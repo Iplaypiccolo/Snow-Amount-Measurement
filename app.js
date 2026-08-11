@@ -471,6 +471,44 @@ function initApp(){
     return out;
   }
 
+  function seasonLabelForStartYear(y){
+    return y+'-11-15~'+(y+1)+'-03-15';
+  }
+
+  function ensureSeason(startYear){
+    var label = seasonLabelForStartYear(startYear);
+    if(!SNOW_DATA.seasons[label]){
+      var dates = dateRangeStrs(startYear,11,15, startYear+1,3,15);
+      var branches = {};
+      ALL_BRANCH_KEYS.forEach(function(k){ branches[k] = dates.map(function(){return null;}); });
+      SNOW_DATA.seasons[label] = {dates: dates, branches: branches};
+    }
+    return SNOW_DATA.seasons[label];
+  }
+
+  function seasonInfoForDate(dateStr){
+    var year = parseInt(dateStr.slice(0,4),10);
+    var month = parseInt(dateStr.slice(4,6),10);
+    var day = parseInt(dateStr.slice(6,8),10);
+    if(month === 11 || month === 12) return year;
+    if(month < 3 || (month === 3 && day <= 15)) return year-1;
+    return null; // 11.15~3.15 범위 밖
+  }
+
+  function isSeasonComplete(label){
+    var season = SNOW_DATA.seasons[label];
+    if(!season) return false;
+    var branchKeys = Object.keys(season.branches);
+    for(var i=0;i<season.dates.length;i++){
+      var found = false;
+      for(var j=0;j<branchKeys.length;j++){
+        if(season.branches[branchKeys[j]][i] != null){ found = true; break; }
+      }
+      if(!found) return false;
+    }
+    return true;
+  }
+
   function refreshSeasonOptions(){
     var sel = document.getElementById('seasonSelect');
     var labels = Object.keys(SNOW_DATA.seasons).sort();
@@ -715,6 +753,151 @@ function initApp(){
   }
 
   document.getElementById('exportXlsxBtn').addEventListener('click', exportSnowTableToXlsx);
+
+  // ---------- txt 업로드로 데이터 추가 ----------
+  function parseSnowText(text){
+    var lines = text.split(/\r?\n/);
+    var currentDate = null;
+    var records = [];
+    for(var i=0;i<lines.length;i++){
+      var line = lines[i];
+      var m = line.match(/DATE (\d{8})/);
+      if(m){ currentDate = m[1]; continue; }
+      if(!line || line[0] === '#') continue;
+      var parts = line.split(',').map(function(s){return s.trim();});
+      if(parts.length < 7) continue;
+      var stnId = parseInt(parts[1], 10);
+      var sd = parseFloat(parts[6]);
+      if(isNaN(stnId) || isNaN(sd) || !currentDate) continue;
+      records.push([currentDate, stnId, sd]);
+    }
+    return records;
+  }
+
+  function recomputeBranchesForDate(season, date){
+    var di = season.dates.indexOf(date);
+    if(di === -1) return;
+    ALL_BRANCH_KEYS.forEach(function(key){
+      var parts = key.split('|||');
+      var hq = HIERARCHY.hq.filter(function(h){return h.name===parts[0];})[0];
+      var br = hq.branches.filter(function(b){return b.name===parts[1];})[0];
+      var max = null;
+      br.stations.forEach(function(s){
+        var rec = SNOW_DATA.stationData[String(s.id)];
+        var v = rec ? rec[date] : null;
+        if(v != null && (max===null || v > max)) max = v;
+      });
+      if(!season.branches[key]) season.branches[key] = season.dates.map(function(){return null;});
+      season.branches[key][di] = max;
+    });
+  }
+
+  function mergeSnowRecords(records){
+    // 1) 날짜별로 그룹화 + 시즌 매핑
+    var byDate = {}; // dateStr -> [[stnId, sd], ...]
+    var dateToSeason = {}; // dateStr -> {label, startYear}
+    records.forEach(function(rec){
+      var date = rec[0], stnId = rec[1], sd = rec[2];
+      var startYear = seasonInfoForDate(date);
+      if(startYear === null) return; // 11.15~3.15 범위 밖 무시
+      byDate[date] = byDate[date] || [];
+      byDate[date].push([stnId, sd]);
+      dateToSeason[date] = {label: seasonLabelForStartYear(startYear), startYear: startYear};
+    });
+
+    var dates = Object.keys(byDate);
+    if(dates.length === 0) return {applied:0, skipped:0, seasonsSkipped:[]};
+
+    // 2) 영향받는 시즌별로, 이미 "완성된" 시즌인데 겹치는 날짜가 있으면 확인
+    var affectedLabels = {};
+    dates.forEach(function(d){ affectedLabels[dateToSeason[d].label] = true; });
+
+    var skipLabels = {};
+    Object.keys(affectedLabels).forEach(function(label){
+      if(isSeasonComplete(label)){
+        var ok = window.confirm(
+          '"'+label+'" 시즌은 이미 전체 기간 데이터가 채워져 있습니다.\n' +
+          '이 시즌에 포함된 날짜를 지금 올리신 자료로 덮어쓰시겠습니까?\n\n' +
+          '(취소를 누르면 이 시즌에 해당하는 날짜는 반영하지 않습니다)'
+        );
+        if(!ok) skipLabels[label] = true;
+      }
+    });
+
+    // 3) 반영
+    var applied = 0, skipped = 0;
+    var touchedSeasonDates = {}; // label -> Set(date)
+
+    dates.forEach(function(date){
+      var info = dateToSeason[date];
+      if(skipLabels[info.label]){ skipped += byDate[date].length; return; }
+      var season = ensureSeason(info.startYear);
+      if(season.dates.indexOf(date) === -1) return;
+
+      byDate[date].forEach(function(pair){
+        var stnId = pair[0], sd = pair[1];
+        SNOW_DATA.stationData[String(stnId)] = SNOW_DATA.stationData[String(stnId)] || {};
+        SNOW_DATA.stationData[String(stnId)][date] = sd;
+        applied++;
+      });
+
+      touchedSeasonDates[info.label] = touchedSeasonDates[info.label] || {};
+      touchedSeasonDates[info.label][date] = true;
+    });
+
+    // 4) 지사별 최댓값 재계산 (실제로 반영된 날짜만)
+    Object.keys(touchedSeasonDates).forEach(function(label){
+      var season = SNOW_DATA.seasons[label];
+      Object.keys(touchedSeasonDates[label]).forEach(function(date){
+        recomputeBranchesForDate(season, date);
+      });
+    });
+
+    return {applied: applied, skipped: skipped, seasonsSkipped: Object.keys(skipLabels)};
+  }
+
+  document.getElementById('downloadJsonBtn').addEventListener('click', function(){
+    var blob = new Blob([JSON.stringify(SNOW_DATA)], {type:'application/json;charset=utf-8'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'snow_data.json';
+    a.click();
+  });
+
+  document.getElementById('snowFileInput').addEventListener('change', function(e){
+    var files = Array.from(e.target.files || []);
+    if(files.length === 0) return;
+    var statusEl = document.getElementById('uploadStatus');
+    statusEl.textContent = '처리 중... (0/'+files.length+')';
+    var done = 0;
+    var totalApplied = 0, totalSkipped = 0;
+    var seasonsSkippedAll = {};
+
+    files.forEach(function(file){
+      var reader = new FileReader();
+      reader.onload = function(ev){
+        var text = ev.target.result;
+        var records = parseSnowText(text);
+        var result = mergeSnowRecords(records);
+        totalApplied += result.applied;
+        totalSkipped += result.skipped;
+        result.seasonsSkipped.forEach(function(l){ seasonsSkippedAll[l] = true; });
+        done++;
+        statusEl.textContent = '처리 중... ('+done+'/'+files.length+')';
+        if(done === files.length){
+          refreshSeasonOptions();
+          refreshDateOptions();
+          buildSnowTable();
+          updateAllSnowBadges();
+          var msg = files.length+'개 파일 처리 완료 · 반영 '+totalApplied+'건';
+          if(totalSkipped > 0) msg += ' · 건너뜀 '+totalSkipped+'건('+Object.keys(seasonsSkippedAll).join(', ')+')';
+          statusEl.textContent = msg;
+          e.target.value = '';
+        }
+      };
+      reader.readAsText(file, 'utf-8');
+    });
+  });
 
   refreshSeasonOptions();
   refreshDateOptions();
