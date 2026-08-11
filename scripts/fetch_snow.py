@@ -147,8 +147,23 @@ def apply_day_to_season(snow_data, hierarchy_map, start_year, date_str, day_max)
         season["branches"][br_key] = arr
 
 
+def find_earliest_missing_date(snow_data, start_year, up_to_date_str):
+    """현재 시즌에서 아직 한 건도 수집되지 않은 가장 이른 날짜를 찾는다.
+    (전날 실패 시, 다음날 실행에서 자동으로 그 날짜부터 다시 시도하게 됨)"""
+    season = ensure_season(snow_data, start_year)
+    station_data = snow_data["stationData"]
+    for date_str in season["dates"]:
+        if date_str > up_to_date_str:
+            break
+        has_any = any(date_str in day_map for day_map in station_data.values())
+        if not has_any:
+            return date_str
+    return None
+
+
 def run_daily():
-    yesterday = date.today() - timedelta(days=1)
+    today = date.today()
+    yesterday = today - timedelta(days=1)
     start_year = season_start_year_for_date(yesterday)
     if start_year is None:
         print(f"{yesterday} 는 11.15~3.15 시즌 범위 밖이라 스킵합니다.")
@@ -158,11 +173,21 @@ def run_daily():
     hierarchy = load_json(HIERARCHY_PATH)
     hmap = branch_station_map(hierarchy)
 
-    date_str = yesterday.strftime("%Y%m%d")
-    print(f"{date_str} 데이터 수집 중...")
-    day_max = fetch_day_max(date_str)
+    up_to = yesterday.strftime("%Y%m%d")
+    target_date = find_earliest_missing_date(snow_data, start_year, up_to)
+    if target_date is None:
+        print(f"이미 {up_to}까지 전부 수집되어 있습니다. 할 일 없음.")
+        return
+
+    print(f"수집 대상 날짜: {target_date} (미수집 상태의 가장 이른 날짜)")
+    day_max = fetch_day_max(target_date)
+    if not day_max:
+        print(f"  {target_date}: 관측소 데이터를 하나도 받지 못했습니다. "
+              f"(기상청 쪽에서 아직 자료가 안 올라왔을 수 있음 - 내일 자동 재시도됩니다)")
+        return
+
     print(f"  관측소 {len(day_max)}개 반영")
-    apply_day_to_season(snow_data, hmap, start_year, date_str, day_max)
+    apply_day_to_season(snow_data, hmap, start_year, target_date, day_max)
     save_json(SNOW_DATA_PATH, snow_data)
     print("완료")
 

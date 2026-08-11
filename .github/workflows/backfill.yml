@@ -1,0 +1,46 @@
+name: 과거 시즌 데이터 백필(수동 실행)
+
+on:
+  workflow_dispatch:
+    inputs:
+      seasons:
+        description: '받아올 과거 시즌 개수 (현재 시즌부터 역순으로)'
+        required: true
+        default: '10'
+      force:
+        description: '이미 있는 시즌도 강제로 다시 받기 (true/false)'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 백필 실행
+        env:
+          KMA_AUTH_KEY: ${{ secrets.KMA_AUTH_KEY }}
+        run: |
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            python scripts/fetch_snow.py backfill ${{ github.event.inputs.seasons }} --force
+          else
+            python scripts/fetch_snow.py backfill ${{ github.event.inputs.seasons }}
+          fi
+
+      - name: 변경사항 커밋
+        run: |
+          git config user.name "snow-map-bot"
+          git config user.email "actions@github.com"
+          git add data/snow_data.json
+          git diff --cached --quiet && echo "변경 없음" || git commit -m "chore: 과거 시즌 백필"
+          git push
