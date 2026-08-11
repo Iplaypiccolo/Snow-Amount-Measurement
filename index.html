@@ -250,6 +250,20 @@
   .sources-content ul{font-size:13.5px; line-height:1.9; padding-left:22px;}
   .sources-content .mono{font-family:var(--mono); background:#f0eee2; padding:1px 5px; border-radius:3px; font-size:12.5px;}
   .sources-content a{color:var(--hwy-green-dark); font-weight:600;}
+  .code-block-wrap{position:relative; margin:8px 0 20px;}
+  .code-block-wrap pre{
+    background:#1e2a22; color:#d8e8dc; font-family:var(--mono); font-size:11.5px;
+    line-height:1.6; padding:16px; border-radius:6px; overflow-x:auto;
+    white-space:pre; margin:0;
+  }
+  .copy-btn{
+    position:absolute; top:8px; right:8px; z-index:2;
+    background:#0b5d38; color:#fff; border:none; border-radius:4px;
+    font-size:11px; font-family:var(--sans); font-weight:600;
+    padding:4px 10px; cursor:pointer;
+  }
+  .copy-btn:hover{background:#0d7146;}
+  .copy-btn.copied{background:#c97a2b;}
   .seasons-table{border-collapse:collapse; width:100%; margin:10px 0 20px; font-size:13px;}
   .seasons-table th, .seasons-table td{border:1px solid var(--line); padding:7px 12px; text-align:left;}
   .seasons-table th{background:#f6f4ec; font-family:var(--mono); font-size:11.5px; color:var(--muted);}
@@ -395,10 +409,63 @@
       <h3>7. 새로운 기간 데이터 추가하기</h3>
       <p>자동 수집 서버는 두지 않습니다 (기상청 API가 클라우드 서버의 IP를 차단하는 문제가 있어서, 안전하고 확실한 수동 방식을 씁니다). 아래 절차로 추가합니다.</p>
       <ol style="font-size:13.5px;line-height:1.9;padding-left:22px;">
-        <li><a href="https://apihub.kma.go.kr" target="_blank" rel="noopener">apihub.kma.go.kr</a> 접속한 상태에서 브라우저 개발자도구(F12) 콘솔에 데이터 수집 스크립트를 실행 → txt 파일 다운로드 (하루치만도, 특정 기간만도 가능)</li>
+        <li><a href="https://apihub.kma.go.kr" target="_blank" rel="noopener">apihub.kma.go.kr</a> 접속한 상태에서 브라우저 개발자도구(F12) → Console 탭에 아래 스크립트를 붙여넣고 실행 (authKey / 시작일 / 종료일만 바꾸면 됨) → txt 파일 자동 다운로드</li>
         <li>이 페이지의 "연도별 신적설" 탭 → <b>"+ 신적설 데이터 파일 추가"</b>로 그 txt 파일 업로드 — 날짜를 보고 자동으로 알맞은 시즌에 들어갑니다</li>
         <li>지금 보이는 화면에는 바로 반영되지만, <b>다른 방문자에게도 영구히 남기려면</b> <b>"⬇ 갱신된 데이터 JSON 저장"</b>으로 전체 데이터를 내려받아 레포 관리자에게 전달 → <span class="mono">data/snow_data.json</span>으로 커밋</li>
       </ol>
+
+      <div class="code-block-wrap">
+        <button class="copy-btn" id="copyScriptBtn" type="button">복사</button>
+        <pre id="consoleScript">(async () =&gt; {
+  const AUTH_KEY = "본인의_authKey_입력";
+  const START = new Date(2024, 10, 15); // 시작일 (월은 0부터: 10=11월). 하루만 받으려면 END와 동일하게
+  const END   = new Date(2025, 2, 15);  // 종료일
+
+  let allText = "";
+  let d = new Date(START);
+
+  while (d &lt;= END) {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
+    const dateStr = `${yyyy}${mm}${dd}`;
+    const dayMax = new Map();
+
+    for (let h = 0; h &lt; 24; h++) {
+      const hh = String(h).padStart(2,'0');
+      const tm = `${dateStr}${hh}00`;
+      const url = `https://apihub.kma.go.kr/api/typ01/url/kma_snow1.php?sd=day&amp;tm=${tm}&amp;help=0&amp;authKey=${AUTH_KEY}`;
+      try {
+        const res = await fetch(url);
+        const buffer = await res.arrayBuffer();
+        const text = new TextDecoder('euc-kr').decode(buffer);
+        text.split('\n').forEach(line =&gt; {
+          if (!line || line[0] === '#') return;
+          const parts = line.split(',').map(s =&gt; s.trim());
+          if (parts.length &lt; 7) return;
+          const stnId = parts[1];
+          const sd = parseFloat(parts[6]);
+          if (isNaN(sd)) return;
+          if (!dayMax.has(stnId) || sd &gt; dayMax.get(stnId).sd) dayMax.set(stnId, {line, sd});
+        });
+      } catch (e) { console.error(`${dateStr} ${hh}시 실패`, e); }
+      await new Promise(r =&gt; setTimeout(r, 150));
+    }
+
+    allText += `#### DATE ${dateStr} ####\n`;
+    dayMax.forEach(({line}) =&gt; { allText += line + "\n"; });
+    console.log(`${dateStr} 완료 (관측소 ${dayMax.size}개)`);
+    d.setDate(d.getDate() + 1);
+  }
+
+  const blob = new Blob([allText], {type: "text/plain;charset=utf-8"});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `snow_${START.toISOString().slice(0,10)}_${END.toISOString().slice(0,10)}.txt`;
+  a.click();
+  console.log("완료! 파일 다운로드됨.");
+})();</pre>
+      </div>
     </div>
   </div>
 </div>

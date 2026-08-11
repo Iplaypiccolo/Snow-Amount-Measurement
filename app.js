@@ -609,6 +609,21 @@ function initApp(){
   }
 
   // ---------- 연도별 신적설 표 ----------
+  var copyBtn = document.getElementById('copyScriptBtn');
+  if(copyBtn){
+    copyBtn.addEventListener('click', function(){
+      var codeEl = document.getElementById('consoleScript');
+      var text = codeEl.textContent;
+      navigator.clipboard.writeText(text).then(function(){
+        copyBtn.textContent = '복사됨!';
+        copyBtn.classList.add('copied');
+        setTimeout(function(){ copyBtn.textContent = '복사'; copyBtn.classList.remove('copied'); }, 1500);
+      }).catch(function(){
+        copyBtn.textContent = '복사 실패(직접 드래그해주세요)';
+      });
+    });
+  }
+
   function buildSeasonsTable(){
     var tbody = document.querySelector('#seasonsTable tbody');
     if(!tbody) return;
