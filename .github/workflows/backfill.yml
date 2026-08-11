@@ -30,6 +30,7 @@ jobs:
       - name: 백필 실행
         env:
           KMA_AUTH_KEY: ${{ secrets.KMA_AUTH_KEY }}
+          NTFY_TOPIC: ${{ vars.NTFY_TOPIC }}
         run: |
           if [ "${{ github.event.inputs.force }}" = "true" ]; then
             python scripts/fetch_snow.py backfill ${{ github.event.inputs.seasons }} --force

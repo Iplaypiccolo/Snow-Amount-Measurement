@@ -22,6 +22,7 @@ jobs:
       - name: 어제 날짜 데이터 수집
         env:
           KMA_AUTH_KEY: ${{ secrets.KMA_AUTH_KEY }}
+          NTFY_TOPIC: ${{ vars.NTFY_TOPIC }}
         run: python scripts/fetch_snow.py daily
 
       - name: 변경사항 커밋

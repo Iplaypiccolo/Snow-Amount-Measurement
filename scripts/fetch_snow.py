@@ -184,12 +184,30 @@ def run_daily():
     if not day_max:
         print(f"  {target_date}: 관측소 데이터를 하나도 받지 못했습니다. "
               f"(기상청 쪽에서 아직 자료가 안 올라왔을 수 있음 - 내일 자동 재시도됩니다)")
+        notify(f"⚠️ {target_date} 데이터 수집 실패 - 내일 자동 재시도")
         return
 
     print(f"  관측소 {len(day_max)}개 반영")
     apply_day_to_season(snow_data, hmap, start_year, target_date, day_max)
     save_json(SNOW_DATA_PATH, snow_data)
     print("완료")
+    notify(f"❄️ {target_date} 신적설 데이터 갱신 완료 (관측소 {len(day_max)}개)")
+
+
+def notify(message):
+    """NTFY_TOPIC 환경변수가 설정되어 있으면 ntfy.sh로 푸시 알림 전송"""
+    topic = os.environ.get("NTFY_TOPIC")
+    if not topic:
+        return
+    try:
+        req = urllib.request.Request(
+            f"https://ntfy.sh/{topic}",
+            data=message.encode("utf-8"),
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=10)
+    except Exception as e:
+        print(f"알림 전송 실패: {e}", file=sys.stderr)
 
 
 def run_backfill(n_seasons, force=False):
@@ -215,6 +233,7 @@ def run_backfill(n_seasons, force=False):
         # 이미 오늘(미래) 이후 날짜는 스킵
         dates = [d for d in dates if d <= today.strftime("%Y%m%d")]
         print(f"=== 시즌 {label} 백필 시작 ({len(dates)}일) ===")
+        notify(f"❄️ 백필 시작: {label} ({len(dates)}일)")
         for date_str in dates:
             print(f"{date_str} 수집 중...")
             day_max = fetch_day_max(date_str)
@@ -222,8 +241,10 @@ def run_backfill(n_seasons, force=False):
             # 시즌 하나 끝날 때마다 중간 저장 (중단되어도 이어서 가능)
             save_json(SNOW_DATA_PATH, snow_data)
         print(f"=== 시즌 {label} 완료 ===")
+        notify(f"✅ 백필 완료: {label}")
 
     print("백필 전체 완료")
+    notify("🎉 전체 백필 완료!")
 
 
 if __name__ == "__main__":
