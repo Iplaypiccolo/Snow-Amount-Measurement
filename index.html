@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>고속도로 인접 적설관측소 지도 | 반경 5~8km(적응형) 분석</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<style>
+  :root{
+    --ink:#0d1b14;
+    --paper:#f5f3ec;
+    --panel:#ffffff;
+    --line:#dcd8c8;
+    --hwy-green:#0b5d38;
+    --hwy-green-dark:#083f27;
+    --signal-amber:#c97a2b;
+    --signal-red:#b5432f;
+    --muted:#6b6455;
+    --mono: "SFMono-Regular","JetBrains Mono",Consolas,"Liberation Mono",Menlo,monospace;
+    --sans: -apple-system,BlinkMacSystemFont,"Pretendard","Noto Sans KR",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;font-family:var(--sans);background:var(--paper);color:var(--ink);}
+
+  .app{display:flex;flex-direction:column;height:100vh;}
+
+  header{
+    background:var(--hwy-green);
+    color:#eef7f0;
+    padding:14px 22px;
+    display:flex;
+    align-items:baseline;
+    gap:16px;
+    flex-wrap:wrap;
+    border-bottom:4px solid var(--hwy-green-dark);
+  }
+  header .badge{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.08em;
+    background:rgba(255,255,255,.14);
+    padding:3px 8px;
+    border-radius:3px;
+    border:1px solid rgba(255,255,255,.25);
+  }
+  header h1{font-size:18px;margin:0;font-weight:700;letter-spacing:-.01em;}
+  header .sub{font-size:12.5px;color:#cfe3d6;margin-left:auto;font-family:var(--mono);}
+
+  .statbar{
+    display:flex;
+    gap:0;
+    background:var(--panel);
+    border-bottom:1px solid var(--line);
+  }
+  .stat{
+    flex:1;
+    padding:10px 18px;
+    border-right:1px solid var(--line);
+  }
+  .stat:last-child{border-right:none;}
+  .stat .num{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--hwy-green-dark);}
+  .stat .lbl{font-size:11px;color:var(--muted);margin-top:2px;}
+
+  .main{
+    flex:1;
+    display:flex;
+    min-height:0;
+  }
+  #map{flex:1.35;min-width:0;}
+
+  .side{
+    flex:1;
+    min-width:340px;
+    max-width:480px;
+    display:flex;
+    flex-direction:column;
+    border-left:1px solid var(--line);
+    background:var(--panel);
+  }
+  .side .toolbar{
+    padding:10px 12px;
+    border-bottom:1px solid var(--line);
+    display:flex;
+    gap:8px;
+  }
+  .side input[type="text"]{
+    flex:1;
+    padding:7px 10px;
+    border:1px solid var(--line);
+    border-radius:4px;
+    font-size:13px;
+    font-family:var(--sans);
+    background:#fbfaf6;
+  }
+  .side input[type="text"]:focus{outline:2px solid var(--hwy-green);outline-offset:-1px;}
+
+  .dist-band-1{color:var(--hwy-green-dark);}
+  .dist-band-2{color:var(--signal-amber);}
+  .dist-band-3{color:var(--signal-red);}
+
+  /* ---- 트리(본부 > 지사 > 관측소) ---- */
+  #tree{padding:4px 0;}
+  .hq-row, .br-row, .st-row{
+    display:flex; align-items:center; gap:8px;
+    cursor:pointer; user-select:none;
+    border-bottom:1px solid #eee;
+  }
+  .hq-row{
+    padding:10px 12px;
+    background:#f6f4ec;
+    font-weight:700; font-size:13.5px;
+    border-top:1px solid var(--line);
+    border-bottom:1px solid var(--line);
+  }
+  .hq-row:hover{background:#eee9d9;}
+  .hq-row .chev, .br-row .chev{
+    font-size:10px; width:10px; color:var(--muted);
+    transition:transform .15s ease;
+  }
+  .hq-row.open .chev, .br-row.open .chev{transform:rotate(90deg);}
+  .hq-name{flex:1;}
+  .count-badge{
+    font-family:var(--mono); font-size:11px;
+    background:var(--hwy-green); color:#fff;
+    padding:1px 8px; border-radius:10px;
+    min-width:26px; text-align:center;
+  }
+  .count-badge.zero{background:#c9c4b3; color:#6b6455;}
+
+  .hq-children{display:none;}
+  .hq-children.expanded{display:block;}
+
+  .br-row{
+    padding:8px 12px 8px 26px;
+    font-size:12.5px; font-weight:600;
+    background:#fff;
+  }
+  .br-row:hover{background:#f2f6f0;}
+  .br-row.active{background:#FFF3A3; box-shadow:inset 3px 0 0 #FFE400;}
+  .color-swatch{
+    width:10px; height:10px; border-radius:50%;
+    display:inline-block; flex-shrink:0;
+    box-shadow:0 0 0 1px rgba(0,0,0,.25);
+  }
+  .br-name{flex:1;}
+
+  .br-children{display:none; background:#fbfaf6;}
+  .br-children.expanded{display:block;}
+
+  .st-row{
+    padding:6px 12px 6px 44px;
+    font-size:12px;
+    justify-content:space-between;
+    background:transparent;
+  }
+  .st-row:hover{background:#eef2e6;}
+  .st-row.active{background:#dcebc9;}
+  .st-name{flex:1;}
+  .st-name .id{display:block;font-family:var(--mono);font-size:10px;color:var(--muted);}
+  .st-dist{font-family:var(--mono);font-weight:700;white-space:nowrap;}
+  .empty-msg{padding:8px 12px 8px 44px;font-size:11.5px;color:var(--muted);font-style:italic;}
+
+  .unclass-section{border-top:3px solid var(--line); margin-top:6px;}
+  .unclass-header{
+    padding:10px 12px; font-size:12px; color:var(--muted);
+    background:#f6f4ec; font-weight:600;
+  }
+
+  .tablewrap{flex:1;overflow:auto;min-height:0;}
+
+  .legend{
+    position:absolute;bottom:16px;left:16px;z-index:500;
+    background:rgba(255,255,255,.94);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:10px 14px;
+    font-size:12px;
+    box-shadow:0 2px 8px rgba(0,0,0,.08);
+  }
+  .legend .row{display:flex;align-items:center;gap:7px;margin:3px 0;}
+  .legend .dot{width:10px;height:10px;border-radius:50%;display:inline-block;border:1.5px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.25);}
+  .legend .line{width:16px;height:3px;background:var(--hwy-green);display:inline-block;border-radius:2px;}
+
+  .leaflet-popup-content{font-family:var(--sans);font-size:12.5px;line-height:1.5;}
+  .leaflet-popup-content b{color:var(--hwy-green-dark);}
+  .popup-dist{font-family:var(--mono);font-weight:700;}
+
+  footer{
+    padding:6px 16px;
+    font-size:10.5px;
+    color:var(--muted);
+    background:var(--panel);
+    border-top:1px solid var(--line);
+    font-family:var(--mono);
+  }
+
+  @media (max-width: 860px){
+    .main{flex-direction:column;}
+    #map{flex:1.2;min-height:280px;}
+    .side{max-width:none;min-width:0;flex:1;}
+  }
+
+  /* ---- 탭바 ---- */
+  .tabbar{
+    display:flex; gap:0;
+    background:var(--hwy-green-dark);
+    padding:0 22px;
+  }
+  .tab-btn{
+    font-family:var(--sans); font-size:13px; font-weight:600;
+    background:none; border:none; color:#bcd9c6;
+    padding:10px 18px; cursor:pointer;
+    border-bottom:3px solid transparent;
+  }
+  .tab-btn:hover{color:#fff;}
+  .tab-btn.active{color:#fff; border-bottom-color:var(--signal-amber);}
+  .view{display:flex; flex-direction:column; flex:1; min-height:0;}
+  #view-map{display:none;}
+  #view-snowtable{display:flex;}
+
+  .side .toolbar{flex-wrap:wrap;}
+  #dateSelect{
+    padding:6px 8px; border:1px solid var(--line); border-radius:4px;
+    font-size:12.5px; font-family:var(--sans); background:#fbfaf6;
+  }
+
+  /* ---- 연도별 신적설 탭 ---- */
+  .snow-toolbar{
+    padding:10px 16px; display:flex; align-items:center; gap:16px;
+    background:var(--panel); border-bottom:1px solid var(--line);
+  }
+  .snow-toolbar select{
+    padding:6px 10px; border:1px solid var(--line); border-radius:4px;
+    font-size:13px; font-family:var(--sans); background:#fbfaf6;
+  }
+  .upload-btn{
+    font-size:12.5px; color:var(--hwy-green-dark); font-weight:600;
+    border:1px dashed var(--hwy-green); border-radius:4px;
+    padding:6px 12px; cursor:pointer;
+    background:#fff; font-family:var(--sans);
+  }
+  .upload-btn:hover{background:#eef6ef;}
+
+  .sources-view{overflow:auto; background:var(--panel); display:block;}
+  .sources-content{max-width:760px; margin:0 auto; padding:30px 24px 60px;}
+  .sources-content h2{color:var(--hwy-green-dark); font-size:20px; margin-bottom:20px;}
+  .sources-content h3{color:var(--hwy-green-dark); font-size:15px; margin:26px 0 8px; border-bottom:2px solid var(--line); padding-bottom:6px;}
+  .sources-content p{font-size:13.5px; line-height:1.8; color:var(--ink);}
+  .sources-content ul{font-size:13.5px; line-height:1.9; padding-left:22px;}
+  .sources-content .mono{font-family:var(--mono); background:#f0eee2; padding:1px 5px; border-radius:3px; font-size:12.5px;}
+
+  .snowtable-wrap{flex:1; overflow:auto; background:var(--panel);}
+  table.snowtable{border-collapse:collapse; font-size:11.5px; white-space:nowrap;}
+  table.snowtable th, table.snowtable td{
+    border:1px solid #eee; padding:4px 8px; text-align:right;
+  }
+  table.snowtable thead th{
+    position:sticky; top:0; background:#eef1e9; z-index:3;
+    font-family:var(--mono); font-weight:600; color:var(--muted);
+    text-align:center;
+  }
+  table.snowtable .row-label{
+    position:sticky; left:0; z-index:2;
+    background:#fbfaf6; text-align:left; font-weight:600;
+    min-width:120px;
+  }
+  table.snowtable thead th.row-label-head{
+    left:0; z-index:4; text-align:left;
+  }
+  table.snowtable .sum-col, table.snowtable .sum-col-head{
+    position:sticky; left:120px; z-index:2;
+    background:#f6f4ec; font-weight:700; color:var(--hwy-green-dark);
+    border-left:2px solid var(--line); border-right:2px solid var(--line);
+    min-width:70px;
+  }
+  table.snowtable thead .sum-col-head{ z-index:4; text-align:center; }
+  table.snowtable tr.hq-row-label td, table.snowtable tr.hq-row-label th{
+    background:#f6f4ec; font-weight:700;
+  }
+  table.snowtable td.snowcell{cursor:pointer; font-family:var(--mono);}
+  table.snowtable td.snowcell:hover{background:#fff3d6 !important;}
+  table.snowtable td.snowcell.has-val{color:var(--hwy-green-dark); font-weight:700;}
+  table.snowtable td.snowcell.zero-val{color:#c9c4b3;}
+  table.snowtable .col-hl{background:#fdf6e3;}
+  table.snowtable .row-hl{background:#fdf6e3;}
+
+  .snow-badge{
+    font-family:var(--mono); font-size:11px; font-weight:700;
+    background:#1F51FF; color:#fff; padding:1px 8px; border-radius:10px;
+    min-width:30px; text-align:center; margin-right:4px;
+  }
+  .snow-badge.none{background:#c9c4b3;}
+  .leaflet-tooltip.snow-label{
+    background:#1F51FF; color:#fff; font-weight:700; font-size:11px;
+    border:none; padding:1px 5px; border-radius:3px;
+    box-shadow:0 1px 3px rgba(0,0,0,.35);
+  }
+  .leaflet-tooltip.snow-label::before{display:none;}
+  .unit-note{font-size:10px; color:var(--muted); padding:6px 12px; font-family:var(--mono);}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <span class="badge">EX-SNOW-NET</span>
+    <h1>고속도로 인접 관측소 지도</h1>
+    <span class="sub" id="genMeta">고속도로 중심선 반경 5km 기본(관측소 5대 이하 시 6→7→8km까지 단계적 확대) · 기상청 공식 적설관측지점 기준</span>
+  </header>
+
+  <div class="tabbar">
+    <button class="tab-btn active" data-tab="snowtable">연도별 신적설</button>
+    <button class="tab-btn" data-tab="map">관측소 지도</button>
+    <button class="tab-btn" data-tab="sources">데이터 출처</button>
+  </div>
+
+  <div id="view-map" class="view" style="display:none;">
+  <div class="statbar">
+    <div class="stat"><div class="num" id="statRoads">-</div><div class="lbl">분석 대상 고속도로 노선</div></div>
+    <div class="stat"><div class="num" id="statHQ">-</div><div class="lbl">본부</div></div>
+    <div class="stat"><div class="num" id="statBranch">-</div><div class="lbl">관할 지사</div></div>
+    <div class="stat"><div class="num" id="statWithin">-</div><div class="lbl">적설관측소 (5~8km 적응형, 분류됨)</div></div>
+    <div class="stat"><div class="num" id="statUnclass">-</div><div class="lbl">미분류 관측소</div></div>
+  </div>
+
+  <div class="main">
+    <div id="map"></div>
+
+    <div class="side">
+      <div class="toolbar">
+        <input type="text" id="searchBox" placeholder="본부 · 지사 · 관측소명 검색" />
+        <select id="dateSelect"><option value="">일자 선택(신적설)</option></select>
+      </div>
+      <div class="unit-note">단위 — 관측소 개수: 대 · 일 신적설량: cm</div>
+      <div class="tablewrap" id="tree"></div>
+    </div>
+  </div>
+  </div>
+
+  <div id="view-snowtable" class="view">
+    <div class="snow-toolbar">
+      <label>기간 선택
+        <select id="seasonSelect"></select>
+      </label>
+      <button class="upload-btn" id="exportXlsxBtn" type="button">⬇ 현재 표 엑셀(xlsx)로 내보내기</button>
+    </div>
+    <div class="snowtable-wrap" id="snowTableWrap"></div>
+  </div>
+
+  <div id="view-sources" class="view sources-view" style="display:none;">
+    <div class="sources-content">
+      <h2>데이터 출처 및 산출 방법</h2>
+
+      <h3>1. 고속도로 노선 데이터</h3>
+      <p>국가교통정보센터(ITS) <b>전국표준노드링크</b> 중 <span class="mono">ROAD_RANK = 101(고속도로)</span> 링크만 추출해 사용했습니다.
+      각 지사가 관할하는 노선의 시점·종점 IC/JC 명칭을 표준노드링크의 노드에 매칭한 뒤, 그래프 최단경로(다익스트라) 알고리즘으로 두 지점 사이의 실제 도로 선형을 그대로 추출해 지사 관할구간으로 사용했습니다.</p>
+
+      <h3>2. 적설관측지점</h3>
+      <p>기상청 API허브 <span class="mono">stn_snow.php</span>(적설관측지점 조회)로 받은 <b>공식 적설관측지점 669개</b>의 지점번호·위경도를 사용했습니다.</p>
+
+      <h3>3. 지사별 관측소 배정 기준 — 적응형 반경</h3>
+      <p>각 관측지점과 지사 관할구간(위 1번) 사이의 최단거리를 계산해 배정했습니다. 한 관측지점이 여러 지사의 관할구간과 가까우면 <b>모든 지사에 중복으로 포함</b>됩니다(배타적 1:1 배정 아님).</p>
+      <ul>
+        <li>기본 반경: <b>5km</b></li>
+        <li>5km 이내 관측소가 5대 이하이면 → <b>6km</b>로 확대</li>
+        <li>6km 이내도 5대 이하이면 → <b>7km</b>로 확대</li>
+        <li>7km 이내도 5대 이하이면 → <b>8km</b>로 확대(최대)</li>
+      </ul>
+
+      <h3>4. 일 신적설 데이터</h3>
+      <p>기상청 API허브 <span class="mono">kma_snow1.php</span>로 하루 00시부터 24시까지 1시간 간격으로 관측값을 조회한 뒤, <b>관측소별로 그날의 최댓값</b>을 그 날짜의 일 신적설로 사용했습니다(기상청 API가 특정 시각에만 관측치를 표출하는 경우가 있어, 시간대별 데이터를 전부 확인해 누락을 방지했습니다).</p>
+
+      <h3>5. 지사·본부 집계 방식</h3>
+      <p>지사의 특정 일자 값 = 그 지사에 배정된 관측소들의 그날 값 중 <b>최댓값</b>. 지사의 시즌 합계 = 기간 내 일별 값의 합. 본부의 일자별 값 = 소속 지사 일자값의 평균. 본부의 시즌 평균 = <b>소속 지사 시즌 합계를 전부 더한 뒤 지사 수로 나눈 값</b>.</p>
+
+      <h3>6. 조회 기간</h3>
+      <p>매 시즌 11월 15일 ~ 익년 3월 15일. 현재 2023-24, 2024-25, 2025-26 시즌 자료를 보유하고 있습니다.</p>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+(function(){
+  var META_DATE_TEXT = "자동 업데이트(매일 새벽)";
+  Promise.all([
+    fetch('data/roads.json').then(function(r){return r.json();}),
+    fetch('data/hierarchy.json').then(function(r){return r.json();}),
+    fetch('data/snow_data.json').then(function(r){return r.json();})
+  ]).then(function(results){
+    window.ROADS_DATA = results[0];
+    window.HIERARCHY = results[1];
+    window.SNOW_DATA = results[2];
+    window.META_DATE = META_DATE_TEXT;
+    var s = document.createElement('script');
+    s.src = 'app.js';
+    s.onload = function(){ initApp(); };
+    document.body.appendChild(s);
+  }).catch(function(err){
+    document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;">데이터 로드 실패: ' + err + '</div>';
+  });
+})();
+</script>
+</body>
+</html>
