@@ -476,16 +476,16 @@
 (function(){
   var META_DATE_TEXT = "자동 업데이트(매일 새벽)";
   Promise.all([
-    fetch('data/roads.json').then(function(r){return r.json();}),
-    fetch('data/hierarchy.json').then(function(r){return r.json();}),
-    fetch('data/snow_data.json').then(function(r){return r.json();})
+    fetch('data/roads.json', {cache: 'no-store'}).then(function(r){return r.json();}),
+    fetch('data/hierarchy.json', {cache: 'no-store'}).then(function(r){return r.json();}),
+    fetch('data/snow_data.json', {cache: 'no-store'}).then(function(r){return r.json();})
   ]).then(function(results){
     window.ROADS_DATA = results[0];
     window.HIERARCHY = results[1];
     window.SNOW_DATA = results[2];
     window.META_DATE = META_DATE_TEXT;
     var s = document.createElement('script');
-    s.src = 'app.js';
+    s.src = 'app.js?v=' + Date.now();
     s.onload = function(){ initApp(); };
     document.body.appendChild(s);
   }).catch(function(err){
