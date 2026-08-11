@@ -393,18 +393,11 @@
       </table>
 
       <h3>7. 새로운 기간 데이터 추가하기</h3>
-      <p>안전상의 이유로 이 웹페이지에서 직접 데이터 수집을 실행시킬 수는 없습니다(레포 쓰기 권한이 필요한 작업이라, 공개 페이지 코드에 그 권한을 넣으면 누구나 레포를 변경할 수 있게 되어버립니다). 대신 아래 절차로 레포 관리자가 직접 실행하면, 완료 즉시 이 사이트와 "연도별 신적설" 탭에 자동으로 반영됩니다.</p>
+      <p>자동 수집 서버는 두지 않습니다 (기상청 API가 클라우드 서버의 IP를 차단하는 문제가 있어서, 안전하고 확실한 수동 방식을 씁니다). 아래 절차로 추가합니다.</p>
       <ol style="font-size:13.5px;line-height:1.9;padding-left:22px;">
-        <li><a href="https://github.com/Iplaypiccolo/Snow-Amount-Measurement/actions/workflows/backfill.yml" target="_blank" rel="noopener">백필 워크플로 페이지</a>로 이동</li>
-        <li><b>Run workflow</b> 버튼 클릭</li>
-        <li><b>years</b> 칸에 원하는 기간 입력
-          <ul>
-            <li><span class="mono">10</span> → 최근 10개 시즌</li>
-            <li><span class="mono">2015-2020</span> → 2015~2020 시작연도 시즌 전부</li>
-            <li><span class="mono">2011,2013,2018</span> → 해당 시작연도 시즌만</li>
-          </ul>
-        </li>
-        <li><b>Run workflow</b> 클릭하면 시작. 이미 있는 시즌은 자동으로 건너뛰며, <span class="mono">force</span>를 <span class="mono">true</span>로 하면 다시 받습니다.</li>
+        <li><a href="https://apihub.kma.go.kr" target="_blank" rel="noopener">apihub.kma.go.kr</a> 접속한 상태에서 브라우저 개발자도구(F12) 콘솔에 데이터 수집 스크립트를 실행 → txt 파일 다운로드 (하루치만도, 특정 기간만도 가능)</li>
+        <li>이 페이지의 "연도별 신적설" 탭 → <b>"+ 신적설 데이터 파일 추가"</b>로 그 txt 파일 업로드 — 날짜를 보고 자동으로 알맞은 시즌에 들어갑니다</li>
+        <li>지금 보이는 화면에는 바로 반영되지만, <b>다른 방문자에게도 영구히 남기려면</b> <b>"⬇ 갱신된 데이터 JSON 저장"</b>으로 전체 데이터를 내려받아 레포 관리자에게 전달 → <span class="mono">data/snow_data.json</span>으로 커밋</li>
       </ol>
     </div>
   </div>
