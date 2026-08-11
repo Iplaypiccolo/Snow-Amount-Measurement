@@ -3,8 +3,11 @@ name: 과거 시즌 데이터 백필(수동 실행)
 on:
   workflow_dispatch:
     inputs:
-      seasons:
-        description: '받아올 과거 시즌 개수 (현재 시즌부터 역순으로)'
+      years:
+        description: >
+          받아올 시즌의 시작연도. 예) "10" = 최근 10개 시즌 /
+          "2015-2020" = 2015~2020 시작연도 시즌 전부 /
+          "2011,2013,2018" = 해당 시작연도 시즌만
         required: true
         default: '10'
       force:
@@ -30,12 +33,11 @@ jobs:
       - name: 백필 실행
         env:
           KMA_AUTH_KEY: ${{ secrets.KMA_AUTH_KEY }}
-          NTFY_TOPIC: ${{ vars.NTFY_TOPIC }}
         run: |
           if [ "${{ github.event.inputs.force }}" = "true" ]; then
-            python scripts/fetch_snow.py backfill ${{ github.event.inputs.seasons }} --force
+            python scripts/fetch_snow.py backfill "${{ github.event.inputs.years }}" --force
           else
-            python scripts/fetch_snow.py backfill ${{ github.event.inputs.seasons }}
+            python scripts/fetch_snow.py backfill "${{ github.event.inputs.years }}"
           fi
 
       - name: 변경사항 커밋
@@ -43,5 +45,5 @@ jobs:
           git config user.name "snow-map-bot"
           git config user.email "actions@github.com"
           git add data/snow_data.json
-          git diff --cached --quiet && echo "변경 없음" || git commit -m "chore: 과거 시즌 백필"
+          git diff --cached --quiet && echo "변경 없음" || git commit -m "chore: 과거 시즌 백필 (${{ github.event.inputs.years }})"
           git push

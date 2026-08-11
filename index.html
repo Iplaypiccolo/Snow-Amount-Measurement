@@ -248,6 +248,11 @@
   .sources-content p{font-size:13.5px; line-height:1.8; color:var(--ink);}
   .sources-content ul{font-size:13.5px; line-height:1.9; padding-left:22px;}
   .sources-content .mono{font-family:var(--mono); background:#f0eee2; padding:1px 5px; border-radius:3px; font-size:12.5px;}
+  .sources-content a{color:var(--hwy-green-dark); font-weight:600;}
+  .seasons-table{border-collapse:collapse; width:100%; margin:10px 0 20px; font-size:13px;}
+  .seasons-table th, .seasons-table td{border:1px solid var(--line); padding:7px 12px; text-align:left;}
+  .seasons-table th{background:#f6f4ec; font-family:var(--mono); font-size:11.5px; color:var(--muted);}
+  .seasons-table td.mono-cell{font-family:var(--mono);}
 
   .snowtable-wrap{flex:1; overflow:auto; background:var(--panel);}
   table.snowtable{border-collapse:collapse; font-size:11.5px; white-space:nowrap;}
@@ -373,8 +378,27 @@
       <h3>5. 지사·본부 집계 방식</h3>
       <p>지사의 특정 일자 값 = 그 지사에 배정된 관측소들의 그날 값 중 <b>최댓값</b>. 지사의 시즌 합계 = 기간 내 일별 값의 합. 본부의 일자별 값 = 소속 지사 일자값의 평균. 본부의 시즌 평균 = <b>소속 지사 시즌 합계를 전부 더한 뒤 지사 수로 나눈 값</b>.</p>
 
-      <h3>6. 조회 기간</h3>
-      <p>매 시즌 11월 15일 ~ 익년 3월 15일. 현재 2023-24, 2024-25, 2025-26 시즌 자료를 보유하고 있습니다.</p>
+      <h3>6. 조회 기간 및 보유 현황</h3>
+      <p>매 시즌 11월 15일 ~ 익년 3월 15일만 조회합니다. 현재 보유 중인 시즌은 아래 표와 같습니다 (자동으로 최신 상태를 표시).</p>
+      <table class="seasons-table" id="seasonsTable">
+        <thead><tr><th>시즌</th><th>보유 일수</th><th>자료 있는 날짜 수</th></tr></thead>
+        <tbody><tr><td colspan="3">불러오는 중...</td></tr></tbody>
+      </table>
+
+      <h3>7. 새로운 기간 데이터 추가하기</h3>
+      <p>안전상의 이유로 이 웹페이지에서 직접 데이터 수집을 실행시킬 수는 없습니다(레포 쓰기 권한이 필요한 작업이라, 공개 페이지 코드에 그 권한을 넣으면 누구나 레포를 변경할 수 있게 되어버립니다). 대신 아래 절차로 레포 관리자가 직접 실행하면, 완료 즉시 이 사이트와 "연도별 신적설" 탭에 자동으로 반영됩니다.</p>
+      <ol style="font-size:13.5px;line-height:1.9;padding-left:22px;">
+        <li><a href="https://github.com/Iplaypiccolo/Snow-Amount-Measurement/actions/workflows/backfill.yml" target="_blank" rel="noopener">백필 워크플로 페이지</a>로 이동</li>
+        <li><b>Run workflow</b> 버튼 클릭</li>
+        <li><b>years</b> 칸에 원하는 기간 입력
+          <ul>
+            <li><span class="mono">10</span> → 최근 10개 시즌</li>
+            <li><span class="mono">2015-2020</span> → 2015~2020 시작연도 시즌 전부</li>
+            <li><span class="mono">2011,2013,2018</span> → 해당 시작연도 시즌만</li>
+          </ul>
+        </li>
+        <li><b>Run workflow</b> 클릭하면 시작. 이미 있는 시즌은 자동으로 건너뛰며, <span class="mono">force</span>를 <span class="mono">true</span>로 하면 다시 받습니다.</li>
+      </ol>
     </div>
   </div>
 </div>

@@ -21,6 +21,7 @@ function initApp(){
     document.getElementById('view-sources').style.display = (name==='sources') ? 'block' : 'none';
     if(name === 'map'){ setTimeout(function(){ map.invalidateSize(); }, 50); }
     if(name === 'snowtable'){ buildSnowTable(); }
+    if(name === 'sources'){ buildSeasonsTable(); }
   }
   document.querySelectorAll('.tab-btn').forEach(function(btn){
     btn.addEventListener('click', function(){ switchTab(btn.dataset.tab); });
@@ -570,6 +571,27 @@ function initApp(){
   }
 
   // ---------- 연도별 신적설 표 ----------
+  function buildSeasonsTable(){
+    var tbody = document.querySelector('#seasonsTable tbody');
+    if(!tbody) return;
+    var labels = Object.keys(SNOW_DATA.seasons).sort();
+    if(labels.length === 0){
+      tbody.innerHTML = '<tr><td colspan="3">보유 중인 시즌 없음</td></tr>';
+      return;
+    }
+    tbody.innerHTML = labels.map(function(label){
+      var season = SNOW_DATA.seasons[label];
+      var branchKeys = Object.keys(season.branches);
+      var daysWithData = 0;
+      for(var i=0;i<season.dates.length;i++){
+        for(var j=0;j<branchKeys.length;j++){
+          if(season.branches[branchKeys[j]][i] != null){ daysWithData++; break; }
+        }
+      }
+      return '<tr><td>'+label+'</td><td class="mono-cell">'+season.dates.length+'일</td><td class="mono-cell">'+daysWithData+'일</td></tr>';
+    }).join('');
+  }
+
   function buildSnowTable(){
     var label = document.getElementById('seasonSelect').value;
     var season = SNOW_DATA.seasons[label];

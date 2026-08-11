@@ -184,45 +184,52 @@ def run_daily():
     if not day_max:
         print(f"  {target_date}: 관측소 데이터를 하나도 받지 못했습니다. "
               f"(기상청 쪽에서 아직 자료가 안 올라왔을 수 있음 - 내일 자동 재시도됩니다)")
-        notify(f"⚠️ {target_date} 데이터 수집 실패 - 내일 자동 재시도")
         return
 
     print(f"  관측소 {len(day_max)}개 반영")
     apply_day_to_season(snow_data, hmap, start_year, target_date, day_max)
     save_json(SNOW_DATA_PATH, snow_data)
     print("완료")
-    notify(f"❄️ {target_date} 신적설 데이터 갱신 완료 (관측소 {len(day_max)}개)")
 
 
-def notify(message):
-    """NTFY_TOPIC 환경변수가 설정되어 있으면 ntfy.sh로 푸시 알림 전송"""
-    topic = os.environ.get("NTFY_TOPIC")
-    if not topic:
-        return
-    try:
-        req = urllib.request.Request(
-            f"https://ntfy.sh/{topic}",
-            data=message.encode("utf-8"),
-            method="POST",
-        )
-        urllib.request.urlopen(req, timeout=10)
-    except Exception as e:
-        print(f"알림 전송 실패: {e}", file=sys.stderr)
+def parse_years_spec(spec, latest_start_year, n_trailing_default=10):
+    """
+    years_spec 형식:
+      - 비어있음/None          -> 최근 n_trailing_default개 시즌
+      - "10"                   -> 최근 10개 시즌
+      - "2015-2020"            -> 2015~2020 시작연도 시즌 전부 (양끝 포함)
+      - "2011,2013,2018"       -> 지정한 시작연도 시즌들만
+    반환: 시작연도(int) 리스트
+    """
+    if not spec:
+        return [latest_start_year - i for i in range(n_trailing_default)]
+    spec = spec.strip()
+    if spec.isdigit():
+        n = int(spec)
+        return [latest_start_year - i for i in range(n)]
+    if "-" in spec and "," not in spec:
+        a, b = spec.split("-")
+        a, b = int(a), int(b)
+        lo, hi = min(a, b), max(a, b)
+        return list(range(lo, hi + 1))
+    years = [int(y.strip()) for y in spec.split(",") if y.strip()]
+    return years
 
 
-def run_backfill(n_seasons, force=False):
+def run_backfill(years_spec, force=False):
     today = date.today()
     latest_start_year = season_start_year_for_date(today)
     if latest_start_year is None:
         # 현재 시즌 밖이면 가장 최근에 끝난 시즌부터
         latest_start_year = today.year - 1 if today.month < 11 else today.year
 
+    start_years = parse_years_spec(years_spec, latest_start_year)
+
     snow_data = load_json(SNOW_DATA_PATH) if os.path.exists(SNOW_DATA_PATH) else {"seasons": {}, "stationData": {}}
     hierarchy = load_json(HIERARCHY_PATH)
     hmap = branch_station_map(hierarchy)
 
-    for i in range(n_seasons):
-        start_year = latest_start_year - i
+    for start_year in start_years:
         label = season_label(start_year)
 
         if not force and label in snow_data["seasons"] and len(snow_data["seasons"][label].get("dates", [])) > 0:
@@ -233,7 +240,6 @@ def run_backfill(n_seasons, force=False):
         # 이미 오늘(미래) 이후 날짜는 스킵
         dates = [d for d in dates if d <= today.strftime("%Y%m%d")]
         print(f"=== 시즌 {label} 백필 시작 ({len(dates)}일) ===")
-        notify(f"❄️ 백필 시작: {label} ({len(dates)}일)")
         for date_str in dates:
             print(f"{date_str} 수집 중...")
             day_max = fetch_day_max(date_str)
@@ -241,10 +247,8 @@ def run_backfill(n_seasons, force=False):
             # 시즌 하나 끝날 때마다 중간 저장 (중단되어도 이어서 가능)
             save_json(SNOW_DATA_PATH, snow_data)
         print(f"=== 시즌 {label} 완료 ===")
-        notify(f"✅ 백필 완료: {label}")
 
     print("백필 전체 완료")
-    notify("🎉 전체 백필 완료!")
 
 
 if __name__ == "__main__":
@@ -254,8 +258,8 @@ if __name__ == "__main__":
 
     mode = sys.argv[1] if len(sys.argv) > 1 else "daily"
     if mode == "backfill":
-        n = int(sys.argv[2]) if len(sys.argv) > 2 else 10
+        years_spec = sys.argv[2] if len(sys.argv) > 2 else None
         force = "--force" in sys.argv
-        run_backfill(n, force=force)
+        run_backfill(years_spec, force=force)
     else:
         run_daily()
