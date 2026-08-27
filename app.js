@@ -325,7 +325,7 @@ function initApp(){
               '<span class="st-name">'+s.name+'<span class="id">#'+s.id+(s.addr?(' · '+s.addr):'')+' · '+s.road+'</span></span>'+
               '<span class="st-snow" style="font-family:var(--mono);font-weight:700;color:#1F51FF;margin-right:8px;"></span>'+
               '<span class="st-dist dist-band-'+band+'">'+s.dist_km.toFixed(3)+' km</span>';
-            stationRowRegistry[s.id] = stRow.querySelector('.st-snow');
+            stationRowRegistry[brKey+'|||'+s.id] = stRow.querySelector('.st-snow');
             stRow.addEventListener('click', function(e){
               e.stopPropagation();
               clearHighlightRows();
@@ -579,9 +579,10 @@ function initApp(){
         else { badge.textContent = '0cm'; badge.classList.add('none'); badge.style.display='inline-block'; }
       }
     });
-    Object.keys(stationRowRegistry).forEach(function(idStr){
-      var el = stationRowRegistry[idStr];
-      var rec = SNOW_DATA.stationData[idStr];
+    Object.keys(stationRowRegistry).forEach(function(compositeKey){
+      var el = stationRowRegistry[compositeKey];
+      var stnId = compositeKey.split('|||').pop();
+      var rec = SNOW_DATA.stationData[stnId];
       var v = (date && rec) ? rec[date] : null;
       el.textContent = (date && v != null) ? (v.toFixed(1)+'cm') : (date ? '-' : '');
     });
