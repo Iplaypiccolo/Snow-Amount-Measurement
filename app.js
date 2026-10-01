@@ -19,6 +19,9 @@ function initApp(){
     document.getElementById('view-map').style.display = (name==='map') ? 'flex' : 'none';
     document.getElementById('view-snowtable').style.display = (name==='snowtable') ? 'flex' : 'none';
     document.getElementById('view-sources').style.display = (name==='sources') ? 'block' : 'none';
+    var vj = document.getElementById('view-jurisdiction');
+    if(vj){ vj.style.display = (name==='jurisdiction') ? 'flex' : 'none'; }
+    if(name === 'jurisdiction' && window.JurisdictionUI){ JurisdictionUI.show(); }
     if(name === 'map'){ setTimeout(function(){ map.invalidateSize(); }, 50); }
     if(name === 'snowtable'){ buildSnowTable(); }
     if(name === 'sources'){ buildSeasonsTable(); }
