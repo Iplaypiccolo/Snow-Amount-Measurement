@@ -11,6 +11,14 @@ data/roads.json         고속도로 노선 좌표 (거의 변경 없음)
 data/hierarchy.json     본부/지사/관측소 배정 정보 (거의 변경 없음)
 data/snow_data.json     시즌별 일 신적설 데이터
 
+jurisdiction/           '기관별 관할 고속도로' 탭 (구간을 눌러 지사 이동, 신설 기관, 본부 이동)
+  core.js                 변경 적용·관측소 배정·적설 재계산 (화면 없이 계산만)
+  ui.js / style.css       화면
+data/sections.json      관할 구간(IC/JC 사이) 모양과 기본 소속
+data/jurisdiction_changes.json  저장된 관할 변경 이력 (화면에서 받은 파일을 여기에 덮어쓰고 커밋)
+data/stations.json      관측소 좌표 목록 (지금은 배정된 적 있는 관측소만)
+tools/build_jurisdiction.py  구간 생성 도구 (표준노드링크에서 걸러낸 파일 필요)
+
 equipment/              장비 지원 페이지 (index.html 의 '장비 지원' 탭에 표시됨)
   index.html              화면 틀
   css/style.css           디자인 (색, 글자, 배치)
@@ -18,9 +26,13 @@ equipment/              장비 지원 페이지 (index.html 의 '장비 지원' 
   js/api.js               서버와 주고받는 곳 (지금은 서버 없음. 서버 연결 시 이 파일만 바꿈)
   js/app.js               화면과 동작 (역할·권한, 저장, 수정기록, 탭, 이벤트)
 
+docs/jurisdiction-rules.md  관할 고속도로 변경 탭 동작 규칙
+docs/jurisdiction-build-report.md  구간 생성·끝점 보정 결과 보고서
 docs/equipment-rules.md   장비 지원 페이지 동작 규칙 (사람이 읽는 문서: 권한 표, 저장·로그·개인정보 규칙)
 docs/decisions.md         결정 사항과 배경 (서버 이전 계획, 개인정보 메모 등. 작업 이어가기용)
 tests/test_equipment.py   장비 지원 페이지 자동 테스트
+tests/test_jurisdiction_core.js  관할 변경 계산 자동 테스트 (node tests/test_jurisdiction_core.js)
+tests/test_jurisdiction_ui.py    관할 변경 탭 화면 자동 테스트
 ```
 
 ## 장비 지원 페이지 확인 방법

@@ -1,0 +1,55 @@
+/* 기관별 관할 고속도로 탭 — index.html 의 색 변수(--panel, --line, --hwy-green 등)를 그대로 씁니다 */
+#view-jurisdiction{flex:1;min-height:0;}
+.jr-wrap{display:flex;flex:1;min-height:0;width:100%;}
+.jr-side{width:390px;min-width:320px;display:flex;flex-direction:column;border-right:1px solid var(--line);background:var(--panel);min-height:0;}
+.jr-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px 4px;font-size:15px;}
+.jr-admin{font-size:12.5px;color:var(--muted);cursor:pointer;display:flex;gap:5px;align-items:center;}
+.jr-note{padding:2px 14px 8px;font-size:11.5px;color:var(--muted);line-height:1.5;}
+.jr-tools{display:flex;gap:6px;padding:0 14px 8px;}
+.jr-tools input{flex:1;padding:7px 9px;border:1px solid var(--line);border-radius:5px;font-size:13px;min-width:0;}
+.jr-admin-only{display:none;}
+.jr-is-admin .jr-admin-only{display:inline-block;}
+.jr-btn{font-family:var(--sans);font-size:12.5px;padding:6px 10px;border:1px solid var(--line);background:#fff;border-radius:5px;cursor:pointer;color:var(--ink);}
+.jr-btn:hover{background:#f1efe6;}
+.jr-primary{background:var(--hwy-green);border-color:var(--hwy-green);color:#fff;}
+.jr-primary:hover{background:var(--hwy-green-dark);}
+.jr-tree{flex:1;overflow:auto;border-top:1px solid var(--line);min-height:120px;}
+.jr-hqname{background:#f1efe6;padding:6px 14px;font-size:12px;font-weight:700;color:var(--hwy-green-dark);position:sticky;top:0;z-index:1;}
+.jr-hqname span{font-family:var(--mono);font-weight:400;color:var(--muted);margin-left:6px;}
+.jr-br{display:flex;align-items:center;gap:8px;padding:6px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0eee4;}
+.jr-br:hover{background:#faf8f1;}
+.jr-br.on{background:#e7f2ea;font-weight:700;}
+.jr-br i{width:11px;height:11px;border-radius:3px;flex:none;}
+.jr-br .n{flex:1;}.jr-br .n em{font-style:normal;font-size:10px;background:var(--signal-amber);color:#fff;border-radius:3px;padding:1px 4px;margin-left:4px;}
+.jr-br .k{font-family:var(--mono);font-size:11px;color:var(--muted);font-weight:400;}
+.jr-detail{background:#fbfaf5;padding:6px 14px 8px 33px;border-bottom:1px solid var(--line);}
+.jr-sec{font-size:12px;padding:3px 0;cursor:pointer;line-height:1.4;}
+.jr-sec:hover{background:#f1efe6;}.jr-sec span{color:var(--hwy-green-dark);font-weight:600;}.jr-sec em{font-style:normal;font-family:var(--mono);color:var(--muted);}
+.jr-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0;font-size:12.5px;}
+.jr-empty{font-size:12px;color:var(--muted);padding:10px 14px;}
+.jr-pending{display:none;border-top:2px solid var(--signal-amber);padding:8px 14px 10px;max-height:44%;overflow:auto;background:#fffaf0;font-size:12.5px;}
+.jr-ptitle{font-weight:700;margin-bottom:4px;}
+.jr-ev{display:flex;gap:6px;align-items:flex-start;padding:3px 0;line-height:1.4;}.jr-ev.old{color:var(--muted);font-size:11.5px;}
+.jr-x{border:none;background:none;cursor:pointer;color:var(--signal-red);font-size:16px;line-height:1;margin-left:auto;}
+.jr-reason{width:100%;margin-top:6px;padding:6px 8px;border:1px solid var(--line);border-radius:5px;font-size:12.5px;}
+.jr-warn{background:#fff1e0;border:1px solid #f0c48f;color:#8a4b00;padding:6px 9px;border-radius:5px;font-size:12px;margin:4px 0 8px;line-height:1.45;}
+.jr-hist{margin-top:6px;font-size:12px;}.jr-hist summary{cursor:pointer;color:var(--muted);}
+.jr-mapbox{flex:1;position:relative;min-width:0;}
+#jmap{position:absolute;inset:0;}
+.jr-selbar{position:absolute;left:50%;transform:translateX(-50%);bottom:26px;z-index:500;background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 12px;gap:10px;align-items:center;box-shadow:0 4px 18px rgba(0,0,0,.25);font-size:13px;flex-wrap:wrap;max-width:94%;}
+.jr-selbar select{padding:5px;border:1px solid var(--line);border-radius:5px;max-width:150px;}
+.jr-legend{position:absolute;left:10px;bottom:10px;z-index:450;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:6px;padding:5px 9px;font-size:11.5px;color:var(--muted);}
+.jr-legend label{margin-left:8px;cursor:pointer;}
+.jr-modal{position:fixed;inset:0;background:rgba(10,20,15,.45);z-index:2000;align-items:center;justify-content:center;}
+.jr-dialog{background:#fff;border-radius:10px;padding:18px 22px;max-width:min(920px,94vw);max-height:86vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.35);}
+.jr-dialog h3{margin:0 0 10px;font-size:16px;}
+.jr-tablewrap{overflow:auto;}
+.jr-table{border-collapse:collapse;width:100%;font-size:12.5px;}
+.jr-table th,.jr-table td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top;}
+.jr-table th{background:#f1efe6;white-space:nowrap;}
+.jr-table td span{color:var(--muted);}.jr-table .p{color:var(--hwy-green);}.jr-table .m{color:var(--signal-red);}
+.jr-table em{font-style:normal;background:var(--signal-amber);color:#fff;border-radius:3px;padding:1px 4px;font-size:10px;}
+.jr-hint{font-size:12px;color:var(--muted);}
+.jr-form{display:flex;flex-direction:column;gap:10px;margin:10px 0;}.jr-form label{display:flex;flex-direction:column;gap:3px;font-size:12.5px;}
+.jr-form input,.jr-form select{padding:7px 9px;border:1px solid var(--line);border-radius:5px;font-size:13.5px;}
+@media (max-width:760px){.jr-wrap{flex-direction:column-reverse;}.jr-side{width:100%;min-width:0;max-height:48%;border-right:none;border-top:1px solid var(--line);}}

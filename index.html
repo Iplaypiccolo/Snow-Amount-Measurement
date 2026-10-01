@@ -334,6 +334,7 @@
   .leaflet-tooltip.snow-label::before{display:none;}
   .unit-note{font-size:10px; color:var(--muted); padding:6px 12px; font-family:var(--mono);}
 </style>
+  <link rel="stylesheet" href="jurisdiction/style.css">
 </head>
 <body>
 <nav class="pagebar" aria-label="페이지 전환">
@@ -357,6 +358,7 @@
     <button class="tab-btn active" data-tab="snowtable">연도별 신적설</button>
     <button class="tab-btn" data-tab="map">관측소 지도</button>
     <button class="tab-btn" data-tab="sources">데이터 출처</button>
+    <button class="tab-btn" data-tab="jurisdiction">기관별 관할 고속도로</button>
   </div>
 
   <div id="view-map" class="view" style="display:none;">
@@ -397,6 +399,8 @@
     </div>
     <div class="snowtable-wrap" id="snowTableWrap"></div>
   </div>
+
+  <div id="view-jurisdiction" class="view" style="display:none;"></div>
 
   <div id="view-sources" class="view sources-view" style="display:none;">
     <div class="sources-content">
@@ -497,21 +501,41 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="jurisdiction/core.js"></script>
+<script src="jurisdiction/ui.js"></script>
 <script>
 (function(){
   var META_DATE_TEXT = "자동 업데이트(매일 새벽)";
   Promise.all([
     fetch('data/roads.json', {cache: 'no-store'}).then(function(r){return r.json();}),
     fetch('data/hierarchy.json', {cache: 'no-store'}).then(function(r){return r.json();}),
-    fetch('data/snow_data.json', {cache: 'no-store'}).then(function(r){return r.json();})
+    fetch('data/snow_data.json', {cache: 'no-store'}).then(function(r){return r.json();}),
+    // 관할 구간(IC/JC 사이)·관측소 목록·변경 이력: 없어도 기존 화면은 그대로 동작
+    fetch('data/sections.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),
+    fetch('data/stations.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),
+    fetch('data/jurisdiction_changes.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;})
   ]).then(function(results){
     window.ROADS_DATA = results[0];
     window.HIERARCHY = results[1];
     window.SNOW_DATA = results[2];
     window.META_DATE = META_DATE_TEXT;
+    // 관할 변경 적용: 저장된 변경(jurisdiction_changes.json) + 이 브라우저에만 임시 적용한 변경
+    var committed = (results[5] && results[5].events) || [];
+    window.JURIS = { doc: results[3], stations: results[4], committed: committed, session: null };
+    try {
+      var raw = sessionStorage.getItem('juris_session');
+      if(raw){
+        var ss = JSON.parse(raw).events || [];
+        if(ss.length >= committed.length && JSON.stringify(ss.slice(0, committed.length)) === JSON.stringify(committed)){ window.JURIS.session = ss; }
+        else { sessionStorage.removeItem('juris_session'); }   // 저장소 쪽 변경이 더 최신이면 임시 적용분은 버림
+      }
+    } catch(e){}
+    if(window.JURIS.doc && window.JurisCore){
+      JurisCore.applyToData(window.HIERARCHY, window.SNOW_DATA, window.JURIS.doc, window.JURIS.stations, window.JURIS.session || committed);
+    }
     var s = document.createElement('script');
     s.src = 'app.js?v=' + Date.now();
-    s.onload = function(){ initApp(); };
+    s.onload = function(){ initApp(); if(window.JurisdictionUI){ JurisdictionUI.init(); } };
     document.body.appendChild(s);
   }).catch(function(err){
     document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;">데이터 로드 실패: ' + err + '</div>';
