@@ -143,7 +143,69 @@ def t_apply_in_browser(b):
     check("임시 적용" in p.locator("#jr-pending").inner_text(), "임시 적용 안내")
     check(p.locator("#statBranch").inner_text() == "59", "지사 수는 그대로")
 
-TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_apply_in_browser]
+
+def t_border_on_click_view_mode(b):
+    p = open_tab(b); sid = sections_of(p, "강원", "춘천")[0]
+    click_sec(p, sid)                                     # 보기 모드(관리자 모드 끔)
+    check(J(p, "JurisdictionUI._state().clicked") == sid, "클릭한 구간이 기억되지 않음")
+    check(J(p, "JurisdictionUI._state().casing.getLayers().length") == 2, "이중 테두리(바깥 띠+테두리) 2겹")
+    check(J(p, "JurisdictionUI._state().ends.getLayers().length") == 2, "시점·종점 표시 2개")
+    tips = p.locator(".jr-endtip").all_inner_texts()
+    check(len(tips) == 2 and tips[0].startswith("시점") and tips[1].startswith("종점"), tips)
+    # 팝업을 닫으면 테두리도 사라짐
+    J(p, "JurisdictionUI._state().map.closePopup()"); p.wait_for_timeout(150)
+    check(J(p, "JurisdictionUI._state().casing.getLayers().length") == 0, "팝업을 닫아도 테두리가 남음")
+
+def t_border_contrast_all_colors(b):
+    p = open_tab(b)
+    res = J(p, """(() => { const U = JurisdictionUI, colors = [...new Set(Object.values(U._state().polys).map(pl => pl.options.color))];
+      return colors.map(c => { const cc = U._casing(c); return [U._contrast(c, cc.casing), U._contrast(cc.casing, cc.outer)]; }); })()""")
+    check(len(res) >= 30, f"색 {len(res)}개")
+    worst = min(r[0] for r in res)
+    check(worst >= 3.0, f"선과 테두리의 대비가 너무 낮은 색이 있음 (최저 {worst:.2f}, 그래픽 기준 3:1)")
+    check(min(r[1] for r in res) >= 15, "테두리와 바깥 띠의 대비")
+    kinds = {J(p, f"JurisdictionUI._casing('hsl({h},72%,{l}%)').casing") for h in (10, 60, 120, 200, 280) for l in (26, 36, 50, 58)}
+    check(kinds == {"#0b130e", "#ffffff"}, f"밝은 색엔 어두운 테두리, 어두운 색엔 흰 테두리가 모두 쓰여야 함: {kinds}")
+
+def t_admin_click_has_border(b):
+    p = open_tab(b); admin(p)
+    secs = sections_of(p, "강원", "춘천")[:3]
+    for s in secs: click_sec(p, s)
+    check(J(p, "JurisdictionUI._state().casing.getLayers().length") == 6, "선택 3개 × 2겹")
+    check(J(p, "JurisdictionUI._state().clicked") == secs[2], "마지막으로 누른 구간")
+    click_sec(p, secs[2])                                   # 다시 누르면 해제
+    check(J(p, "JurisdictionUI._state().casing.getLayers().length") == 4, "해제하면 테두리도 사라짐")
+
+def t_pick_destination_on_map(b):
+    p = open_tab(b); admin(p)
+    src = sections_of(p, "강원", "춘천")[:2]; dst = sections_of(p, "강원", "홍천")[0]; to = bid(p, "강원", "홍천")
+    for s in src: click_sec(p, s)
+    p.click("#jr-pick"); p.wait_for_timeout(150)
+    check(p.locator("#jr-pickbar").is_visible(), "안내 바가 안 보임")
+    check(J(p, "JurisdictionUI._state().map.getContainer().style.cursor") == "crosshair", "커서")
+    click_sec(p, dst); p.wait_for_timeout(250)                # 홍천 구간을 지도에서 클릭
+    ev = J(p, "JurisdictionUI._state().pending")
+    check(len(ev) == 1 and ev[0]["t"] == "move" and ev[0]["to"] == to and ev[0]["sections"] == src, ev)
+    check(p.locator("#jr-pickbar").is_hidden(), "안내 바가 닫히지 않음")
+    check(J(p, "Object.keys(JurisdictionUI._state().selected).length") == 0, "선택이 비워지지 않음")
+    # 같은 지사 구간을 찍으면 거부, Esc 로 취소
+    for s in sections_of(p, "강원", "원주")[:1]: click_sec(p, s)
+    p.click("#jr-pick"); click_sec(p, sections_of(p, "강원", "원주")[1]); p.wait_for_timeout(150)
+    check(len(J(p, "JurisdictionUI._state().pending")) == 1, "같은 지사로 이동이 추가됨")
+    p.keyboard.press("Escape"); p.wait_for_timeout(100)
+    check(J(p, "JurisdictionUI._state().pick") is False and p.locator("#jr-pickbar").is_hidden(), "Esc 취소")
+
+def t_popup_button_starts_edit(b):
+    p = open_tab(b); sid = sections_of(p, "강원", "춘천")[0]
+    J(p, f"(()=>{{const pl=JurisdictionUI._state().polys['{sid}'];pl.fire('click',{{latlng:pl.getCenter(),originalEvent:{{}}}});pl.openPopup(pl.getCenter())}})()"); p.wait_for_timeout(250)
+    check(p.locator(".jr-popbtn").count() == 1, "보기 모드 팝업에 [이 구간 옮기기]가 없음")
+    p.click(".jr-popbtn"); p.wait_for_timeout(250)
+    check(p.locator("#jr-admin").is_checked(), "관리자 모드로 바뀌지 않음")
+    check(J(p, "Object.keys(JurisdictionUI._state().selected)") == [sid], "구간이 선택되지 않음")
+    check(p.locator("#jr-selbar").is_visible(), "이동 바가 안 보임")
+
+TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_apply_in_browser,
+         t_border_on_click_view_mode, t_border_contrast_all_colors, t_admin_click_has_border, t_pick_destination_on_map, t_popup_button_starts_edit]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()

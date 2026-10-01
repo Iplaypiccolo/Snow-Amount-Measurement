@@ -53,3 +53,9 @@
 .jr-form{display:flex;flex-direction:column;gap:10px;margin:10px 0;}.jr-form label{display:flex;flex-direction:column;gap:3px;font-size:12.5px;}
 .jr-form input,.jr-form select{padding:7px 9px;border:1px solid var(--line);border-radius:5px;font-size:13.5px;}
 @media (max-width:760px){.jr-wrap{flex-direction:column-reverse;}.jr-side{width:100%;min-width:0;max-height:48%;border-right:none;border-top:1px solid var(--line);}}
+
+.jr-endtip{background:#fff;color:#0b130e;border:2px solid #0b130e;border-radius:4px;font-weight:700;font-size:12px;padding:2px 7px;box-shadow:0 1px 4px rgba(0,0,0,.35);}
+.jr-endtip.leaflet-tooltip-top:before,.jr-endtip.leaflet-tooltip-bottom:before{display:none;}
+.jr-pickbar{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:520;background:#0b130e;color:#fff;padding:8px 8px 8px 16px;border-radius:22px;font-size:13px;gap:12px;align-items:center;box-shadow:0 4px 16px rgba(0,0,0,.4);}
+.jr-pickbar .jr-btn{border-radius:14px;}
+.jr-popbtn{margin-top:2px;}

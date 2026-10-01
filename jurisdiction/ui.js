@@ -8,7 +8,7 @@
 (function () {
   'use strict';
   var C = window.JurisCore;
-  var S = { inited: false, admin: false, selected: {}, last: null, pending: [], focus: null, map: null, polys: {}, roads: null, search: '', view: null, secMap: null };
+  var S = { inited: false, admin: false, selected: {}, last: null, clicked: null, pick: false, pending: [], focus: null, map: null, polys: {}, casing: null, ends: null, roads: null, search: '', view: null, secMap: null };
 
   function J() { return window.JURIS; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -28,6 +28,31 @@
     return 'hsl(' + Math.round(hqI * 360 / st.hqs.length + 8) + ',72%,' + light + '%)';
   }
 
+  /* ---------- 테두리 색: 선 색의 밝기에 따라 반대로 ----------
+     선이 밝으면 어두운 테두리, 선이 어두우면 흰 테두리. 지도 배경에서도 떨어져 보이도록
+     가장 바깥에는 테두리와 반대 색의 얇은 띠를 한 겹 더 둡니다 (이중 테두리). */
+  function toRgb(color) {
+    var m = /hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/.exec(color);
+    if (m) {
+      var h = +m[1] / 360, sat = +m[2] / 100, l = +m[3] / 100;
+      var q = l < 0.5 ? l * (1 + sat) : l + sat - l * sat, p = 2 * l - q;
+      var f = function (t) { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+      return [f(h + 1 / 3) * 255, f(h) * 255, f(h - 1 / 3) * 255];
+    }
+    var x = color.replace('#', ''); if (x.length === 3) x = x.replace(/(.)/g, '$1$1');
+    return [parseInt(x.slice(0, 2), 16), parseInt(x.slice(2, 4), 16), parseInt(x.slice(4, 6), 16)];
+  }
+  function relLum(rgb) {
+    var c = rgb.map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  }
+  function contrast(a, b) { var l1 = relLum(toRgb(a)), l2 = relLum(toRgb(b)), hi = Math.max(l1, l2), lo = Math.min(l1, l2); return (hi + 0.05) / (lo + 0.05); }
+  function casingColors(lineColor) {
+    var dark = '#0b130e', white = '#ffffff';
+    // 선과의 대비가 더 큰 쪽(어두운색/흰색)을 테두리로, 나머지를 바깥 띠로 씁니다
+    return contrast(lineColor, dark) >= contrast(lineColor, white) ? { casing: dark, outer: white } : { casing: white, outer: dark };
+  }
+
   /* ---------- 화면 뼈대 ---------- */
   function buildShell() {
     var root = $('view-jurisdiction');
@@ -44,10 +69,11 @@
       '</div>' +
       '<div class="jr-mapbox"><div id="jmap"></div>' +
         '<div id="jr-selbar" class="jr-selbar" style="display:none"></div>' +
-        '<div class="jr-legend">점선 = 변경 대기 · 굵은 분홍 = 선택한 구간 <label><input type="checkbox" id="jr-roads" checked> 배경 도로</label></div>' +
+        '<div id="jr-pickbar" class="jr-pickbar" style="display:none">도착 지사로 삼을 구간을 지도에서 클릭하세요 <button id="jr-pickcancel" class="jr-btn">취소 (Esc)</button></div>' +
+        '<div class="jr-legend">이중 테두리 = 선택·클릭한 구간 · 점선 = 변경 대기 <label><input type="checkbox" id="jr-roads" checked> 배경 도로</label></div>' +
       '</div></div>' +
       '<div id="jr-modal" class="jr-modal" style="display:none"></div>';
-    $('jr-note').innerHTML = '지도에서 구간을 누르면 소속 정보가 보입니다. 변경하려면 <b>관리자 모드</b>를 켜세요. 이 모드는 화면 편의 기능이며, 실제 반영은 저장 파일을 저장소에 올릴 수 있는 사람만 할 수 있습니다.';
+    $('jr-note').innerHTML = '지도에서 구간을 누르면 테두리와 함께 소속 정보가 보입니다. 변경하려면 <b>관리자 모드</b>를 켜고 구간을 누르세요. 이 모드는 화면 편의 기능이며, 실제 반영은 저장 파일을 저장소에 올릴 수 있는 사람만 할 수 있습니다.';
   }
 
   function ensureMap() {
@@ -59,11 +85,14 @@
       L.polyline(r.coords.map(function (c) { return [c[1], c[0]]; }), { color: '#b9b5a5', weight: 1, opacity: 0.7, interactive: false }).addTo(S.roads);
     });
     J().doc.sections.forEach(function (sec) {
-      var p = L.polyline(sec.coords.map(function (c) { return [c[1], c[0]]; }), { weight: 4, opacity: 0.95 }).addTo(S.map);
+      var p = L.polyline(sec.coords.map(function (c) { return [c[1], c[0]]; }), { weight: 4, opacity: 0.95, bubblingMouseEvents: false }).addTo(S.map);
       p.bindPopup(function () { return infoHtml(sec); });
       p.on('click', function (e) { onSectionClick(sec, e.originalEvent); });
       S.polys[sec.id] = p;
     });
+    S.casing = L.layerGroup().addTo(S.map);          // 선택·클릭한 구간의 이중 테두리
+    S.ends = L.layerGroup().addTo(S.map);            // 시점·종점 IC/JC 표시
+    S.map.on('popupclose', function () { if (!S.admin && S.clicked) { S.clicked = null; restyle(); } });   // 보기 모드: 팝업을 닫으면 테두리도 해제
     S.map.on('popupopen', function (e) {          // 닫기(X)가 href="#" 라서 상위 프레임으로 이동하는 문제 방지
       var btn = e.popup && e.popup._closeButton;
       if (btn) { btn.removeAttribute('href'); L.DomEvent.off(btn, 'click'); L.DomEvent.on(btn, 'click', function (ev) { L.DomEvent.preventDefault(ev); S.map.closePopup(e.popup); }); }
@@ -74,34 +103,83 @@
   function infoHtml(sec) {
     var st = S.view.state, o = st.branches[st.owner[sec.id]];
     return '<b>' + esc(sec.route) + '</b><br>' + esc(sec['from']) + ' → ' + esc(sec.to) + ' · ' + sec.km + 'km<br>' +
-      '소속: <b>' + esc(o ? o.name : '-') + '</b> 지사 (' + esc(o ? o.hq : '-') + ')';
+      '소속: <b>' + esc(o ? o.name : '-') + '</b> 지사 (' + esc(o ? o.hq : '-') + ')' +
+      (S.admin ? '' : '<div style="margin-top:7px"><button class="jr-btn jr-popbtn" data-sid="' + sec.id + '">이 구간 옮기기 (관리자 모드 켜기)</button></div>');
   }
 
   /* ---------- 지도 스타일 ---------- */
+  function latlngsOf(sec) { return sec.coords.map(function (c) { return [c[1], c[0]]; }); }
+
   function restyle() {
-    var st = S.view.state, committed = C.resolve(J().doc, base()).owner;
+    var st = S.view.state, committed = C.resolve(J().doc, base()).owner, hl = {};
+    Object.keys(S.selected).forEach(function (id) { hl[id] = true; });
+    if (S.clicked) hl[S.clicked] = true;
     J().doc.sections.forEach(function (sec) {
       var p = S.polys[sec.id]; if (!p) return;
-      var own = st.owner[sec.id], sel = !!S.selected[sec.id], dim = S.focus && own !== S.focus;
+      var own = st.owner[sec.id], dim = S.focus && own !== S.focus && !hl[sec.id];
       p.setStyle({
-        color: sel ? '#ff00aa' : colorOf(own), weight: sel ? 8 : (S.focus && own === S.focus ? 6 : 4),
+        color: colorOf(own), weight: hl[sec.id] || (S.focus && own === S.focus) ? 6 : 4,
         opacity: dim ? 0.22 : 0.95, dashArray: own !== committed[sec.id] ? '7,7' : null
       });
-      if (sel) p.bringToFront();
+    });
+    // 이중 테두리: 가장 바깥(반대색 띠) → 테두리 → 구간 선 순서로 겹쳐 그림
+    S.casing.clearLayers(); S.ends.clearLayers();
+    var ids = Object.keys(hl).filter(function (id) { return S.polys[id]; }), outers = [], cases = [];
+    ids.forEach(function (id) {
+      var sec = S.secMap[id], cc = casingColors(colorOf(st.owner[id])), ll = latlngsOf(sec);
+      outers.push(L.polyline(ll, { color: cc.outer, weight: 20, opacity: 0.7, interactive: false, lineCap: 'round' }).addTo(S.casing));
+      cases.push(L.polyline(ll, { color: cc.casing, weight: 13, opacity: 1, interactive: false, lineCap: 'round' }).addTo(S.casing));
+    });
+    outers.forEach(function (l) { l.bringToFront(); });
+    cases.forEach(function (l) { l.bringToFront(); });
+    ids.forEach(function (id) { S.polys[id].bringToFront(); });
+    var endId = S.clicked || (ids.length === 1 ? ids[0] : null);       // 시점·종점은 마지막으로 누른 구간(또는 1개 선택 시)만
+    if (endId && S.secMap[endId]) addEnds(S.secMap[endId]);
+  }
+
+  function addEnds(sec) {
+    var pts = [[sec.coords[0], 'start', sec['from']], [sec.coords[sec.coords.length - 1], 'end', sec.to]];
+    pts.forEach(function (x) {
+      var name = x[2] === '(IC 아님)' ? '구간 끝' : x[2], label = (x[1] === 'start' ? '시점 ' : '종점 ') + name;
+      L.circleMarker([x[0][1], x[0][0]], { radius: 7, color: '#0b130e', weight: 3, fillColor: '#ffffff', fillOpacity: 1, interactive: false })
+        .bindTooltip(esc(label), { permanent: true, direction: x[1] === 'start' ? 'top' : 'bottom', offset: [0, x[1] === 'start' ? -8 : 8], className: 'jr-endtip' })
+        .addTo(S.ends);
     });
   }
 
   /* ---------- 구간 선택 ---------- */
   function onSectionClick(sec, ev) {
-    if (!S.admin) return;                       // 보기 모드: 팝업만
+    if (!S.admin) { S.clicked = sec.id; restyle(); return; }       // 보기 모드: 팝업 + 테두리
     if (S.map) S.map.closePopup();
+    if (S.pick) { pickDestination(sec); return; }                 // 도착 지사를 지도에서 찍는 중
     if (ev && ev.shiftKey && S.last && S.last.chain === sec.chain) {       // Shift+클릭: 같은 노선 줄에서 범위 선택
       var lo = Math.min(S.last.order, sec.order), hi = Math.max(S.last.order, sec.order);
       J().doc.sections.forEach(function (s) { if (s.chain === sec.chain && s.order >= lo && s.order <= hi) S.selected[s.id] = true; });
     } else {
       if (S.selected[sec.id]) delete S.selected[sec.id]; else S.selected[sec.id] = true;
     }
+    S.clicked = S.selected[sec.id] ? sec.id : null;
     S.last = sec; afterChange(false);
+  }
+
+  function setAdmin(on) {
+    S.admin = on; if (!on) { S.selected = {}; S.last = null; S.pick = false; S.clicked = null; }
+    $('jr-admin').checked = on;
+    $('view-jurisdiction').classList.toggle('jr-is-admin', on);
+    afterChange(false);
+  }
+
+  function setPick(on) {
+    S.pick = on;
+    $('jr-pickbar').style.display = on ? 'flex' : 'none';
+    if (S.map) S.map.getContainer().style.cursor = on ? 'crosshair' : '';
+  }
+
+  // 지도에서 클릭한 구간의 소속 지사를 도착 지사로 삼아 이동 대기에 추가
+  function pickDestination(sec) {
+    var st = S.view.state, to = st.owner[sec.id], sel = selectedList().filter(function (s) { return st.owner[s.id] !== to; });
+    if (!sel.length) { window.alert('선택한 구간이 이미 ' + st.branches[to].name + ' 지사 소속입니다. 다른 지사의 구간을 눌러 주세요.'); return; }
+    setPick(false); queueMove(sel, to);
   }
 
   function selectedList() { return J().doc.sections.filter(function (s) { return S.selected[s.id]; }); }
@@ -116,7 +194,7 @@
     }).join('');
     var prev = $('jr-dest') ? $('jr-dest').value : '';
     bar.innerHTML = '<b>' + sel.length + '개 구간 · ' + km + 'km 선택</b> → 이동할 지사 <select id="jr-dest">' + opts + '</select>' +
-      '<button id="jr-move" class="jr-btn jr-primary">이동 대기에 추가</button><button id="jr-clear" class="jr-btn">선택 해제</button>';
+      '<button id="jr-move" class="jr-btn jr-primary">이동 대기에 추가</button><button id="jr-pick" class="jr-btn">지도에서 도착 지사 고르기</button><button id="jr-clear" class="jr-btn">선택 해제</button>';
     if (prev) $('jr-dest').value = prev;
     bar.style.display = 'flex';
   }
@@ -228,12 +306,16 @@
     return 'B' + String(max + 1).padStart(3, '0');
   }
 
-  function addMove() {
-    var sel = selectedList(), to = $('jr-dest').value; if (!sel.length || !to) return;
+  function queueMove(sel, to) {
     var st = S.view.state, from = []; sel.forEach(function (s) { var o = st.owner[s.id]; if (o !== to && from.indexOf(o) < 0) from.push(o); });
     if (!from.length) { window.alert('선택한 구간이 이미 그 지사 소속입니다.'); return; }
     S.pending.push({ t: 'move', sections: sel.map(function (s) { return s.id; }), to: to, from: from, km: round1(sel.reduce(function (a, s) { return a + s.km; }, 0)) });
-    S.selected = {}; S.last = null; afterChange(true);
+    S.selected = {}; S.last = null; S.clicked = null; afterChange(true);
+  }
+
+  function addMove() {
+    var sel = selectedList(), to = $('jr-dest').value; if (!sel.length || !to) return;
+    queueMove(sel, to);
   }
 
   function addBranchDialog() {
@@ -285,23 +367,24 @@
   }
 
   function bind() {
-    $('jr-admin').addEventListener('change', function (e) {
-      S.admin = e.target.checked; if (!S.admin) { S.selected = {}; S.last = null; }
-      document.getElementById('view-jurisdiction').classList.toggle('jr-is-admin', S.admin);
-      afterChange(false);
-    });
+    $('jr-admin').addEventListener('change', function (e) { setAdmin(e.target.checked); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && S.pick) setPick(false); });
     $('jr-search').addEventListener('input', function (e) { S.search = e.target.value; renderTree(); });
     $('jr-add').addEventListener('click', addBranchDialog);
     $('jr-roads').addEventListener('change', function (e) { if (e.target.checked) S.roads.addTo(S.map); else S.map.removeLayer(S.roads); });
     document.getElementById('view-jurisdiction').addEventListener('click', function (e) {
       var t = e.target;
+      var pb = t.closest && t.closest('.jr-popbtn');                 // 팝업의 [이 구간 옮기기]: 관리자 모드로 바꾸고 그 구간을 선택
+      if (pb) { var sid = pb.dataset.sid; S.map.closePopup(); setAdmin(true); S.selected[sid] = true; S.clicked = sid; S.last = S.secMap[sid]; afterChange(false); return; }
       var br = t.closest && t.closest('.jr-br'); if (br) { focusBranch(br.dataset.id); return; }
       var sec = t.closest && t.closest('.jr-sec');
       if (sec && t.tagName === 'INPUT') { if (t.checked) S.selected[sec.dataset.sid] = true; else delete S.selected[sec.dataset.sid]; afterChange(false); return; }
       if (sec) { var p = S.polys[sec.dataset.sid]; if (p) S.map.fitBounds(p.getBounds(), { padding: [60, 60], maxZoom: 13 }); return; }
       var id = t.id;
       if (id === 'jr-move') addMove();
-      else if (id === 'jr-clear') { S.selected = {}; S.last = null; afterChange(false); }
+      else if (id === 'jr-pick') setPick(true);
+      else if (id === 'jr-pickcancel') setPick(false);
+      else if (id === 'jr-clear') { S.selected = {}; S.last = null; S.clicked = null; afterChange(false); }
       else if (id === 'jr-selall') { J().doc.sections.forEach(function (s) { if (S.view.state.owner[s.id] === S.focus) S.selected[s.id] = true; }); afterChange(false); }
       else if (id === 'jr-preview') preview();
       else if (id === 'jr-save') saveFile();
@@ -327,5 +410,5 @@
     if (!S.inited) return;
     ensureMap(); afterChange(false);
   }
-  window.JurisdictionUI = { init: init, show: show, _state: function () { return S; } };
+  window.JurisdictionUI = { init: init, show: show, _state: function () { return S; }, _casing: casingColors, _contrast: contrast };
 })();
