@@ -6,12 +6,34 @@
 
 ```
 index.html              페이지 골격 (데이터는 fetch로 불러옴). 맨 위 탭으로 '강설량 측정' / '장비 지원' 전환
-equipment.html          장비 지원 페이지 (index.html의 '장비 지원' 탭에 표시됨. 현재 샘플 데이터·가상 차량번호)
 app.js                  화면 로직 (지도, 표, 탭 전환, 업로드 병합 등)
 data/roads.json         고속도로 노선 좌표 (거의 변경 없음)
 data/hierarchy.json     본부/지사/관측소 배정 정보 (거의 변경 없음)
 data/snow_data.json     시즌별 일 신적설 데이터
+
+equipment/              장비 지원 페이지 (index.html 의 '장비 지원' 탭에 표시됨)
+  index.html              화면 틀
+  css/style.css           디자인 (색, 글자, 배치)
+  js/sample-data.js       샘플 데이터 (가상 차량번호·가짜 운전원. 실제 데이터 아님)
+  js/api.js               서버와 주고받는 곳 (지금은 서버 없음. 서버 연결 시 이 파일만 바꿈)
+  js/app.js               화면과 동작 (역할·권한, 저장, 수정기록, 탭, 이벤트)
+
+docs/equipment-rules.md   장비 지원 페이지 동작 규칙 (사람이 읽는 문서: 권한 표, 저장·로그·개인정보 규칙)
+docs/decisions.md         결정 사항과 배경 (서버 이전 계획, 개인정보 메모 등. 작업 이어가기용)
+tests/test_equipment.py   장비 지원 페이지 자동 테스트
 ```
+
+## 장비 지원 페이지 확인 방법
+
+- **그냥 열어보기**: `equipment/index.html` 을 더블클릭하면 브라우저에서 열립니다. (상단 "접속 아이디(데모)"로 역할을 바꿔 볼 수 있습니다)
+- **자동 테스트** (수정 후 "전과 똑같이 동작하는지" 확인):
+  ```
+  pip install playwright
+  playwright install chromium
+  python tests/test_equipment.py
+  ```
+  `15/15 통과` 처럼 나오면 정상입니다. 하나라도 `FAIL` 이면 어디가 틀렸는지 함께 표시됩니다.
+- 현재는 샘플 데이터이며 **저장해도 새로고침하면 사라집니다.** (서버 미연결)
 
 ## 데이터 갱신 방식 — 수동(크롬 콘솔)
 
