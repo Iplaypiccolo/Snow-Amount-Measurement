@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>제설장비 지원 현황</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">雪</div>
+      <h1>제설장비 지원 현황<small>신속대응팀 · 지역본부 지원</small></h1>
+    </div>
+    <div class="date-nav" aria-label="지원일자 선택">
+      <button type="button" id="prevDay" aria-label="전날">‹</button>
+      <input type="date" id="dateInput" aria-label="지원일자">
+      <button type="button" id="nextDay" aria-label="다음날">›</button>
+    </div>
+    <label class="user-box">접속 아이디(데모)
+      <select id="userSel" aria-label="접속 아이디 선택(데모용)"></select>
+    </label>
+    <button type="button" class="theme-btn" id="themeBtn">화면 밝기</button>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-tab="move">이동 현황</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="fleet">기관별 장비</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="branch">지사별 요청·편성</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="driver">운전원 현황</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="log" id="logTabBtn" hidden>로그 기록</button>
+  </nav>
+</header>
+
+<main>
+  <!-- ===== 이동 현황 ===== -->
+  <section class="panel" id="panel-move">
+    <div class="perm" id="perm-move"></div>
+    <div class="summary">
+      <div class="summary-head">
+        <h2>어느 기관에서 어느 지사로</h2>
+        <p id="summaryNote"></p>
+      </div>
+      <div class="matrix-wrap"><table class="matrix" id="matrix"></table></div>
+    </div>
+    <div class="filters" id="filters"></div>
+    <div id="destList"></div>
+  </section>
+
+  <!-- ===== 기관별 장비 ===== -->
+  <section class="panel" id="panel-fleet" hidden>
+    <div class="perm" id="perm-fleet"></div>
+    <div class="org-grid" id="orgGrid"></div>
+    <div class="filters" id="fleetFilters"></div>
+    <div class="table-wrap tall"><table class="eq" id="eqTable"></table></div>
+    <div class="savebar" id="save-fleet" hidden>
+      <span class="save-state" aria-live="polite"></span>
+      <button type="button" class="btn" data-revert="fleet">되돌리기</button>
+      <button type="button" class="btn primary" data-save="fleet">저장</button>
+    </div>
+  </section>
+
+  <!-- ===== 지사별 요청·편성 ===== -->
+  <section class="panel" id="panel-branch" hidden>
+    <div class="perm" id="perm-branch"></div>
+    <div class="filters">
+      <button type="button" class="chip" id="onlyActive" aria-pressed="true">요청 있는 지사만</button>
+    </div>
+    <div class="table-wrap"><table class="branch" id="branchTable"></table></div>
+    <div class="savebar" id="save-branch" hidden>
+      <span class="save-state" aria-live="polite"></span>
+      <button type="button" class="btn" data-revert="branch">되돌리기</button>
+      <button type="button" class="btn primary" data-save="branch">저장</button>
+    </div>
+  </section>
+
+  <!-- ===== 운전원 현황 ===== -->
+  <section class="panel" id="panel-driver" hidden>
+    <div class="perm" id="perm-driver"></div>
+    <div class="filters" id="drvFilters"></div>
+    <div class="table-wrap"><table class="drv" id="drvTable"></table></div>
+    <div class="savebar" id="save-driver" hidden>
+      <span class="save-state" aria-live="polite"></span>
+      <button type="button" class="btn" data-revert="driver">되돌리기</button>
+      <button type="button" class="btn primary" data-save="driver">저장</button>
+    </div>
+  </section>
+
+  <!-- ===== 로그 기록 (관리자만) ===== -->
+  <section class="panel" id="panel-log" hidden>
+    <div class="perm" id="perm-log"></div>
+    <div class="filters" id="logFilters"></div>
+    <div class="table-wrap tall"><table class="logt" id="logTable"></table></div>
+  </section>
+</main>
+
+<div class="sheet-backdrop" id="backdrop" hidden></div>
+<aside class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></aside>
+<div class="tip" id="tip" hidden role="tooltip"></div>
+<div class="toast" id="toast" hidden role="status"></div>
+<!-- 코드는 아래 순서대로 불러옵니다 (순서가 중요합니다) -->
+<script src="js/sample-data.js"></script>
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
