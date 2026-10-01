@@ -5,7 +5,8 @@
 ## 구조
 
 ```
-index.html              페이지 골격 (데이터는 fetch로 불러옴)
+index.html              페이지 골격 (데이터는 fetch로 불러옴). 맨 위 탭으로 '강설량 측정' / '장비 지원' 전환
+equipment.html          장비 지원 페이지 (index.html의 '장비 지원' 탭에 표시됨. 현재 샘플 데이터·가상 차량번호)
 app.js                  화면 로직 (지도, 표, 탭 전환, 업로드 병합 등)
 data/roads.json         고속도로 노선 좌표 (거의 변경 없음)
 data/hierarchy.json     본부/지사/관측소 배정 정보 (거의 변경 없음)

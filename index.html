@@ -22,7 +22,23 @@
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;height:100%;font-family:var(--sans);background:var(--paper);color:var(--ink);}
 
-  .app{display:flex;flex-direction:column;height:100vh;}
+  body{display:flex;flex-direction:column;}
+  .app{display:flex;flex-direction:column;flex:1;min-height:0;}
+
+  /* ---- 최상위 페이지 전환 바 (강설량 측정 / 장비 지원) ---- */
+  .pagebar{
+    flex:none; display:flex; gap:6px; align-items:center;
+    background:#16202B; padding:6px 22px;
+  }
+  .page-btn{
+    font-family:var(--sans); font-size:13.5px; font-weight:700;
+    background:none; border:1px solid transparent; color:#9fb0bf;
+    padding:6px 16px; border-radius:6px; cursor:pointer;
+  }
+  .page-btn:hover{color:#fff;}
+  .page-btn.active{color:#16202B; background:#F2A900; border-color:#F2A900;}
+  #page-equip{display:none; flex:1; min-height:0;}
+  #page-equip iframe{width:100%; height:100%; border:0; display:block; background:#EEF2F5;}
 
   header{
     background:var(--hwy-green);
@@ -320,7 +336,16 @@
 </style>
 </head>
 <body>
-<div class="app">
+<nav class="pagebar" aria-label="페이지 전환">
+  <button type="button" class="page-btn active" data-page="snow">강설량 측정</button>
+  <button type="button" class="page-btn" data-page="equip">장비 지원</button>
+</nav>
+
+<div id="page-equip">
+  <iframe id="equipFrame" title="제설장비 지원 현황" data-src="equipment.html"></iframe>
+</div>
+
+<div class="app" id="page-snow">
 
   <header>
     <span class="badge">EX-SNOW-NET</span>
@@ -491,6 +516,25 @@
   }).catch(function(err){
     document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;">데이터 로드 실패: ' + err + '</div>';
   });
+})();
+</script>
+<script>
+/* 최상위 페이지 전환: 강설량 측정 <-> 장비 지원 (장비 지원은 처음 열 때 불러옴) */
+(function(){
+  var btns = document.querySelectorAll('.page-btn');
+  var snow = document.getElementById('page-snow');
+  var equip = document.getElementById('page-equip');
+  var frame = document.getElementById('equipFrame');
+  function show(name){
+    btns.forEach(function(b){ b.classList.toggle('active', b.dataset.page === name); });
+    snow.style.display = (name === 'snow') ? '' : 'none';
+    equip.style.display = (name === 'equip') ? 'block' : 'none';
+    if(name === 'equip' && !frame.getAttribute('src')){ frame.setAttribute('src', frame.dataset.src); }
+    if(name === 'snow'){ setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, 50); } // 지도 크기 다시 맞춤
+    try{ history.replaceState(null, '', name === 'equip' ? '#equip' : location.pathname + location.search); }catch(e){}
+  }
+  btns.forEach(function(b){ b.addEventListener('click', function(){ show(b.dataset.page); }); });
+  if(location.hash === '#equip'){ show('equip'); }
 })();
 </script>
 </body>
