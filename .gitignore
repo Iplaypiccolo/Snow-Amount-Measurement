@@ -1,3 +1,7 @@
-__pycache__/
+
+# Cloudflare 로컬 시험 파일
 *.pyc
 .DS_Store
+.wrangler/
+__pycache__/
+node_modules/

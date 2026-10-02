@@ -21,6 +21,12 @@ tools/build_jurisdiction.py  구간 생성 도구 (표준노드링크에서 걸�
 tools/add_unassigned_sections.py  미지정 고속도로(어느 지사에도 속하지 않은 도로) 구간 추가 도구
 docs/unassigned-sections-report.md  미지정 구간 생성 결과
 
+functions/              Cloudflare Pages 서버 코드 (/api: 로그인, 계정 관리, 접속 로그, 수집 상태)
+admin/                  관리자 콘솔 화면 (/admin/)
+workers/collector/      기상청 API 자동 호출 Worker (지금은 접속 시험판)
+cloudflare/             D1 표 정의(schema.sql)와 배포 안내(README.md)
+wrangler.jsonc          Cloudflare Pages 설정
+
 equipment/              장비 지원 페이지 (index.html 의 '장비 지원' 탭에 표시됨)
   index.html              화면 틀
   css/style.css           디자인 (색, 글자, 배치)
@@ -33,6 +39,8 @@ docs/jurisdiction-build-report.md  구간 생성·끝점 보정 결과 보고서
 docs/equipment-rules.md   장비 지원 페이지 동작 규칙 (사람이 읽는 문서: 권한 표, 저장·로그·개인정보 규칙)
 docs/decisions.md         결정 사항과 배경 (서버 이전 계획, 개인정보 메모 등. 작업 이어가기용)
 tests/test_equipment.py   장비 지원 페이지 자동 테스트
+tests/test_cloudflare_auth.mjs  서버 코드(로그인·계정·접속 로그·수집 시험) 자동 테스트 (node --no-warnings tests/test_cloudflare_auth.mjs)
+tests/test_admin_console.py     관리자 콘솔 화면 자동 테스트
 tests/test_jurisdiction_core.js  관할 변경 계산 자동 테스트 (node tests/test_jurisdiction_core.js)
 tests/test_jurisdiction_ui.py    관할 변경 탭 화면 자동 테스트
 ```

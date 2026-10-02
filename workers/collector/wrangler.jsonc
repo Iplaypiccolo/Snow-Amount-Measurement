@@ -1,0 +1,17 @@
+// 기상청 자료 수집 Worker 설정
+// 처음 한 번: 아래 database_id 를 `npx wrangler d1 create snow-ops` 결과로 바꾸세요. (자세한 순서: cloudflare/README.md)
+{
+  "name": "snow-collector",
+  "main": "src/index.js",
+  "compatibility_date": "2026-01-01",
+  "triggers": { "crons": ["*/30 * * * *"] },          // 30분마다 (UTC 기준 분 단위라 한국 시간과 분이 같습니다)
+  "d1_databases": [
+    { "binding": "DB", "database_name": "snow-ops", "database_id": "REPLACE_WITH_DATABASE_ID" }
+  ],
+  "vars": {
+    // 시험할 기상청 주소. 인증키 자리는 {KEY} 로 두면 비밀값 KMA_KEY 로 채워집니다. 본인이 쓰는 API 주소로 바꾸세요.
+    "KMA_PROBE_URL": "https://apihub.kma.go.kr/api/typ01/url/fct_shrt_reg.php?tmfc=0&authKey={KEY}",
+    "KMA_TIMEOUT_MS": "20000"
+  }
+  // 비밀값(코드나 저장소에 넣지 않음): npx wrangler secret put KMA_KEY   /   npx wrangler secret put TRIGGER_TOKEN
+}

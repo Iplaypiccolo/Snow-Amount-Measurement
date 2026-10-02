@@ -1,0 +1,11 @@
+// Cloudflare Pages(화면 + /api 서버 코드) 설정 — 저장소 맨 위 폴더가 사이트이고, functions/ 폴더가 서버 코드입니다.
+// 처음 한 번: 아래 database_id 를 `npx wrangler d1 create snow-ops` 결과로 바꾸세요. (자세한 순서: cloudflare/README.md)
+{
+  "name": "snow-ops",
+  "pages_build_output_dir": ".",
+  "compatibility_date": "2026-01-01",
+  "d1_databases": [
+    { "binding": "DB", "database_name": "snow-ops", "database_id": "REPLACE_WITH_DATABASE_ID" }
+  ]
+  // 비밀값: npx wrangler pages secret put SETUP_TOKEN --project-name snow-ops   (첫 관리자 만들 때만 필요)
+}

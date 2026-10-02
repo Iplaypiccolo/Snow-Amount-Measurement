@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>관리자 콘솔</title>
+<style>
+  :root{--ink:#0d1b14;--paper:#f5f3ec;--panel:#fff;--line:#dcd8c8;--green:#0f6b45;--red:#b3261e;--amber:#d98a00;--muted:#6b7566;}
+  *{box-sizing:border-box} body{margin:0;background:var(--paper);color:var(--ink);font:14px/1.55 -apple-system,"Malgun Gothic","Noto Sans KR",sans-serif;}
+  header{background:#0b3d29;color:#fff;padding:12px 18px;display:flex;align-items:center;gap:12px}
+  header b{font-size:16px} header .sp{flex:1} header .who{font-size:12.5px;opacity:.9}
+  main{max-width:1040px;margin:0 auto;padding:18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:16px}
+  h2{margin:0 0 10px;font-size:16px} h3{margin:14px 0 6px;font-size:14px}
+  label{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--muted);margin-bottom:10px}
+  input,select{padding:8px 10px;border:1px solid var(--line);border-radius:6px;font:inherit;color:var(--ink);background:#fff}
+  button{font:inherit;padding:7px 14px;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer}
+  button.primary{background:var(--green);border-color:var(--green);color:#fff;font-weight:600} button.danger{color:var(--red)}
+  button:disabled{opacity:.45;cursor:default}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end} .narrow{max-width:380px}
+  .msg{padding:8px 12px;border-radius:6px;margin:8px 0;font-size:13px} .msg.err{background:#fde8e6;color:var(--red)} .msg.ok{background:#e3f3ea;color:var(--green)}
+  .temp{font:15px/1.4 ui-monospace,Consolas,monospace;background:#fff8e1;border:2px dashed var(--amber);padding:10px 12px;border-radius:6px;margin:8px 0;user-select:all}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:14px;flex-wrap:wrap}
+  .tabs button{border:none;border-bottom:3px solid transparent;border-radius:0;background:none;padding:8px 14px;color:var(--muted)}
+  .tabs button.on{border-bottom-color:var(--amber);color:var(--ink);font-weight:700}
+  table{border-collapse:collapse;width:100%;font-size:13px} th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+  th{background:#f1efe6;white-space:nowrap} .tw{overflow:auto} .tag{display:inline-block;border-radius:4px;padding:1px 7px;font-size:12px;background:#eee}
+  .tag.ok{background:#e3f3ea;color:var(--green)} .tag.bad{background:#fde8e6;color:var(--red)} .tag.warn{background:#fff1c9;color:#8a5a00}
+  .hint{font-size:12px;color:var(--muted)} .mono{font-family:ui-monospace,Consolas,monospace;font-size:12px;word-break:break-all}
+</style>
+</head>
+<body>
+<header><b>관리자 콘솔</b><span class="sp"></span><span class="who" id="who"></span><button id="logoutBtn" style="display:none">로그아웃</button></header>
+<main id="app"><div class="card">불러오는 중…</div></main>
+<script src="admin.js"></script>
+</body>
+</html>
