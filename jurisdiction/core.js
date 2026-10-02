@@ -5,7 +5,7 @@
    - 브라우저에서는 window.JurisCore, Node(테스트)에서는 require() 로 쓸 수 있습니다.
 
    변경 이벤트 3종 (data/jurisdiction_changes.json 의 events 배열에 순서대로 쌓임)
-     { t:'move',     sections:['S0001',...], to:'B012' }         구간들을 다른 지사로 이동
+     { t:'move',     sections:['S0001',...], to:'B012' }         구간들을 다른 지사로 이동 (to 가 'NONE' 이면 소속을 없앰=미지정)
      { t:'addBranch', id:'B060', hq:'강원', name:'신설지사' }    신설 기관 추가
      { t:'moveHq',   branch:'B012', hq:'충북' }                  지사를 다른 본부로 이동
    ============================================================ */
@@ -39,9 +39,10 @@
         var b = branches[ev.branch];
         if (b && doc.hqs.indexOf(ev.hq) >= 0 && b.hq !== ev.hq) { b.hq = ev.hq; ok = true; }
       } else if (ev.t === 'move') {
-        if (branches[ev.to]) {
+        if (ev.to === 'NONE' || branches[ev.to]) {
+          var toId = ev.to === 'NONE' ? null : ev.to;        // 소속이 없는 구간의 owner 는 null
           (ev.sections || []).forEach(function (sid) {
-            if (sid in owner && owner[sid] !== ev.to) { owner[sid] = ev.to; ok = true; }
+            if (sid in owner && owner[sid] !== toId) { owner[sid] = toId; ok = true; }
           });
         }
       }
@@ -144,7 +145,7 @@
     var geomDirty = {}, hqMoved = {};
     doc.sections.forEach(function (s) {
       var now = st.owner[s.id];
-      if (now !== baseOwner[s.id]) { geomDirty[now] = true; geomDirty[baseOwner[s.id]] = true; }
+      if (now !== baseOwner[s.id]) { if (now) geomDirty[now] = true; if (baseOwner[s.id]) geomDirty[baseOwner[s.id]] = true; }
     });
     st.order.forEach(function (id) {
       var b = st.branches[id];
@@ -239,7 +240,7 @@
       if (!a || a.hq !== b.hq) ids[id] = true;
     });
     doc.sections.forEach(function (s) {
-      if (A.owner[s.id] !== B.owner[s.id]) { ids[A.owner[s.id]] = true; ids[B.owner[s.id]] = true; }
+      if (A.owner[s.id] !== B.owner[s.id]) { if (A.owner[s.id]) ids[A.owner[s.id]] = true; if (B.owner[s.id]) ids[B.owner[s.id]] = true; }
     });
     var list = Object.keys(ids);
     var before = evaluate(doc, stationsDoc, S, eventsBefore, list), after = evaluate(doc, stationsDoc, S, eventsAfter, list);
@@ -258,7 +259,7 @@
   function summarize(doc, events) {
     var st = resolve(doc, events), km = {}, cnt = {};
     doc.sections.forEach(function (s) {
-      var o = st.owner[s.id];
+      var o = st.owner[s.id] || 'NONE';                   // 소속 없는 구간은 'NONE' 으로 모아서 셈
       km[o] = (km[o] || 0) + s.km; cnt[o] = (cnt[o] || 0) + 1;
     });
     return { state: st, km: km, count: cnt };
