@@ -1,7 +1,7 @@
 /* 계정 발급 함수(supabase/functions/account-admin/core.mjs) 자동 테스트 — 실제 Supabase 없이 가짜 DB·Auth 로 시험
    실행: node tests/test_account_admin.mjs   (저장소 맨 위 폴더에서) */
 import assert from 'node:assert/strict';
-import { handle, genPassword, toCsv, emailOf, USERNAME_RE } from '../supabase/functions/account-admin/core.mjs';
+import { handle, genPassword, toCsv, emailOf, USERNAME_RE, passwordProblems, PW_SYMBOLS } from '../supabase/functions/account-admin/core.mjs';
 import { webcrypto as crypto } from 'node:crypto';
 
 const results = [];
@@ -201,6 +201,77 @@ await test('아이디 규칙·이메일 규칙', () => {
   assert.ok(USERNAME_RE.test('exgyeonggigwangju') && USERNAME_RE.test('admin-01') && !USERNAME_RE.test('Admin') && !USERNAME_RE.test('a b') && !USERNAME_RE.test('ex'));
   assert.equal(emailOf('exchungju'), 'exchungju@snow-support.invalid');
   assert.equal(toCsv([{ username: 'a', display_name: '이, "름"', role: 'branch', branch_id: 'B1', temp_password: 'pw' }]).split('\r\n')[1], 'a,"이, ""름""",pw,branch,B1');
+});
+
+
+/* ---------- 비밀번호 일괄 설정(엑셀표) ---------- */
+const GOOD = (i) => `Snow#Ride-${2026 + i}k`;            // 규칙을 모두 만족하는 서로 다른 비밀번호
+
+await test('비밀번호 규칙: 12자·소문자·대문자·숫자·기호, 아이디·지사 이름·반복·이어지는 글자 거절', () => {
+  const bad = (pw, u = 'exchungju') => passwordProblems(pw, u).join('|');
+  assert.deepEqual(passwordProblems('Snow#Ride-2026k', 'exchungju'), []);
+  assert.match(bad('Sh0rt!aA'), /12자 이상/); assert.match(bad('snow#ride-2026k'), /대문자/); assert.match(bad('SNOW#RIDE-2026K'), /소문자/);
+  assert.match(bad('Snow#Ride-xxxxk'), /숫자/); assert.match(bad('SnowRide2026kk'), /기호/);
+  assert.match(bad('Snow Ride#2026k'), /공백/); assert.match(bad('Snow#exchungju9Z'), /아이디/); assert.match(bad('Snow#Chungju-99Z'), /지사 이름/);
+  assert.match(bad('Snow#Rideeee-26k'), /반복/); assert.match(bad('Snow#Ride-1234k'), /이어지는/); assert.match(bad('Snow#Ride-dcba7'), /이어지는/);
+  assert.match(bad('A'.repeat(40) + 'a1!' + 'B'.repeat(40)), /72/);
+  assert.equal(passwordProblems('', 'x')[0], '비밀번호를 입력하세요'); assert.equal(passwordProblems(null, 'x')[0], '비밀번호를 입력하세요');
+  assert.ok(PW_SYMBOLS.includes('!') && PW_SYMBOLS.includes('#') && !PW_SYMBOLS.includes('가'));
+});
+
+await test('일괄 설정: 관리자가 지사·장비 계정 비밀번호를 정하면 반영되고, 다음 로그인 때 변경 요구가 기본이며, 기존 로그인은 끊기고, 비밀번호는 응답·기록에 없다', async () => {
+  const w = world(); addAdmin(w);
+  await call(w, { action: 'create', users: [U('exchungju', { branch_id: 'B001' }), U('exwonju', { branch_id: 'B002' }), { username: 'equip-01', display_name: '지원장비', role: 'equip' }] }, { jwt: 'jwt-admin' });
+  const ids = Object.fromEntries([...w.profiles.values()].filter((p) => p.role !== 'admin').map((p) => [p.username, p.id]));
+  for (const id of Object.values(ids)) w.profiles.get(id).must_change = false;            // 모두 이미 비밀번호를 바꾼 상태
+  w.audit.length = 0;
+  const items = [{ username: 'exchungju', password: GOOD(1) }, { username: 'exwonju', password: GOOD(2) }, { username: 'equip-01', password: GOOD(3) }];
+  const r = await J(await call(w, { action: 'set_passwords', items }, { jwt: 'jwt-admin' }));
+  assert.equal(r.status, 200); assert.equal(r.body.updated, 3); assert.deepEqual(r.body.failed, []); assert.equal(r.body.require_change, true);
+  for (const it of items) { assert.equal(w.users.get(ids[it.username]).password, it.password); assert.equal(w.profiles.get(ids[it.username]).must_change, true, '다음 로그인 때 변경 요구'); }
+  assert.deepEqual([...w.sessionsRevoked].sort(), Object.values(ids).sort());
+  assert.equal(w.audit.length, 3); assert.ok(w.audit.every((a) => a.kind === '비밀번호설정' && a.username === 'admin-01'));
+  const dump = JSON.stringify([r.body, w.audit]); for (const it of items) assert.ok(!dump.includes(it.password), '비밀번호가 응답·기록에 남음');
+  // 변경 요구 없이 바로 쓰게 하기
+  const r2 = await J(await call(w, { action: 'set_passwords', require_change: false, items: [{ username: 'exchungju', password: GOOD(9) }] }, { jwt: 'jwt-admin' }));
+  assert.equal(r2.status, 200); assert.equal(w.profiles.get(ids.exchungju).must_change, false); assert.equal(w.users.get(ids.exchungju).password, GOOD(9));
+});
+
+await test('일괄 설정: 하나라도 규칙에 어긋나거나 중복되면 아무것도 바꾸지 않는다 (행별 이유 표시)', async () => {
+  const w = world(); addAdmin(w);
+  await call(w, { action: 'create', users: [U('exa1'), U('exb2'), U('exc3')] }, { jwt: 'jwt-admin' });
+  const before = JSON.stringify([...w.users.values()]);
+  const r = await J(await call(w, { action: 'set_passwords', items: [{ username: 'exa1', password: GOOD(1) }, { username: 'exb2', password: 'short' }, { username: 'exc3', password: GOOD(1) }, { username: 'exa1', password: GOOD(4) }, { username: 'NOT VALID', password: GOOD(5) }] }, { jwt: 'jwt-admin' }));
+  assert.equal(r.status, 400); assert.equal(r.body.error, 'validation');
+  const by = Object.fromEntries(r.body.details.map((d) => [d.index, d.error]));
+  assert.match(by[1], /12자 이상/); assert.match(by[2], /같은 비밀번호/); assert.match(by[3], /같은 아이디/); assert.match(by[4], /아이디 형식/);
+  assert.equal(JSON.stringify([...w.users.values()]), before); assert.equal(w.sessionsRevoked.length, 0);
+  assert.equal((await J(await call(w, { action: 'set_passwords', items: [] }, { jwt: 'jwt-admin' }))).status, 400);
+  assert.equal((await J(await call(w, { action: 'set_passwords', items: Array.from({ length: 101 }, (_, i) => ({ username: 'ex' + String(i).padStart(3, '0') + 'a', password: GOOD(i) })) }, { jwt: 'jwt-admin' }))).status, 400);
+});
+
+await test('일괄 설정: 관리자 계정·없는 계정은 실패로 알려 주고 나머지는 처리, 권한 없는 사람·시작 토큰은 거절', async () => {
+  const w = world(); addAdmin(w); addAdmin(w, 'admin-02', 'jwt-admin2');
+  await call(w, { action: 'create', users: [U('exgurye')] }, { jwt: 'jwt-admin' });
+  const r = await J(await call(w, { action: 'set_passwords', items: [{ username: 'exgurye', password: GOOD(1) }, { username: 'admin-02', password: GOOD(2) }, { username: 'exnobody', password: GOOD(3) }] }, { jwt: 'jwt-admin' }));
+  assert.equal(r.status, 207); assert.equal(r.body.updated, 1);
+  const f = Object.fromEntries(r.body.failed.map((x) => [x.username, x.error]));
+  assert.match(f['admin-02'], /관리자 계정/); assert.match(f.exnobody, /찾을 수 없음/);
+  assert.ok(![...w.users.values()].some((u) => u.password === GOOD(2)), '관리자 비밀번호가 바뀜');
+  w.profiles.set('b1', { id: 'b1', username: 'exb', role: 'branch', branch_id: 'B001', disabled: false, must_change: false }); w.jwt.set('jwt-b', 'b1');
+  assert.equal((await call(w, { action: 'set_passwords', items: [{ username: 'exgurye', password: GOOD(4) }] }, { jwt: 'jwt-b' })).status, 403);
+  const tok = 'tt'; w.boot = { hash: await hex(tok), expires_at: '2026-10-02T10:10:00Z' };
+  assert.equal((await call(w, { action: 'set_passwords', items: [{ username: 'exgurye', password: GOOD(5) }] }, { boot: tok })).status, 403);
+  assert.ok(![...w.users.values()].some((u) => u.password === GOOD(4) || u.password === GOOD(5)));
+});
+
+await test('일괄 설정: Auth 가 비밀번호를 거절하면 그 계정만 실패하고 상태는 바뀌지 않는다', async () => {
+  const w = world(); addAdmin(w);
+  await call(w, { action: 'create', users: [U('exok1'), U('exbad2')] }, { jwt: 'jwt-admin' });
+  const orig = w.deps.auth.updatePassword; w.deps.auth.updatePassword = async (id, pw) => (w.users.get(id).email.startsWith('exbad2') ? { error: { message: 'weak password: ' + pw } } : orig(id, pw));
+  const r = await J(await call(w, { action: 'set_passwords', items: [{ username: 'exok1', password: GOOD(1) }, { username: 'exbad2', password: GOOD(2) }] }, { jwt: 'jwt-admin' }));
+  assert.equal(r.status, 207); assert.equal(r.body.updated, 1); assert.equal(r.body.failed[0].username, 'exbad2');
+  assert.ok(!JSON.stringify(r.body).includes(GOOD(2)), '오류 문구에 비밀번호가 새어 나감');
 });
 
 const ok = results.filter((r) => r[1]).length;
