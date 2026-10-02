@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 이 화면은 이 사이트의 스크립트만 실행하고, Supabase(*.supabase.co)로만 연결합니다 -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src https://*.supabase.co; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<title>관리 콘솔</title>
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<header><b>제설 관리 콘솔</b><span class="sp"></span><span class="who" id="who"></span><button id="logoutBtn" type="button" hidden>로그아웃</button></header>
+<main id="app"><div class="card">불러오는 중…</div></main>
+<div id="modal" class="modal" hidden></div>
+<script src="policy.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

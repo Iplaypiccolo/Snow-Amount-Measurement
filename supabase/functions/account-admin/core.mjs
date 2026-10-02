@@ -13,6 +13,33 @@ const LOWER = 'abcdefghijkmnpqrstuvwxyz', UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ', DI
 const ALL = LOWER + UPPER + DIGIT + SYMBOL;
 const MAX_USERS = 100, MAX_BODY = 65536, CONCURRENCY = 6;
 
+/* ---------- 비밀번호 규칙: 프로젝트(Supabase Auth) 설정과 같고, 약한 패턴을 더 막음. admin/admin.js 의 화면 검사와 똑같이 맞춰져 있음(tests 가 비교) ---------- */
+export const PW_SYMBOLS = ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '-', '=', '[', ']', '{', '}', ';', "'", '\\', ':', '"', '|', '<', '>', '?', ',', '.', '/', '`', '~'].join('');   // Supabase Auth 가 "기호"로 인정하는 글자
+const hasRun = (pw) => {                           // abcd / 1234 / dcba / 4321 처럼 이어지는 글자 4개 이상
+  const c = [...pw.toLowerCase()].map((x) => x.codePointAt(0));
+  for (let i = 0; i + 3 < c.length; i++) {
+    const d = c[i + 1] - c[i];
+    if ((d === 1 || d === -1) && c[i + 2] - c[i + 1] === d && c[i + 3] - c[i + 2] === d) return true;
+  }
+  return false;
+};
+export function passwordProblems(pw, username) {
+  if (typeof pw !== 'string' || !pw) return ['비밀번호를 입력하세요'];
+  const p = [], low = pw.toLowerCase(), u = String(username || '').toLowerCase(), core = u.replace(/^ex/, '');
+  if ([...pw].length < 12) p.push('12자 이상');
+  if (new TextEncoder().encode(pw).length > 72) p.push('72바이트 이하(영문 72자)');
+  if (!/[a-z]/.test(pw)) p.push('소문자 필요');
+  if (!/[A-Z]/.test(pw)) p.push('대문자 필요');
+  if (!/[0-9]/.test(pw)) p.push('숫자 필요');
+  if (![...pw].some((c) => PW_SYMBOLS.includes(c))) p.push('기호 필요');
+  if (/[\s\u0000-\u001f]/.test(pw)) p.push('공백·제어 문자 불가');
+  if (u && low.includes(u)) p.push('아이디 포함 불가');
+  else if (core.length >= 4 && low.includes(core)) p.push('지사 이름 포함 불가');
+  if (/(.)\1{3,}/.test(pw)) p.push('같은 글자 4번 이상 반복 불가');
+  if (hasRun(pw)) p.push('이어지는 글자(abcd·1234) 4개 이상 불가');
+  return p;
+}
+
 export const emailOf = (username) => `${username}@${EMAIL_DOMAIN}`;
 
 function randInt(randomBytes, n) {                 // 0..n-1, 치우침 없는 무작위(거절 추출)
@@ -108,6 +135,37 @@ async function actCreate(req, d, actor, body) {
     message: actor.bootstrap ? '임시 비밀번호는 비공개 저장소(credentials)의 파일에만 저장했습니다.' : '임시 비밀번호는 지금 한 번만 보입니다. 안전하게 전달하세요.' });
 }
 
+// 관리자 화면의 "비밀번호 일괄 설정"(엑셀표): 관리자가 지사·지원장비 계정의 비밀번호를 직접 정함. 비밀번호는 응답·기록 어디에도 남기지 않음.
+async function actSetPasswords(req, d, actor, body) {
+  if (actor.bootstrap) return fail(403, 'forbidden', '이 작업은 관리자 로그인으로만 할 수 있습니다.');
+  const items = body.items;
+  if (!Array.isArray(items) || items.length < 1 || items.length > MAX_USERS) return fail(400, 'bad_request', `비밀번호는 1~${MAX_USERS}개씩 설정할 수 있습니다.`);
+  const requireChange = body.require_change !== false;              // 기본: 처음 로그인할 때 본인이 다시 바꾸게 함
+  const errs = [], seen = new Map(), pwSeen = new Map();
+  items.forEach((it, i) => {
+    const e = (m) => errs.push({ index: i, username: it && it.username, error: m });
+    if (!it || typeof it !== 'object' || typeof it.username !== 'string' || !USERNAME_RE.test(it.username)) return e('아이디 형식 오류');
+    if (seen.has(it.username)) e('같은 아이디가 두 번 들어 있음'); seen.set(it.username, i);
+    const prob = passwordProblems(it.password, it.username);
+    if (prob.length) e(prob.join(', '));
+    else if (pwSeen.has(it.password)) e('다른 계정과 같은 비밀번호 (계정마다 달라야 함)'); else pwSeen.set(it.password, i);
+  });
+  if (errs.length) return fail(400, 'validation', '입력을 확인하세요.', { details: errs });
+  const results = await pool(items, CONCURRENCY, async (it) => {
+    const t = await d.store.getProfileByUsername(it.username);
+    if (!t) return { username: it.username, ok: false, error: '계정을 찾을 수 없음' };
+    if (t.role === 'admin') return { username: it.username, ok: false, error: '관리자 계정은 이 방법으로 바꿀 수 없음(본인 비밀번호 변경 또는 초기화 사용)' };
+    const up = await d.auth.updatePassword(t.id, it.password);       // 이 갱신이 must_change 를 해제하는 트리거를 건드리므로
+    if (up && up.error) return { username: it.username, ok: false, error: '비밀번호 규칙에 맞지 않거나 저장하지 못함' };
+    await d.store.updateProfile(t.id, { must_change: requireChange });   // 원하는 상태로 다시 지정 (순서 중요)
+    await d.store.revokeSessions(t.id);                                  // 기존 로그인은 모두 끊음
+    return { username: it.username, ok: true };
+  });
+  const okRows = results.filter((r) => r.ok), failed = results.filter((r) => !r.ok).map(({ username, error }) => ({ username, error }));
+  if (okRows.length) await audit(d, actor, req, okRows.map((r) => ({ kind: '비밀번호설정', target: r.username, to_val: { require_change: requireChange } })));
+  return json(failed.length ? 207 : 200, { ok: failed.length === 0, updated: okRows.length, failed, require_change: requireChange });
+}
+
 async function findTarget(d, username) {
   if (typeof username !== 'string' || !USERNAME_RE.test(username)) return null;
   return d.store.getProfileByUsername(username);
@@ -156,6 +214,7 @@ export async function handle(req, d) {
   try {
     if (body.action === 'create') return await actCreate(req, d, a.actor, body);
     if (body.action === 'reset') return await actReset(req, d, a.actor, body);
+    if (body.action === 'set_passwords') return await actSetPasswords(req, d, a.actor, body);
     if (body.action === 'disable') return await actDisable(req, d, a.actor, body, true);
     if (body.action === 'enable') return await actDisable(req, d, a.actor, body, false);
     return fail(400, 'bad_action', '알 수 없는 작업입니다.');
