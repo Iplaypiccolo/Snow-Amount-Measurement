@@ -38,20 +38,20 @@ begin insert into _t(name, got, want, ok) values (name, case when cond then 'tru
 
 do $t$
 declare
-  a uuid := gen_random_uuid(); b1 uuid := gen_random_uuid(); b2 uuid := gen_random_uuid(); e uuid := gen_random_uuid(); d uuid := gen_random_uuid();
+  a uuid := gen_random_uuid(); b1 uuid := gen_random_uuid(); b2 uuid := gen_random_uuid(); e uuid := gen_random_uuid(); d uuid := gen_random_uuid(); m uuid := gen_random_uuid();
   rid bigint; rep text; fails int; total int; hdr text := '{"cf-connecting-ip":"203.0.113.9"}';
   c0 bigint; c1 bigint; s text;
 begin
   -- ===== 시험용 자료(시험이 끝나면 전부 사라짐) =====
   insert into auth.users (id, aud, role, email) values
     (a,'authenticated','authenticated','a@t.test'),(b1,'authenticated','authenticated','b1@t.test'),(b2,'authenticated','authenticated','b2@t.test'),
-    (e,'authenticated','authenticated','e@t.test'),(d,'authenticated','authenticated','d@t.test');
+    (e,'authenticated','authenticated','e@t.test'),(d,'authenticated','authenticated','d@t.test'),(m,'authenticated','authenticated','m@t.test');
   insert into public.hqs values ('H1','강원',false,1),('H2','민자',true,2);
   insert into public.branches (id,hq_id,name) values ('B001','H1','춘천'),('B002','H1','홍천');
   insert into public.equip_orgs values ('서울경기');
-  insert into public.profiles (id,username,display_name,role,branch_id,disabled) values
-    (a,'adm-test','관리자','admin',null,false),(b1,'br-001','춘천지사','branch','B001',false),(b2,'br-002','홍천지사','branch','B002',false),
-    (e,'eq-001','지원장비','equip',null,false),(d,'dis-001','비활성','equip',null,true);
+  insert into public.profiles (id,username,display_name,role,branch_id,disabled,must_change) values
+    (a,'adm-test','관리자','admin',null,false,false),(b1,'br-001','춘천지사','branch','B001',false,false),(b2,'br-002','홍천지사','branch','B002',false,false),
+    (e,'eq-001','지원장비','equip',null,false,false),(d,'dis-001','비활성','equip',null,true,false),(m,'tmp-001','임시비번','equip',null,false,true);
   insert into public.vehicles values ('11가1111','서울경기','제설차',true);
   insert into public.support_rounds (name,start_date) values ('시험 회차','2026-12-01') returning id into rid;
   insert into public.round_vehicles values (rid,'11가1111','');
@@ -71,6 +71,16 @@ begin
   perform pg_temp.chk('비활성: hqs 읽으면 0건','authenticated',d,'select 1 from public.hqs','ok:0');
   perform pg_temp.chk('비활성: vehicles 쓰기 차단','authenticated',d,'insert into public.vehicles values (''99가9999'',''서울경기'',''제설차'',true)','err:42501');
 
+  -- ===== B2. 임시 비밀번호(must_change) 계정은 비밀번호를 바꾸기 전까지 아무 자료도 못 쓴다 =====
+  perform pg_temp.chk('임시비번: hqs 읽으면 0건','authenticated',m,'select 1 from public.hqs','ok:0');
+  perform pg_temp.chk('임시비번: vehicles 쓰기 차단','authenticated',m,'insert into public.vehicles values (''98가9898'',''서울경기'',''제설차'',true)','err:42501');
+  perform pg_temp.chk('임시비번: 본인 계정 정보는 볼 수 있음(변경 필요 여부 확인용)','authenticated',m,'select 1 from public.profiles','ok:1');
+  perform pg_temp.chk('임시비번: 스스로 must_change 해제 시도 → 0건','authenticated',m,format('update public.profiles set must_change=false where id=%L',m),'ok:0');
+  perform pg_temp.yes('임시비번 상태가 그대로 유지됨', (select must_change from public.profiles where id = m));
+  perform pg_temp.chk('비밀번호가 바뀌면(auth.users 갱신) 임시 상태가 자동으로 해제됨','postgres',null,format('update auth.users set encrypted_password=%L where id=%L','$2a$10$x',m),'ok:1');
+  perform pg_temp.yes('must_change 가 자동 해제됨', not (select must_change from public.profiles where id = m));
+  perform pg_temp.chk('해제 후: hqs 읽기','authenticated',m,'select 1 from public.hqs','ok:2');
+
   -- ===== C. 활성 로그인 사용자는 기준정보를 읽는다 =====
   perform pg_temp.chk('관리자: hqs 읽기','authenticated',a,'select 1 from public.hqs','ok:2');
   perform pg_temp.chk('지사: hqs 읽기','authenticated',b1,'select 1 from public.hqs','ok:2');
@@ -88,7 +98,7 @@ begin
   perform pg_temp.chk('관리자: settings 보임','authenticated',a,'select 1 from public.settings','ok:1');
   perform pg_temp.chk('지사: profiles 본인 1건만','authenticated',b1,'select 1 from public.profiles','ok:1');
   perform pg_temp.chk('지원장비: profiles 본인 1건만','authenticated',e,'select 1 from public.profiles','ok:1');
-  perform pg_temp.chk('관리자: profiles 전체 5건','authenticated',a,'select 1 from public.profiles','ok:5');
+  perform pg_temp.chk('관리자: profiles 전체 6건','authenticated',a,'select 1 from public.profiles','ok:6');
 
   -- ===== E. 기준정보 쓰기는 관리자만 =====
   perform pg_temp.chk('지사: hqs 추가 차단','authenticated',b1,'insert into public.hqs values (''H3'',''x'',false,3)','err:42501');
