@@ -38,7 +38,12 @@ docs/grid-assign-rules.md  예보 격자 편입 탭 동작 규칙
 docs/d1-schema-design.md   Cloudflare D1 표 설계 v1(설계안), docs/d1-schema-v1.sql
 docs/supabase-design.md      Supabase 구성(snow-support, 서울): 표·권한·기록·시험·남은 일
 supabase/migrations/       Supabase 표·권한(RLS)·기록 트리거 SQL (실제 적용한 것)
-supabase/tests/rls_test.sql  권한·기록 자동 시험(SQL Editor 에서 실행, 95항목)
+supabase/tests/rls_test.sql  권한·기록 자동 시험(SQL Editor 에서 실행, 103항목)
+supabase/tests/accounts_check.sql  실제 계정 점검(낯선 가입자·임시 비밀번호 계정·관리자)
+supabase/seed/            본부·지사 기준정보 SQL
+supabase/functions/account-admin/  계정 발급·초기화·비활성화 함수(Edge Function)
+docs/accounts.md           계정 목록(아이디만, 비밀번호 없음)
+tests/test_account_admin.mjs  계정 발급 함수 자동 시험(12항목)
 docs/jurisdiction-build-report.md  구간 생성·끝점 보정 결과 보고서
 docs/equipment-rules.md   장비 지원 페이지 동작 규칙 (사람이 읽는 문서: 권한 표, 저장·로그·개인정보 규칙)
 docs/decisions.md         결정 사항과 배경 (서버 이전 계획, 개인정보 메모 등. 작업 이어가기용)
