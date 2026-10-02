@@ -20,11 +20,10 @@ const USERS = {
   eq1:    { label: "지원장비",   role: "equip" }
 };
 const state = { uid: "admin1", org: "전체", type: "전체", q: "", onlyActive: true,
-  closedHq: new Set(), fleetOrg: "전체", drvOrg: "전체", revealed: new Set() };
+  closedHq: new Set(), fleetOrg: "전체" };
 const me = () => USERS[state.uid];
 const isAdmin = () => me().role === "admin";
 const canVeh = () => me().role === "admin" || me().role === "equip";   // 기관별 장비
-const canDrv = canVeh;                                                    // 운전원 현황
 const canBranch = b => isAdmin() || (me().role === "branch" && me().branch === b); // 본인 지사만
 
 /* ============================================================
@@ -34,8 +33,6 @@ function esc(v) {   // XSS 방지: 화면에 글자를 넣을 땐 항상 이 함
   return String(v ?? "").replace(/[&<>"']/g, c =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
-const maskName = n => (!n ? "" : n.length < 2 ? n : n[0] + "○" + n.slice(2));
-const maskPhone = p => (p || "").replace(/(\d{3})-?(\d{3,4})-?(\d{4})/, "$1-****-$3");
 const p2 = n => String(n).padStart(2, "0");
 function fmtTime(iso) {
   if (!iso) return "미정";
@@ -48,19 +45,16 @@ const STATUS = { O: ["go", "지원"], X: ["stop", "지원 불가"], "": ["wait",
 const hqOf = b => Object.keys(DATA.branches).find(h => DATA.branches[h].some(r => r[0] === b));
 const WD = "일월화수목금토";
 function fmtMD(iso) { const [y, m, d] = iso.split("-").map(Number); return `${m}/${d}(${WD[new Date(y, m - 1, d).getDay()]})`; }
-const driverOf = (v, i) => DATA.drivers.find(d => d.id === v.driverIds[i]);
 const sameDay = iso => new Date(iso).toDateString() === new Date().toDateString();
 const todayEdits = k => LOG.filter(l => l.kind === "수정" && l.key === k && sameDay(l.at));   // 말풍선은 '오늘' 수정분만
 const hasHist = k => todayEdits(k).length > 0;
-const TAB_NAME = { fleet: "기관별 장비", branch: "지사별 요청·편성", driver: "운전원 현황" };
+const TAB_NAME = { fleet: "기관별 장비", branch: "지사별 요청·편성" };
 const FIELD = { "req.truck": "요청 제설차", "req.blower": "요청 제설기", "assigned.truck": "편성 제설차", "assigned.blower": "편성 제설기",
-  snowCm: "예상 적설", warning: "특보", arrive: "도착 요청", reason: "사유", status: "지원 여부", days: "지원 일자·기관", driver0: "운전원 1", driver1: "운전원 2", name: "이름", phone: "전화번호", org: "기관" };
+  snowCm: "예상 적설", warning: "특보", arrive: "도착 요청", reason: "사유", status: "지원 여부", days: "지원 일자·기관" };
 function describeKey(key) {
   const [t, id, f] = key.split(":"), fl = FIELD[f] || f;
   if (t === "req") return `${id} 지사 · ${fl}`;
-  if (t === "veh") return `${id} · ${fl}`;
-  const d = DATA.drivers.find(x => x.id === id);
-  return `${d && d.name ? maskName(d.name) : "운전원"} · ${fl}`;
+  return `${id} · ${fl}`;
 }
 function logAdd(o) { LOG.push({ at: new Date().toISOString(), by: me().label, ip: "-", key: null, from: null, to: null, ...o }); }
 
@@ -72,8 +66,7 @@ function getVal(key) {
     if (!r) return f === "snowCm" ? null : f === "warning" ? false : f === "arrive" || f === "reason" ? "" : 0;
     return f.split(".").reduce((o, k) => o[k], r);
   }
-  if (t === "veh") { const v = DATA.vehicles.find(x => x.plate === id); return f.startsWith("driver") ? v.driverIds[+f.slice(6)] : v[f]; }
-  if (t === "drv") return DATA.drivers.find(d => d.id === id)[f];
+  if (t === "veh") return DATA.vehicles.find(x => x.plate === id)[f];
 }
 function putVal(key, val) {
   const [t, id, f] = key.split(":");
@@ -83,10 +76,8 @@ function putVal(key, val) {
     path.reduce((o, k) => o[k], r)[last] = val;
   } else if (t === "veh") {
     const v = DATA.vehicles.find(x => x.plate === id);
-    if (f.startsWith("driver")) v.driverIds[+f.slice(6)] = val || null;
-    else v[f] = Array.isArray(val) ? JSON.parse(JSON.stringify(val)) : val;
+    v[f] = Array.isArray(val) ? JSON.parse(JSON.stringify(val)) : val;
   }
-  else if (t === "drv") DATA.drivers.find(d => d.id === id)[f] = val;
 }
 function allowed(key) {   // 이 아이디가 이 값을 고칠 수 있는가 (화면용 검사. 서버에서도 똑같이 막아야 함)
   const [t, id] = key.split(":");
@@ -106,7 +97,7 @@ function commit(key, val) {
   const [t, id, f] = key.split(":");
   if (t === "veh" && f === "status" && val !== "O") commitRaw(`veh:${id}:days`, []); // 지원 아님 → 도착지 비움
   // TODO: 여기서 서버에 저장 요청을 보냅니다
-  const light = (t === "drv" && (f === "name" || f === "phone")) || (t === "req" && f === "reason");
+  const light = (t === "req" && f === "reason");
   if (light) { hideTip(); renderMatrix(); renderDest(); renderFleet(); updateSavebars(); }   // 입력 중인 칸은 다시 그리지 않음(연속 입력 보호)
   else refreshKeepFocus();
 }
@@ -114,12 +105,11 @@ function commit(key, val) {
 /* ---------- 저장 기능: 저장 전 변경은 '임시', 저장 버튼을 눌러야 확정 ---------- */
 const PENDING = [];   // 아직 저장하지 않은 변경 목록
 const SNAP = {};      // 마지막으로 저장한 상태(되돌리기용 사본)
-const TABS = ["fleet", "branch", "driver"];
-const tabOf = key => ({ req: "branch", veh: "fleet", drv: "driver" })[key.split(":")[0]];
+const TABS = ["fleet", "branch"];
+const tabOf = key => ({ req: "branch", veh: "fleet" })[key.split(":")[0]];
 const slice = {
-  fleet:  () => JSON.stringify(DATA.vehicles.map(v => [v.plate, v.status, v.days, v.driverIds])),
-  branch: () => JSON.stringify(DATA.requests),
-  driver: () => JSON.stringify(DATA.drivers)
+  fleet:  () => JSON.stringify(DATA.vehicles.map(v => [v.plate, v.status, v.days])),
+  branch: () => JSON.stringify(DATA.requests)
 };
 const takeSnap = t => { SNAP[t] = slice[t](); };
 const isDirty = t => slice[t]() !== SNAP[t];
@@ -127,9 +117,8 @@ const canEditTab = t => t === "branch" ? (isAdmin() || me().role === "branch") :
 function dropPending(t) { for (let i = PENDING.length - 1; i >= 0; i--) if (tabOf(PENDING[i].key) === t) PENDING.splice(i, 1); }
 function restore(t) {
   const s = JSON.parse(SNAP[t]);
-  if (t === "fleet") s.forEach(([p, st, ds, ids]) => { const v = DATA.vehicles.find(x => x.plate === p); v.status = st; v.days = ds; v.driverIds = ids; });
-  else if (t === "branch") DATA.requests = s;
-  else DATA.drivers = s;
+  if (t === "fleet") s.forEach(([p, st, ds]) => { const v = DATA.vehicles.find(x => x.plate === p); v.status = st; v.days = ds; });
+  else DATA.requests = s;
   dropPending(t);
 }
 let toastTimer;
@@ -140,34 +129,19 @@ function toast(msg, isErr) {
 }
 function saveTab(t) {
   if (!canEditTab(t) || !isDirty(t)) return;
-  if (t === "driver") {   // 저장 전 입력 확인
-    if (DATA.drivers.some(d => !d.name.trim())) return toast("이름이 비어 있는 운전원이 있습니다. 이름을 입력하거나 삭제해 주세요.", true);
-    const bad = DATA.drivers.find(d => d.phone && !/^01\d-?\d{3,4}-?\d{4}$/.test(d.phone));
-    if (bad) return toast(`전화번호 형식을 확인해 주세요 (${maskName(bad.name)}). 예: 010-1234-5678`, true);
-  }
   // 같은 칸을 여러 번 고쳤으면 "처음 값 → 마지막 값" 한 건으로 합칩니다
   const merged = new Map();
   PENDING.filter(p => tabOf(p.key) === t).forEach(p => { const e = merged.get(p.key); if (e) e.to = p.to; else merged.set(p.key, { ...p }); });
-  let added = [], removed = [];
-  if (t === "driver") {   // 운전원을 새로 넣거나 뺀 것도 기록 대상
-    const before = JSON.parse(SNAP.driver);
-    added = DATA.drivers.filter(d => !before.some(b => b.id === d.id));
-    removed = before.filter(b => !DATA.drivers.some(d => d.id === b.id));
-  }
   // 서버에 저장 요청 (js/api.js). 성공했을 때만 아래(기록 남기기·화면 확정)를 실행하고, 실패하면 알리고 그대로 둡니다
-  if (!Api.save(t, [...merged.values()], { added, removed })) return toast("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.", true);
-  added.forEach(d => logAdd({ kind: "추가", tab: TAB_NAME.driver, target: `${maskName(d.name)} (${d.org})` }));
-  removed.forEach(d => logAdd({ kind: "삭제", tab: TAB_NAME.driver, target: `${maskName(d.name) || "(이름 없음)"} (${d.org})` }));
+  if (!Api.save(t, [...merged.values()], {})) return toast("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.", true);
   let n = 0;
   merged.forEach((p, key) => {
-    if (added.some(d => key.startsWith("drv:" + d.id + ":"))) return;   // 새 운전원의 입력값은 '추가' 한 건으로 갈음
     if (String(p.from ?? "") !== String(p.to ?? "")) {
       logAdd({ kind: "수정", tab: TAB_NAME[t], key, target: describeKey(key), from: p.from, to: p.to }); n++;
     }
   });
-  const total = n + added.length + removed.length;
   dropPending(t); takeSnap(t); refresh();
-  toast(total ? `저장했습니다 (${total}건)` : "저장했습니다");
+  toast(n ? `저장했습니다 (${n}건)` : "저장했습니다");
 }
 function updateSavebars() {
   TABS.forEach(t => {
@@ -190,9 +164,6 @@ function showVal(key, v) {
   if (f === "arrive") return fmtTime(v);
   if (f === "snowCm") return v == null || v === "" ? "없음" : v + "cm";
   if (f === "days") return v && v.length ? v.map(([d, xs]) => `${fmtMD(d)} ${xs.map(x => x || "기관 미정").join("→")}`).join(", ") : "(없음)";
-  if (f === "driver0" || f === "driver1") { const d = DATA.drivers.find(x => x.id === v); return d ? maskName(d.name) : "미지정"; }
-  if (f === "name") return v ? maskName(v) : "(빈칸)";
-  if (f === "phone") return v ? maskPhone(v) : "(빈칸)";
   return v === "" || v == null ? "(빈칸)" : String(v);
 }
 const hvA = (key, focus = true) => (isAdmin() && hasHist(key)) ? ` data-hv="${esc(key)}"${focus ? ' tabindex="0"' : ""}` : "";
@@ -265,15 +236,11 @@ function renderFilters() {
 }
 const matches = v => (state.org === "전체" || v.org === state.org) && (state.type === "전체" || v.type === state.type) &&
   (!state.q || v.plate.replace(/\s/g, "").includes(state.q.replace(/\s/g, "")));
-function driverText(v, i) {
-  const d = driverOf(v, i);
-  return d ? esc(maskName(d.name)) : `<span class="muted">미지정</span>`;
-}
 function vehicleRow(v, stops = []) {
   const [cls, label] = STATUS[v.status];
   return `<button type="button" class="vrow" data-plate="${esc(v.plate)}">
     <span class="plate">${esc(v.plate)}</span><span class="vtype">${esc(v.type)}</span>
-    <span class="vfrom">${esc(v.org)}</span><span class="vdriver">${driverText(v, 0)}</span>
+    <span class="vfrom">${esc(v.org)}</span>
     <span class="status-wrap"><span class="status ${cls}">${label}</span>${stops.length > 1 ? `<span class="tag" title="${esc(stops.join(" → "))}">${stops.length}곳 경유</span>` : ""}</span></button>`;
 }
 function renderDest() {
@@ -306,7 +273,7 @@ function renderDest() {
    ============================================================ */
 function renderFleet() {
   banner("perm-fleet", canVeh(),
-    "지원 여부·지원일별 기관(하루 여러 기관은 ＋)·운전원을 수정한 뒤 아래 [저장]을 눌러야 확정됩니다. 운전원은 '운전원 현황'에 등록된 같은 기관 소속 중에서 고릅니다.",
+    "지원 여부와 지원일별 기관(하루 여러 기관은 ＋)을 수정한 뒤 아래 [저장]을 눌러야 확정됩니다.",
     "보기만 가능합니다. 수정은 관리자·지원장비 아이디만 할 수 있습니다.");
   document.getElementById("orgGrid").innerHTML = DATA.orgs.map(org => {
     const l = DATA.vehicles.filter(v => v.org === org);
@@ -328,10 +295,9 @@ function renderFleet() {
       ? `<select class="ci" data-edit="${esc(kS)}" data-type="text" aria-label="${esc(v.plate)} 지원 여부"${hvA(kS, false)}>${["", "O", "X"].map(s => `<option value="${s}" ${v.status === s ? "selected" : ""}>${STATUS[s][1]}</option>`).join("")}</select>`
       : H(kS, `<span class="status ${cls}">${label}</span>`);
     return `<tr><td><span class="plate">${esc(v.plate)}</span></td><td>${esc(v.type)}</td><td>${esc(v.org)}</td><td>${statusCell}</td>
-      ${Array.from({ length: cols }, (_, i) => `<td>${slotCell(v, i, edit, dests)}</td>`).join("")}
-      <td>${driverCell(v, 0, edit)}</td><td>${driverCell(v, 1, edit)}</td></tr>`;
+      ${Array.from({ length: cols }, (_, i) => `<td>${slotCell(v, i, edit, dests)}</td>`).join("")}</tr>`;
   }).join("");
-  document.getElementById("eqTable").innerHTML = `<thead><tr><th>차량번호</th><th>장비</th><th>기관</th><th>지원 여부</th>${Array.from({ length: cols }, (_, i) => `<th>지원일 ${i + 1}</th>`).join("")}<th>운전원 1</th><th>운전원 2</th></tr></thead><tbody>${rows}</tbody>`;
+  document.getElementById("eqTable").innerHTML = `<thead><tr><th>차량번호</th><th>장비</th><th>기관</th><th>지원 여부</th>${Array.from({ length: cols }, (_, i) => `<th>지원일 ${i + 1}</th>`).join("")}</tr></thead><tbody>${rows}</tbody>`;
 }
 
 /* ---------- 지원 일자별 지원 기관: 가로로 '지원일 1, 2, 3, 4 …' 칸 (기본 4칸, [＋ 칸 추가]로 늘림) ---------- */
@@ -356,24 +322,6 @@ function slotCell(v, i, edit, dests) {
     <input class="ci" type="date" data-sd="${pl}" data-i="${i}" data-fk="sd:${pl}:${i}" value="${esc(e ? e[0] : "")}" ${off ? "disabled" : ""} aria-label="${pl} 지원일 ${i + 1} 날짜"${hvA(key, false)}>
     ${stops.map((x, j) => `<div class="slot-x">${sel(x, j, false)}${j === stops.length - 1 && !extra ? plus : ""}</div>`).join("")}
     ${extra ? `<div class="slot-x">${sel("", stops.length, true)}</div>` : ""}</div>`;
-}
-
-/* ---------- 운전원: '운전원 현황' 명단에서 같은 기관 이름만 골라 쓰기 (번호는 자동 표시) ---------- */
-function driverOptions(v, i) {
-  const other = v.driverIds[1 - i], cur = driverOf(v, i);
-  const list = DATA.drivers.filter(d => d.org === v.org && d.id !== other && d.name.trim());
-  if (cur && !list.includes(cur)) list.push(cur);   // 소속이 바뀐 운전원도 현재 배정은 보이게
-  return list.map(d => ({ d, label: d.name + (list.filter(x => x.name === d.name).length > 1 ? ` (${d.phone.slice(-4)})` : "") + (d.org !== v.org ? " · 다른 기관" : "") }));
-}
-function driverCell(v, i, edit) {
-  const d = driverOf(v, i), k = `veh:${v.plate}:driver${i}`, kind = `<span class="tag">${esc(v.kinds[i])}</span>`;
-  if (edit) return `<select class="ci" data-edit="${esc(k)}" data-type="text" aria-label="${esc(v.plate)} 운전원 ${i + 1}"${hvA(k, false)}>
-      <option value="">선택 안 함</option>${driverOptions(v, i).map(o => `<option value="${esc(o.d.id)}" ${d && d.id === o.d.id ? "selected" : ""}>${esc(o.label)}</option>`).join("")}</select>
-    <div class="dphone">${d ? esc(d.phone || "번호 미등록") : '<span class="muted">-</span>'} ${kind}</div>`;
-  if (!d) return `<span class="muted">미지정</span> ${kind}`;
-  const shown = state.revealed.has(d.id);
-  return `${H(k, esc(shown ? d.name : maskName(d.name)))}
-    <div class="dphone">${esc(shown ? d.phone : maskPhone(d.phone))} ${shown ? "" : `<button type="button" class="btn sm" data-reveal="${esc(d.id)}">보기</button>`} ${kind}</div>`;
 }
 
 /* ============================================================
@@ -427,41 +375,6 @@ document.getElementById("onlyActive").onclick = e => {
 };
 
 /* ============================================================
-   [7] 운전원 현황 (관리자·지원장비 수정: 이름·전화번호)
-   ============================================================ */
-function renderDrivers() {
-  const edit = canDrv();
-  banner("perm-driver", edit,
-    "이름과 전화번호를 입력한 뒤 아래 [저장]을 눌러 주세요. 이 명단을 나중에 기관별 장비 탭에서 골라 쓰게 됩니다.",
-    "보기만 가능합니다. 이름·전화번호는 가려서 보이고, '보기'를 누르면 표시됩니다(조회 기록 대상).");
-  const f = document.getElementById("drvFilters");
-  f.innerHTML = ["전체", ...DATA.orgs].map(o => `<button type="button" class="chip" data-do="${esc(o)}" aria-pressed="${state.drvOrg === o}">${o === "전체" ? "모든 기관" : esc(o)}</button>`).join("") +
-    (edit ? `<button type="button" class="btn primary" id="addDrv" style="margin-left:auto">＋ 운전원 추가</button>` : "");
-  f.querySelectorAll("[data-do]").forEach(b => b.onclick = () => { state.drvOrg = b.dataset.do; renderDrivers(); });
-  const add = document.getElementById("addDrv");
-  if (add) add.onclick = () => {
-    const id = "d" + Date.now();
-    DATA.drivers.push({ id, org: state.drvOrg !== "전체" ? state.drvOrg : DATA.orgs[0], name: "", phone: "" });
-    renderDrivers(); updateSavebars();
-    const n = document.querySelector(`[data-edit="${CSS.escape("drv:" + id + ":name")}"]`); if (n) n.focus();
-  };
-  const list = DATA.drivers.filter(d => state.drvOrg === "전체" || d.org === state.drvOrg);
-  const rows = list.map(d => {
-    const kN = `drv:${d.id}:name`, kP = `drv:${d.id}:phone`, kO = `drv:${d.id}:org`;
-    const plates = DATA.vehicles.filter(v => v.driverIds.includes(d.id)).map(v => `<span class="plate" style="font-size:12.5px">${esc(v.plate)}</span>`).join(" ") || '<span class="muted">-</span>';
-    if (edit) return `<tr>
-      <td><select class="ci" data-edit="${esc(kO)}" data-type="text" aria-label="소속 기관"${hvA(kO, false)}>${DATA.orgs.map(o => `<option ${d.org === o ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></td>
-      <td><input class="ci nm" type="text" maxlength="20" placeholder="이름" data-edit="${esc(kN)}" data-type="text" value="${esc(d.name)}" aria-label="운전원 이름"${hvA(kN, false)}></td>
-      <td><input class="ci ph" type="tel" inputmode="tel" maxlength="13" placeholder="010-0000-0000" data-edit="${esc(kP)}" data-type="phone" value="${esc(d.phone)}" aria-label="전화번호"${hvA(kP, false)}></td>
-      <td>${plates}</td><td><button type="button" class="btn sm danger" data-del="${esc(d.id)}">삭제</button></td></tr>`;
-    const shown = state.revealed.has(d.id);
-    return `<tr><td>${esc(d.org)}</td><td>${H(kN, esc(shown ? d.name : maskName(d.name)))}</td>
-      <td>${H(kP, esc(shown ? d.phone : maskPhone(d.phone)))} ${shown ? "" : `<button type="button" class="btn sm" data-reveal="${esc(d.id)}">보기</button>`}</td><td>${plates}</td><td></td></tr>`;
-  }).join("");
-  document.getElementById("drvTable").innerHTML = `<thead><tr><th>기관</th><th>이름</th><th>전화번호</th><th>배정 장비</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan="5" class="muted" style="text-align:center;padding:28px">등록된 운전원이 없습니다.</td></tr>`}</tbody>`;
-}
-
-/* ============================================================
    [7-2] 로그 기록 (관리자만 그리기)
    ============================================================ */
 Object.assign(state, { logUser: "전체", logKind: "전체", logToday: false });
@@ -471,7 +384,7 @@ function renderLog() {
   const pm = document.getElementById("perm-log");
   pm.className = "perm can";
   pm.textContent = "관리자만 볼 수 있습니다. 로그는 화면에서 고치거나 지울 수 없습니다. 실제 운영에서는 서버가 IP와 함께 기록하고 1년 이상 보관하세요. (이 시연 화면에서 새로 생긴 기록의 IP는 서버가 없어 '-'로 표시됩니다.)";
-  const kinds = ["전체", "접속", "수정", "조회", "추가", "삭제"];
+  const kinds = ["전체", "접속", "수정"];
   const users = [...new Set(LOG.map(l => l.by))];
   const f = document.getElementById("logFilters");
   f.innerHTML = kinds.map(k => `<button type="button" class="chip" data-lk="${k}" aria-pressed="${state.logKind === k}">${k === "전체" ? "모든 구분" : k}</button>`).join("") +
@@ -480,12 +393,12 @@ function renderLog() {
   f.querySelectorAll("[data-lk]").forEach(b => b.onclick = () => { state.logKind = b.dataset.lk; renderLog(); });
   document.getElementById("logUser").onchange = e => { state.logUser = e.target.value; renderLog(); };
   document.getElementById("logToday").onclick = () => { state.logToday = !state.logToday; renderLog(); };
-  const badge = k => k === "조회" ? `<span class="tag snow">조회</span>` : `<span class="status ${k === "삭제" ? "stop" : k === "접속" ? "wait" : "go"}">${esc(k)}</span>`;
+  const badge = k => `<span class="status ${k === "접속" ? "wait" : "go"}">${esc(k)}</span>`;
   const rows = LOG.filter(l => (state.logKind === "전체" || l.kind === state.logKind) && (state.logUser === "전체" || l.by === state.logUser) && (!state.logToday || sameDay(l.at)))
     .slice().reverse().slice(0, 300).map(l => `<tr>
       <td class="t">${esc(fmtShort(l.at))}</td><td>${esc(l.by)}</td><td>${badge(l.kind)}</td><td>${esc(l.tab || "-")}</td>
       <td>${esc(l.target || (l.key ? describeKeyLog(l.key) : "-"))}</td>
-      <td>${l.kind === "수정" ? `${esc(showVal(l.key, l.from))} → ${esc(showVal(l.key, l.to))}` : l.kind === "조회" ? "연락처 표시" : l.kind === "접속" ? "접속" : l.kind === "추가" ? "운전원 등록" : "운전원 삭제"}</td>
+      <td>${l.kind === "수정" ? `${esc(showVal(l.key, l.from))} → ${esc(showVal(l.key, l.to))}` : "접속"}</td>
       <td class="ip">${esc(l.ip)}</td></tr>`).join("");
   box.innerHTML = `<thead><tr><th>일시</th><th>아이디</th><th>구분</th><th>탭</th><th>대상</th><th>내용</th><th>IP</th></tr></thead><tbody>${rows || `<tr><td colspan="7" class="muted" style="text-align:center;padding:28px">조건에 맞는 기록이 없습니다.</td></tr>`}</tbody>`;
 }
@@ -500,20 +413,13 @@ function openSheet(plate) {
   const v = DATA.vehicles.find(x => x.plate === plate); if (!v) return;
   curPlate = plate;
   const cur = (v.days || []).find(([d]) => d === state.date), curStops = cur ? cur[1].filter(Boolean) : [], [cls, label] = STATUS[v.status];
-  const drv = i => {
-    const d = driverOf(v, i), shown = d && state.revealed.has(d.id);
-    return `<dt>운전원 ${i + 1}</dt><dd>${d ? esc(shown ? d.name : maskName(d.name)) : '<span class="muted">미지정</span>'} <span class="tag" style="margin-left:6px">${esc(v.kinds[i])}</span></dd>
-      <dt>연락처</dt><dd>${d ? esc(shown ? d.phone : maskPhone(d.phone)) + (shown ? "" : ` <button type="button" class="reveal" data-reveal="${esc(d.id)}">보기</button>`) : '<span class="muted">-</span>'}</dd>`;
-  };
   sheet.innerHTML = `<button type="button" class="sheet-close" id="sheetClose">닫기</button>
     <span class="plate" style="font-size:18px">${esc(v.plate)}</span>
     <h2 id="sheetTitle">${esc(v.org)} ${esc(v.type)}</h2>
     ${H(`veh:${v.plate}:status`, `<span class="status ${cls}">${label}</span>`)}
     <section><h3>이동</h3><dl class="kv"><dt>출발</dt><dd>${esc(v.org)} 기계화부</dd>
       <dt>지원 일자</dt><dd>${v.days && v.days.length ? H(`veh:${v.plate}:days`, v.days.map(([d, xs]) => `${esc(fmtMD(d))} → ${esc(xs.map(x => x || "기관 미정").join(" → "))}`).join("<br>")) : "-"}</dd>
-      <dt>도착 요청</dt><dd>${curStops.length ? curStops.map(x => DATA.requests[x] ? `${esc(x)} ${H(`req:${x}:arrive`, fmtTime(DATA.requests[x].arrive))}` : esc(x)).join("<br>") : "-"}</dd></dl></section>
-    <section><h3>운전원</h3><dl class="kv">${drv(0)}${drv(1)}</dl>
-      <p class="note">연락처는 가려서 보여주고 '보기'를 누를 때만 표시합니다. 실제 운영 시 이 동작을 접속기록에 남기세요.</p></section>`;
+      <dt>도착 요청</dt><dd>${curStops.length ? curStops.map(x => DATA.requests[x] ? `${esc(x)} ${H(`req:${x}:arrive`, fmtTime(DATA.requests[x].arrive))}` : esc(x)).join("<br>") : "-"}</dd></dl></section>`;
   sheet.hidden = false; backdrop.hidden = false;
   if (!lastFocus) lastFocus = document.activeElement;
   document.getElementById("sheetClose").focus();
@@ -554,20 +460,11 @@ document.addEventListener("change", e => {
   if (t === "bool") v = el.checked;
   else if (t === "int") v = el.value === "" ? 0 : Math.max(0, Math.min(999, Math.floor(+el.value) || 0));
   else if (t === "num") v = el.value === "" ? null : Math.max(0, Math.min(999, +el.value || 0));
-  else if (t === "phone") v = el.value.replace(/[^\d-]/g, "").slice(0, 13);
   else v = el.value.trim();
   commit(el.dataset.edit, v);
   if (isAdmin() && hasHist(el.dataset.edit) && !el.dataset.hv) el.dataset.hv = el.dataset.edit;
 });
 document.addEventListener("click", e => {
-  const del = e.target.closest("[data-del]");
-  if (del && canDrv() && confirm("이 운전원을 명단에서 삭제할까요?")) {
-    const id = del.dataset.del;
-    DATA.drivers = DATA.drivers.filter(d => d.id !== id);
-    PENDING.splice(0, PENDING.length, ...PENDING.filter(p => !p.key.startsWith("drv:" + id + ":")));
-    // TODO: 서버에 삭제 요청
-    refresh();
-  }
   const sa = e.target.closest("[data-stop-add]");
   if (sa && canVeh()) {
     state.extraStop.add(sa.dataset.stopAdd); renderFleet();
@@ -577,19 +474,11 @@ document.addEventListener("click", e => {
   if (sv) saveTab(sv.dataset.save);
   const rt = e.target.closest("[data-revert]");
   if (rt && confirm("저장하지 않은 변경을 모두 취소할까요?")) { restore(rt.dataset.revert); refresh(); }
-  const rv = e.target.closest("[data-reveal]");
-  if (rv) {
-    state.revealed.add(rv.dataset.reveal);
-    const dd = DATA.drivers.find(x => x.id === rv.dataset.reveal);
-    if (dd) logAdd({ kind: "조회", tab: curPlate ? "장비 상세" : TAB_NAME.driver, target: `${maskName(dd.name)} 연락처` });
-    // TODO: 서버에 "누가 언제 어느 운전원 연락처를 봤는지" 기록 요청
-    const p = curPlate; refresh(); if (p) openSheet(p);
-  }
 });
 function refresh() {
   hideTip();
   banner("perm-move", false, "", "위에서 고른 날짜(‹ ›)에 이동하는 장비를 보여줍니다. 모든 탭의 현황을 볼 수 있고, 수정은 아이디 역할에 따라 각 탭에서 할 수 있습니다.");
-  renderMatrix(); renderFilters(); renderDest(); renderFleet(); renderBranch(); renderDrivers(); renderLog(); updateSavebars();
+  renderMatrix(); renderFilters(); renderDest(); renderFleet(); renderBranch(); renderLog(); updateSavebars();
   document.getElementById("logTabBtn").hidden = !isAdmin();
   if (!isAdmin() && !document.getElementById("panel-log").hidden) document.querySelector('[data-tab="move"]').click();
 }
