@@ -1,0 +1,187 @@
+-- ============================================================
+-- 권한(RLS)·접속 기록 자동 시험 — Supabase SQL Editor 에 통째로 붙여넣고 실행하세요.
+--  * 시험용 계정·자료를 만들었다가 마지막에 "일부러 오류"를 내서 전부 되돌립니다. 실제 자료는 바뀌지 않습니다.
+--  * 결과는 오류 창에 "RLS 시험 결과 — 전체 N, 실패 0" 과 항목별 PASS/FAIL 목록으로 나옵니다. 실패가 0 이어야 합니다.
+--  * 권한 규칙(02 마이그레이션)을 바꿀 때마다 다시 실행하세요.
+-- ============================================================
+create temp table _t (n serial, name text, got text, want text, ok boolean);
+
+create or replace function pg_temp.run_as(rl text, uid uuid, stmt text, hdr text default '') returns text
+language plpgsql as $f$
+declare n bigint;
+begin
+  perform set_config('request.jwt.claims', case when uid is null then '' else json_build_object('sub', uid, 'role', rl)::text end, true);
+  perform set_config('request.headers', coalesce(hdr, ''), true);
+  if rl <> 'postgres' then execute format('set local role %I', rl); end if;
+  begin
+    execute stmt;
+    get diagnostics n = row_count;
+    execute 'reset role';
+    return 'ok:' || n;
+  exception when others then
+    execute 'reset role';
+    return 'err:' || sqlstate;
+  end;
+end $f$;
+
+create or replace function pg_temp.chk(name text, rl text, uid uuid, stmt text, want text, hdr text default '') returns void
+language plpgsql as $f$
+declare got text := pg_temp.run_as(rl, uid, stmt, hdr); good boolean;
+begin
+  good := case when want = 'ok:+' then got ~ '^ok:[1-9]' else got = want end;
+  insert into _t(name, got, want, ok) values (name, got, want, good);
+end $f$;
+
+create or replace function pg_temp.yes(name text, cond boolean, info text default '') returns void
+language plpgsql as $f$
+begin insert into _t(name, got, want, ok) values (name, case when cond then 'true' else 'false ' || info end, 'true', coalesce(cond, false)); end $f$;
+
+do $t$
+declare
+  a uuid := gen_random_uuid(); b1 uuid := gen_random_uuid(); b2 uuid := gen_random_uuid(); e uuid := gen_random_uuid(); d uuid := gen_random_uuid();
+  rid bigint; rep text; fails int; total int; hdr text := '{"cf-connecting-ip":"203.0.113.9"}';
+  c0 bigint; c1 bigint; s text;
+begin
+  -- ===== 시험용 자료(시험이 끝나면 전부 사라짐) =====
+  insert into auth.users (id, aud, role, email) values
+    (a,'authenticated','authenticated','a@t.test'),(b1,'authenticated','authenticated','b1@t.test'),(b2,'authenticated','authenticated','b2@t.test'),
+    (e,'authenticated','authenticated','e@t.test'),(d,'authenticated','authenticated','d@t.test');
+  insert into public.hqs values ('H1','강원',false,1),('H2','민자',true,2);
+  insert into public.branches (id,hq_id,name) values ('B001','H1','춘천'),('B002','H1','홍천');
+  insert into public.equip_orgs values ('서울경기');
+  insert into public.profiles (id,username,display_name,role,branch_id,disabled) values
+    (a,'adm-test','관리자','admin',null,false),(b1,'br-001','춘천지사','branch','B001',false),(b2,'br-002','홍천지사','branch','B002',false),
+    (e,'eq-001','지원장비','equip',null,false),(d,'dis-001','비활성','equip',null,true);
+  insert into public.vehicles values ('11가1111','서울경기','제설차',true);
+  insert into public.support_rounds (name,start_date) values ('시험 회차','2026-12-01') returning id into rid;
+  insert into public.round_vehicles values (rid,'11가1111','');
+  insert into public.round_requests (round_id, branch_id) values (rid,'B002');
+  insert into public.stations values (1,'시험관측소',null,37,127);
+  insert into public.settings values ('k','{}');
+  insert into public.collector_runs (job, started_at) values ('forecast', now());
+
+  -- ===== A. 비로그인(anon)은 아무것도 못 한다 =====
+  perform pg_temp.chk('anon: hqs 읽기 차단','anon',null,'select 1 from public.hqs','err:42501');
+  perform pg_temp.chk('anon: profiles 읽기 차단','anon',null,'select 1 from public.profiles','err:42501');
+  perform pg_temp.chk('anon: snapshots 읽기 차단','anon',null,'select 1 from public.snapshots','err:42501');
+  perform pg_temp.chk('anon: 도우미 함수(private) 호출 차단','anon',null,'select private.my_role()','err:42501');
+  perform pg_temp.chk('anon: round_requests 쓰기 차단','anon',null,format('insert into public.round_requests(round_id,branch_id) values (%s,%L)',rid,'B001'),'err:42501');
+
+  -- ===== B. 비활성 계정은 읽기도 쓰기도 못 한다 =====
+  perform pg_temp.chk('비활성: hqs 읽으면 0건','authenticated',d,'select 1 from public.hqs','ok:0');
+  perform pg_temp.chk('비활성: vehicles 쓰기 차단','authenticated',d,'insert into public.vehicles values (''99가9999'',''서울경기'',''제설차'',true)','err:42501');
+
+  -- ===== C. 활성 로그인 사용자는 기준정보를 읽는다 =====
+  perform pg_temp.chk('관리자: hqs 읽기','authenticated',a,'select 1 from public.hqs','ok:2');
+  perform pg_temp.chk('지사: hqs 읽기','authenticated',b1,'select 1 from public.hqs','ok:2');
+  perform pg_temp.chk('지원장비: branches 읽기','authenticated',e,'select 1 from public.branches','ok:2');
+  perform pg_temp.chk('지사: vehicles 읽기','authenticated',b2,'select 1 from public.vehicles','ok:1');
+  perform pg_temp.chk('지사: round_requests 읽기(타 지사 행도 읽음)','authenticated',b1,'select 1 from public.round_requests','ok:1');
+
+  -- ===== D. 관리자 전용 정보는 관리자만 본다 =====
+  perform pg_temp.chk('지사: audit_log 0건','authenticated',b1,'select 1 from public.audit_log','ok:0');
+  perform pg_temp.chk('지원장비: audit_log 0건','authenticated',e,'select 1 from public.audit_log','ok:0');
+  perform pg_temp.chk('관리자: audit_log 보임','authenticated',a,'select 1 from public.audit_log','ok:+');
+  perform pg_temp.chk('지사: collector_runs 0건','authenticated',b1,'select 1 from public.collector_runs','ok:0');
+  perform pg_temp.chk('관리자: collector_runs 보임','authenticated',a,'select 1 from public.collector_runs','ok:1');
+  perform pg_temp.chk('지사: settings 0건','authenticated',b1,'select 1 from public.settings','ok:0');
+  perform pg_temp.chk('관리자: settings 보임','authenticated',a,'select 1 from public.settings','ok:1');
+  perform pg_temp.chk('지사: profiles 본인 1건만','authenticated',b1,'select 1 from public.profiles','ok:1');
+  perform pg_temp.chk('지원장비: profiles 본인 1건만','authenticated',e,'select 1 from public.profiles','ok:1');
+  perform pg_temp.chk('관리자: profiles 전체 5건','authenticated',a,'select 1 from public.profiles','ok:5');
+
+  -- ===== E. 기준정보 쓰기는 관리자만 =====
+  perform pg_temp.chk('지사: hqs 추가 차단','authenticated',b1,'insert into public.hqs values (''H3'',''x'',false,3)','err:42501');
+  perform pg_temp.chk('지원장비: hqs 추가 차단','authenticated',e,'insert into public.hqs values (''H3'',''x'',false,3)','err:42501');
+  perform pg_temp.chk('관리자: hqs 추가','authenticated',a,'insert into public.hqs values (''H3'',''x'',false,3)','ok:1');
+  perform pg_temp.chk('지사: branches 수정은 0건','authenticated',b1,'update public.branches set name=''해킹'' where id=''B001''','ok:0');
+  perform pg_temp.chk('지원장비: branches 삭제는 0건','authenticated',e,'delete from public.branches','ok:0');
+  perform pg_temp.chk('관리자: branches 수정','authenticated',a,'update public.branches set radius_km=5','ok:2');
+  perform pg_temp.chk('지사: snapshots 쓰기 차단','authenticated',b1,'insert into public.snapshots values (''s1'',1,now(),''{}'')','err:42501');
+  perform pg_temp.chk('관리자: snapshots 쓰기','authenticated',a,'insert into public.snapshots values (''s1'',1,now(),''{}'')','ok:1');
+  perform pg_temp.chk('지사: grid_assign 쓰기 차단','authenticated',b1,'insert into public.grid_assign values (73,127,''B001'')','err:42501');
+  perform pg_temp.chk('지원장비: grid_assign 쓰기 차단','authenticated',e,'insert into public.grid_assign values (73,127,''B001'')','err:42501');
+  perform pg_temp.chk('관리자: grid_assign 쓰기(한 격자에 두 기관)','authenticated',a,'insert into public.grid_assign values (73,127,''B001''),(73,127,''B002'')','ok:2');
+  perform pg_temp.chk('관리자: grid_assign 범위 밖 격자 차단','authenticated',a,'insert into public.grid_assign values (500,1,''B001'')','err:23514');
+  perform pg_temp.chk('지원장비: snow_daily 쓰기 차단','authenticated',e,'insert into public.snow_daily values (''2026-12-01'',1,3.5)','err:42501');
+  perform pg_temp.chk('관리자: snow_daily 쓰기','authenticated',a,'insert into public.snow_daily values (''2026-12-01'',1,3.5)','ok:1');
+  perform pg_temp.chk('지사: snow_uploads 읽기 0건','authenticated',b1,'select 1 from public.snow_uploads','ok:0');
+  perform pg_temp.chk('관리자: snow_uploads 기록','authenticated',a,'insert into public.snow_uploads (ok, rows_written) values (true, 680)','ok:1');
+  perform pg_temp.chk('관리자: grid_events 기록(작성자 위조 시도)','authenticated',a,format('insert into public.grid_events (by_user, kind, payload) values (%L,''cellAdd'',''{}'')', b2),'ok:1');
+  perform pg_temp.yes('grid_events 작성자는 DB가 채움(위조 불가)', (select by_user = a from public.grid_events order by id desc limit 1));
+  perform pg_temp.chk('지사: grid_events 기록 차단','authenticated',b1,'insert into public.grid_events (kind, payload) values (''cellAdd'',''{}'')','err:42501');
+
+  -- ===== F. 서버 전용(수집) 표는 로그인 사용자가 못 쓴다 =====
+  perform pg_temp.chk('관리자도: collector_runs 쓰기 차단(서버 전용)','authenticated',a,'insert into public.collector_runs (job, started_at) values (''x'', now())','err:42501');
+  perform pg_temp.chk('관리자도: forecast_cells 쓰기 차단(서버 전용)','authenticated',a,'insert into public.forecast_cells (nx, ny) values (1,1)','err:42501');
+  perform pg_temp.chk('관리자도: warnings_active 쓰기 차단(서버 전용)','authenticated',a,'insert into public.warnings_active (zone_code, kind, level) values (''z'',''대설'',''주의보'')','err:42501');
+
+  -- ===== G. 장비: 관리자·지원장비가 수정, 지사는 못 함 =====
+  perform pg_temp.chk('지원장비: vehicles 추가','authenticated',e,'insert into public.vehicles values (''22가2222'',''서울경기'',''제설기'',true)','ok:1');
+  perform pg_temp.chk('지원장비: vehicles 수정','authenticated',e,'update public.vehicles set active=false where plate=''22가2222''','ok:1');
+  perform pg_temp.chk('지원장비: vehicles 삭제','authenticated',e,'delete from public.vehicles where plate=''22가2222''','ok:1');
+  perform pg_temp.chk('지사: vehicles 추가 차단','authenticated',b1,'insert into public.vehicles values (''33가3333'',''서울경기'',''제설차'',true)','err:42501');
+  perform pg_temp.chk('지사: vehicles 수정은 0건','authenticated',b1,'update public.vehicles set active=false','ok:0');
+  perform pg_temp.chk('관리자: vehicles 추가','authenticated',a,'insert into public.vehicles values (''23가3333'',''서울경기'',''이동정비차'',true)','ok:1');
+  perform pg_temp.chk('차종 값 검사','authenticated',a,'insert into public.vehicles values (''24가4444'',''서울경기'',''덤프'',true)','err:23514');
+  perform pg_temp.chk('지원장비: support_rounds 만들기 차단','authenticated',e,'insert into public.support_rounds (name,start_date) values (''x'',''2026-12-05'')','err:42501');
+  perform pg_temp.chk('지사: support_rounds 만들기 차단','authenticated',b1,'insert into public.support_rounds (name,start_date) values (''x'',''2026-12-05'')','err:42501');
+  perform pg_temp.chk('관리자: support_rounds 만들기','authenticated',a,'insert into public.support_rounds (name,start_date,created_by) values (''r2'',''2026-12-05'','''||b2||''')','ok:1');
+  perform pg_temp.yes('support_rounds 작성자는 DB가 채움(위조 불가)', (select created_by = a from public.support_rounds where name='r2'));
+  perform pg_temp.chk('지원장비: round_vehicles 추가','authenticated',e,format('insert into public.round_vehicles values (%s,''23가3333'',''O'')',rid),'ok:1');
+  perform pg_temp.chk('지원장비: round_vehicles 수정','authenticated',e,format('update public.round_vehicles set status=''X'' where round_id=%s and plate=''23가3333''',rid),'ok:1');
+  perform pg_temp.chk('지사: round_vehicles 추가 차단','authenticated',b1,format('insert into public.round_vehicles values (%s,''11가1111'',''O'')',rid),'err:42501');
+  perform pg_temp.chk('지원장비: round_vehicle_days 추가','authenticated',e,format('insert into public.round_vehicle_days values (%s,''23가3333'',''2026-12-02'',1,''B001'')',rid),'ok:1');
+  perform pg_temp.chk('지사: round_vehicle_days 추가 차단','authenticated',b1,format('insert into public.round_vehicle_days values (%s,''23가3333'',''2026-12-02'',2,''B001'')',rid),'err:42501');
+  perform pg_temp.chk('지원장비: round_requests 추가 차단','authenticated',e,format('insert into public.round_requests(round_id,branch_id) values (%s,''B001'')',rid),'err:42501');
+  perform pg_temp.chk('지원장비: round_requests 수정은 0건','authenticated',e,'update public.round_requests set req_truck=9','ok:0');
+
+  -- ===== H. 지사별 요청·편성: 지사는 "본인 지사" 행만 =====
+  perform pg_temp.chk('춘천지사: 본인 행 추가','authenticated',b1,format('insert into public.round_requests(round_id,branch_id) values (%s,''B001'')',rid),'ok:1',hdr);
+  perform pg_temp.chk('춘천지사: 홍천 행 추가 차단','authenticated',b1,format('insert into public.round_requests(round_id,branch_id) values (%s,''B002'')',rid),'err:42501');
+  select count(*) into c0 from public.audit_log where username = 'br-001';
+  perform pg_temp.chk('춘천지사: 본인 행 수정','authenticated',b1,'update public.round_requests set req_truck=3, reason=''눈길사고 예방'' where branch_id=''B001''','ok:1',hdr);
+  perform pg_temp.chk('춘천지사: 홍천 행 수정은 0건','authenticated',b1,'update public.round_requests set req_truck=99 where branch_id=''B002''','ok:0');
+  perform pg_temp.chk('홍천지사: 춘천 행 수정은 0건','authenticated',b2,'update public.round_requests set req_truck=99 where branch_id=''B001''','ok:0');
+  perform pg_temp.chk('춘천지사: 본인 행을 다른 지사로 옮기기 차단','authenticated',b1,'update public.round_requests set branch_id=''B002'' where branch_id=''B001''','err:42501');
+  perform pg_temp.chk('춘천지사: 삭제는 0건','authenticated',b1,'delete from public.round_requests where branch_id=''B001''','ok:0');
+  perform pg_temp.chk('춘천지사: 음수 대수 차단','authenticated',b1,'update public.round_requests set req_truck=-1 where branch_id=''B001''','err:23514');
+  perform pg_temp.chk('춘천지사: 수정자 위조 시도','authenticated',b1,format('update public.round_requests set updated_by=%L where branch_id=''B001''',b2),'ok:1');
+  perform pg_temp.yes('round_requests 수정자는 DB가 채움(위조 불가)', (select updated_by = b1 from public.round_requests where round_id=rid and branch_id='B001'));
+  perform pg_temp.chk('관리자: 홍천 행 수정','authenticated',a,'update public.round_requests set snow_cm=7 where branch_id=''B002''','ok:1');
+  perform pg_temp.chk('관리자: 지사 행 삭제','authenticated',a,'delete from public.round_requests where branch_id=''B001''','ok:1');
+
+  -- ===== I. 계정: 본인이 역할을 못 바꾼다 =====
+  perform pg_temp.chk('지사: 본인 역할을 admin 으로 바꾸기 → 0건','authenticated',b1,format('update public.profiles set role=''admin'', branch_id=null where id=%L',b1),'ok:0');
+  perform pg_temp.yes('지사 역할은 그대로', (select role = 'branch' from public.profiles where id = b1));
+  perform pg_temp.chk('지사: 새 계정 만들기 차단','authenticated',b1,format('insert into public.profiles (id,username,display_name,role) values (%L,''x-001'',''x'',''admin'')',gen_random_uuid()),'err:42501');
+  perform pg_temp.chk('관리자: 계정 비활성화','authenticated',a,format('update public.profiles set disabled=true where id=%L',e),'ok:1');
+  perform pg_temp.chk('방금 비활성화된 계정은 즉시 읽기 0건','authenticated',e,'select 1 from public.hqs','ok:0');
+  perform pg_temp.chk('지사 역할인데 소속 지사가 없으면 거절','postgres',null,format('insert into public.profiles (id,username,display_name,role) values (%L,''bad-001'',''x'',''branch'')',gen_random_uuid()),'err:23514');
+  perform pg_temp.chk('아이디는 소문자·숫자만','postgres',null,format('insert into public.profiles (id,username,display_name,role) values (%L,''BAD-002'',''x'',''admin'')',gen_random_uuid()),'err:23514');
+
+  -- ===== J. 접속·수정 기록 =====
+  select count(*) into c1 from public.audit_log where username = 'br-001';
+  perform pg_temp.yes('춘천지사 수정이 기록됨(+2건 이상: 추가·수정 등)', c1 > c0, c0||'→'||c1);
+  select format('%s|%s|%s|%s', kind, tab, to_val::text, ip) into s from public.audit_log where username='br-001' and kind='수정' and target like 'round_requests:%' order by id limit 1;
+  perform pg_temp.yes('기록: 구분·표·바뀐 값만·IP', s like '수정|round_requests|%"req_truck": 3%' and s not like '%updated_by%' and s like '%|203.0.113.9', coalesce(s,'없음'));
+  select count(*) into c0 from public.audit_log;
+  perform pg_temp.chk('바뀐 것이 없는 수정','authenticated',b1,'update public.round_requests set req_truck=req_truck','ok:0');
+  perform pg_temp.yes('바뀐 것이 없으면 기록하지 않음', (select count(*) from public.audit_log) = c0);
+  perform pg_temp.chk('지사: audit_log 쓰기 차단','authenticated',b1,'insert into public.audit_log (kind) values (''위조'')','err:42501');
+  perform pg_temp.chk('관리자: audit_log 수정 차단','authenticated',a,'update public.audit_log set kind=''x''','err:42501');
+  perform pg_temp.chk('관리자: audit_log 삭제 차단','authenticated',a,'delete from public.audit_log','err:42501');
+  perform pg_temp.chk('서버(postgres)도: audit_log 수정 차단(트리거)','postgres',null,'update public.audit_log set kind=''x''','err:42501');
+  perform pg_temp.chk('서버(postgres)도: audit_log 삭제 차단(트리거)','postgres',null,'delete from public.audit_log','err:42501');
+  perform pg_temp.chk('서버(postgres)도: audit_log 비우기 차단(트리거)','postgres',null,'truncate public.audit_log','err:42501');
+
+  -- ===== K. 설정 점검 =====
+  perform pg_temp.yes('RLS 가 꺼진 표가 없다', (select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and not c.relrowsecurity) = 0);
+  perform pg_temp.yes('RLS 가 켜져 있는데 정책이 하나도 없는 표가 없다', (select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and c.relrowsecurity and not exists (select 1 from pg_policies p where p.schemaname='public' and p.tablename=c.relname)) = 0);
+  perform pg_temp.yes('anon 에게 public 표 권한이 없다', (select count(*) from information_schema.role_table_grants where grantee='anon' and table_schema='public') = 0);
+  perform pg_temp.yes('로그인 사용자에게 TRUNCATE 권한이 없다', (select count(*) from information_schema.role_table_grants where grantee='authenticated' and table_schema='public' and privilege_type in ('TRUNCATE','TRIGGER','REFERENCES')) = 0);
+
+  select count(*), count(*) filter (where not ok), string_agg(case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  → 실제 ' || got || ' / 기대 ' || want end, E'\n' order by n)
+    into total, fails, rep from _t;
+  raise exception E'RLS 시험 결과 — 전체 %, 실패 %\n%', total, fails, rep;   -- 예외로 끝내서 시험 자료를 전부 되돌림
+end $t$;
