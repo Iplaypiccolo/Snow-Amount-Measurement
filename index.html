@@ -335,6 +335,7 @@
   .unit-note{font-size:10px; color:var(--muted); padding:6px 12px; font-family:var(--mono);}
 </style>
   <link rel="stylesheet" href="jurisdiction/style.css">
+  <link rel="stylesheet" href="grid/style.css">
 </head>
 <body>
 <nav class="pagebar" aria-label="페이지 전환">
@@ -359,6 +360,7 @@
     <button class="tab-btn" data-tab="map">관측소 지도</button>
     <button class="tab-btn" data-tab="sources">데이터 출처</button>
     <button class="tab-btn" data-tab="jurisdiction">기관별 관할 고속도로</button>
+    <button class="tab-btn" data-tab="grid">예보 격자 편입</button>
   </div>
 
   <div id="view-map" class="view" style="display:none;">
@@ -401,6 +403,8 @@
   </div>
 
   <div id="view-jurisdiction" class="view" style="display:none;"></div>
+
+  <div id="view-grid" class="view" style="display:none;"></div>
 
   <div id="view-sources" class="view sources-view" style="display:none;">
     <div class="sources-content">
@@ -503,6 +507,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="jurisdiction/core.js"></script>
 <script src="jurisdiction/ui.js"></script>
+<script src="grid/core.js"></script>
+<script src="grid/ui.js"></script>
 <script>
 (function(){
   var META_DATE_TEXT = "자동 업데이트(매일 새벽)";
@@ -513,7 +519,10 @@
     // 관할 구간(IC/JC 사이)·관측소 목록·변경 이력: 없어도 기존 화면은 그대로 동작
     fetch('data/sections.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),
     fetch('data/stations.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),
-    fetch('data/jurisdiction_changes.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;})
+    fetch('data/jurisdiction_changes.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),
+    // 예보 격자 편입(기본 편입 + 저장된 변경): 없어도 기존 화면은 그대로 동작
+    fetch('data/grid_assign.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),
+    fetch('data/grid_changes.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;})
   ]).then(function(results){
     window.ROADS_DATA = results[0];
     window.HIERARCHY = results[1];
@@ -521,6 +530,7 @@
     window.META_DATE = META_DATE_TEXT;
     // 관할 변경 적용: 저장된 변경(jurisdiction_changes.json) + 이 브라우저에만 임시 적용한 변경
     var committed = (results[5] && results[5].events) || [];
+    window.GRID = { baseline: results[6], committed: (results[7] && results[7].events) || [] };
     window.JURIS = { doc: results[3], stations: results[4], committed: committed, session: null };
     try {
       var raw = sessionStorage.getItem('juris_session');
@@ -535,7 +545,7 @@
     }
     var s = document.createElement('script');
     s.src = 'app.js?v=' + Date.now();
-    s.onload = function(){ initApp(); if(window.JurisdictionUI){ JurisdictionUI.init(); } };
+    s.onload = function(){ initApp(); if(window.JurisdictionUI){ JurisdictionUI.init(); } if(window.GridUI){ GridUI.init(); } };
     document.body.appendChild(s);
   }).catch(function(err){
     document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;">데이터 로드 실패: ' + err + '</div>';

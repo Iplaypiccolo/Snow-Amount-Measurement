@@ -1,0 +1,15 @@
+/* 예보 격자 편입 탭 — 관할 고속도로 탭의 공통 클래스(jr-*)를 그대로 쓰고, 격자 전용 스타일만 추가합니다 */
+#view-grid{flex:1;min-height:0;}
+#gmap{position:absolute;inset:0;}
+.gr-summary{margin:0 14px 10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;}
+.gr-big{font-size:14px;} .gr-big b{font-size:20px;color:var(--hwy-green-dark);} .gr-big span{color:var(--muted);font-size:12px;}
+.gr-sub{font-size:12px;color:var(--muted);margin:2px 0 6px;}
+.gr-badge{font-size:12px;border-radius:6px;padding:5px 8px;line-height:1.45;}
+.gr-badge.ok{background:#e3f3ea;color:var(--hwy-green-dark);} .gr-badge.warn{background:#fff1c9;color:#8a5a00;} .gr-badge.over{background:#fde8e6;color:var(--signal-red);font-weight:700;}
+.gr-tools{position:absolute;left:54px;top:12px;z-index:520;background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 8px;gap:8px;align-items:center;box-shadow:0 2px 10px rgba(0,0,0,.2);font-size:12px;}
+.gr-tools .hint{color:var(--muted);}
+.gr-legend .sw{display:inline-block;width:12px;height:12px;border-radius:2px;margin:0 3px 0 8px;vertical-align:-2px;border:1.5px solid #888;}
+.gr-legend .sw1{background:rgba(60,150,90,.4);border-color:#3c965a;} .gr-legend .sw2{background:rgba(120,60,180,.3);border:3px solid #5b1a8f;}
+.gr-legend .sw0{background:rgba(200,200,180,.15);border:1px dashed #8a8a7a;} .gr-legend .sw3{border:3px solid #ff00aa;background:rgba(255,0,170,.2);} .gr-legend .sw4{border:2px dashed #d98a00;background:#fff;}
+.gr-tip{font-size:12px;line-height:1.5;}
+.gr-tip em{color:#5b1a8f;font-style:normal;font-weight:700;}

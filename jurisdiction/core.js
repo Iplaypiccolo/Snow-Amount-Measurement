@@ -274,8 +274,18 @@
     return { state: st, km: km, count: cnt };
   }
 
+  /* ---------- 8) 기관 색 (관할 고속도로 탭과 격자 편입 탭이 같은 색을 씀) ---------- */
+  function colorOf(st, id) {
+    if (id == null || id === 'NONE') return '#4a4a4a';
+    var b = st.branches[id]; if (!b) return '#999';
+    var regular = st.hqs.filter(function (h) { return h !== PRIVATE_HQ; }), idx = 0;
+    for (var i = 0; i < st.order.length; i++) { var o = st.branches[st.order[i]]; if (o.hq === b.hq) { if (o.id === id) break; idx++; } }
+    if (b.hq === PRIVATE_HQ) return 'hsl(278,48%,' + [38, 54, 28, 62][idx % 4] + '%)';
+    return 'hsl(' + Math.round(regular.indexOf(b.hq) * 360 / regular.length + 8) + ',72%,' + [36, 50, 26, 58][idx % 4] + '%)';
+  }
+
   var api = {
-    resolve: resolve, buildSegments: buildSegments, pickStations: pickStations, distToSegments: distToSegments,
+    colorOf: colorOf, resolve: resolve, buildSegments: buildSegments, pickStations: pickStations, distToSegments: distToSegments,
     isPrivate: isPrivate, PRIVATE_HQ: PRIVATE_HQ, applyToData: applyToData, impact: impact, evaluate: evaluate, summarize: summarize,
     seasonSeries: seasonSeries, clone: clone, latestSeasonKey: latestSeasonKey
   };
