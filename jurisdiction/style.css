@@ -59,3 +59,10 @@
 .jr-pickbar{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:520;background:#0b130e;color:#fff;padding:8px 8px 8px 16px;border-radius:22px;font-size:13px;gap:12px;align-items:center;box-shadow:0 4px 16px rgba(0,0,0,.4);}
 .jr-pickbar .jr-btn{border-radius:14px;}
 .jr-popbtn{margin-top:2px;}
+
+.jr-savebar{position:absolute;top:12px;right:12px;z-index:520;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px;gap:8px;align-items:center;box-shadow:0 4px 16px rgba(0,0,0,.28);font-size:13px;flex-wrap:wrap;max-width:calc(100% - 70px);}
+.jr-savebar .st{color:var(--muted);margin-right:4px;}
+.jr-savebar.dirty{border-color:var(--signal-amber);border-width:2px;}
+.jr-savebar.dirty .st{color:var(--ink);font-weight:700;}
+.jr-savebar .jr-btn:disabled{opacity:.4;cursor:default;}
+.jr-savebar .jr-primary{padding:6px 18px;}

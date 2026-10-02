@@ -54,11 +54,11 @@ def load_nodes(path):
 def load_links(path):
     c = sqlite3.connect(path)
     out = []
-    for lid, f, t, ty, ln, g in c.execute("select LINK_ID,F_NODE,T_NODE,ROAD_TYPE,LENGTH,geom from moct_link"):
+    for lid, f, t, ty, ln, nm, g in c.execute("select LINK_ID,F_NODE,T_NODE,ROAD_TYPE,LENGTH,ROAD_NAME,geom from moct_link"):
         geom = parse_geom(g)
         lines = list(geom.geoms) if geom.geom_type == 'MultiLineString' else [geom]
         coords = [xy for ln_ in lines for xy in ln_.coords]
-        out.append(dict(id=lid, f=f, t=t, type=ty, len=ln, coords=coords))
+        out.append(dict(id=lid, f=f, t=t, type=ty, len=ln, name=nm, coords=coords))
     return out
 
 

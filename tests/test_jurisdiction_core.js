@@ -33,7 +33,8 @@ test('관측소 배정 규칙이 현재 59개 지사의 배정과 반경을 그�
 test('구간 686여 개의 길이 합이 지사 합계와 맞고, 모든 구간에 소속이 있다', () => {
   const ids = new Set(doc.branches.map(b => b.id));
   assert.ok(doc.sections.length > 600);
-  assert.ok(doc.sections.every(s => ids.has(s.owner) && s.coords.length >= 2 && s.km > 0));
+  assert.ok(doc.sections.every(s => (s.owner === null || ids.has(s.owner)) && s.coords.length >= 2 && s.km > 0));
+  assert.ok(doc.sections.filter(s => s.owner === null).length > 100, '미지정 구간이 있어야 함');
 });
 
 test('구간 이동: 두 지사만 바뀌고 일별 신적설이 새 관측소로 다시 계산된다', () => {
@@ -97,6 +98,41 @@ test('미리보기: 이동한 두 지사의 km·관측소·적설 변화를 보�
   const a = rows.find(r => r.id === A), b = rows.find(r => r.id === B);
   assert.ok(a.after.km < a.before.km && b.after.km > b.before.km);
   assert.ok(a.before.allMax !== undefined);
+});
+
+const unSecs = () => doc.sections.filter(s => s.owner === null);
+
+test('미지정 구간이 있어도 이벤트가 없으면 기존 지사 데이터는 그대로다', () => {
+  const { H, S } = fresh(), H0 = JSON.stringify(H), S0 = JSON.stringify(S);
+  C.applyToData(H, S, doc, stationsDoc, []);
+  assert.strictEqual(JSON.stringify(H), H0); assert.strictEqual(JSON.stringify(S), S0);
+  const sm = C.summarize(doc, []); assert.ok(sm.km.NONE > 300 && sm.count.NONE === unSecs().length);
+});
+
+test('미지정 구간을 지사에 배정하면 그 지사의 관할·관측소·적설이 다시 계산된다', () => {
+  const { H, S } = fresh(), to = bid('수도권', '시흥'), pick = unSecs().slice(0, 3).map(s => s.id);
+  const km0 = C.summarize(doc, []).km;
+  const r = C.applyToData(H, S, doc, stationsDoc, [{ t: 'move', sections: pick, to }]);
+  assert.deepStrictEqual(r.changed.map(c => c.id), [to]);               // 미지정 쪽은 '변경된 지사'가 아님
+  const sm = C.summarize(doc, [{ t: 'move', sections: pick, to }]);
+  const added = doc.sections.filter(s => pick.includes(s.id)).reduce((a, s) => a + s.km, 0);
+  assert.ok(Math.abs(sm.km[to] - km0[to] - added) < 1e-6 && Math.abs(km0.NONE - sm.km.NONE - added) < 1e-6);
+  const b = H.hq.find(h => h.name === '수도권').branches.find(x => x.name === '시흥');
+  assert.strictEqual(b.count, b.stations.length);
+});
+
+test('지사 구간을 미지정(NONE)으로 되돌릴 수 있다', () => {
+  const { H, S } = fresh(), A = bid('강원', '춘천'), one = secsOf(A).slice(0, 1).map(s => s.id);
+  const sm = C.summarize(doc, [{ t: 'move', sections: one, to: 'NONE' }]);
+  assert.strictEqual(sm.state.owner[one[0]], null); assert.ok(sm.count.NONE === unSecs().length + 1);
+  const r = C.applyToData(H, S, doc, stationsDoc, [{ t: 'move', sections: one, to: 'NONE' }]);
+  assert.deepStrictEqual(r.changed.map(c => c.id), [A]);
+});
+
+test('미리보기: 미지정 구간을 옮기면 도착 지사 하나만 비교 대상이 된다', () => {
+  const { S } = fresh(), to = bid('수도권', '시흥');
+  const rows = C.impact(doc, stationsDoc, S, [], [{ t: 'move', sections: unSecs().slice(0, 2).map(s => s.id), to }]);
+  assert.strictEqual(rows.length, 1); assert.ok(rows[0].after.km > rows[0].before.km);
 });
 
 const ok = results.filter(r => r[1]).length;

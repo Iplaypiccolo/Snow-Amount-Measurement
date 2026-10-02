@@ -51,3 +51,5 @@
 - 신설 노선은 **나중에 표준노드링크로 가져오며**, 그때도 IC/JC 기준으로 나눈다. 이 작업은 Claude에게 파일을 주면 `tools/build_jurisdiction.py` 방식으로 진행한다.
 - 전국표준노드링크 원본(노드 약 162MB, 링크 약 327MB)은 저장소에 넣지 않는다. QGIS에서 고속도로 링크(ROAD_RANK=101)와 고속도로에 닿은 노드만 걸러 쓴다.
 - 확인 필요: **적설관측지점 전체 목록**(기상청 API허브 stn_snow.php, 약 669곳)의 좌표를 받아 `data/stations.json` 에 반영해야 새로 편입되는 지역의 관측소를 놓치지 않는다.
+- **미지정 고속도로**: 어느 지사에도 속하지 않은 고속도로를 `owner = null` 구간으로 `data/sections.json` 에 추가(`tools/add_unassigned_sections.py`, 325구간 약 804km). 눌러서 지사에 배정하거나 지사 구간을 미지정으로 되돌릴 수 있다. `hierarchy.json`, `snow_data.json` 은 바뀌지 않는다.
+- **저장 방식 안내**: 관리자 모드에서 항상 보이는 저장 바 + 저장 후 GitHub 업로드 순서 안내. 서버가 없는 동안 실제 반영은 GitHub 에 파일을 올리는 방식이다.
