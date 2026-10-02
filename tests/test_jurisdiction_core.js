@@ -135,6 +135,52 @@ test('미리보기: 미지정 구간을 옮기면 도착 지사 하나만 비교
   assert.strictEqual(rows.length, 1); assert.ok(rows[0].after.km > rows[0].before.km);
 });
 
+const hqCount = H => H.hq.reduce((a, h) => a + h.branches.length, 0);
+
+test("본부 목록에 '민자'가 있고, 지금은 민자 기관·구간이 없다", () => {
+  assert.ok(doc.hqs.includes('민자')); assert.strictEqual(doc.hqs[doc.hqs.length - 1], '민자');
+  assert.ok(!doc.branches.some(b => b.hq === '민자'));
+});
+
+test('민자 기관을 만들고 미지정 구간을 옮겨도 강설량 화면 데이터(지사·관측소·적설)는 그대로다', () => {
+  const { H, S } = fresh(), H0 = JSON.stringify(H), S0 = JSON.stringify(S);
+  const ev = [{ t: 'addBranch', id: 'B901', hq: '민자', name: '시험민자고속도로' }, { t: 'move', sections: unSecs().slice(0, 4).map(s => s.id), to: 'B901' }];
+  const r = C.applyToData(H, S, doc, stationsDoc, ev);
+  assert.strictEqual(JSON.stringify(H), H0); assert.strictEqual(JSON.stringify(S), S0);
+  assert.strictEqual(r.changed.length, 0);
+  const sm = C.summarize(doc, ev); assert.ok(sm.km.B901 > 0 && sm.state.branches.B901.hq === '민자');
+});
+
+test('지사 구간을 민자로 넘기면 그 지사만 다시 계산되고 민자 쪽에는 관측소 계산이 없다', () => {
+  const { H, S } = fresh(), A = bid('강원', '춘천'), pick = secsOf(A).slice(0, 2).map(s => s.id);
+  const ev = [{ t: 'addBranch', id: 'B901', hq: '민자', name: '시험민자' }, { t: 'move', sections: pick, to: 'B901' }];
+  const r = C.applyToData(H, S, doc, stationsDoc, ev);
+  assert.deepStrictEqual(r.changed.map(c => c.id), [A]);
+  assert.ok(!H.hq.some(h => h.branches.some(b => b.name === '시험민자')));
+  Object.keys(S.seasons).forEach(k => assert.ok(!Object.keys(S.seasons[k].branches).some(key => key.includes('시험민자'))));
+});
+
+test('기존 지사를 민자 본부로 옮기면 강설량 화면에서 빠지고 적설 기록도 사라진다 (다시 옮기면 돌아옴)', () => {
+  const { H, S } = fresh(), id = bid('충북', '엄정'), n0 = hqCount(H), k0 = Object.keys(S.seasons)[0];
+  C.applyToData(H, S, doc, stationsDoc, [{ t: 'moveHq', branch: id, hq: '민자' }]);
+  assert.strictEqual(hqCount(H), n0 - 1);
+  assert.ok(!('충북|||엄정' in S.seasons[k0].branches) && !Object.keys(S.seasons[k0].branches).some(k => k.endsWith('|||엄정')));
+  const hq = H.hq.find(h => h.name === '충북'); assert.strictEqual(hq.count, hq.branches.reduce((a, b) => a + b.count, 0));
+  // 민자로 옮겼다가 다른 일반 본부로 다시 옮기는 이벤트열: 일반 본부에서는 새로 계산되어 나타남
+  const { H: H2, S: S2 } = fresh();
+  C.applyToData(H2, S2, doc, stationsDoc, [{ t: 'moveHq', branch: id, hq: '민자' }, { t: 'moveHq', branch: id, hq: '강원' }]);
+  const b = H2.hq.find(h => h.name === '강원').branches.find(x => x.name === '엄정');
+  assert.ok(b && b.stations.length === b.count && b.count > 0);
+  assert.strictEqual(S2.seasons[k0].branches['강원|||엄정'].length, S2.seasons[k0].dates.length);
+});
+
+test('미리보기: 민자 기관은 관측소·적설을 계산하지 않는다고 표시된다', () => {
+  const { S } = fresh();
+  const rows = C.impact(doc, stationsDoc, S, [], [{ t: 'addBranch', id: 'B901', hq: '민자', name: '시험민자' }, { t: 'move', sections: unSecs().slice(0, 2).map(s => s.id), to: 'B901' }]);
+  assert.strictEqual(rows.length, 1); assert.strictEqual(rows[0].after.priv, true);
+  assert.strictEqual(rows[0].after.stations.length, 0); assert.strictEqual(rows[0].after.allMax, null);
+});
+
 const ok = results.filter(r => r[1]).length;
 results.forEach(r => console.log((r[1] ? 'PASS ' : 'FAIL ') + r[0] + (r[1] ? '' : '  → ' + r[2])));
 console.log('\n' + ok + '/' + results.length + ' 통과');
