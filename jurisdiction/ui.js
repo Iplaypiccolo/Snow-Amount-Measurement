@@ -8,7 +8,7 @@
 (function () {
   'use strict';
   var C = window.JurisCore;
-  var S = { inited: false, admin: false, selected: {}, last: null, clicked: null, pick: false, pending: [], focus: null, map: null, polys: {}, casing: null, ends: null, roads: null, search: '', view: null, secMap: null };
+  var S = { boxes: {}, lastMove: 0, inited: false, admin: false, selected: {}, last: null, clicked: null, pick: false, pending: [], focus: null, map: null, polys: {}, casing: null, ends: null, roads: null, search: '', view: null, secMap: null };
 
   function J() { return window.JURIS; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -24,11 +24,20 @@
     var st = S.view.state, b = st.branches[id];
     if (id == null || id === 'NONE') return NONE_COLOR;
     if (!b) return '#999';
-    var hqI = st.hqs.indexOf(b.hq), idx = 0;
+    var regular = st.hqs.filter(function (h) { return h !== C.PRIVATE_HQ; }), idx = 0;
     for (var i = 0; i < st.order.length; i++) { var o = st.branches[st.order[i]]; if (o.hq === b.hq) { if (o.id === id) break; idx++; } }
     var light = [36, 50, 26, 58][idx % 4];
-    return 'hsl(' + Math.round(hqI * 360 / st.hqs.length + 8) + ',72%,' + light + '%)';
+    if (b.hq === C.PRIVATE_HQ) return 'hsl(278,48%,' + [38, 54, 28, 62][idx % 4] + '%)';        // 민자: 보라 계열 (일반 본부 색은 그대로)
+    return 'hsl(' + Math.round(regular.indexOf(b.hq) * 360 / regular.length + 8) + ',72%,' + light + '%)';
   }
+
+  /* ---------- 굵기: 지도를 확대할수록 굵어짐 (배경 지도의 도로도 확대하면 넓어지므로) ----------
+     줌 7(전국)=4px, 9=7px, 11=9px, 13=11px, 15=14px, 17=16px */
+  var BASE_Z = 5;
+  function widthFor(zoom) { return Math.round(Math.max(3, Math.min(16, 2 + (zoom - BASE_Z) * 1.15))); }
+  function curWidth() { return widthFor(S.map ? S.map.getZoom() : 7); }
+  // 점선 무늬도 굵기에 비례해야 굵은 선에서도 보임 (변경 대기 = 긴 점선, 미지정 = 둥근 점)
+  function dashFor(kind, w) { return kind === 'pending' ? Math.round(w * 1.6) + ',' + Math.round(w * 1.2) : kind === 'none' ? '1,' + Math.round(w * 1.7) : null; }
 
   /* ---------- 테두리 색: 선 색의 밝기에 따라 반대로 ----------
      선이 밝으면 어두운 테두리, 선이 어두우면 흰 테두리. 지도 배경에서도 떨어져 보이도록
@@ -81,7 +90,7 @@
 
   function ensureMap() {
     if (S.map) { setTimeout(function () { S.map.invalidateSize(); }, 50); return; }
-    S.map = L.map('jmap', { preferCanvas: true, zoomControl: true }).setView([36.4, 127.9], 7);
+    S.map = L.map('jmap', { renderer: L.canvas({ tolerance: 8 }), zoomControl: true }).setView([36.4, 127.9], 7);   // tolerance: 선에서 8px 떨어져도 눌림
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(S.map);
     S.roads = L.layerGroup().addTo(S.map);
     (window.ROADS_DATA || []).forEach(function (r) {
@@ -92,7 +101,21 @@
       p.bindPopup(function () { return infoHtml(sec); });
       p.on('click', function (e) { onSectionClick(sec, e.originalEvent); });
       S.polys[sec.id] = p;
+      var lat = sec.coords.map(function (c) { return c[1]; }), lon = sec.coords.map(function (c) { return c[0]; });
+      S.boxes[sec.id] = [Math.min.apply(null, lat), Math.min.apply(null, lon), Math.max.apply(null, lat), Math.max.apply(null, lon)];
     });
+    // 선을 정확히 못 눌러도 가까운 구간(NEAR_PX 이내)을 눌린 것으로 처리
+    S.map.on('click', function (e) {
+      var hit = nearestSection(e.latlng, NEAR_PX); if (!hit) return;
+      onSectionClick(hit, e.originalEvent);
+      if (!S.admin) S.polys[hit.id].openPopup(e.latlng);
+    });
+    S.map.on('mousemove', function (e) {          // 눌릴 만큼 가까우면 손 모양 커서
+      var now = Date.now(); if (now - S.lastMove < 60) return; S.lastMove = now;
+      var el = S.map.getContainer(); if (S.pick) { el.style.cursor = 'crosshair'; return; }
+      el.style.cursor = nearestSection(e.latlng, NEAR_PX) ? 'pointer' : '';
+    });
+    S.map.on('zoomend', function () { restyle(); });          // 확대·축소에 맞춰 굵기 다시 칠함
     S.casing = L.layerGroup().addTo(S.map);          // 선택·클릭한 구간의 이중 테두리
     S.ends = L.layerGroup().addTo(S.map);            // 시점·종점 IC/JC 표시
     S.map.on('popupclose', function () { if (!S.admin && S.clicked) { S.clicked = null; restyle(); } });   // 보기 모드: 팝업을 닫으면 테두리도 해제
@@ -101,6 +124,25 @@
       if (btn) { btn.removeAttribute('href'); L.DomEvent.off(btn, 'click'); L.DomEvent.on(btn, 'click', function (ev) { L.DomEvent.preventDefault(ev); S.map.closePopup(e.popup); }); }
     });
     setTimeout(function () { S.map.invalidateSize(); }, 50);
+  }
+
+  // 지도 위 한 점에서 가장 가까운 구간 (화면 픽셀 거리 maxPx 이내). 선에 정확히 닿지 않아도 눌리게 하는 보정
+  var NEAR_PX = 14;
+  function nearestSection(latlng, maxPx) {
+    var m = S.map, size = m.getSize(), b = m.getBounds();
+    var padLat = maxPx * (b.getNorth() - b.getSouth()) / size.y, padLon = maxPx * (b.getEast() - b.getWest()) / size.x;
+    var p = m.latLngToLayerPoint(latlng), best = null, bd = maxPx + 1;
+    J().doc.sections.forEach(function (sec) {
+      var bx = S.boxes[sec.id];
+      if (latlng.lat < bx[0] - padLat || latlng.lat > bx[2] + padLat || latlng.lng < bx[1] - padLon || latlng.lng > bx[3] + padLon) return;
+      var c = sec.coords, prev = m.latLngToLayerPoint([c[0][1], c[0][0]]);
+      for (var i = 1; i < c.length; i++) {
+        var cur = m.latLngToLayerPoint([c[i][1], c[i][0]]), d = L.LineUtil.pointToSegmentDistance(p, prev, cur);
+        if (d < bd) { bd = d; best = sec; }
+        prev = cur;
+      }
+    });
+    return bd <= maxPx ? best : null;
   }
 
   function infoHtml(sec) {
@@ -120,10 +162,10 @@
     J().doc.sections.forEach(function (sec) {
       var p = S.polys[sec.id]; if (!p) return;
       var own = st.owner[sec.id], key = own || 'NONE', dim = S.focus && key !== S.focus && !hl[sec.id];
+      var w = curWidth() + (hl[sec.id] || (S.focus && key === S.focus) ? 2 : 0);
       p.setStyle({
-        color: colorOf(own), weight: hl[sec.id] || (S.focus && key === S.focus) ? 6 : 4,
-        opacity: dim ? 0.22 : 0.95,
-        dashArray: own !== committed[sec.id] ? '7,7' : (own === null ? '2,8' : null),   // 점선 굵음=변경 대기, 점 모양=미지정
+        color: colorOf(own), weight: w, opacity: dim ? 0.22 : 0.95,
+        dashArray: own !== committed[sec.id] ? dashFor('pending', w) : (own === null ? dashFor('none', w) : null),   // 긴 점선=변경 대기, 둥근 점=미지정
         lineCap: own === null ? 'round' : 'butt'
       });
     });
@@ -132,8 +174,9 @@
     var ids = Object.keys(hl).filter(function (id) { return S.polys[id]; }), outers = [], cases = [];
     ids.forEach(function (id) {
       var sec = S.secMap[id], cc = casingColors(colorOf(st.owner[id])), ll = latlngsOf(sec);
-      outers.push(L.polyline(ll, { color: cc.outer, weight: 20, opacity: 0.7, interactive: false, lineCap: 'round' }).addTo(S.casing));
-      cases.push(L.polyline(ll, { color: cc.casing, weight: 13, opacity: 1, interactive: false, lineCap: 'round' }).addTo(S.casing));
+      var w = curWidth() + 2;
+      outers.push(L.polyline(ll, { color: cc.outer, weight: w + 14, opacity: 0.7, interactive: false, lineCap: 'round' }).addTo(S.casing));
+      cases.push(L.polyline(ll, { color: cc.casing, weight: w + 7, opacity: 1, interactive: false, lineCap: 'round' }).addTo(S.casing));
     });
     outers.forEach(function (l) { l.bringToFront(); });
     cases.forEach(function (l) { l.bringToFront(); });
@@ -146,7 +189,7 @@
     var pts = [[sec.coords[0], 'start', sec['from']], [sec.coords[sec.coords.length - 1], 'end', sec.to]];
     pts.forEach(function (x) {
       var name = x[2] === '(IC 아님)' ? '구간 끝' : x[2], label = (x[1] === 'start' ? '시점 ' : '종점 ') + name;
-      L.circleMarker([x[0][1], x[0][0]], { radius: 7, color: '#0b130e', weight: 3, fillColor: '#ffffff', fillOpacity: 1, interactive: false })
+      L.circleMarker([x[0][1], x[0][0]], { radius: Math.max(7, Math.round(curWidth() * 0.8)), color: '#0b130e', weight: 3, fillColor: '#ffffff', fillOpacity: 1, interactive: false })
         .bindTooltip(esc(label), { permanent: true, direction: x[1] === 'start' ? 'top' : 'bottom', offset: [0, x[1] === 'start' ? -8 : 8], className: 'jr-endtip' })
         .addTo(S.ends);
     });
@@ -210,9 +253,9 @@
     var st = S.view.state, km = S.view.km, cnt = S.view.count, q = S.search.trim();
     var html = st.hqs.map(function (hq) {
       var ids = st.order.filter(function (id) { return st.branches[id].hq === hq && (!q || st.branches[id].name.indexOf(q) >= 0); });
-      if (!ids.length) return '';
+      if (!ids.length && !(hq === C.PRIVATE_HQ && !q)) return '';
       var total = round1(ids.reduce(function (a, id) { return a + (km[id] || 0); }, 0));
-      return '<div class="jr-hq"><div class="jr-hqname">' + esc(hq) + ' <span>' + total + 'km</span></div>' + ids.map(function (id) {
+      return '<div class="jr-hq"><div class="jr-hqname">' + esc(hq) + ' <span>' + total + 'km</span>' + (hq === C.PRIVATE_HQ ? ' <em class="jr-priv">관측소·적설 계산 안 함</em>' : '') + '</div>' + ids.map(function (id) {
         var b = st.branches[id], on = S.focus === id;
         var row = '<div class="jr-br' + (on ? ' on' : '') + '" data-id="' + id + '"><i style="background:' + colorOf(id) + '"></i>' +
           '<span class="n">' + esc(b.name) + (b.added ? ' <em>신설</em>' : '') + '</span><span class="k">' + round1(km[id] || 0) + 'km · ' + (cnt[id] || 0) + '구간</span></div>';
@@ -239,7 +282,7 @@
     if (S.admin && id === 'NONE') h += '<div class="jr-row"><button class="jr-btn" id="jr-selall">미지정 구간 전체 선택</button></div>';
     if (!secs.length) return h + '<div class="jr-empty">' + (id === 'NONE' ? '미지정 구간이 없습니다.' : '관할 구간이 없습니다. 지도에서 구간을 골라 이 지사로 옮기세요.') + '</div></div>';
     h += secs.map(function (s) {
-      return '<div class="jr-sec" data-sid="' + s.id + '">' + (S.admin ? '<input type="checkbox" data-sid="' + s.id + '"' + (S.selected[s.id] ? ' checked' : '') + '> ' : '') +
+      return '<div class="jr-sec' + (S.selected[s.id] ? ' sel' : '') + '" data-sid="' + s.id + '" title="' + (S.admin ? '누르면 선택/해제하고 지도에 표시합니다 (Shift+클릭: 범위 선택)' : '누르면 지도에 표시합니다') + '">' + (S.admin ? '<input type="checkbox" data-sid="' + s.id + '"' + (S.selected[s.id] ? ' checked' : '') + '> ' : '') +
         '<span>' + esc(s.route) + '</span> ' + esc(s['from']) + ' → ' + esc(s.to) + ' <em>' + s.km + 'km</em></div>';
     }).join('');
     return h + '</div>';
@@ -307,10 +350,11 @@
       var a = r.before, b = r.after;
       var name = b ? esc(b.name) + ' <span>(' + esc(b.hq) + ')</span>' + (!a ? ' <em>신설</em>' : '') : esc(r.id);
       var km = a ? a.km + ' → ' + (b ? b.km : '-') : '신설 → ' + (b ? b.km : '-');
-      var stn = (a ? a.stations.length : 0) + '곳 → ' + (b ? b.stations.length : 0) + '곳' + (b && b.radiusKm ? ' <span>(반경 ' + b.radiusKm + 'km)</span>' : '') +
+      var stn = (b && b.priv) ? '<span>민자 — 관측소·적설 계산 안 함</span>' + (a && !a.priv ? '<div class="m">− 이 지사의 관측소 배정이 없어집니다</div>' : '') :
+        (a ? a.stations.length : 0) + '곳 → ' + (b ? b.stations.length : 0) + '곳' + (b && b.radiusKm ? ' <span>(반경 ' + b.radiusKm + 'km)</span>' : '') +
         (r.added.length ? '<div class="p">+ ' + esc(r.added.join(', ')) + '</div>' : '') + (r.removed.length ? '<div class="m">− ' + esc(r.removed.join(', ')) + '</div>' : '');
-      var zero = b && b.sections === 0 ? '<div class="m">관할 구간이 없어 적설을 계산할 수 없습니다.</div>' : '';
-      return '<tr><td>' + name + zero + '</td><td>' + km + 'km</td><td>' + stn + '</td><td>' + fmt(a && a.latestMax) + ' → ' + fmt(b && b.latestMax) + '</td><td>' + fmt(a && a.allMax) + ' → ' + fmt(b && b.allMax) + '</td></tr>';
+      var zero = b && b.sections === 0 && !b.priv ? '<div class="m">관할 구간이 없어 적설을 계산할 수 없습니다.</div>' : '';
+      return '<tr><td>' + name + zero + '</td><td>' + km + 'km</td><td>' + stn + '</td><td>' + fmt(a && a.latestMax) + ' → ' + (b && b.priv ? '-' : fmt(b && b.latestMax)) + '</td><td>' + fmt(a && a.allMax) + ' → ' + (b && b.priv ? '-' : fmt(b && b.allMax)) + '</td></tr>';
     }).join('');
     modal('<h3>변경 미리보기</h3>' + warn + '<div class="jr-tablewrap"><table class="jr-table"><thead><tr><th>지사</th><th>관할 길이</th><th>관측소</th><th>최신 시즌 최대 신적설</th><th>전체 시즌 최대 신적설</th></tr></thead><tbody>' +
       (body || '<tr><td colspan="5">바뀌는 지사가 없습니다.</td></tr>') + '</tbody></table></div>' +
@@ -394,6 +438,15 @@
     bar.style.display = 'flex';
   }
 
+  // 왼쪽 목록에서 노선명(구간 행)을 누르면: 지도에서 그 구간을 누른 것과 똑같이 처리 (관리자 모드=선택, 보기 모드=테두리·팝업)
+  function pickFromList(sec, ev) {
+    var p = S.polys[sec.id]; if (!p) return;
+    var bounds = p.getBounds();
+    if (!S.map.getBounds().pad(-0.1).contains(bounds)) S.map.fitBounds(bounds, { padding: [70, 70], maxZoom: 13 });   // 이미 화면에 보이면 지도를 움직이지 않음
+    onSectionClick(sec, ev);
+    if (!S.admin) p.openPopup(p.getCenter());
+  }
+
   function focusBranch(id) {
     S.focus = S.focus === id ? null : id;
     afterChange(false);
@@ -416,7 +469,7 @@
       var br = t.closest && t.closest('.jr-br'); if (br) { focusBranch(br.dataset.id); return; }
       var sec = t.closest && t.closest('.jr-sec');
       if (sec && t.tagName === 'INPUT') { if (t.checked) S.selected[sec.dataset.sid] = true; else delete S.selected[sec.dataset.sid]; afterChange(false); return; }
-      if (sec) { var p = S.polys[sec.dataset.sid]; if (p) S.map.fitBounds(p.getBounds(), { padding: [60, 60], maxZoom: 13 }); return; }
+      if (sec) { pickFromList(S.secMap[sec.dataset.sid], e); return; }
       var id = t.id;
       if (id === 'jr-move') addMove();
       else if (id === 'jr-pick') setPick(true);
@@ -449,5 +502,5 @@
     if (!S.inited) return;
     ensureMap(); afterChange(false);
   }
-  window.JurisdictionUI = { init: init, show: show, _state: function () { return S; }, _casing: casingColors, _contrast: contrast, _uploadUrl: uploadUrl };
+  window.JurisdictionUI = { init: init, show: show, _state: function () { return S; }, _casing: casingColors, _contrast: contrast, _uploadUrl: uploadUrl, _near: nearestSection, _width: widthFor, NEAR_PX: NEAR_PX };
 })();

@@ -40,7 +40,7 @@ def run(name, fn, pw_browser):
 def as_user(p, uid): p.select_option("#userSel", uid); p.wait_for_timeout(150)
 def tab(p, t): p.click(f"[data-tab={t}]"); p.wait_for_timeout(150)
 def ev(p, js): return p.evaluate(js)
-def bars(p): return ev(p, "['fleet','branch','driver'].map(t=>!document.getElementById('save-'+t).hidden)")
+def bars(p): return ev(p, "['fleet','branch'].map(t=>!document.getElementById('save-'+t).hidden)")
 def toast(p): return p.locator("#toast").inner_text()
 def save(p, t): p.click(f"#save-{t} [data-save]"); p.wait_for_timeout(250)
 def vehicle(p, cond): return ev(p, f"DATA.vehicles.find(v => {cond}).plate")
@@ -49,24 +49,22 @@ def days(p, plate): return ev(p, f"DATA.vehicles.find(v => v.plate === '{plate}'
 # ---------------------------------------------------------------- 테스트 목록
 def t_load(p):
     names = p.locator(".tab:visible").all_inner_texts()
-    check(names == ["이동 현황", "기관별 장비", "지사별 요청·편성", "운전원 현황", "로그 기록"], names)
+    check(names == ["이동 현황", "기관별 장비", "지사별 요청·편성", "로그 기록"], names)
 
 def t_role_bars_and_tabs(p):
-    check(bars(p) == [True, True, True], "관리자: 저장 바 3개")
+    check(bars(p) == [True, True], "관리자: 저장 바 2개")
     check(p.locator("#logTabBtn").is_visible(), "관리자: 로그 탭 보임")
-    as_user(p, "br1");  check(bars(p) == [False, True, False], f"지사: {bars(p)}")
+    as_user(p, "br1");  check(bars(p) == [False, True], f"지사: {bars(p)}")
     check(p.locator("#logTabBtn").is_hidden(), "지사: 로그 탭 숨김")
-    as_user(p, "eq1");  check(bars(p) == [True, False, True], f"지원장비: {bars(p)}")
+    as_user(p, "eq1");  check(bars(p) == [True, False], f"지원장비: {bars(p)}")
 
 def t_permission_bypass_blocked(p):
     as_user(p, "br1")      # 대관령지사
     before = ev(p, "JSON.stringify(DATA.requests)")
     ev(p, "commit('req:양양:req.truck', 77)")                                  # 다른 지사
     ev(p, "commit('veh:' + DATA.vehicles[0].plate + ':status', 'X')")         # 장비
-    ev(p, "commit('drv:d1:name', '해킹')")                                    # 운전원
     check(ev(p, "JSON.stringify(DATA.requests)") == before, "지사 아이디가 다른 지사 값을 바꿈")
     check(ev(p, "DATA.vehicles[0].status") != "X" or True, "")
-    check(ev(p, "DATA.drivers.find(d=>d.id==='d1').name") != "해킹", "지사 아이디가 운전원을 바꿈")
     as_user(p, "eq1")
     ev(p, "commit('req:대관령:req.truck', 55)")
     check(ev(p, "DATA.requests['대관령'].req.truck") != 55, "지원장비 아이디가 지사 요청을 바꿈")
@@ -154,7 +152,7 @@ def t_fleet_columns_2_to_10(p):
     used = ev(p, "usedMax()")
     check(all(d == (v < max(2, used)) for v, d in opts), f"사용 중인 칸보다 적게 못 줄여야 함: {opts}")
     p.select_option("#colsSel", "10"); p.wait_for_timeout(200)
-    check(p.locator("#eqTable thead th").count() - 6 == 10, "10칸")
+    check(p.locator("#eqTable thead th").count() - 4 == 10, "10칸")
 
 def t_overview_by_date_and_multistop(p):
     first = p.locator("#summaryNote").inner_text()
@@ -165,58 +163,32 @@ def t_overview_by_date_and_multistop(p):
     p.wait_for_timeout(200)
     check("이동하는 장비가 없습니다" in p.locator("#destList").inner_text(), "빈 날짜 안내")
 
-def t_driver_select_same_org_and_phone(p):
-    tab(p, "fleet")
-    plate = vehicle(p, "v.org === '서울경기' && !v.driverIds[0]")
-    names = p.locator(f'[data-edit="veh:{plate}:driver0"] option').all_inner_texts()
-    allowed = ev(p, "DATA.drivers.filter(d => d.org === '서울경기').map(d => d.name)")
-    check(set(names) - {"선택 안 함"} <= set(allowed) and len(names) > 1, names)
-    other_org = ev(p, "DATA.drivers.filter(d => d.org !== '서울경기').map(d => d.name)")
-    check(not (set(names) & set(other_org)), "다른 기관 운전원이 목록에 있음")
-    first = ev(p, "DATA.drivers.find(d => d.org === '서울경기').id")
-    p.select_option(f'[data-edit="veh:{plate}:driver0"]', first); p.wait_for_timeout(300)
-    phone = ev(p, f"DATA.drivers.find(d => d.id === '{first}').phone")
-    check(phone in p.locator(f'tr:has([data-edit="veh:{plate}:driver0"])').first.inner_text(), "전화번호 자동 표시")
-    names2 = p.locator(f'[data-edit="veh:{plate}:driver1"] option').all_inner_texts()
-    check(ev(p, f"DATA.drivers.find(d => d.id === '{first}').name") not in names2, "운전원 1로 고른 사람이 2에도 나옴")
-
-def t_driver_tab_validation_and_log(p):
-    tab(p, "driver")
-    n = ev(p, "DATA.drivers.length")
-    p.click("#addDrv"); p.wait_for_timeout(200)
-    save(p, "driver"); check("이름이 비어" in toast(p), toast(p))
-    p.keyboard.type("테스트운전원"); p.keyboard.press("Tab"); p.keyboard.type("111-2222"); p.keyboard.press("Tab")
-    save(p, "driver"); check("전화번호 형식" in toast(p), toast(p))
-    ph = p.locator('input[data-edit$=":phone"]').last; ph.fill("010-5555-6666"); ph.press("Tab"); p.wait_for_timeout(200)
-    save(p, "driver"); check("저장했습니다" in toast(p), toast(p))
-    check(ev(p, "DATA.drivers.length") == n + 1, "추가 안 됨")
-    kinds = ev(p, "LOG.slice(-3).map(l => l.kind)"); check("추가" in kinds, kinds)
-    p.locator("[data-del]").last.click(); p.wait_for_timeout(200); save(p, "driver")
-    check(ev(p, "DATA.drivers.length") == n, "삭제 안 됨")
-    check("삭제" in ev(p, "LOG.slice(-2).map(l => l.kind)"), "삭제 로그")
-
-def t_masking_and_reveal_log(p):
-    as_user(p, "br1"); tab(p, "driver")
-    cell = p.locator("#drvTable tbody tr").first.inner_text()
-    check("○" in cell and "****" in cell, cell)
-    n = ev(p, "LOG.filter(l => l.kind === '조회').length")
-    p.locator("#drvTable [data-reveal]").first.click(); p.wait_for_timeout(200)
-    check(ev(p, "LOG.filter(l => l.kind === '조회').length") == n + 1, "조회 로그가 안 남음")
-    check("****" not in p.locator("#drvTable tbody tr").first.inner_text(), "보기 후에도 가려져 있음")
-
 def t_xss_text_is_escaped(p):
-    as_user(p, "eq1"); tab(p, "driver"); p.click("#addDrv"); p.wait_for_timeout(200)
-    p.keyboard.type("<img src=x onerror=window.__x=1>"); p.keyboard.press("Tab"); p.keyboard.type("010-1234-5678"); p.keyboard.press("Tab")
-    save(p, "driver"); p.wait_for_timeout(200)
+    as_user(p, "br1"); tab(p, "branch")
+    i = p.locator('[data-edit="req:대관령:reason"]'); i.fill("<img src=x onerror=window.__x=1>"); i.press("Tab"); p.wait_for_timeout(250)
+    save(p, "branch"); p.wait_for_timeout(200)
     check(ev(p, "window.__x") is None, "스크립트가 실행됨")
-    as_user(p, "br1"); tab(p, "driver"); tab(p, "fleet"); tab(p, "move")
-    check(p.locator("#drvTable img, #eqTable img, #destList img").count() == 0, "이미지 태그가 만들어짐")
+    as_user(p, "eq1"); tab(p, "branch"); tab(p, "fleet"); tab(p, "move")
+    check(p.locator("#branchTable img, #eqTable img, #destList img").count() == 0, "이미지 태그가 만들어짐")
+    as_user(p, "admin1"); tab(p, "branch")
+    check("<img" in p.locator("#branchTable").inner_text() or "<img" in p.locator('[data-edit="req:대관령:reason"]').input_value(), "글자로 보여야 함")
     check(ev(p, "window.__x") is None, "스크립트가 실행됨")
+
+def t_no_driver_info_anywhere(p):
+    html = ev(p, "document.documentElement.outerHTML")
+    for word in ("운전원", "전화번호", "연락처"):
+        check(word not in p.locator("body").inner_text(), f"화면에 '{word}'가 남아 있음")
+    check(ev(p, "typeof DATA.drivers") == "undefined", "DATA.drivers 가 남아 있음")
+    check(ev(p, "DATA.vehicles.every(v => !('driverIds' in v) && !('kinds' in v))"), "장비에 운전원 정보가 남아 있음")
+    check(p.locator('[data-tab="driver"]').count() == 0 and p.locator("#panel-driver").count() == 0, "운전원 탭이 남아 있음")
+    tab(p, "fleet"); heads = p.locator("#eqTable thead th").all_inner_texts()
+    check(not any("운전원" in h for h in heads), heads)
+    p.click(".vrow >> nth=0") if False else None
 
 TESTS = [t_load, t_role_bars_and_tabs, t_permission_bypass_blocked, t_branch_user_sees_only_own_row_inputs,
          t_save_and_revert, t_unsaved_discarded_on_user_switch, t_history_tooltip_today_max3, t_log_tab,
          t_fleet_days_and_stops, t_fleet_columns_2_to_10, t_overview_by_date_and_multistop,
-         t_driver_select_same_org_and_phone, t_driver_tab_validation_and_log, t_masking_and_reveal_log, t_xss_text_is_escaped]
+         t_no_driver_info_anywhere, t_xss_text_is_escaped]
 
 if __name__ == "__main__":
     with sync_playwright() as pw:

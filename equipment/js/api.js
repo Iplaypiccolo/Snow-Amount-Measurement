@@ -11,9 +11,9 @@
    ============================================================ */
 const Api = {
   /* 저장 버튼을 눌렀을 때 호출됩니다.
-     tab     : "fleet"(기관별 장비) | "branch"(지사별 요청·편성) | "driver"(운전원 현황)
+     tab     : "fleet"(기관별 장비) | "branch"(지사별 요청·편성)
      changes : 바뀐 값 목록 [{ key, from, to }]
-     extras  : { added: 새로 추가한 운전원, removed: 삭제한 운전원 }
+     extras  : { } (지금은 비어 있음)
      돌려주는 값: 저장에 성공하면 true, 실패하면 false */
   save(tab, changes, extras) {
     return true;   // TODO: 서버로 changes 를 보내고, 서버 응답에 따라 true / false 를 돌려줍니다

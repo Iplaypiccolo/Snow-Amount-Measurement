@@ -33,8 +33,11 @@ results, errors = [], []
 def check(c, m):
     if not c: raise AssertionError(m)
 
+OPENED = []        # 테스트가 연 화면들 (테스트가 끝나면 모두 닫아 메모리를 아낌)
+
 def open_tab(browser, session=None):
     p = browser.new_page(viewport={"width": 1400, "height": 900}, accept_downloads=True)
+    OPENED.append(p)
     p.on("pageerror", lambda e: errors.append(str(e)))
     p.on("dialog", lambda d: d.accept())
     p.route("**/*", route)
@@ -48,6 +51,10 @@ def open_tab(browser, session=None):
 def run(name, fn, browser):
     try: fn(browser); results.append((name, True, ""))
     except Exception as e: results.append((name, False, f"{e.__class__.__name__}: {str(e)[:300]}"))
+    finally:
+        while OPENED:
+            try: OPENED.pop().close()
+            except Exception: pass
 
 J = lambda p, js: p.evaluate(js)
 def admin(p): p.check("#jr-admin"); p.wait_for_timeout(150)
@@ -62,7 +69,7 @@ def t_tab_loads(b):
     check(J(p, "Object.keys(JurisdictionUI._state().polys).length") == J(p, "JURIS.doc.sections.length") > 600, "구간 선이 그려지지 않음")
     check(p.locator(".jr-br").count() == 60, f"지사 59 + 미지정 1 = 60, 실제 {p.locator('.jr-br').count()}")
     check(p.locator('.jr-br[data-id="NONE"]').count() == 1, "미지정 행")
-    check(p.locator(".jr-hqname").count() == 10, "본부 9개 + 미지정 1개")
+    check(p.locator(".jr-hqname").count() == 11, "본부 9개 + 민자 1개 + 미지정 1개")
     check(p.locator("#jr-add").is_hidden(), "보기 모드에서 신설 버튼이 보임")
     check(p.locator("#jr-selbar").is_hidden(), "보기 모드에서 이동 바가 보임")
     # 기존 화면 영향 없음
@@ -229,7 +236,7 @@ def t_unassigned_visible_and_clickable(b):
     p = open_tab(b); ids = un_ids(p)
     check(len(ids) > 100, f"미지정 구간 {len(ids)}")
     st = J(p, f"(()=>{{const o=JurisdictionUI._state().polys['{ids[0]}'].options;return [o.color,o.dashArray,o.weight,o.opacity]}})()")
-    check(st[0] == "#4a4a4a" and st[1] == "2,8" and st[2] >= 4 and st[3] >= 0.9, f"미지정 선 모양 {st}")
+    check(st[0] == "#4a4a4a" and st[1] and st[1].startswith("1,") and st[2] >= 4 and st[3] >= 0.9, f"미지정 선 모양(둥근 점) {st}")
     row = p.locator('.jr-br[data-id="NONE"]'); check("구간" in row.inner_text(), row.inner_text())
     # 보기 모드: 눌러서 정보 확인
     click_sec(p, ids[0])
@@ -244,7 +251,7 @@ def t_assign_unassigned_to_branch(b):
     ev = J(p, "JurisdictionUI._state().pending")
     check(len(ev) == 1 and ev[0]["to"] == to and ev[0]["sections"] == ids and ev[0]["from"] == [None], ev)
     check("미지정" in p.locator(".jr-ev").first.inner_text(), p.locator(".jr-ev").first.inner_text())
-    st = J(p, f"JurisdictionUI._state().polys['{ids[0]}'].options.dashArray"); check(st == "7,7", "변경 대기는 굵은 점선")
+    st = J(p, f"JurisdictionUI._state().polys['{ids[0]}'].options.dashArray"); check(st and not st.startswith("1,") and "," in st, f"변경 대기는 긴 점선 {st}")
     p.click("#jr-preview"); p.wait_for_timeout(300)
     check(p.locator(".jr-table tbody tr").count() == 1 and "시흥" in p.locator(".jr-table").inner_text(), "미리보기는 시흥 1곳")
     p.click("#jr-close")
@@ -261,9 +268,90 @@ def t_select_all_unassigned_row(b):
     p.click("#jr-selall"); p.wait_for_timeout(250)
     check(J(p, "Object.keys(JurisdictionUI._state().selected).length") == len(un_ids(p)), "미지정 전체 선택")
 
+def zoom_to(p, z): J(p, f"JurisdictionUI._state().map.setZoom({z}, {{animate: false}})"); p.wait_for_timeout(350)
+def line_w(p, sid): return J(p, f"JurisdictionUI._state().polys['{sid}'].options.weight")
+
+def t_width_grows_with_zoom(b):
+    p = open_tab(b); sid = sections_of(p, "강원", "춘천")[0]
+    ws = {}
+    for z in (7, 9, 11, 13, 15, 17):
+        zoom_to(p, z); ws[z] = line_w(p, sid)
+    check(ws[7] >= 4 and ws[7] < ws[9] < ws[11] < ws[13] < ws[15] <= ws[17], f"확대할수록 굵어져야 함 {ws}")
+    check(ws[13] >= 10 and ws[15] >= 13, f"확대했을 때 충분히 굵어야 함 {ws}")
+    # 선택 테두리도 굵기에 맞춰 같이 굵어짐
+    admin(p); click_sec(p, sid)
+    outer = J(p, "JurisdictionUI._state().casing.getLayers()[0].options.weight")
+    check(outer >= ws[17] + 14, f"테두리 굵기 {outer}")
+
+def t_click_tolerance_near_miss(b):
+    p = open_tab(b); admin(p); sid = sections_of(p, "강원", "춘천")[2]
+    zoom_to(p, 11)
+    # 구간 중앙에서 화면 기준 10px 떨어진 곳을 눌러도 선택됨 / 70px 떨어진 곳은 안 됨
+    def click_offset(px):
+        return J(p, f"""(()=>{{const U=JurisdictionUI._state(), m=U.map, pl=U.polys['{sid}'];
+          m.fitBounds(pl.getBounds(), {{padding:[80,80], animate:false}});
+          const c=m.latLngToContainerPoint(pl.getCenter()); const pt=m.containerPointToLatLng([c.x, c.y+{px}]);
+          m.fire('click', {{latlng: pt, originalEvent: {{}}}});
+          return Object.keys(U.selected)}})()""")
+    got = click_offset(11); check(got == [sid], f"10px 근처 클릭이 선택되지 않음 {got}")
+    J(p, "(()=>{const U=JurisdictionUI._state(); U.selected={}; U.clicked=null})()")
+    got = click_offset(90); check(got != [sid] and sid not in got, f"90px 떨어진 클릭이 선택됨 {got}")
+
+def t_nearest_prefers_closest(b):
+    p = open_tab(b); a = sections_of(p, "강원", "춘천")
+    got = J(p, f"""(()=>{{const U=JurisdictionUI._state(), m=U.map, sec=JURIS.doc.sections.find(s=>s.id==='{a[3]}');
+      m.setView([sec.coords[0][1], sec.coords[0][0]], 12, {{animate:false}});
+      const hit = JurisdictionUI._near(L.latLng(sec.coords[0][1], sec.coords[0][0]), JurisdictionUI.NEAR_PX); return hit && hit.id}})()""")
+    check(got in (a[3], a[2], a[4]), f"끝점 근처에서 이웃 구간 중 하나여야 함 {got}")
+
+def t_row_click_selects_and_shows(b):
+    p = open_tab(b); admin(p)
+    p.click(".jr-br:has-text('춘천')"); p.wait_for_timeout(300)
+    rows = p.locator(".jr-sec"); check(rows.count() >= 5, "구간 행")
+    sid = rows.nth(1).get_attribute("data-sid")
+    rows.nth(1).locator("span").first.click(); p.wait_for_timeout(300)          # 노선명을 누름
+    check(J(p, "Object.keys(JurisdictionUI._state().selected)") == [sid], "노선명을 눌러도 선택되어야 함")
+    check(J(p, "JurisdictionUI._state().casing.getLayers().length") == 2, "지도에 이중 테두리로 표시")
+    check(p.locator(".jr-sec.sel").count() == 1 and p.locator(f'.jr-sec[data-sid="{sid}"] input').is_checked(), "목록에도 선택 표시")
+    # 한 번 더 누르면 해제, Shift+클릭으로 범위 선택
+    p.locator(f'.jr-sec[data-sid="{sid}"] span').first.click(); p.wait_for_timeout(250)
+    check(J(p, "Object.keys(JurisdictionUI._state().selected).length") == 0, "다시 누르면 해제")
+    p.locator(".jr-sec").nth(0).locator("span").first.click(); p.locator(".jr-sec").nth(3).locator("span").first.click(modifiers=["Shift"]); p.wait_for_timeout(300)
+    check(J(p, "Object.keys(JurisdictionUI._state().selected).length") == 4, "목록에서도 Shift+클릭 범위 선택")
+
+def t_row_click_view_mode(b):
+    p = open_tab(b)
+    p.click(".jr-br:has-text('춘천')"); p.wait_for_timeout(300)
+    sid = p.locator(".jr-sec").nth(2).get_attribute("data-sid")
+    p.locator(".jr-sec").nth(2).locator("span").first.click(); p.wait_for_timeout(400)
+    check(J(p, "JurisdictionUI._state().clicked") == sid, "보기 모드: 클릭한 구간 표시")
+    check(J(p, "JurisdictionUI._state().casing.getLayers().length") == 2, "테두리")
+    check(p.locator(".leaflet-popup-content").count() == 1, "팝업")
+
+def t_private_hq(b):
+    p = open_tab(b); admin(p)
+    check(p.locator(".jr-hqname:has-text('민자')").count() == 1, "민자 본부가 목록에 보여야 함(비어 있어도)")
+    check("관측소·적설 계산 안 함" in p.locator(".jr-hqname:has-text('민자')").inner_text(), "민자 안내 표시")
+    p.click("#jr-add"); p.fill("#jr-newname", "시험민자"); p.select_option("#jr-newhq", "민자"); p.click("#jr-newok"); p.wait_for_timeout(300)
+    check(p.locator(".jr-hqname:has-text('민자') ~ .jr-br:has-text('시험민자')").count() == 1, "민자 아래에 새 기관")
+    pid = J(p, "Object.keys(JurisdictionUI._state().view.state.branches).slice(-1)[0]")
+    un = un_ids(p)[:2]
+    for u in un: click_sec(p, u)
+    p.select_option("#jr-dest", pid); p.click("#jr-move"); p.wait_for_timeout(300)
+    col = J(p, f"JurisdictionUI._state().polys['{un[0]}'].options.color"); check(col.startswith("hsl(278"), f"민자 색은 보라 계열 {col}")
+    p.click("#jr-preview"); p.wait_for_timeout(300)
+    txt = p.locator(".jr-table").inner_text(); check("계산 안 함" in txt, txt)
+    p.click("#jr-close")
+    # 강설량 화면(지사 수)은 그대로
+    p.click("#jr-apply"); p.wait_for_load_state("load")
+    p.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)
+    check(p.locator("#statBranch").inner_text() == "59", "민자 기관이 강설량 화면 통계에 들어가면 안 됨")
+    check(J(p, "HIERARCHY.hq.some(h => h.name === '민자')") is False, "HIERARCHY 에 민자 본부가 생기면 안 됨")
+
 TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_apply_in_browser,
          t_border_on_click_view_mode, t_border_contrast_all_colors, t_admin_click_has_border, t_pick_destination_on_map, t_popup_button_starts_edit,
-         t_save_bar_always_visible, t_unassigned_visible_and_clickable, t_assign_unassigned_to_branch, t_select_all_unassigned_row]
+         t_save_bar_always_visible, t_unassigned_visible_and_clickable, t_assign_unassigned_to_branch, t_select_all_unassigned_row,
+         t_width_grows_with_zoom, t_click_tolerance_near_miss, t_nearest_prefers_closest, t_row_click_selects_and_shows, t_row_click_view_mode, t_private_hq]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()

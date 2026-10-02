@@ -401,7 +401,7 @@ def main():
 
     # ---------- 7) 파일 쓰기 ----------
     sec_doc = {'version': 1, 'source': '전국표준노드링크 고속도로(ROAD_RANK=101) + IC/JC 노드',
-               'hqs': [h['name'] for h in hier['hq']],
+               'hqs': [h['name'] for h in hier['hq']] + ['민자'],   # 민자: 한국도로공사가 관리하지 않는 고속도로(관측소·적설 계산 없음)
                'branches': branches, 'sections': sections}
     (repo / 'data/sections.json').write_text(json.dumps(sec_doc, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
     (repo / 'data/hierarchy.json').write_text(json.dumps(hier, ensure_ascii=False), encoding='utf-8')

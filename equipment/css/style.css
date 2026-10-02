@@ -147,8 +147,6 @@ table.matrix { border-collapse: collapse; width: 100%; min-width: 460px; font-va
 .vtype { font-weight: 600; font-size: 14px; }
 .vfrom { color: var(--ink-soft); font-size: 14px; }
 .vfrom::before { content: "출발 "; font-size: 12px; }
-.vdriver { font-size: 14px; }
-.vdriver .empty { color: var(--ink-soft); }
 
 /* 번호판: 이 화면의 핵심 요소 */
 .plate {
@@ -216,7 +214,6 @@ table.branch { border-collapse: collapse; width: 100%; min-width: 820px; font-va
 .sheet h3 { font-size: 13px; color: var(--ink-soft); font-weight: 600; margin: 0 0 8px; }
 .kv { display: grid; grid-template-columns: 90px 1fr; gap: 6px 12px; font-size: 14.5px; margin: 0; }
 .kv dt { color: var(--ink-soft); } .kv dd { margin: 0; }
-.reveal { border: 1px solid var(--line); background: none; border-radius: 6px; padding: 1px 8px; font-size: 13px; cursor: pointer; margin-left: 6px; }
 .note { font-size: 12.5px; color: var(--ink-soft); margin-top: 10px; }
 
 /* ---------- 모바일 ---------- */
@@ -227,12 +224,12 @@ table.branch { border-collapse: collapse; width: 100%; min-width: 820px; font-va
   .search { margin-left: 0; width: 100%; }
   .dest-head { padding: 14px 16px; }
   .vrow {
-    grid-template-columns: 124px 1fr auto; grid-template-areas: "plate type status" "plate from driver";
+    grid-template-columns: 124px 1fr auto; grid-template-areas: "plate type status" "plate from from";
     gap: 2px 10px; padding: 12px 16px;
   }
   .vrow .plate { grid-area: plate; } .vrow .vtype { grid-area: type; }
   .vrow .status { grid-area: status; justify-self: end; }
-  .vrow .vfrom { grid-area: from; font-size: 13px; } .vrow .vdriver { grid-area: driver; font-size: 13px; text-align: right; }
+  .vrow .vfrom { grid-area: from; font-size: 13px; }
 }
 
 /* ============ v2 추가: 역할·수정·수정기록 ============ */
@@ -256,7 +253,6 @@ input.ci:disabled, select.ci:disabled { opacity: .45; }
 input.num { width: 60px; text-align: center; }
 input.dt { width: 176px; }
 input.rs { width: 130px; }
-input.nm { width: 110px; } input.ph { width: 140px; }
 input[type="checkbox"].ci { width: 20px; height: 20px; min-height: 0; padding: 0; accent-color: var(--plow); }
 
 /* 수정기록이 있는 값 표시 (관리자에게만) */
@@ -276,10 +272,10 @@ input[data-hv], select[data-hv] { border-bottom: 1px dotted var(--ink-soft); }
 .btn.danger { color: var(--stop); }
 .btn.sm { padding: 2px 9px; font-size: 13px; }
 
-table.eq, table.drv { border-collapse: collapse; width: 100%; font-size: 14px; }
-.eq th, .eq td, .drv th, .drv td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
-.eq thead th, .drv thead th { background: var(--bg); font-size: 13px; font-weight: 600; position: sticky; top: 0; }
-table.eq { min-width: 780px; } table.drv { min-width: 640px; }
+table.eq { border-collapse: collapse; width: 100%; font-size: 14px; }
+.eq th, .eq td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+.eq thead th { background: var(--bg); font-size: 13px; font-weight: 600; position: sticky; top: 0; }
+table.eq { min-width: 780px; }
 .eq td:first-child, .eq th:first-child { position: sticky; left: 0; background: var(--surface); z-index: 1; }
 .eq thead th:first-child { background: var(--bg); }
 .table-wrap.tall { max-height: 70vh; overflow: auto; }
@@ -323,7 +319,6 @@ table.eq { min-width: 1180px; }
 .dcell { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; min-width: 270px; }
 .dchip { display: inline-flex; align-items: center; gap: 2px; }
 .dchip input.ci { width: 138px; font-size: 13px; padding: 2px 5px; }
-.dphone { font-size: 12.5px; color: var(--ink-soft); margin-top: 4px; }
 .eq select.ci { min-width: 128px; }
 
 table.eq { min-width: 1100px; }

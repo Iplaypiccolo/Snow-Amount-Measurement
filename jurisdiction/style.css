@@ -66,3 +66,7 @@
 .jr-savebar.dirty .st{color:var(--ink);font-weight:700;}
 .jr-savebar .jr-btn:disabled{opacity:.4;cursor:default;}
 .jr-savebar .jr-primary{padding:6px 18px;}
+
+.jr-priv{font-style:normal;font-weight:400;font-size:10.5px;background:#7d4a9e;color:#fff;border-radius:3px;padding:1px 6px;margin-left:6px;}
+.jr-sec.sel{background:#fff1c9;border-radius:3px;}
+.jr-sec{padding:5px 2px;}

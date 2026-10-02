@@ -14,6 +14,11 @@ data/snow_data.json     시즌별 일 신적설 데이터
 jurisdiction/           '기관별 관할 고속도로' 탭 (구간을 눌러 지사 이동, 신설 기관, 본부 이동)
   core.js                 변경 적용·관측소 배정·적설 재계산 (화면 없이 계산만)
   ui.js / style.css       화면
+grid/                   '예보 격자 편입' 탭 (기상청 5km 격자를 지도에서 골라 기관에 편입, 여러 기관 공유 가능)
+  core.js                 격자 변환·편입 계산·호출량 판정 / ui.js·style.css 화면
+data/grid_assign.json   격자 기본 편입(칸별 기관)과 후보 칸
+data/grid_changes.json  저장된 격자 편입 변경 이력
+tools/build_grid_assign.py  격자 기본 편입 생성 도구
 data/sections.json      관할 구간(IC/JC 사이) 모양과 기본 소속
 data/jurisdiction_changes.json  저장된 관할 변경 이력 (화면에서 받은 파일을 여기에 덮어쓰고 커밋)
 data/stations.json      관측소 좌표 목록 (지금은 배정된 적 있는 관측소만)
@@ -29,10 +34,14 @@ equipment/              장비 지원 페이지 (index.html 의 '장비 지원' 
   js/app.js               화면과 동작 (역할·권한, 저장, 수정기록, 탭, 이벤트)
 
 docs/jurisdiction-rules.md  관할 고속도로 변경 탭 동작 규칙
+docs/grid-assign-rules.md  예보 격자 편입 탭 동작 규칙
+docs/d1-schema-design.md   Cloudflare D1 표 설계 v1(설계안), docs/d1-schema-v1.sql
 docs/jurisdiction-build-report.md  구간 생성·끝점 보정 결과 보고서
 docs/equipment-rules.md   장비 지원 페이지 동작 규칙 (사람이 읽는 문서: 권한 표, 저장·로그·개인정보 규칙)
 docs/decisions.md         결정 사항과 배경 (서버 이전 계획, 개인정보 메모 등. 작업 이어가기용)
 tests/test_equipment.py   장비 지원 페이지 자동 테스트
+tests/test_grid_core.js  격자 계산 자동 테스트 (node tests/test_grid_core.js)
+tests/test_grid_ui.py    격자 편입 탭 화면 자동 테스트
 tests/test_jurisdiction_core.js  관할 변경 계산 자동 테스트 (node tests/test_jurisdiction_core.js)
 tests/test_jurisdiction_ui.py    관할 변경 탭 화면 자동 테스트
 ```

@@ -13,6 +13,8 @@
   'use strict';
 
   var RADIUS_STEPS = [5, 6, 7, 8];
+  var PRIVATE_HQ = '민자';        // 한국도로공사가 관리하지 않는 고속도로: 구분만 하고 관측소·적설은 계산하지 않음
+  function isPrivate(hq) { return hq === PRIVATE_HQ; }
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function nameTaken(branches, name) {
@@ -139,35 +141,44 @@
   /* ---------- 5) 실제 데이터(HIERARCHY, SNOW_DATA)에 이벤트 반영 ---------- */
   function applyToData(H, S, doc, stationsDoc, events) {
     var st = resolve(doc, events);
-    var baseOwner = {}, baseHq = {};
+    var baseOwner = {}, baseHq = {}, baseIds = {};
     doc.sections.forEach(function (s) { baseOwner[s.id] = s.owner; });
-    doc.branches.forEach(function (b) { baseHq[b.id] = b.hq; });
-    var geomDirty = {}, hqMoved = {};
+    doc.branches.forEach(function (b) { baseHq[b.id] = b.hq; baseIds[b.id] = true; });
+    var geomDirty = {};
     doc.sections.forEach(function (s) {
       var now = st.owner[s.id];
       if (now !== baseOwner[s.id]) { if (now) geomDirty[now] = true; if (baseOwner[s.id]) geomDirty[baseOwner[s.id]] = true; }
-    });
-    st.order.forEach(function (id) {
-      var b = st.branches[id];
-      if (b.added) geomDirty[id] = true;
-      else if (b.hq !== baseHq[id]) hqMoved[id] = true;
     });
     var hqByName = {};
     H.hq.forEach(function (h) { hqByName[h.name] = h; });
     var canRecompute = !!(stationsDoc && stationsDoc.stations && stationsDoc.stations.length);
     var changed = [];
 
-    st.order.forEach(function (id) {
-      var b = st.branches[id];
-      if (!geomDirty[id] && !hqMoved[id]) return;
-      var oldHqName = b.added ? null : baseHq[id];
-      var oldKey = b.added ? null : oldHqName + '|||' + b.name;
-      var found = b.added ? null : findBranch(H, oldHqName, b.name);
-      var obj = found ? found.branch : { name: b.name, count: 0, anchor: null, radiusKm: 5, stations: [], routeSegments: [] };
-      var oldCount = found ? obj.count : 0;
-      var recomputed = false;
+    function dropSeries(key) { Object.keys(S.seasons).forEach(function (k) { delete S.seasons[k].branches[key]; }); }
 
-      if (geomDirty[id]) {
+    st.order.forEach(function (id) {
+      var b = st.branches[id], inBase = !!baseIds[id] && !b.added;
+      var wasInH = inBase && !isPrivate(baseHq[id]);        // 지금 사이트(강설량 화면)에 있던 지사인가
+      var nowInH = !isPrivate(b.hq);                         // 변경 후에도 강설량 화면에 있어야 하는가 (민자는 없음)
+      var hqMoved = inBase && b.hq !== baseHq[id];
+      if (!geomDirty[id] && !hqMoved && !(b.added && nowInH)) return;
+      var oldKey = wasInH ? baseHq[id] + '|||' + b.name : null;
+      var found = wasInH ? findBranch(H, baseHq[id], b.name) : null;
+      var oldCount = found ? found.branch.count : 0;
+
+      if (!nowInH) {                                         // 민자로 옮겨짐: 강설량 화면에서 빼고 적설 기록도 지움
+        if (found) {
+          found.hq.branches = found.hq.branches.filter(function (x) { return x !== found.branch; });
+          found.hq.count -= oldCount;
+          dropSeries(oldKey);
+          changed.push({ id: id, key: null, oldKey: oldKey, added: false, removed: true });
+        }
+        return;
+      }
+
+      var obj = found ? found.branch : { name: b.name, count: 0, anchor: null, radiusKm: 5, stations: [], routeSegments: [] };
+      var recomputed = false;
+      if (geomDirty[id] || !found) {                          // 관할이 바뀌었거나, 새로 강설량 화면에 들어오는 지사
         var secs = doc.sections.filter(function (s) { return st.owner[s.id] === id; });
         obj.routeSegments = buildSegments(secs);
         if (canRecompute) {
@@ -179,30 +190,28 @@
       }
 
       var newHq = hqByName[b.hq];
-      if (found && found.hq !== newHq) {                 // 본부 이동: 원래 본부에서 빼고 새 본부에 넣음
+      if (found && found.hq !== newHq) {                     // 본부 이동: 원래 본부에서 빼고 새 본부에 넣음
         found.hq.branches = found.hq.branches.filter(function (x) { return x !== obj; });
         found.hq.count -= oldCount;
         newHq.branches.push(obj);
         newHq.count += obj.count;
-      } else if (!found) {                               // 신설 기관
+      } else if (!found) {                                   // 신설 기관 (또는 민자에서 일반 본부로 옮겨진 기관)
         newHq.branches.push(obj);
         newHq.count += obj.count;
-      } else {                                           // 같은 본부 안에서 관측소 수만 바뀜
+      } else {                                               // 같은 본부 안에서 관측소 수만 바뀜
         newHq.count += obj.count - oldCount;
       }
 
       var newKey = b.hq + '|||' + b.name;
       if (recomputed || !found) {
         setBranchSeries(S, newKey, obj.stations);
-      } else if (oldKey !== newKey) {                    // 관측소는 그대로, 키만 바뀜 → 시리즈 복사
+      } else if (oldKey !== newKey) {                        // 관측소는 그대로, 키만 바뀜 → 시리즈 복사
         Object.keys(S.seasons).forEach(function (k) {
           var br = S.seasons[k].branches;
           if (br[oldKey]) br[newKey] = br[oldKey];
         });
       }
-      if (oldKey && oldKey !== newKey) {
-        Object.keys(S.seasons).forEach(function (k) { delete S.seasons[k].branches[oldKey]; });
-      }
+      if (oldKey && oldKey !== newKey) dropSeries(oldKey);
       changed.push({ id: id, key: newKey, oldKey: oldKey, added: b.added });
     });
     return { state: st, changed: changed, recomputed: canRecompute };
@@ -219,14 +228,14 @@
       var b = st.branches[id];
       if (!b) { out[id] = null; return; }
       var secs = doc.sections.filter(function (s) { return st.owner[s.id] === id; });
-      var segs = buildSegments(secs);
-      var pick = stationsDoc && stationsDoc.stations ? pickStations(segs, stationsDoc.stations) : { radiusKm: null, stations: [] };
-      var all = Object.keys(S.seasons).map(function (k) { return maxOf(seasonSeries(S.seasons[k], S.stationData, pick.stations)); });
+      var segs = buildSegments(secs), priv = isPrivate(b.hq);      // 민자는 관측소·적설을 계산하지 않음
+      var pick = !priv && stationsDoc && stationsDoc.stations ? pickStations(segs, stationsDoc.stations) : { radiusKm: null, stations: [] };
+      var all = priv ? [null] : Object.keys(S.seasons).map(function (k) { return maxOf(seasonSeries(S.seasons[k], S.stationData, pick.stations)); });
       out[id] = {
-        id: id, name: b.name, hq: b.hq, sections: secs.length,
+        id: id, name: b.name, hq: b.hq, priv: priv, sections: secs.length,
         km: Math.round(secs.reduce(function (a, s) { return a + s.km; }, 0) * 10) / 10,
         radiusKm: pick.radiusKm, stations: pick.stations.map(function (x) { return x.name; }),
-        latestMax: maxOf([maxOf(seasonSeries(S.seasons[latest], S.stationData, pick.stations))]), allMax: maxOf(all)
+        latestMax: priv ? null : maxOf([maxOf(seasonSeries(S.seasons[latest], S.stationData, pick.stations))]), allMax: maxOf(all)
       };
     });
     return out;
@@ -265,9 +274,19 @@
     return { state: st, km: km, count: cnt };
   }
 
+  /* ---------- 8) 기관 색 (관할 고속도로 탭과 격자 편입 탭이 같은 색을 씀) ---------- */
+  function colorOf(st, id) {
+    if (id == null || id === 'NONE') return '#4a4a4a';
+    var b = st.branches[id]; if (!b) return '#999';
+    var regular = st.hqs.filter(function (h) { return h !== PRIVATE_HQ; }), idx = 0;
+    for (var i = 0; i < st.order.length; i++) { var o = st.branches[st.order[i]]; if (o.hq === b.hq) { if (o.id === id) break; idx++; } }
+    if (b.hq === PRIVATE_HQ) return 'hsl(278,48%,' + [38, 54, 28, 62][idx % 4] + '%)';
+    return 'hsl(' + Math.round(regular.indexOf(b.hq) * 360 / regular.length + 8) + ',72%,' + [36, 50, 26, 58][idx % 4] + '%)';
+  }
+
   var api = {
-    resolve: resolve, buildSegments: buildSegments, pickStations: pickStations, distToSegments: distToSegments,
-    applyToData: applyToData, impact: impact, evaluate: evaluate, summarize: summarize,
+    colorOf: colorOf, resolve: resolve, buildSegments: buildSegments, pickStations: pickStations, distToSegments: distToSegments,
+    isPrivate: isPrivate, PRIVATE_HQ: PRIVATE_HQ, applyToData: applyToData, impact: impact, evaluate: evaluate, summarize: summarize,
     seasonSeries: seasonSeries, clone: clone, latestSeasonKey: latestSeasonKey
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
