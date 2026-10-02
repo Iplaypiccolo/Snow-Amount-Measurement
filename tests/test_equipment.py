@@ -29,6 +29,7 @@ def run(name, fn, pw_browser):
     page = pw_browser.new_page(viewport={"width": 1440, "height": 1000})
     page.on("pageerror", lambda e: errors.append(f"[{name}] {e}"))
     page.on("dialog", lambda d: d.accept())
+    page.add_init_script("localStorage.setItem('ss_session', JSON.stringify({access_token:'t',refresh_token:'r',expires_at:Date.now()+3.6e6,user_id:'u',persist:true,auto_until:Date.now()+1e9}))")   # 로그인한 상태로 시작
     page.goto(URL); page.wait_for_timeout(250)
     try:
         fn(page); results.append((name, True, ""))

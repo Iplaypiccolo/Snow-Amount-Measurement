@@ -9,6 +9,8 @@
 """
 import functools, http.server, json, os, socketserver, sys, threading
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _sb_mock as SBM       # 첫 화면은 로그인이 필요하므로 가짜 Supabase 서버로 로그인한 상태에서 시작
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -41,6 +43,7 @@ def open_tab(browser, session=None):
     p.on("pageerror", lambda e: errors.append(str(e)))
     p.on("dialog", lambda d: d.accept())
     p.route("**/*", route)
+    SBM.install(p, SBM.Mock(), "admin-01")
     if session is not None:
         p.add_init_script("sessionStorage.setItem('juris_session', %s)" % json.dumps(json.dumps(session)))
     p.goto(URL)

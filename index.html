@@ -336,12 +336,15 @@
 </style>
   <link rel="stylesheet" href="jurisdiction/style.css">
   <link rel="stylesheet" href="grid/style.css">
+  <link rel="stylesheet" href="auth/gate.css">
 </head>
 <body>
 <nav class="pagebar" aria-label="페이지 전환">
   <button type="button" class="page-btn active" data-page="snow">강설량 측정</button>
   <button type="button" class="page-btn" data-page="equip">장비 지원</button>
+  <span class="ss-user" id="ssUser" hidden></span>
 </nav>
+<noscript><div style="padding:40px;font-family:sans-serif;">이 화면은 JavaScript 가 켜져 있어야 로그인할 수 있습니다.</div></noscript>
 
 <div id="page-equip">
   <iframe id="equipFrame" title="제설장비 지원 현황" data-src="equipment/index.html"></iframe>
@@ -509,9 +512,13 @@
 <script src="jurisdiction/ui.js"></script>
 <script src="grid/core.js"></script>
 <script src="grid/ui.js"></script>
+<script src="auth/auth.js"></script>
+<script src="auth/gate.js"></script>
 <script>
 (function(){
   var META_DATE_TEXT = "자동 업데이트(매일 새벽)";
+  // 로그인하기 전에는 자료(data/*.json)도 화면도 불러오지 않습니다. 로그인에 성공하면 아래 bootApp 이 실행됩니다.
+  function bootApp(){
   Promise.all([
     fetch('data/roads.json', {cache: 'no-store'}).then(function(r){return r.json();}),
     fetch('data/hierarchy.json', {cache: 'no-store'}).then(function(r){return r.json();}),
@@ -550,6 +557,8 @@
   }).catch(function(err){
     document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;">데이터 로드 실패: ' + err + '</div>';
   });
+  }
+  SSGate.start({ onReady: bootApp });
 })();
 </script>
 <script>

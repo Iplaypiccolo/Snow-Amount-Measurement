@@ -6,6 +6,7 @@
 import json, sys
 sys.path.insert(0, __file__.rsplit("/", 1)[0])
 import test_jurisdiction_ui as T       # 같은 서버·지도 라이브러리 설정을 재사용
+import _sb_mock as SBM
 from playwright.sync_api import sync_playwright
 
 check, J = T.check, T.J
@@ -15,6 +16,7 @@ def open_grid(browser):
     p = browser.new_page(viewport={"width": 1400, "height": 900}, accept_downloads=True)
     T.OPENED.append(p)
     p.on("pageerror", lambda e: errors.append(str(e))); p.on("dialog", lambda d: d.accept()); p.route("**/*", T.route)
+    SBM.install(p, SBM.Mock(), "admin-01")
     p.goto(T.URL); p.wait_for_function("window.GridUI && GridUI._state().inited", timeout=60000)
     p.click(".tab-btn[data-tab=grid]"); p.wait_for_timeout(900)
     return p
@@ -143,7 +145,7 @@ def t_new_branch_from_jurisdiction_appears(b):
     p = b.new_page(viewport={"width": 1400, "height": 900}); T.OPENED.append(p)
     sess = {"events": [{"t": "addBranch", "id": "B900", "hq": "강원", "name": "신설시험"}]}
     p.add_init_script("sessionStorage.setItem('juris_session', %s)" % json.dumps(json.dumps(sess)))
-    p.on("pageerror", lambda e: errors.append(str(e))); p.route("**/*", T.route); p.goto(T.URL)
+    p.on("pageerror", lambda e: errors.append(str(e))); p.route("**/*", T.route); SBM.install(p, SBM.Mock(), "admin-01"); p.goto(T.URL)
     p.wait_for_function("window.GridUI && GridUI._state().inited", timeout=60000); p.click(".tab-btn[data-tab=grid]"); p.wait_for_timeout(700)
     check(p.locator("#gr-tree .jr-br:has-text('신설시험')").count() == 1, "관할 탭에서 만든 신설 기관이 격자 탭에도 보여야 함")
     check(p.locator("#gr-tree .jr-br:has-text('신설시험') em").count() == 1, "신설 표시")

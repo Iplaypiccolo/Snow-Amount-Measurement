@@ -10,9 +10,10 @@
 <link rel="stylesheet" href="admin.css">
 </head>
 <body>
-<header><b>제설 관리 콘솔</b><span class="sp"></span><span class="who" id="who"></span><button id="logoutBtn" type="button" hidden>로그아웃</button></header>
+<header><b>제설 관리 콘솔</b><a id="homeLink" href="../">← 첫 화면</a><span class="sp"></span><span class="who" id="who"></span><button id="logoutBtn" type="button" hidden>로그아웃</button></header>
 <main id="app"><div class="card">불러오는 중…</div></main>
 <div id="modal" class="modal" hidden></div>
+<script src="../auth/auth.js"></script>
 <script src="policy.js"></script>
 <script src="admin.js"></script>
 </body>

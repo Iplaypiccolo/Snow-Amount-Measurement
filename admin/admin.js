@@ -6,11 +6,7 @@
    ============================================================ */
 (function () {
   'use strict';
-  var CFG = window.ADMIN_CFG || {
-    url: 'https://yzwbnohzhnctdvufntig.supabase.co',
-    key: 'sb_publishable_PQNwbLdG3wNUqA8u50G6Sw_qks53KcQ',    // 공개 키(브라우저에 넣도록 만든 키)
-    emailDomain: 'snow-support.invalid'
-  };
+  var A = window.SSAuth;                  // 로그인 공통 부품(auth/auth.js)
   var P = window.PwPolicy;
   var $ = function (id) { return document.getElementById(id); };
   var app = $('app'), who = $('who'), logoutBtn = $('logoutBtn'), modal = $('modal');
@@ -23,67 +19,43 @@
   function p2(n) { return String(n).padStart(2, '0'); }
   function fmt(iso) { if (!iso) return '-'; var d = new Date(iso); return isNaN(d) ? esc(iso) : d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds()); }
 
-  /* ---------- 서버와 통신 ---------- */
-  function saveSession(s) { S.session = s; try { if (s) sessionStorage.setItem('ss_session', JSON.stringify(s)); else sessionStorage.removeItem('ss_session'); } catch (e) {} }
-  function loadSession() { try { var s = JSON.parse(sessionStorage.getItem('ss_session') || 'null'); if (s && s.access_token) S.session = s; } catch (e) {} }
-  function raw(path, opt) {
-    opt = opt || {};
-    var h = { apikey: CFG.key }; if (opt.body !== undefined) h['Content-Type'] = 'application/json';
-    if (opt.token) h.Authorization = 'Bearer ' + opt.token;
-    return fetch(CFG.url + path, { method: opt.method || 'GET', headers: h, body: opt.body !== undefined ? JSON.stringify(opt.body) : undefined, cache: 'no-store' })
-      .then(function (r) { return r.text().then(function (t) { var j = null; try { j = t ? JSON.parse(t) : null; } catch (e) {} return { status: r.status, ok: r.ok, json: j }; }); });
-  }
-  function fresh() {                          // 로그인 토큰이 곧 만료되면 새로 받음
-    var s = S.session; if (!s) return Promise.reject(new Error('no_session'));
-    if (s.expires_at - Date.now() > 60000) return Promise.resolve(s.access_token);
-    return raw('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: { refresh_token: s.refresh_token } }).then(function (r) {
-      if (!r.ok || !r.json || !r.json.access_token) { saveSession(null); throw new Error('no_session'); }
-      saveSession(toSession(r.json)); return S.session.access_token;
-    });
-  }
-  function authed(path, opt) { return fresh().then(function (t) { opt = opt || {}; opt.token = t; return raw(path, opt); }); }
-  function rest(path) { return authed('/rest/v1/' + path); }
-  function fn(body) { return authed('/functions/v1/account-admin', { method: 'POST', body: body }); }
-  function toSession(j) { return { access_token: j.access_token, refresh_token: j.refresh_token, expires_at: Date.now() + (j.expires_in || 3600) * 1000, user_id: j.user && j.user.id }; }
-  function netErr() { return '서버에 연결할 수 없습니다. 인터넷 연결을 확인하세요. (회사 네트워크에서 supabase.co 접속이 막혀 있을 수도 있습니다)'; }
+  /* ---------- 서버와 통신: 공통 부품(auth/auth.js)이 로그인 토큰 보관·자동 갱신을 맡습니다 ---------- */
+  var rest = A.rest, fn = A.fn, authed = A.authed, netErr = function () { return A.NET_MSG; };
 
   /* ---------- 시작 ---------- */
   function start() {
-    loadSession();
-    if (!S.session) return viewLogin();
+    if (!A.hasSession()) return viewLogin();
     loadMe().then(function (ok) { if (ok) route(); });
   }
   function loadMe() {
-    return rest('profiles?select=id,username,display_name,role,branch_id,must_change,disabled&id=eq.' + encodeURIComponent(S.session.user_id)).then(function (r) {
-      var p = r.ok && Array.isArray(r.json) && r.json[0];
-      if (!p) { saveSession(null); S.me = null; viewLogin(r.ok ? '이 계정은 아직 등록되어 있지 않습니다. 관리자에게 문의하세요.' : '로그인이 만료되었습니다. 다시 로그인하세요.'); return false; }
-      if (p.disabled) { saveSession(null); S.me = null; viewLogin('비활성화된 계정입니다. 관리자에게 문의하세요.'); return false; }
-      S.me = p; return true;
-    }).catch(function (e) { saveSession(null); viewLogin(e && e.message === 'no_session' ? '로그인이 만료되었습니다. 다시 로그인하세요.' : netErr()); return false; });
+    return A.restore().then(function (r) {
+      if (r.ok) { S.me = r.me; return true; }
+      S.me = null; viewLogin(r.message); return false;
+    });
   }
   function route() { header(); if (S.me.must_change) return viewChangePw(true); viewHome(); }
   function header() { who.textContent = S.me ? S.me.display_name + ' (' + (ROLE[S.me.role] || S.me.role) + ')' : ''; logoutBtn.hidden = !S.me; }
 
   /* ---------- 로그인 ---------- */
   function viewLogin(note) {
-    S.me = null; header();
-    app.innerHTML = '<div class="card narrow"><h2>로그인</h2>' + (note ? msg('warn', note) : '') + '<div id="m"></div><form id="f" autocomplete="on"><label>아이디<input id="u" autocomplete="username" autocapitalize="none" spellcheck="false"></label>' +
-      '<label>비밀번호<input id="pw" type="password" autocomplete="current-password"></label><button class="primary" type="submit">로그인</button></form>' +
+    S.me = null; header(); var saved = A.savedUser();
+    app.innerHTML = '<div class="card narrow"><h2>로그인</h2>' + (note ? msg('warn', note) : '') + '<div id="m"></div><form id="f" autocomplete="on"><label>아이디<input id="u" autocomplete="username" autocapitalize="none" spellcheck="false" value="' + esc(saved) + '"></label>' +
+      '<label>비밀번호<input id="pw" type="password" autocomplete="current-password"></label>' +
+      '<label class="inline"><input type="checkbox" id="rem"' + (saved ? ' checked' : '') + '> 아이디 저장</label>' +
+      '<label class="inline"><input type="checkbox" id="auto"> 자동 로그인 <span class="hint">(관리자 ' + A.AUTO_DAYS.admin + '일·그 외 ' + A.AUTO_DAYS.other + '일 유지) 공용 컴퓨터에서는 켜지 마세요</span></label>' +
+      '<p><button class="primary" type="submit">로그인</button></p></form>' +
       '<p class="hint">임시 비밀번호로 처음 로그인하면 새 비밀번호를 정하게 됩니다.</p></div>';
-    $('u').focus();
+    (saved ? $('pw') : $('u')).focus();
     $('f').onsubmit = function (e) {
       e.preventDefault(); var u = val('u').trim().toLowerCase(), pw = val('pw'); if (!u || !pw) { $('m').innerHTML = msg('err', '아이디와 비밀번호를 입력하세요.'); return; }
-      raw('/auth/v1/token?grant_type=password', { method: 'POST', body: { email: u + '@' + CFG.emailDomain, password: pw } }).then(function (r) {
-        $('pw').value = '';
-        if (r.ok && r.json && r.json.access_token) { saveSession(toSession(r.json)); loadMe().then(function (ok) { if (ok) route(); }); return; }
-        $('m').innerHTML = msg('err', r.status === 429 ? '시도가 너무 많습니다. 잠시 뒤에 다시 하세요.' : '아이디 또는 비밀번호가 올바르지 않습니다.');
-      }).catch(function () { $('pw').value = ''; $('m').innerHTML = msg('err', netErr()); });
+      A.login(u, pw, { remember: $('rem').checked, auto: $('auto').checked }).then(function (r) {
+        if ($('pw')) $('pw').value = '';
+        if (r.ok) { S.me = r.me; route(); return; }
+        $('m').innerHTML = msg(r.reason === 'bad' ? 'err' : 'warn', r.message);   // 비밀번호 오류만 빨간색, 그 밖(미등록·비활성·연결 문제)은 안내색
+      });
     };
   }
-  function logout() {
-    var t = S.session && S.session.access_token; saveSession(null); S.me = null; S.users = null; S.sheet = null;
-    (t ? raw('/auth/v1/logout', { method: 'POST', token: t }).catch(function () {}) : Promise.resolve()).then(function () { viewLogin(); });
-  }
+  function logout() { S.me = null; S.users = null; S.sheet = null; A.logout().then(function () { viewLogin(); }); }
 
   /* ---------- 비밀번호 변경 (임시 비밀번호면 반드시) ---------- */
   function viewChangePw(forced) {
@@ -130,7 +102,7 @@
   function tabMe() {
     var m = S.me;
     pane().innerHTML = '<div class="card"><h2>내 정보</h2><table><tr><th>아이디</th><td>' + esc(m.username) + '</td></tr><tr><th>이름</th><td>' + esc(m.display_name) + '</td></tr><tr><th>역할</th><td>' + esc(ROLE[m.role] || m.role) + (m.branch_id ? ' · ' + esc(m.branch_id) : '') + '</td></tr></table>' +
-      '<p><button id="cp" type="button">비밀번호 변경</button></p>' + (m.role !== 'admin' ? '<p class="hint">강설량·관할·장비 지원 화면은 다음 단계에서 이 로그인과 연결됩니다.</p>' : '') + '</div>';
+      '<p><button id="cp" type="button">비밀번호 변경</button></p>' + '<p><a href="../">← 첫 화면(강설량 측정·장비 지원)으로 가기</a></p>' + '</div>';
     $('cp').onclick = function () { viewChangePw(false); };
   }
 
@@ -143,6 +115,18 @@
     });
   }
   function hqName(u) { var b = S.br[u.branch_id]; return b && S.hq[b.hq_id] ? S.hq[b.hq_id].name : ''; }
+  // 강설량 측정 화면과 같은 계층·순서: 본부(hqs.sort 순) → 그 안에서 지사 번호(B001, B002 … 가 곧 data/hierarchy.json 의 지사 순서) → 아이디.
+  // 지사가 아닌 계정(지원장비)은 맨 아래 "지원장비·기타" 묶음.
+  function hierInfo(u) {
+    var b = S.br[u.branch_id], h = b && S.hq[b.hq_id];
+    if (h) return { g: h.id, label: h.name, o1: h.sort, o2: b.id };
+    return { g: '_other', label: '지원장비·기타', o1: 9999, o2: '' };
+  }
+  function cmpHier(a, b) {
+    var x = hierInfo(a), y = hierInfo(b);
+    return (x.o1 - y.o1) || (x.o2 < y.o2 ? -1 : x.o2 > y.o2 ? 1 : 0) || (a.username < b.username ? -1 : a.username > b.username ? 1 : 0);
+  }
+  var ROLE_ORDER = { admin: 0, equip: 1, branch: 2 };
 
   /* ---------- 계정 관리 ---------- */
   function tabUsers() {
@@ -151,7 +135,7 @@
     loadDirectory().then(function () { if (vt !== S.vt) return; drawUsers(); $('q').oninput = drawUsers; }).catch(function () { if (vt === S.vt && $('list')) $('list').innerHTML = msg('err', '계정 목록을 불러오지 못했습니다.'); });
   }
   function drawUsers() {
-    var q = val('q').trim().toLowerCase(), rows = S.users.filter(function (u) { return !q || (u.username + ' ' + u.display_name + ' ' + hqName(u)).toLowerCase().indexOf(q) >= 0; });
+    var q = val('q').trim().toLowerCase(), rows = S.users.slice().sort(function (a, b) { return (ROLE_ORDER[a.role] - ROLE_ORDER[b.role]) || cmpHier(a, b); }).filter(function (u) { return !q || (u.username + ' ' + u.display_name + ' ' + hqName(u)).toLowerCase().indexOf(q) >= 0; });
     $('cnt').textContent = rows.length + ' / ' + S.users.length + '개';
     $('list').innerHTML = '<table><thead><tr><th>아이디</th><th>이름</th><th>본부</th><th>역할</th><th>상태</th><th></th></tr></thead><tbody>' + rows.map(function (u) {
       var st = u.disabled ? '<span class="tag bad">비활성</span>' : u.must_change ? '<span class="tag warn">비밀번호 변경 대기</span>' : '<span class="tag ok">사용 중</span>', me = u.id === S.me.id;
@@ -183,15 +167,15 @@
   function tabSheet() {
     var vt = S.vt;
     pane().innerHTML = '<div class="card"><h2>비밀번호 일괄 설정</h2>' +
-      '<p class="hint">지사·지원장비 계정의 비밀번호를 한 번에 정합니다. <b>엑셀에서 비밀번호 열(또는 "아이디 + 비밀번호" 두 열)을 복사해 아무 입력칸에 붙여넣으세요.</b> 한 열만 붙여넣으면 눌러 둔 칸부터 아래로 채워지고, 두 열이면 아이디로 찾아 채웁니다. 관리자 계정은 이 표에 나오지 않습니다.</p>' +
+      '<p class="hint">지사·지원장비 계정의 비밀번호를 한 번에 정합니다. 표는 <b>강설량 측정 화면과 같은 본부·지사 순서</b>입니다(엑셀 목록을 같은 순서로 만들어 붙여넣으세요). <b>엑셀에서 비밀번호 열(또는 "아이디 + 비밀번호" 두 열)을 복사해 아무 입력칸에 붙여넣으세요.</b> 한 열만 붙여넣으면 눌러 둔 칸부터 아래로 채워지고, 두 열이면 아이디로 찾아 채웁니다. 관리자 계정은 이 표에 나오지 않습니다.</p>' +
       '<div id="m"></div><div class="row"><label class="inline"><input type="checkbox" id="rc" checked> 저장 후 처음 로그인할 때 본인이 비밀번호를 바꾸게 하기</label>' +
       '<label class="inline"><input type="checkbox" id="mk" checked> 입력한 비밀번호 가리기</label><input id="q" placeholder="본부·이름·아이디로 거르기" style="min-width:220px"></div>' +
       '<div class="row"><button type="button" id="rnd">빈 칸을 무작위 비밀번호로 채우기</button><button type="button" id="clr">입력 모두 지우기</button><button type="button" id="csv">입력한 비밀번호 CSV로 받기</button><span class="sp"></span><span id="sum" class="hint"></span><button type="button" class="primary" id="save" disabled>저장</button></div>' +
       '<div class="tw sheet" id="grid">불러오는 중…</div></div>';
     loadDirectory().then(function () {
       if (vt !== S.vt) return;
-      var rows = S.users.filter(function (u) { return u.role !== 'admin'; }).map(function (u) { return { id: u.id, username: u.username, name: u.display_name, hq: hqName(u), pw: '', state: '', note: '' }; });
-      S.sheet = { rows: rows, focus: 0 }; drawSheet(); bindSheet();
+      var rows = S.users.filter(function (u) { return u.role !== 'admin'; }).sort(cmpHier).map(function (u) { var h = hierInfo(u); return { id: u.id, username: u.username, name: u.display_name, hq: hqName(u), g: h.g, gl: h.label, pw: '', state: '', note: '' }; });
+      S.sheet = { rows: rows, collapsed: {} }; drawSheet(); bindSheet();
     }).catch(function () { if (vt === S.vt && $('grid')) $('grid').innerHTML = msg('err', '계정 목록을 불러오지 못했습니다.'); });
   }
   function visibleRows() { var q = val('q').trim().toLowerCase(); return S.sheet.rows.filter(function (r) { return !q || (r.hq + ' ' + r.name + ' ' + r.username).toLowerCase().indexOf(q) >= 0; }); }
@@ -206,11 +190,19 @@
     return { cls: cls, html: st };
   }
   function drawSheet() {
-    var vis = visibleRows(), dups = dupMap(), type = $('mk').checked ? 'password' : 'text';
-    $('grid').innerHTML = '<table><thead><tr><th>#</th><th>본부</th><th>이름</th><th>아이디</th><th>새 비밀번호</th><th>검사</th></tr></thead><tbody>' + vis.map(function (r, i) {
-      var v = rowView(r, dups), cls = v.cls, st = v.html;
-      return '<tr class="' + cls + '" data-u="' + esc(r.username) + '"><td>' + (i + 1) + '</td><td>' + esc(r.hq) + '</td><td>' + esc(r.name) + '</td><td class="mono">' + esc(r.username) + '</td><td class="cell"><input class="pw" type="' + type + '" autocomplete="new-password" spellcheck="false" data-u="' + esc(r.username) + '" value="' + esc(r.pw) + '"></td><td class="cell">' + st + '</td></tr>';
-    }).join('') + '</tbody></table>';
+    var vis = visibleRows(), dups = dupMap(), type = $('mk').checked ? 'password' : 'text', html = '', last = null, n = 0;
+    vis.forEach(function (r) {
+      n++;
+      if (r.g !== last) {
+        last = r.g;
+        var grp = vis.filter(function (x) { return x.g === r.g; }), filled = grp.filter(function (x) { return x.pw; }).length, shut = !!S.sheet.collapsed[r.g];
+        html += '<tr class="grp" data-g="' + esc(r.g) + '"><td colspan="6"><button type="button" class="gtoggle" data-g="' + esc(r.g) + '" aria-expanded="' + (!shut) + '" title="접기·펼치기">' + (shut ? '▸' : '▾') + '</button> <b>' + esc(r.gl) + '</b> <span class="hint">' + (r.g === '_other' ? '계정' : '지사') + ' ' + grp.length + '개 · 입력 <span class="gcnt">' + filled + '</span></span></td></tr>';
+      }
+      if (S.sheet.collapsed[r.g]) return;                 // 접어도 입력한 값과 붙여넣기 순서에는 영향이 없습니다(보이는 것만 숨김)
+      var v = rowView(r, dups);
+      html += '<tr class="' + v.cls + '" data-u="' + esc(r.username) + '" data-g="' + esc(r.g) + '"><td>' + n + '</td><td>' + esc(r.hq) + '</td><td>' + esc(r.name) + '</td><td class="mono">' + esc(r.username) + '</td><td class="cell"><input class="pw" type="' + type + '" autocomplete="new-password" spellcheck="false" data-u="' + esc(r.username) + '" value="' + esc(r.pw) + '"></td><td class="cell">' + v.html + '</td></tr>';
+    });
+    $('grid').innerHTML = '<table><thead><tr><th>#</th><th>본부</th><th>이름</th><th>아이디</th><th>새 비밀번호</th><th>검사</th></tr></thead><tbody>' + html + '</tbody></table>';
     updateSummary();
   }
   function updateSummary() {
@@ -221,6 +213,7 @@
   function refreshRows() {       // 입력 중에는 칸을 다시 그리지 않고 상태 표시만 갱신 (커서가 튀지 않게)
     var dups = dupMap();
     Array.prototype.forEach.call($('grid').querySelectorAll('tbody tr'), function (tr) {
+      if (tr.classList.contains('grp')) { var c = S.sheet.rows.filter(function (x) { return x.g === tr.dataset.g && x.pw && visibleRows().indexOf(x) >= 0; }).length; tr.querySelector('.gcnt').textContent = c; return; }
       var r = S.sheet.rows.filter(function (x) { return x.username === tr.dataset.u; })[0], v = rowView(r, dups);
       tr.className = v.cls; tr.children[5].innerHTML = v.html;
     });
@@ -229,6 +222,7 @@
   function bindSheet() {
     var g = $('grid');
     g.addEventListener('input', function (e) { var t = e.target; if (t.classList.contains('pw')) { var r = S.sheet.rows.filter(function (x) { return x.username === t.dataset.u; })[0]; r.pw = t.value; r.state = ''; r.note = ''; refreshRows(); } });   // 고친 칸만 "저장됨"·실패 이유를 지움
+    g.addEventListener('click', function (e) { var t = e.target.closest && e.target.closest('.gtoggle'); if (t) { S.sheet.collapsed[t.dataset.g] = !S.sheet.collapsed[t.dataset.g]; drawSheet(); } });
     g.addEventListener('focusin', function (e) { if (e.target.classList.contains('pw')) S.sheet.focusUser = e.target.dataset.u; });
     g.addEventListener('paste', function (e) { var t = e.target; if (!t.classList.contains('pw')) return; var text = (e.clipboardData || window.clipboardData).getData('text'); if (text == null) return; e.preventDefault(); pasteText(text, t.dataset.u); });
     $('mk').onchange = drawSheet; $('q').oninput = drawSheet;
