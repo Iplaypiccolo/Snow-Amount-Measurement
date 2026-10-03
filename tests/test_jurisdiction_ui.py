@@ -16,7 +16,9 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parent.parent
 class Quiet(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a, **k): pass
-server = socketserver.TCPServer(("127.0.0.1", 0), functools.partial(Quiet, directory=str(ROOT)))
+# 여러 요청을 동시에 처리(한 번에 하나씩이면 큰 JSON 을 보내는 동안 스크립트 요청이 밀려 시험이 시간 초과로 흔들림)
+socketserver.ThreadingTCPServer.daemon_threads = True
+server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), functools.partial(Quiet, directory=str(ROOT)))
 PORT = server.server_address[1]
 threading.Thread(target=server.serve_forever, daemon=True).start()
 URL = f"http://127.0.0.1:{PORT}/index.html"
@@ -238,6 +240,20 @@ def t_legacy_new_branch_without_id_still_works(b):
     check(all(J(p, f"JurisdictionUI._state().view.state.owner['{u}']") == "11" for u in un) and J(p, "JurisdictionUI._state().view.state.branches['11'].name") == "민자", "이미 저장된 이동 이력이 그대로 적용됨")
     p.click("#jr-add"); p.fill("#jr-newname", "또신설"); p.click("#jr-newok"); p.wait_for_timeout(300)
     nid = J(p, "JurisdictionUI._state().pending[0].id"); check(nid == "B060", f"예전 번호('10','11')가 있어도 다음 기관 번호는 B060 이어야 함: {nid}")
+
+def t_html_in_branch_name_is_text(b):
+    """기관 이름에 HTML(<img onerror=…>)이 들어 있어도 모든 화면(강설량 표·관측소 트리·관할 이력)에서 글자로만 보이고 실행되지 않는다"""
+    m = SBM.Mock(); bad = '<img src=x onerror="window.__xss=1">악성'
+    secs = [s["id"] for s in json.load(open(ROOT / "data/sections.json", encoding="utf-8"))["sections"] if s["owner"] == "B035"][:2]
+    m.events["jurisdiction_events"] += [{"id": 1, "at": "2026-10-03T01:00:00Z", "by_user": None, "kind": "addBranch", "payload": {"id": "B060", "hq": "광주전남", "name": bad}, "note": "<b>메모</b>"},
+        {"id": 2, "at": "2026-10-03T01:01:00Z", "by_user": None, "kind": "move", "payload": {"sections": secs, "to": "B060", "from": ["B035"], "km": 1}, "note": None}]
+    p = open_tab(b, mock=m)
+    p.click(".tab-btn[data-tab=snowtable]"); p.wait_for_timeout(300); p.click(".tab-btn[data-tab=map]"); p.wait_for_timeout(300)
+    p.click(".tab-btn[data-tab=jurisdiction]"); p.wait_for_timeout(300); J(p, "document.querySelectorAll('details').forEach(d => d.open = true)"); p.wait_for_timeout(500)
+    check(J(p, "window.__xss") is None, "이름 속 HTML 이 실행되면 안 됨")
+    check(J(p, "document.querySelectorAll('img[src=x]').length") == 0, "이름 속 <img> 가 요소로 만들어지면 안 됨")
+    check(bad in p.locator("#snowTableWrap").inner_text() and bad + " 지사" in p.locator("#tree").inner_text(), "강설량 표·관측소 트리에 이름이 글자 그대로 보여야 함")
+    check("<b>메모</b>" in p.locator("#jr-pending").inner_text(), "변경 이력의 메모도 글자 그대로")
 
 def t_save_failure_keeps_pending_and_offers_file(b):
     m = SBM.Mock(); p = open_tab(b, mock=m); admin(p)
@@ -470,7 +486,7 @@ def t_private_hq(b):
     check(p.locator("#statBranch").inner_text() == "59", "민자 기관이 강설량 화면 통계에 들어가면 안 됨")
     check(J(p, "HIERARCHY.hq.some(h => h.name === '민자')") is False, "HIERARCHY 에 민자 본부가 생기면 안 됨")
 
-TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload, t_new_branch_id_survives_save, t_legacy_new_branch_without_id_still_works,
+TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload, t_new_branch_id_survives_save, t_legacy_new_branch_without_id_still_works, t_html_in_branch_name_is_text,
          t_save_failure_keeps_pending_and_offers_file, t_history_load_failure_falls_back_and_blocks_save, t_history_paging_and_backup_export,
          t_border_on_click_view_mode, t_border_contrast_all_colors, t_admin_click_has_border, t_pick_destination_on_map, t_no_admin_checkbox_and_no_popup_move_button,
          t_save_bar_always_visible, t_unassigned_visible_and_clickable, t_assign_unassigned_to_branch, t_select_all_unassigned_row,

@@ -16,7 +16,9 @@ handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(
 handler.log_message = lambda *a, **k: None
 class Quiet(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a, **k): pass
-server = socketserver.TCPServer(("127.0.0.1", 0), functools.partial(Quiet, directory=str(ROOT)))
+# 여러 요청을 동시에 처리(한 번에 하나씩이면 큰 JSON 을 보내는 동안 스크립트 요청이 밀려 시험이 시간 초과로 흔들림)
+socketserver.ThreadingTCPServer.daemon_threads = True
+server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), functools.partial(Quiet, directory=str(ROOT)))
 PORT = server.server_address[1]
 threading.Thread(target=server.serve_forever, daemon=True).start()
 URL = f"http://127.0.0.1:{PORT}/equipment/index.html"
