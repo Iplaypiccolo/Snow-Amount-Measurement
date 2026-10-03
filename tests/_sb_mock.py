@@ -2,8 +2,29 @@
 가짜 Supabase 서버 — 실제 Supabase 에 접속하지 않고 시험하기 위한 흉내 (tests/test_admin_ui.py, test_login_gate.py, 기존 화면 시험이 함께 씀)
 흉내 내는 것: 로그인·토큰 갱신·로그아웃, 내 정보/계정 목록/지사·본부/접속 로그 읽기(권한 규칙 포함), 비밀번호 변경, 계정 발급 함수(일괄 설정·초기화·비활성화)
 """
-import json, re, time
+import json, re, time, datetime
+from pathlib import Path
 from urllib.parse import urlparse, parse_qs
+
+_SNAP = {}
+def snow_snapshot_text():
+    """서버의 적설 요약본(snapshots 'snow')을 data/snow_data.json 으로 흉내 — DB 함수 admin_rebuild_snow_snapshot 과 같은 규칙(결측 -99.9 제외, 시즌별 11/15~3/15 전체 날짜)"""
+    if "t" not in _SNAP:
+        sd = json.load(open(Path(__file__).resolve().parent.parent / "data" / "snow_data.json", encoding="utf-8"))["stationData"]
+        def y_of(d): return int(d[:4]) if int(d[4:6]) >= 11 else int(d[:4]) - 1
+        seasons = {}
+        for stn, rec in sd.items():
+            for d, v in rec.items():
+                if v < 0: continue
+                y = y_of(d); lab = f"{y}-11-15~{y + 1}-03-15"
+                if lab not in seasons:
+                    dates, cur = [], datetime.date(y, 11, 15)
+                    while cur <= datetime.date(y + 1, 3, 15): dates.append(cur.strftime("%Y%m%d")); cur += datetime.timedelta(days=1)
+                    seasons[lab] = {"dates": dates, "idx": {x: i for i, x in enumerate(dates)}, "st": {}}
+                S = seasons[lab]; arr = S["st"].setdefault(stn, [None] * len(S["dates"])); arr[S["idx"][d]] = v
+        for S in seasons.values(): del S["idx"]
+        _SNAP["t"] = json.dumps([{"body": {"version": 1, "seasons": seasons}, "built_at": "2026-10-04T00:00:00Z"}])
+    return _SNAP["t"]
 
 SB = "https://yzwbnohzhnctdvufntig.supabase.co"
 DOMAIN = "snow-support.invalid"
@@ -18,6 +39,7 @@ class Mock:
         self.requests, self.rid, self.req_calls = [], 0, []          # 구간 변경 요청(jurisdiction_requests)
         self.events = {"jurisdiction_events": [], "grid_events": []}  # 변경 이력 표 (저장하면 쌓이고, 모든 사용자가 같은 것을 읽음)
         self.event_calls, self.events_fail = [], None                 # 저장 요청 기록 / 저장·읽기 오류 흉내 (status, body)
+        self.snow_calls, self.snow_empty = [], False                  # 적설 넣기 함수 호출 기록 / 요약본이 아직 없는 상황 흉내
         self.add("admin-01", "관리자1", "admin", None, ADMIN_PW)
         self.add("admin-02", "관리자2", "admin", None, "Second#Admin-77qZ")
         names = [("exchungju", "충주지사", "B019", "H04"), ("exdongseoul", "동서울지사", "B006", "H02"), ("exgurye", "구례지사", "B039", "H07"), ("exwonju", "원주지사", "B011", "H03"),
@@ -69,6 +91,20 @@ class Mock:
                 rows.append({"id": len(rows) + 1 + getattr(self, "event_id_base", 0), "at": "2026-10-03T05:00:%02dZ" % (len(rows) % 60), "by_user": u["id"], "kind": b["kind"], "payload": b["payload"], "note": b.get("note")})
             return send(201)
         return send(405, {"message": "no"})
+    def save_rpc(self, u, body, send):
+        """DB 함수 save_jurisdiction 흉내: 이력 저장 + 요청 승인을 한 번에(하나라도 안 되면 아무것도 안 바뀜)"""
+        evs, ids = (body or {}).get("p_events"), (body or {}).get("p_approve") or []
+        self.event_calls.append(("save_jurisdiction", body))
+        if self.events_fail and self.events_fail[0] != "get": return send(*self.events_fail[1])
+        if not self.active_admin(u): return send(403, {"code": "42501", "message": "new row violates row-level security policy"})
+        if not isinstance(evs, list) or not evs or any(not isinstance(b, dict) or b.get("kind") not in ("move", "addBranch", "moveHq") or not isinstance(b.get("payload"), dict) for b in evs): return send(400, {"code": "23514", "message": "check violation"})
+        reqs = [r for r in self.requests if r["id"] in set(ids)]
+        if len(reqs) != len(set(ids)) or any(r["status"] != "pending" for r in reqs): return send(400, {"code": "55000", "message": "request_not_pending"})
+        rows = self.events["jurisdiction_events"]
+        for b in evs:
+            rows.append({"id": len(rows) + 1 + getattr(self, "event_id_base", 0), "at": "2026-10-03T05:00:%02dZ" % (len(rows) % 60), "by_user": u["id"], "kind": b["kind"], "payload": b["payload"], "note": b.get("note")})
+        for r in reqs: r["status"] = "approved"; r["resolution_note"] = body.get("p_note") or "관할 변경 저장 시 승인"; r["resolved_by"] = u["id"]
+        return send(200, {"events": len(evs), "approved": len(reqs)})
     def requests_api(self, route, req, u, q, body, send):
         """구간 변경 요청 표와 같은 권한 규칙을 흉내: 지사만 요청·자기 지사 것만 읽기·관리자만 승인/반려·지사는 자기 대기 요청만 취소"""
         import re as _re
@@ -138,12 +174,24 @@ class Mock:
             if tbl in ("branches", "hqs"): return send(200, (self.branches if tbl == "branches" else self.hqs) if self.usable(u) else [])
             if tbl == "jurisdiction_requests": return self.requests_api(route, req, u, q, body, send)
             if tbl in self.events: return self.events_api(tbl, req, u, q, body, send)
+            if tbl == "snapshots":
+                if not self.usable(u) or self.snow_empty or q.get("key") != ["eq.snow"]: return send(200, [])
+                return route.fulfill(status=200, headers={**CORS, "content-type": "application/json"}, body=snow_snapshot_text())
+            if tbl == "snow_uploads": return send(200, [{"at": "2026-10-04T01:00:00Z", "date_from": "2025-12-01", "date_to": "2025-12-02", "stations": 2, "rows_written": 2, "ok": True, "note": "txt by admin-01"}] if self.active_admin(u) else [])
+            if tbl == "save_jurisdiction" and "/rpc/" in path: return self.save_rpc(u, body, send)
             if tbl == "audit_log":
                 rows = self.audit if self.active_admin(u) else []
                 k = q.get("kind", [""])[0]
                 if k.startswith("eq."): rows = [r for r in rows if r["kind"] == k[3:]]
                 return send(200, rows)
             return send(404, {"message": "no table"})
+        if path == "/functions/v1/import-snow":
+            if not self.active_admin(u): return send(403, {"ok": False, "error": "forbidden", "message": "관리자만 할 수 있는 작업입니다."})
+            self.snow_calls.append(body)
+            dry = body.get("action") == "plan"
+            return send(200, {"ok": True, "action": body.get("action"), "summary": {"source": "txt" if "txt" in body else "github:main", "stations": 2, "values": 3, "dates": ["20251201", "20251202"]},
+                              "counts": {"new": 2, "changed": 0, "same": 0, "skipped_missing": 1, "skipped_out_of_season": 0, "written": 0 if dry else 2},
+                              "message": "검사만 했습니다. 데이터베이스는 바뀌지 않았습니다." if dry else "2개 값을 저장하고 요약본을 다시 만들었습니다."})
         if path == "/functions/v1/account-admin":
             if not self.active_admin(u): return send(403, {"ok": False, "error": "forbidden", "message": "관리자만 할 수 있는 작업입니다."})
             self.fn_calls.append(body)

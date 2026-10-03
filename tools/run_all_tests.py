@@ -24,6 +24,8 @@ SUITES = [
     ('계정 발급 함수', 'tests/test_account_admin.mjs', 'node'),
     ('비밀번호 규칙 화면·서버 일치', 'tests/test_admin_policy_parity.mjs', 'node'),
     ('기준정보 이전 함수', 'tests/test_import_reference.mjs', 'node'),
+    ('적설 넣기 함수', 'tests/test_import_snow.mjs', 'node'),
+    ('적설 요약본 → 화면 계산', 'tests/test_snow_snapshot.js', 'node'),
     ('관할 계산', 'tests/test_jurisdiction_core.js', 'node'),
     ('관할 새로고침 없는 재적용', 'tests/test_reapply.js', 'node'),
     ('격자 계산', 'tests/test_grid_core.js', 'node'),

@@ -63,7 +63,7 @@ def t_login_session_logout(b, m):
     login(p, "admin-01", "wrong-password-xx"); check("올바르지 않습니다" in p.locator(".msg.err").inner_text(), "로그인 실패 문구")
     check(p.evaluate("sessionStorage.getItem('ss_session')") is None, "실패했는데 세션이 저장됨")
     login(p, "admin-01", ADMIN_PW); p.wait_for_selector(".tabs")
-    check(p.locator(".tabs button").all_inner_texts() == ["계정 관리", "비밀번호 일괄 설정", "접속 로그", "내 정보"], p.locator(".tabs button").all_inner_texts())
+    check(p.locator(".tabs button").all_inner_texts() == ["계정 관리", "비밀번호 일괄 설정", "적설 자료", "접속 로그", "내 정보"], p.locator(".tabs button").all_inner_texts())
     check("관리자1" in p.locator("#who").inner_text(), "상단 이름")
     ss = p.evaluate("sessionStorage.getItem('ss_session')"); check(ss and ADMIN_PW not in ss and "password" not in ss.lower(), "세션에 비밀번호가 저장됨")
     check(p.evaluate("localStorage.length") == 0, "localStorage 사용 금지")
@@ -194,6 +194,24 @@ def t_users_tab(b, m):
     check(m.fn_calls[-1] == {"action": "disable", "username": "exwonju"}, "비활성화 호출")
     p.locator("tr", has_text="exwonju").locator("button[data-a=enable]").click(); p.wait_for_selector("tr:has-text('exwonju') .tag.warn")
 
+def t_snow_upload_tab(b, m):
+    """적설 자료 탭: 메모장 파일 → [검사](plan) → [저장](load). 검사 전에는 저장 버튼이 꺼져 있고, 파일을 바꾸면 다시 검사해야 함"""
+    dl = []; p = new_page(b, m, dl); login(p, "admin-01", ADMIN_PW); p.click('.tabs button[data-t=snow]'); p.wait_for_selector("#sup table")
+    check(p.locator("#sload").is_disabled(), "검사 전에는 저장 꺼짐")
+    p.click("#splan"); p.wait_for_timeout(200); check("파일을 먼저" in p.locator("#sm").inner_text(), "파일 없이 검사하면 안내")
+    txt = "#### DATE 20251201 ####" + chr(10) + "202512010900, 90, x, x, x, x, 3.5" + chr(10)
+    p.set_input_files("#sf", files=[{"name": "snow.txt", "mimeType": "text/plain", "buffer": txt.encode("utf-8")}])
+    p.click("#splan"); p.wait_for_selector("#sm >> text=새 값")
+    check(m.snow_calls[-1] == {"action": "plan", "txt": txt, "overwrite": False}, m.snow_calls[-1])
+    check("결측(-99.9)이라 뺌 1" in p.locator("#sm").inner_text() and not p.locator("#sload").is_disabled(), "검사 결과 표시·저장 켜짐")
+    p.click("#sload"); p.wait_for_selector("#sm >> text=저장한 값")
+    check(m.snow_calls[-1]["action"] == "load" and m.snow_calls[-1]["txt"] == txt and any("저장할까요" in d for d in dl), "확인 후 같은 내용으로 저장")
+    check(p.locator("#sload").is_disabled(), "저장 뒤에는 다시 검사해야 저장 가능")
+    p.check("#sow"); check(p.locator("#sload").is_disabled(), "옵션을 바꾸면 다시 검사")
+    p.click("#gplan"); p.wait_for_selector("#gm >> text=새 값")
+    check(m.snow_calls[-1] == {"action": "plan", "source": "github", "ref": "main"}, m.snow_calls[-1])
+    check("txt by admin-01" in p.locator("#sup").inner_text(), "최근 저장 기록 표시")
+
 def t_audit_tab(b, m):
     p = new_page(b, m); login(p, "admin-01", ADMIN_PW); p.click('.tabs button[data-t=audit]'); p.wait_for_selector("#rows table")
     check(p.locator("#rows tbody tr").count() == 3 and "203.0.113.5" in p.locator("#rows").inner_text() and "account-admin" in p.locator("#rows").inner_text(), "기록 표시")
@@ -274,7 +292,7 @@ def t_token_refresh(b, m):
     p.reload(); p.wait_for_selector("#u"); check("만료" in p.locator(".msg.warn").inner_text(), "갱신 실패 시 다시 로그인 안내")
 
 TESTS = [t_login_session_logout, t_unregistered_and_disabled, t_forced_change, t_checklist_live, t_sheet_rows_and_paste, t_sheet_validation_display, t_sheet_save_payload,
-         t_sheet_partial_and_validation_errors, t_sheet_random_csv_filter, t_sheet_unsaved_guard_and_clear, t_users_tab, t_audit_tab, t_non_admin_cannot_use_admin_apis, t_xss_and_csp, t_token_refresh, t_fast_tab_switching_no_errors, t_sheet_hierarchy_order, t_users_tab_order, t_set_then_branch_logs_in_directly]
+         t_sheet_partial_and_validation_errors, t_sheet_random_csv_filter, t_sheet_unsaved_guard_and_clear, t_users_tab, t_snow_upload_tab, t_audit_tab, t_non_admin_cannot_use_admin_apis, t_xss_and_csp, t_token_refresh, t_fast_tab_switching_no_errors, t_sheet_hierarchy_order, t_users_tab_order, t_set_then_branch_logs_in_directly]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch(); b.new_context()

@@ -13,7 +13,7 @@ check, J = T.check, T.J
 results, errors = [], T.errors
 
 def open_grid(browser, mock=None):
-    p = browser.new_page(viewport={"width": 1400, "height": 900}, accept_downloads=True)
+    p = browser.new_page(bypass_csp=True, viewport={"width": 1400, "height": 900}, accept_downloads=True)
     T.OPENED.append(p)
     p.on("pageerror", lambda e: errors.append(str(e))); p.on("dialog", lambda d: d.accept()); p.route("**/*", T.route)
     SBM.install(p, mock or SBM.Mock(), "admin-01")
@@ -236,7 +236,7 @@ def t_colors_match_other_tab(b):
     check(col == r[0], f"관할 고속도로 탭 색 {col} / 격자 탭 색 {r[0]}")
 
 def t_new_branch_from_jurisdiction_appears(b):
-    p = b.new_page(viewport={"width": 1400, "height": 900}); T.OPENED.append(p)
+    p = b.new_page(bypass_csp=True, viewport={"width": 1400, "height": 900}); T.OPENED.append(p)
     m = SBM.Mock()           # 관할 탭에서 신설 기관을 만들어 서버에 저장해 둔 상태(변경 이력 표에 이미 쌓여 있음)
     m.events["jurisdiction_events"].append({"id": 1, "at": "2026-10-03T01:00:00Z", "by_user": None, "kind": "addBranch", "payload": {"id": "B900", "hq": "강원", "name": "신설시험"}, "note": None})
     p.on("pageerror", lambda e: errors.append(str(e))); p.route("**/*", T.route); SBM.install(p, m, "admin-01"); p.goto(T.URL)

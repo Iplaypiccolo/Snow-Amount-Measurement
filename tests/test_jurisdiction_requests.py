@@ -128,10 +128,21 @@ def t_admin_prepares_move_and_save_approves(b):
     check("요청 #%d" % r1["id"] in p.locator(".jr-ev").first.inner_text() and "이동 준비됨" in p.locator("#jr-requests").inner_text(), "변경 대기에 요청 번호 표시 + 카드는 '이동 준비됨'")
     check(r1["status"] == "pending", "저장하기 전에는 아직 승인되지 않음")
     T.clear_toast(p); p.click("#jr-top-save"); T.saved(p, 1)
-    mv = m.event_calls[-1][1][-1]["payload"]; check(m.event_calls[-1][1][-1]["kind"] == "move" and mv["req"] == r1["id"] and mv["sections"] == CJ_SECS[:2] and mv["to"] == GURYE, mv)
+    call = m.event_calls[-1]; check(call[0] == "save_jurisdiction" and call[1]["p_approve"] == [r1["id"]], f"저장과 승인을 서버 함수 하나로 한 번에: {call[0]}")
+    mv = call[1]["p_events"][-1]["payload"]; check(call[1]["p_events"][-1]["kind"] == "move" and mv["req"] == r1["id"] and mv["sections"] == CJ_SECS[:2] and mv["to"] == GURYE, mv)
     p.wait_for_timeout(700); check(r1["status"] == "approved" and r1["resolution_note"] and r1["resolved_by"], "저장하면 연결된 요청이 승인 처리됨")
-    check(any(c[0] == "PATCH" and "status=eq.pending" in c[1] for c in m.req_calls), "승인은 대기 중인 요청에만")
+    check(not any(c[0] == "PATCH" for c in m.req_calls), "승인을 따로 부르지 않음(저장과 함께 끝남)")
     check(p.locator("#jr-requests [data-ra=prep]").count() == 0 and "처리된 요청 1건" in p.locator("#jr-requests").inner_text() and p.locator(".tab-btn[data-tab=jurisdiction] .jr-badge").count() == 0, "처리된 요청으로 이동, 탭 표시도 사라짐")
+
+def t_save_fails_whole_if_request_was_cancelled(b):
+    """이동 준비 뒤 지사가 요청을 취소했다면: 저장 + 승인이 모두 취소되고(아무것도 저장 안 됨) 변경 대기는 남아 있으며 이유를 알려 준다"""
+    m = mock_with_branch(); r1 = m.add_request(CHUNGJU, CJ_SECS[:2], to=GURYE, reason="구례 구간")
+    p = open_as(b, "admin-01", m, click_tab=False); p.wait_for_selector("#jrNotice"); p.click("#jrNoticeGo"); p.wait_for_selector("#jr-requests [data-ra=prep]")
+    p.locator("[data-ra=prep]").first.click(); p.wait_for_timeout(400)
+    r1["status"] = "cancelled"                                   # 그사이 지사가 취소함(서버 상태)
+    n0 = len(m.events["jurisdiction_events"]); p.click("#jr-top-save"); p.wait_for_selector("#jr-modal >> text=저장하지 못했습니다")
+    check(len(m.events["jurisdiction_events"]) == n0 and r1["status"] == "cancelled", "아무것도 저장·승인되지 않음")
+    check("이미 처리" in p.locator("#jr-modal").inner_text() and len(sf(p, "pending")) == 1, "이유 안내 + 변경 대기 유지")
 
 def t_admin_chooses_destination_rejects_and_already_owned(b):
     m = mock_with_branch(); r_open = m.add_request(CHUNGJU, CJ_SECS[:1]); r_rej = m.add_request(CHUNGJU, CJ_SECS[1:2], to=GURYE); r_same = m.add_request(CHUNGJU, CJ_SECS[2:3], to=CHUNGJU)
@@ -198,7 +209,7 @@ def t_unassigned_gray_solid_everywhere(b):
     d = J(p, f"JurisdictionUI._state().polys['{ids[0]}'].options.dashArray"); check(d and "," in d, "변경 대기는 점선")
 
 TESTS = [t_branch_requests_a_move, t_branch_request_without_destination_and_errors, t_equip_cannot_request, t_branch_cannot_use_admin_features, t_admin_sees_notice_badge_and_panel,
-         t_no_notice_when_nothing_pending, t_admin_prepares_move_and_save_approves, t_admin_chooses_destination_rejects_and_already_owned, t_grid_tab_admin_only, t_unassigned_gray_solid_everywhere, t_unassigned_highly_visible]
+         t_no_notice_when_nothing_pending, t_admin_prepares_move_and_save_approves, t_save_fails_whole_if_request_was_cancelled, t_admin_chooses_destination_rejects_and_already_owned, t_grid_tab_admin_only, t_unassigned_gray_solid_everywhere, t_unassigned_highly_visible]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()

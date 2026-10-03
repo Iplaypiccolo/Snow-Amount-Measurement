@@ -41,7 +41,7 @@ DLG = {"prompt": ""}   # 입력 창(prompt)에 넣을 글자: 시험이 필요�
 OPENED = []        # 테스트가 연 화면들 (테스트가 끝나면 모두 닫아 메모리를 아낌)
 
 def open_tab(browser, session=None, user="admin-01", mock=None, click_tab=True):          # session 은 더 이상 쓰지 않음(예전 임시 적용 기능 삭제)
-    p = browser.new_page(viewport={"width": 1400, "height": 900}, accept_downloads=True)
+    p = browser.new_page(bypass_csp=True, viewport={"width": 1400, "height": 900}, accept_downloads=True)
     OPENED.append(p)
     p.on("pageerror", lambda e: errors.append(str(e)))
     p.on("dialog", lambda d: d.accept(DLG["prompt"]) if d.type == "prompt" else d.accept())      # 확인 창은 [확인], 입력 창은 DLG["prompt"] 를 입력
@@ -254,6 +254,45 @@ def t_html_in_branch_name_is_text(b):
     check(J(p, "document.querySelectorAll('img[src=x]').length") == 0, "이름 속 <img> 가 요소로 만들어지면 안 됨")
     check(bad in p.locator("#snowTableWrap").inner_text() and bad + " 지사" in p.locator("#tree").inner_text(), "강설량 표·관측소 트리에 이름이 글자 그대로 보여야 함")
     check("<b>메모</b>" in p.locator("#jr-pending").inner_text(), "변경 이력의 메모도 글자 그대로")
+
+def t_csp_blocks_injected_script(b):
+    """첫 화면 보안 정책(CSP): 화면이 정상으로 열리고, 누군가 HTML 을 끼워 넣어도 그 안의 스크립트(onerror 등)는 실행되지 않는다"""
+    p = b.new_page(viewport={"width": 1400, "height": 900}); OPENED.append(p)          # bypass_csp 없이 실제와 같은 조건
+    p.on("pageerror", lambda e: errors.append(str(e))); p.route("**/*", route); SBM.install(p, SBM.Mock())
+    p.goto(URL); p.wait_for_selector("body.authed"); p.wait_for_selector("#snowTableWrap table", timeout=60000)
+    csp = p.evaluate("document.querySelector('meta[http-equiv=Content-Security-Policy]').content")
+    check("script-src 'self' https://cdnjs.cloudflare.com" in csp and "connect-src 'self' https://*.supabase.co" in csp and "unsafe-inline" not in csp.split("script-src")[1].split(";")[0], csp)
+    p.evaluate("""() => { const d = document.createElement('div'); d.innerHTML = '<img src="data:," onerror="window.__xss=1"><a href="javascript:window.__xss=2" id="__l">x</a>'; document.body.appendChild(d);
+      const s = document.createElement('script'); s.textContent = 'window.__xss = 3'; document.body.appendChild(s); document.getElementById('__l').click(); }""")
+    p.wait_for_timeout(400)
+    check(p.evaluate("window.__xss") is None, "끼워 넣은 스크립트가 실행되면 안 됨")
+    check(p.evaluate("typeof JurisCore") == "object" and p.evaluate("!!document.querySelector('#snowTableWrap table')"), "사이트 자체 스크립트는 정상 동작")
+
+def t_snow_from_server_not_public_file(b):
+    """적설은 서버 요약본(로그인 필요)에서 읽고, 공개 파일 data/snow_data.json 은 받지 않는다. 지사별 값은 화면이 계산해 예전과 같다. 관리자만 '적설 자료 올리기' 링크"""
+    reqs = []; m = SBM.Mock()
+    p = b.new_page(bypass_csp=True, viewport={"width": 1400, "height": 900}); OPENED.append(p)
+    p.on("request", lambda r: reqs.append(r.url)); p.route("**/*", route); SBM.install(p, m); p.goto(URL)
+    p.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)
+    check(not any("snow_data.json" in u for u in reqs) and any("/rest/v1/snapshots" in u for u in reqs), [u for u in reqs if "snow" in u])
+    F = json.load(open(ROOT / "data/snow_data.json", encoding="utf-8")); lab = "2024-11-15~2025-03-15"
+    got = J(p, f"SNOW_DATA.seasons['{lab}'].branches['강원|||대관령']")
+    check(got == F["seasons"][lab]["branches"]["강원|||대관령"], "지사별 값이 예전 파일과 같아야 함")
+    check(J(p, "Object.keys(SNOW_DATA.seasons).length") == 9 and J(p, "!!document.getElementById('downloadJsonBtn') || !!document.getElementById('snowFileInput')") is False, "시즌 9개, 예전 JSON 저장·임시 업로드 버튼 없음")
+    check(p.locator("#snowAdminLink").is_visible(), "관리자에게는 적설 자료 올리기 링크")
+    p2 = b.new_page(bypass_csp=True, viewport={"width": 1400, "height": 900}); OPENED.append(p2)
+    p2.route("**/*", route); SBM.install(p2, m, "exchungju"); m.users["exchungju"]["profile"]["must_change"] = False; p2.goto(URL)
+    p2.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)
+    check(not p2.locator("#snowAdminLink").is_visible(), "지사에게는 링크가 보이지 않음")
+
+def t_snow_server_empty_falls_back_to_file(b):
+    """서버에 적설 요약본이 아직 없으면(처음 옮기기 전) 예전 파일로 대신 보여 줘서 표가 비지 않는다. 지사별 값은 같은 방식으로 계산"""
+    m = SBM.Mock(); m.snow_empty = True
+    p = open_tab(b, mock=m, click_tab=False)
+    p.click(".tab-btn[data-tab=snowtable]"); p.wait_for_timeout(300)
+    F = json.load(open(ROOT / "data/snow_data.json", encoding="utf-8")); lab = "2024-11-15~2025-03-15"
+    check(J(p, "SNOW_DATA.fromFile") is True and J(p, "Object.keys(SNOW_DATA.seasons).length") == 9, "예전 파일로 대신")
+    check(J(p, f"SNOW_DATA.seasons['{lab}'].branches['강원|||대관령']") == F["seasons"][lab]["branches"]["강원|||대관령"] and "자료 없음" not in p.locator("#snowTableWrap").inner_text(), "표가 채워지고 값이 같음")
 
 def t_save_failure_keeps_pending_and_offers_file(b):
     m = SBM.Mock(); p = open_tab(b, mock=m); admin(p)
@@ -486,7 +525,7 @@ def t_private_hq(b):
     check(p.locator("#statBranch").inner_text() == "59", "민자 기관이 강설량 화면 통계에 들어가면 안 됨")
     check(J(p, "HIERARCHY.hq.some(h => h.name === '민자')") is False, "HIERARCHY 에 민자 본부가 생기면 안 됨")
 
-TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload, t_new_branch_id_survives_save, t_legacy_new_branch_without_id_still_works, t_html_in_branch_name_is_text,
+TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload, t_new_branch_id_survives_save, t_legacy_new_branch_without_id_still_works, t_html_in_branch_name_is_text, t_csp_blocks_injected_script, t_snow_from_server_not_public_file, t_snow_server_empty_falls_back_to_file,
          t_save_failure_keeps_pending_and_offers_file, t_history_load_failure_falls_back_and_blocks_save, t_history_paging_and_backup_export,
          t_border_on_click_view_mode, t_border_contrast_all_colors, t_admin_click_has_border, t_pick_destination_on_map, t_no_admin_checkbox_and_no_popup_move_button,
          t_save_bar_always_visible, t_unassigned_visible_and_clickable, t_assign_unassigned_to_branch, t_select_all_unassigned_row,
