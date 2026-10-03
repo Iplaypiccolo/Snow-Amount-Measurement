@@ -127,9 +127,8 @@ def t_admin_prepares_move_and_save_approves(b):
     ev = sf(p, "pending"); check(len(ev) == 1 and ev[0]["t"] == "move" and ev[0]["to"] == GURYE and ev[0]["sections"] == CJ_SECS[:2] and ev[0]["req"] == r1["id"] and ev[0]["from"] == [CHUNGJU], ev)
     check("요청 #%d" % r1["id"] in p.locator(".jr-ev").first.inner_text() and "이동 준비됨" in p.locator("#jr-requests").inner_text(), "변경 대기에 요청 번호 표시 + 카드는 '이동 준비됨'")
     check(r1["status"] == "pending", "저장하기 전에는 아직 승인되지 않음")
-    p.click("#jr-top-save"); p.wait_for_selector("#jr-reload", timeout=10000)
+    T.clear_toast(p); p.click("#jr-top-save"); T.saved(p, 1)
     mv = m.event_calls[-1][1][-1]["payload"]; check(m.event_calls[-1][1][-1]["kind"] == "move" and mv["req"] == r1["id"] and mv["sections"] == CJ_SECS[:2] and mv["to"] == GURYE, mv)
-    check("연결된 지사 요청 1건은 승인 처리됩니다" in p.locator(".jr-dialog").inner_text(), "저장 안내에 요청 승인 처리 안내")
     p.wait_for_timeout(700); check(r1["status"] == "approved" and r1["resolution_note"] and r1["resolved_by"], "저장하면 연결된 요청이 승인 처리됨")
     check(any(c[0] == "PATCH" and "status=eq.pending" in c[1] for c in m.req_calls), "승인은 대기 중인 요청에만")
     check(p.locator("#jr-requests [data-ra=prep]").count() == 0 and "처리된 요청 1건" in p.locator("#jr-requests").inner_text() and p.locator(".tab-btn[data-tab=jurisdiction] .jr-badge").count() == 0, "처리된 요청으로 이동, 탭 표시도 사라짐")
@@ -191,9 +190,9 @@ def t_unassigned_highly_visible(b):
 
 def t_unassigned_gray_solid_everywhere(b):
     p = open_as(b, "admin-01", SBM.Mock()); ids = [s["id"] for s in DOC["sections"] if s["owner"] is None]; check(len(ids) > 100, "미지정 구간")
-    o = J(p, f"(()=>{{const o=JurisdictionUI._state().polys['{ids[0]}'].options;return [o.color,o.dashArray,o.lineCap]}})()"); check(o[0] == "#3f3f3f" and not o[1] and o[2] == "butt", o)
+    o = J(p, f"(()=>{{const o=JurisdictionUI._state().polys['{ids[0]}'].options;return [o.color,o.dashArray,o.lineCap]}})()"); check(o[0] == "#3f3f3f" and not o[1] and o[2] == "round", o)
     sw = p.evaluate("getComputedStyle(document.querySelector('.jr-br[data-id=NONE] i')).backgroundColor"); check(sw == "rgb(63, 63, 63)", sw)
-    leg = p.locator("#view-jurisdiction .jr-legend").inner_text(); check("진한 회색 실선" in leg and "점선 = 미지정" not in leg and "회색 점선" not in leg, leg)
+    leg = p.locator("#view-jurisdiction .jr-legend").inner_text(); check("진한 회색 = 미지정" in leg and "점선 = 미지정" not in leg and "회색 점선" not in leg and "점선 = 변경 대기" in leg, leg)
     # 변경 대기 중인 구간은 여전히 점선(미지정과 구분)
     T.click_sec(p, ids[0]); p.select_option("#jr-dest", J(p, "JURIS.doc.branches[0].id")); p.click("#jr-move"); p.wait_for_timeout(300)
     d = J(p, f"JurisdictionUI._state().polys['{ids[0]}'].options.dashArray"); check(d and "," in d, "변경 대기는 점선")

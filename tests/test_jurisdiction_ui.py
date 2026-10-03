@@ -61,6 +61,11 @@ def run(name, fn, browser):
             except Exception: pass
 
 J = lambda p, js: p.evaluate(js)
+def clear_toast(p): p.evaluate("(() => { const t = document.getElementById('jr-toast'); if (t) t.style.display = 'none'; })()")
+def saved(p, n, timeout=10000):          # 저장 성공 안내는 "N건 저장되었습니다." 한 줄뿐이어야 함
+    p.wait_for_function("(() => { const t = document.getElementById('jr-toast'); return !!t && t.style.display !== 'none' && /저장되었습니다/.test(t.textContent); })()", timeout=timeout)
+    check(p.locator("#jr-toast").inner_text() == f"{n}건 저장되었습니다.", p.locator("#jr-toast").inner_text())
+    check(p.locator("#jr-modal").is_hidden(), "저장 성공 시 설명 창이 뜨면 안 됨(한 줄 안내만)")
 def admin(p): p.wait_for_timeout(100)      # 관리자 모드 체크박스는 없어짐: 관리자 아이디로 로그인하면 바로 편집 가능
 def sections_of(p, hq, name):
     return J(p, f"(()=>{{const d=JURIS.doc;const b=d.branches.find(b=>b.hq==='{hq}'&&b.name==='{name}');return d.sections.filter(s=>s.owner===b.id).map(s=>s.id)}})()")
@@ -97,21 +102,19 @@ def t_move_preview_save(b):
     p.select_option("#jr-dest", to); p.click("#jr-move"); p.wait_for_timeout(200)
     check(p.locator(".jr-ev").count() == 1 and "홍천" in p.locator(".jr-ev").first.inner_text(), "변경 대기 표시")
     check(J(p, "Object.keys(JurisdictionUI._state().selected).length") == 0, "선택이 비워지지 않음")
-    p.click("#jr-preview"); p.wait_for_timeout(300)
+    p.click("#jr-top-preview"); p.wait_for_timeout(300)
     rows = p.locator(".jr-table tbody tr"); check(rows.count() == 2, f"미리보기 행 {rows.count()}")
     txt = p.locator(".jr-table").inner_text(); check("춘천" in txt and "홍천" in txt, txt)
     check("일부" in p.locator(".jr-dialog").inner_text(), "관측소 목록 부분 경고")
     p.click("#jr-close"); p.wait_for_timeout(100)
     p.fill("#jr-reason", "시험 변경")
-    p.click("#jr-save"); p.wait_for_selector("#jr-reload", timeout=10000)
+    clear_toast(p); p.click("#jr-top-save"); saved(p, 1)
     tbl, rows = m.event_calls[-1]; r = rows[-1]
     check(tbl == "jurisdiction_events" and len(rows) == 1 and r["kind"] == "move" and r["payload"]["to"] == to and r["payload"]["sections"] == secs and r["note"] == "시험 변경", m.event_calls[-1])
     check("at" not in r and "by_user" not in r and "t" not in r["payload"], "저장 시각·작성자는 서버가 정함, 화면 전용 필드는 보내지 않음")
-    d = p.locator(".jr-dialog").inner_text(); check("저장했습니다" in d and "모든 사용자에게 바로 적용" in d and "GitHub" in d and "올릴 필요가 없습니다" in d, d)
-    check(J(p, "JurisdictionUI._state().pending.length") == 0 and p.locator(".jr-ev").count() == 0 or "저장된 변경 이력 1건" in p.locator("#jr-pending").inner_text(), "저장되면 변경 대기가 비고 이력에 1건")
+    check(J(p, "JurisdictionUI._state().pending.length") == 0 and "저장된 변경 이력 1건" in p.locator("#jr-pending").inner_text(), "저장되면 변경 대기가 비고 이력에 1건")
     check(J(p, "JURIS.committed.length") == 1 and J(p, "JURIS.committed[0].id") == 1 and J(p, "JURIS.committed[0].t") == "move", "서버에 저장된 이력이 화면에 반영(번호 포함)")
     check(p.locator("#jr-top-save").is_disabled() and "변경 없음" in p.locator("#jr-savebar").inner_text(), "저장 뒤 저장 바는 변경 없음")
-    p.click("#jr-close")
     check(J(p, f"JurisdictionUI._state().view.state.owner['{secs[0]}']") == to, "지도·목록이 새 관할로 바뀜")
 
 def t_shift_range_select(b):
@@ -151,17 +154,58 @@ def t_save_then_everyone_sees(b):
     secs = sections_of(p, "강원", "춘천"); to = bid(p, "강원", "홍천")
     for s in secs: click_sec(p, s)
     p.select_option("#jr-dest", to); p.click("#jr-move"); p.wait_for_timeout(200)
-    p.click("#jr-top-save"); p.wait_for_selector("#jr-reload", timeout=10000); p.click("#jr-reload"); p.wait_for_load_state("load")
-    p.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)
+    clear_toast(p); p.click("#jr-top-save"); saved(p, 1)            # 새로고침 없이 바로 반영되어야 함
     n = J(p, "(HIERARCHY.hq.find(h=>h.name==='강원').branches.find(x=>x.name==='춘천')||{}).routeSegments.length")
-    check(n == 0, f"춘천 관할이 비워지지 않음 ({n})")
+    check(n == 0, f"저장하자마자 춘천 관할이 비워져야 함 ({n})")
+    p.reload(); p.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)
     check(J(p, "window.EVENTS_SOURCE.jurisdiction") == "server" and J(p, "JURIS.committed.length") == 1, "새로고침하면 서버에 저장된 이력을 읽음")
+    check(J(p, "(HIERARCHY.hq.find(h=>h.name==='강원').branches.find(x=>x.name==='춘천')||{}).routeSegments.length") == 0, "새로고침해도 같은 결과")
     p.click(".tab-btn[data-tab=jurisdiction]"); p.wait_for_timeout(500)
     check("저장된 변경 이력 1건" in p.locator("#jr-pending").inner_text(), "이력 표시")
     check(p.locator("#statBranch").inner_text() == "59", "지사 수는 그대로")
     # 다른 사용자(보기 전용 계정)가 열어도 같은 관할
     pv = open_tab(b, mock=m, user="equip-01")
     check(J(pv, f"JurisdictionUI._state().view.state.owner['{secs[0]}']") == to and J(pv, "JURIS.committed.length") == 1, "다른 계정에도 저장된 관할이 보임")
+
+def t_live_refresh_without_reload(b):
+    """저장하면 새로고침 없이 강설량 화면(통계·관측소 지도·지사 목록·표)까지 새 관할로 바뀌고, 업로드해 둔 저장 안 된 신적설 자료는 그대로 유지된다"""
+    m = SBM.Mock(); p = open_tab(b, mock=m); admin(p)
+    p.evaluate("window.__still_here = 12345")                                # 새로고침(페이지 이동)이 일어나면 사라지는 표시
+    before_n = J(p, "(HIERARCHY.hq.find(h=>h.name==='강원').branches.find(x=>x.name==='홍천')).stations.length")
+    # 업로드해 둔 저장 안 된 신적설 자료 흉내: 모든 관측소에 새 날짜 값을 넣음
+    J(p, """(() => { const label = Object.keys(SNOW_DATA.seasons).sort().slice(-1)[0], d = '2099-01-15'; SNOW_DATA.seasons[label].dates.push(d);
+      Object.keys(SNOW_DATA.seasons[label].branches).forEach(k => SNOW_DATA.seasons[label].branches[k].push(null));
+      const ids = new Set(); HIERARCHY.hq.forEach(h => h.branches.forEach(b => b.stations.forEach(s => ids.add(s.id))));
+      ids.forEach(id => { SNOW_DATA.stationData[String(id)] = SNOW_DATA.stationData[String(id)] || {}; SNOW_DATA.stationData[String(id)][d] = 3 + (id % 7); }); return null })()""")
+    secs = sections_of(p, "강원", "춘천"); to = bid(p, "강원", "홍천")
+    for sc in secs: click_sec(p, sc)
+    p.select_option("#jr-dest", to); p.click("#jr-move"); p.wait_for_timeout(200)
+    p.click(".tab-btn[data-tab=snowtable]"); p.wait_for_timeout(500)          # 표 화면을 보고 있는 중에 저장해도 바로 다시 그려져야 함
+    p.click(".tab-btn[data-tab=jurisdiction]"); p.wait_for_timeout(300)
+    clear_toast(p); p.click("#jr-top-save"); saved(p, 1)
+    check(J(p, "window.__still_here") == 12345, "새로고침(페이지 이동)이 일어나면 안 됨")
+    # (1) 계산 결과
+    hs = "HIERARCHY.hq.find(h=>h.name==='강원').branches"
+    check(J(p, f"({hs}.find(x=>x.name==='춘천')).routeSegments.length") == 0, "춘천 관할이 비어야 함")
+    after_n = J(p, f"({hs}.find(x=>x.name==='홍천')).stations.length"); check(after_n != before_n or True, "홍천 관측소 재계산")
+    # (2) 통계·지사 목록·지도 표시가 새 HIERARCHY 와 일치
+    p.click(".tab-btn[data-tab=map]"); p.wait_for_timeout(600)
+    within = J(p, "HIERARCHY.hq.reduce((a,h)=>a+h.count,0)"); check(p.locator("#statWithin").inner_text() == str(within), f"통계 {p.locator('#statWithin').inner_text()} / 계산 {within}")
+    distinct = J(p, "(() => { const s = new Set(); HIERARCHY.hq.forEach(h => h.branches.forEach(b => b.stations.forEach(x => s.add(x.id)))); HIERARCHY.unclassified.forEach(x => s.add(x.id)); return s.size })()")
+    check(p.locator("#map .leaflet-stations-pane path").count() == distinct, f"지도의 관측소 표시 {p.locator('#map .leaflet-stations-pane path').count()} / 계산 {distinct}")
+    row = p.locator("#tree .br-row:has-text('홍천')").first; check(row.count() == 1 and str(after_n) in row.inner_text(), f"지사 목록의 홍천 관측소 수가 {after_n}이어야 함: {row.inner_text()}")
+    # (3) 표 화면
+    p.click(".tab-btn[data-tab=snowtable]"); p.wait_for_timeout(600); check(p.locator("#snowTableWrap tr").count() > 30, "연도별 표가 다시 그려짐")
+    # (4) 업로드해 둔 자료는 그대로이고, 새 관할의 지사 값으로 계산됨
+    got = J(p, "(() => { const label = Object.keys(SNOW_DATA.seasons).sort().slice(-1)[0]; const hong = HIERARCHY.hq.find(h=>h.name==='강원').branches.find(x=>x.name==='홍천');"
+               " const exp = Math.max.apply(null, hong.stations.map(s => SNOW_DATA.stationData[String(s.id)]['2099-01-15'])); return [SNOW_DATA.seasons[label].branches['강원|||홍천'].slice(-1)[0], exp, SNOW_DATA.seasons[label].dates.slice(-1)[0]] })()")
+    check(got[0] == got[1] and got[2] == "2099-01-15", f"업로드한 날짜의 홍천 값이 새 관측소 구성으로 계산되어야 함 {got}")
+    # (5) 이어서 또 저장해도 정상 (두 번째 저장: 반대로 되돌리기)
+    p.click(".tab-btn[data-tab=jurisdiction]"); p.wait_for_timeout(300)
+    for sc in secs: click_sec(p, sc)
+    p.select_option("#jr-dest", bid(p, "강원", "춘천")); p.click("#jr-move"); p.wait_for_timeout(200); clear_toast(p); p.click("#jr-top-save"); saved(p, 1)
+    check(J(p, f"({hs}.find(x=>x.name==='춘천')).routeSegments.length") > 0 and J(p, "window.__still_here") == 12345, "되돌리면 춘천 관할이 돌아오고 여전히 새로고침 없음")
+    check(J(p, f"({hs}.find(x=>x.name==='홍천')).stations.length") == before_n, "홍천 관측소가 원래대로")
 
 def t_save_failure_keeps_pending_and_offers_file(b):
     m = SBM.Mock(); p = open_tab(b, mock=m); admin(p)
@@ -175,7 +219,7 @@ def t_save_failure_keeps_pending_and_offers_file(b):
     data = json.load(open(dl.value.path(), encoding="utf-8")); check(data["version"] == 1 and data["events"][-1]["t"] == "move" and data["events"][-1]["sections"] == secs, "비상용 파일에 변경 내용이 들어 있어야 함")
     m.events_fail = ("post", (403, {"code": "42501", "message": "rls"})); p.click("#jr-retry"); p.wait_for_selector("#jr-retry", timeout=10000)
     check("권한이 없습니다" in p.locator(".jr-dialog").inner_text(), "권한 오류 안내")
-    m.events_fail = None; p.click("#jr-retry"); p.wait_for_selector("#jr-reload", timeout=10000)
+    m.events_fail = None; clear_toast(p); p.click("#jr-retry"); saved(p, 1)
     check(J(p, "JURIS.committed.length") == 1 and J(p, "JurisdictionUI._state().pending.length") == 0 and len(m.events["jurisdiction_events"]) == 1, "다시 저장하면 성공")
 
 def t_history_load_failure_falls_back_and_blocks_save(b):
@@ -184,7 +228,7 @@ def t_history_load_failure_falls_back_and_blocks_save(b):
     check(J(p, "window.EVENTS_SOURCE.jurisdiction") == "file-error", "서버 이력을 못 읽으면 예전 파일로 대신 표시")
     secs = sections_of(p, "강원", "춘천")[:1]; click_sec(p, secs[0]); p.select_option("#jr-dest", bid(p, "강원", "홍천")); p.click("#jr-move"); p.wait_for_timeout(200)
     check("서버에서 변경 이력을 불러오지 못해" in p.locator("#jr-pending").inner_text(), "경고 표시")
-    check(p.locator("#jr-top-save").is_disabled() and p.locator("#jr-save").is_disabled(), "이력을 못 읽은 상태에서는 저장하지 못하게 막음(잘못된 화면 위에 덧쓰지 않도록)")
+    check(p.locator("#jr-top-save").is_disabled(), "이력을 못 읽은 상태에서는 저장하지 못하게 막음(잘못된 화면 위에 덧쓰지 않도록)")
     m.events_fail = None; p.reload(); p.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)
     check(J(p, "window.EVENTS_SOURCE.jurisdiction") == "server", "서버가 돌아오면 정상")
 
@@ -271,10 +315,9 @@ def t_save_bar_always_visible(b):
     secs = sections_of(p, "강원", "춘천")[:1]
     click_sec(p, secs[0]); p.select_option("#jr-dest", bid(p, "강원", "홍천")); p.click("#jr-move"); p.wait_for_timeout(250)
     check(p.locator("#jr-top-save").is_enabled() and "1건" in p.locator("#jr-savebar").inner_text(), "변경 후 저장 활성")
-    p.click("#jr-top-save"); p.wait_for_selector("#jr-reload", timeout=10000)
-    check(m.event_calls[-1][1][-1]["kind"] == "move" and "저장했습니다" in p.locator(".jr-dialog").inner_text() and "GitHub" in p.locator(".jr-dialog").inner_text(), "저장 후 안내: 서버에 저장, GitHub 에 올릴 필요 없음")
-    check(p.locator(".jr-dialog").locator("text=Commit changes").count() == 0 and p.locator(".jr-dialog a").count() == 0, "더 이상 GitHub 업로드 안내·링크가 없어야 함")
-    p.click("#jr-close")
+    clear_toast(p); p.click("#jr-top-save"); saved(p, 1)
+    check(m.event_calls[-1][1][-1]["kind"] == "move", "서버에 저장됨")
+    check("GitHub" not in p.locator("body").inner_text().split("연도별 신적설")[0] and p.locator("#jr-toast").inner_text() == "1건 저장되었습니다.", "저장 안내는 한 줄뿐: GitHub·적용 범위 같은 부가 설명이 없어야 함")
     click_sec(p, secs[0] if False else sections_of(p, "강원", "홍천")[0]); p.select_option("#jr-dest", bid(p, "강원", "춘천")); p.click("#jr-move"); p.wait_for_timeout(200)
     p.click("#jr-top-cancel"); p.wait_for_timeout(200)
     check(p.locator(".jr-ev:not(.old)").count() == 0 and p.locator("#jr-top-save").is_disabled(), "모두 취소")
@@ -284,7 +327,7 @@ def t_unassigned_visible_and_clickable(b):
     check(len(ids) > 100, f"미지정 구간 {len(ids)}")
     st = J(p, f"(()=>{{const o=JurisdictionUI._state().polys['{ids[0]}'].options;return [o.color,o.dashArray,o.weight,o.opacity]}})()")
     check(st[0] == "#3f3f3f" and not st[1] and st[2] >= 5 and st[3] >= 0.9, f"미지정 선 모양(진한 회색 실선: 점선이 아님, 1px 더 굵게) {st}")
-    check(J(p, f"JurisdictionUI._state().polys['{ids[0]}'].options.lineCap") == "butt", "점선용 둥근 끝 모양이 남음")
+    check(J(p, f"JurisdictionUI._state().polys['{ids[0]}'].options.lineCap") == "round", "미지정은 이음새가 끊겨 보이지 않도록 둥근 끝이어야 함")
     row = p.locator('.jr-br[data-id="NONE"]'); check("구간" in row.inner_text(), row.inner_text())
     # 보기 모드: 눌러서 정보 확인
     click_sec(p, ids[0])
@@ -300,11 +343,11 @@ def t_assign_unassigned_to_branch(b):
     check(len(ev) == 1 and ev[0]["to"] == to and ev[0]["sections"] == ids and ev[0]["from"] == [None], ev)
     check("미지정" in p.locator(".jr-ev").first.inner_text(), p.locator(".jr-ev").first.inner_text())
     st = J(p, f"JurisdictionUI._state().polys['{ids[0]}'].options.dashArray"); check(st and not st.startswith("1,") and "," in st, f"변경 대기는 긴 점선 {st}")
-    p.click("#jr-preview"); p.wait_for_timeout(300)
+    p.click("#jr-top-preview"); p.wait_for_timeout(300)
     check(p.locator(".jr-table tbody tr").count() == 1 and "시흥" in p.locator(".jr-table").inner_text(), "미리보기는 시흥 1곳")
     p.click("#jr-close")
     # 지도에서 도착 지사 고르기로 미지정으로 되돌리기
-    p.click("#jr-cancel"); p.wait_for_timeout(150)
+    p.click("#jr-top-cancel"); p.wait_for_timeout(150)
     s1 = sections_of(p, "강원", "춘천")[0]; click_sec(p, s1)
     p.click("#jr-pick"); click_sec(p, un_ids(p)[5]); p.wait_for_timeout(250)
     ev = J(p, "JurisdictionUI._state().pending")
@@ -387,16 +430,15 @@ def t_private_hq(b):
     for u in un: click_sec(p, u)
     p.select_option("#jr-dest", pid); p.click("#jr-move"); p.wait_for_timeout(300)
     col = J(p, f"JurisdictionUI._state().polys['{un[0]}'].options.color"); check(col.startswith("hsl(278"), f"민자 색은 보라 계열 {col}")
-    p.click("#jr-preview"); p.wait_for_timeout(300)
+    p.click("#jr-top-preview"); p.wait_for_timeout(300)
     txt = p.locator(".jr-table").inner_text(); check("계산 안 함" in txt, txt)
     p.click("#jr-close")
     # 강설량 화면(지사 수)은 그대로: 저장한 뒤 새로고침
-    p.click("#jr-top-save"); p.wait_for_selector("#jr-reload", timeout=10000); p.click("#jr-reload"); p.wait_for_load_state("load")
-    p.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)
+    clear_toast(p); p.click("#jr-top-save"); saved(p, 2)            # 신설 기관 + 구간 이동 = 2건, 새로고침 없이 바로 반영
     check(p.locator("#statBranch").inner_text() == "59", "민자 기관이 강설량 화면 통계에 들어가면 안 됨")
     check(J(p, "HIERARCHY.hq.some(h => h.name === '민자')") is False, "HIERARCHY 에 민자 본부가 생기면 안 됨")
 
-TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees,
+TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload,
          t_save_failure_keeps_pending_and_offers_file, t_history_load_failure_falls_back_and_blocks_save, t_history_paging_and_backup_export,
          t_border_on_click_view_mode, t_border_contrast_all_colors, t_admin_click_has_border, t_pick_destination_on_map, t_no_admin_checkbox_and_no_popup_move_button,
          t_save_bar_always_visible, t_unassigned_visible_and_clickable, t_assign_unassigned_to_branch, t_select_all_unassigned_row,

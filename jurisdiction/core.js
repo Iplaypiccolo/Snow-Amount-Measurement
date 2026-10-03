@@ -217,6 +217,21 @@
     return { state: st, changed: changed, recomputed: canRecompute };
   }
 
+  /* ---------- 5-2) 새로고침 없이 다시 적용 ----------
+     Hbase : 이벤트를 적용하기 전의 처음 지사 목록(복사본), S : 지금 적설 자료(업로드한 미저장 자료 포함, 그대로 유지)
+     돌려주는 값: 새 H. 지사별 일별 신적설(시리즈)은 새 H 의 관측소 구성으로 전부 다시 계산하므로, 이전에 적용했던 흔적이 남지 않는다. */
+  function rebuildAllSeries(H, S) {
+    var keys = {};
+    H.hq.forEach(function (h) { h.branches.forEach(function (b) { keys[h.name + '|||' + b.name] = b; setBranchSeries(S, h.name + '|||' + b.name, b.stations); }); });
+    Object.keys(S.seasons).forEach(function (k) { Object.keys(S.seasons[k].branches).forEach(function (key) { if (!keys[key]) delete S.seasons[k].branches[key]; }); });
+  }
+  function reapply(Hbase, S, doc, stationsDoc, events) {
+    var H = JSON.parse(JSON.stringify(Hbase));
+    var r = applyToData(H, S, doc, stationsDoc, events);
+    rebuildAllSeries(H, S);
+    return { H: H, result: r };
+  }
+
   /* ---------- 6) 저장 전 미리보기: 두 상태(이벤트 목록 A, B)를 비교 ---------- */
   function latestSeasonKey(S) { return Object.keys(S.seasons).sort().slice(-1)[0]; }
   function maxOf(arr) { var m = null; arr.forEach(function (v) { if (v != null && (m === null || v > m)) m = v; }); return m; }
@@ -285,7 +300,7 @@
   }
 
   var api = {
-    colorOf: colorOf, resolve: resolve, buildSegments: buildSegments, pickStations: pickStations, distToSegments: distToSegments,
+    reapply: reapply, rebuildAllSeries: rebuildAllSeries, colorOf: colorOf, resolve: resolve, buildSegments: buildSegments, pickStations: pickStations, distToSegments: distToSegments,
     isPrivate: isPrivate, PRIVATE_HQ: PRIVATE_HQ, applyToData: applyToData, impact: impact, evaluate: evaluate, summarize: summarize,
     seasonSeries: seasonSeries, clone: clone, latestSeasonKey: latestSeasonKey
   };

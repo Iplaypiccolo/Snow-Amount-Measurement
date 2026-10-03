@@ -92,3 +92,24 @@
 .jr-notice-card ul{list-style:none;padding:0;margin:0 0 14px;text-align:left;background:#faf7ec;border-radius:8px}.jr-notice-card li{padding:7px 12px;border-bottom:1px solid #eee8d4}.jr-notice-card li:last-child{border-bottom:none}.jr-notice-card li span{color:var(--muted);font-size:12px}
 .jr-notice-btns{display:flex;gap:8px;justify-content:center}
 .jr-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#0b3d29;color:#fff;border-radius:9px;padding:10px 16px;font-size:13px;z-index:3500;max-width:min(560px,92vw);box-shadow:0 8px 30px rgba(0,0,0,.35);display:none}
+
+/* ---- 화면 정리: 변경 대기 패널 한 곳, 선택 바·범례 겹침 방지, 글자 넘침 방지 ---- */
+.jr-pending{border-top:1px solid var(--line);background:#fff;max-height:34%}
+.jr-savebar{display:block;width:min(400px,calc(100% - 80px));max-height:62%;overflow:auto;padding:9px 11px}
+.jr-sb-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.jr-sb-head .st{flex:1 1 auto;min-width:0;font-weight:600;line-height:1.35;word-break:keep-all}
+.jr-savebar:not(.dirty) .jr-sb-head .st{font-weight:500}
+.jr-sb-btns{display:flex;gap:6px;flex:0 0 auto}.jr-sb-btns .jr-btn{white-space:nowrap}
+.jr-sb-list{margin-top:7px;max-height:30vh;overflow:auto;border-top:1px solid var(--line);padding-top:4px}
+.jr-sb-list .jr-ev{align-items:center;justify-content:space-between;gap:8px;border-bottom:1px dashed #eee3c8;padding:5px 0;font-size:12.5px}
+.jr-sb-list .jr-ev:last-child{border-bottom:none}.jr-evt{min-width:0;overflow-wrap:anywhere;word-break:keep-all}
+.jr-sb-list .jr-x{flex:0 0 auto;border:none;background:none;color:#b3261e;font-size:17px;line-height:1;cursor:pointer;padding:0 4px}
+.jr-selbar{display:flex;bottom:44px;gap:8px 14px;max-width:min(92%,760px);justify-content:center}
+.jr-selbar .jr-selinfo{white-space:nowrap}.jr-selbar .jr-grp{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
+.jr-selbar .jr-btn{white-space:nowrap}.jr-lbl{font-size:12px;color:var(--muted);white-space:nowrap}
+.jr-legend{display:flex;flex-wrap:wrap;align-items:center;gap:2px 12px;max-width:calc(100% - 20px);line-height:1.5;word-break:keep-all}
+.jr-legend label{margin-left:0;white-space:nowrap}
+.jr-requests .jr-req-h,.jr-req-b,.jr-req-r{overflow-wrap:anywhere;word-break:keep-all}
+.jr-note,.jr-req-b{word-break:keep-all}.jr-head{gap:8px}.jr-head b{min-width:0}
+
+.jr-selbar{width:max-content}      /* 가운데 기준으로 놓은 바가 절반 폭에서 줄바꿈되지 않고, 들어갈 만큼은 한 줄에 */

@@ -80,12 +80,16 @@ test('기본·후보 밖의 격자도 직접 추가할 수 있다 (범위 안이
   assert.ok(r.assign.get('10,10').has('B001') && r.cells.has('10,10')); assert.strictEqual(G.summarize(r.assign).union, 935);
 });
 
-test('호출량 계산: 300칸 = 8번·80분·하루 2,400건(무료 가능), 934칸은 24번·240분이라 3시간 안에 못 끝남', () => {
-  assert.deepStrictEqual(G.budget(300), { runs: 8, minutes: 80, daily: 2400, level: 'ok', text: G.budget(300).text });
-  assert.strictEqual(G.budget(500).level, 'warn');
-  assert.strictEqual(G.budget(934).level, 'over'); assert.strictEqual(G.budget(934).runs, 24);
-  assert.strictEqual(G.budget(1300).level, 'over');
+test('호출량 계산(서버 수집 기준 추정값: 한 번 100칸·5분 간격): 300칸 = 3번·15분·하루 2,400건, 934칸 = 10번·50분이라 3시간 안에 끝남, 하루 호출 한도는 1,250칸에서 넘음', () => {
+  assert.deepStrictEqual(G.budget(300), { runs: 3, minutes: 15, daily: 2400, level: 'ok', text: G.budget(300).text });
+  assert.strictEqual(G.budget(934).level, 'ok'); assert.strictEqual(G.budget(934).runs, 10); assert.strictEqual(G.budget(934).minutes, 50); assert.strictEqual(G.budget(934).daily, 7472);
+  assert.ok(/3시간 안에 모든 칸을 읽을 수 있고/.test(G.budget(934).text) && !/Worker/.test(G.budget(934).text), '더 이상 무료 Worker 문구가 없어야 함');
+  assert.strictEqual(G.budget(1000).level, 'ok'); assert.strictEqual(G.budget(1000).daily, 8000);            // 하루 8,000건(한도의 80%)까지는 초록
+  assert.strictEqual(G.budget(1001).level, 'warn'); assert.ok(/80%/.test(G.budget(1001).text));            // 80% 넘으면 노랑
+  assert.strictEqual(G.budget(1250).level, 'warn'); assert.strictEqual(G.budget(1251).level, 'over');      // 하루 10,000건 한도: 1,250칸 × 8 = 10,000
+  assert.ok(/하루 호출 한도/.test(G.budget(1300).text));
   assert.strictEqual(G.budget(0).runs, 0);
+  assert.strictEqual(G.budget(2000).level, 'over');
 });
 
 test('저장 전 비교: 바뀌는 기관만 나오고 합집합 전·후와 호출량 판정이 함께 나온다', () => {

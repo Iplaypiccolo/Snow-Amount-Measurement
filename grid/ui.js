@@ -37,7 +37,7 @@
       '<div class="jr-wrap">' +
       '<div class="jr-side">' +
         '<div class="jr-head"><b>예보 격자 편입</b><span class="jr-role">관리자 전용</span></div>' +
-        '<div class="jr-note">기상청 예보는 5km 격자 단위입니다. 칸을 눌러 기관에 편입하세요. 한 칸을 <b>여러 기관이 함께</b> 가질 수 있고, 예보 호출은 편입된 칸을 <b>한 번씩만</b> 합니다. 이 탭은 관리자 아이디에서만 보입니다.</div>' +
+        '<div class="jr-note">기상청 예보는 5km 격자 단위입니다. 칸을 눌러 기관에 편입하세요. 한 칸을 <b>여러 기관이 함께</b> 가질 수 있고, 예보 호출은 편입된 칸을 <b>한 번씩만</b> 합니다. 여러 건을 모아 오른쪽 위 <b>[저장]</b>을 누르면 한꺼번에 적용됩니다.</div>' +
         '<div id="gr-summary" class="gr-summary"></div>' +
         '<div class="jr-tools"><input id="gr-search" placeholder="기관 검색 (예: 춘천)"></div>' +
         '<div id="gr-tree" class="jr-tree"></div>' +
@@ -146,7 +146,7 @@
   function renderSummary() {
     var b = G.budget(S.sum.union), cls = { ok: 'ok', warn: 'warn', over: 'over' }[b.level];
     $('gr-summary').innerHTML = '<div class="gr-big">호출 대상 격자 <b>' + S.sum.union + '칸</b> <span>(여러 기관 공유 ' + S.sum.shared + '칸)</span></div>' +
-      '<div class="gr-sub">하루 호출 약 ' + b.daily.toLocaleString() + '건 · 무료 Worker 분할 ' + b.runs + '번(약 ' + b.minutes + '분)</div><div class="gr-badge ' + cls + '">' + esc(b.text) + '</div>';
+      '<div class="gr-sub">하루 호출 약 ' + b.daily.toLocaleString() + '건 · 수집 분할 ' + b.runs + '번(약 ' + b.minutes + '분)</div><div class="gr-badge ' + cls + '">' + esc(b.text) + '</div>';
   }
 
   /* ---------- 기관 목록 ---------- */
@@ -188,31 +188,34 @@
   function describe(ev) {
     return ev.t === 'add' ? '격자 ' + ev.cells.length + '칸에 <b>' + esc(branchName(ev.to)) + '</b> 편입' : '격자 ' + ev.cells.length + '칸에서 <b>' + esc(branchName(ev.from)) + '</b> 제외';
   }
-  function renderPending() {
+  function renderPending() {          // 왼쪽 아래: 서버 연결 경고와 저장된 이력만 (변경 대기·저장 버튼은 오른쪽 위 한 곳에 모음)
     var box = $('gr-pending'), com = base(), h = '';
     if (serverDown()) h += '<div class="jr-warn">⚠ 서버에서 변경 이력을 불러오지 못해 예전 파일 기준으로 보고 있습니다. 새로고침해서 서버에 연결된 뒤에 저장하세요.</div>';
-    if (S.pending.length) {
-      h += '<div class="jr-ptitle">변경 대기 ' + S.pending.length + '건</div>' + S.pending.map(function (ev, i) { return '<div class="jr-ev">' + describe(ev) + '<button class="jr-x" data-ev="' + i + '" title="이 변경 취소">×</button></div>'; }).join('') +
-        '<input id="gr-reason" class="jr-reason" placeholder="변경 사유 (선택)" value="' + esc(S.reason || '') + '">' +
-        '<div class="jr-row"><button class="jr-btn" data-act="preview">미리보기</button><button class="jr-btn jr-primary" data-act="save"' + (S.saving || serverDown() ? ' disabled' : '') + '>' + (S.saving ? '저장하는 중…' : '변경 저장') + '</button><button class="jr-btn" data-act="cancel">모두 취소</button></div>';
-    }
     if (com.length) h += '<details class="jr-hist"><summary>저장된 변경 이력 ' + com.length + '건</summary>' + com.slice().reverse().slice(0, 30).map(function (ev) { return '<div class="jr-ev old">' + (ev.at ? esc(String(ev.at).slice(0, 10)) + ' ' : '') + describe(ev) + (ev.note ? ' <em>' + esc(ev.note) + '</em>' : '') + '</div>'; }).join('') +
       (S.admin ? '<div class="jr-row"><button class="jr-btn" data-act="export" title="변경 이력 전체를 파일로 보관합니다">이력 파일로 내려받기(백업)</button></div>' : '') + '</details>';
     box.innerHTML = h; box.style.display = h ? 'block' : 'none';
   }
-  function renderSaveBar() {
+  function renderSaveBar() {          // 지도 오른쪽 위 "변경 대기" 패널: 변경 목록·사유·[미리보기][모두 취소][저장]은 여기에만 있음
     var bar = $('gr-savebar'); if (!S.admin) { bar.style.display = 'none'; return; }
-    var n = S.pending.length; bar.className = 'jr-savebar' + (n ? ' dirty' : '');
-    bar.innerHTML = '<span class="st">' + (n ? '● 저장하지 않은 변경 ' + n + '건' : '변경 없음 — 칸을 눌러 기관에 편입하세요') + '</span>' +
-      '<button class="jr-btn" data-act="preview"' + (n ? '' : ' disabled') + '>미리보기</button><button class="jr-btn" data-act="cancel"' + (n ? '' : ' disabled') + '>모두 취소</button>' +
-      '<button class="jr-btn jr-primary" data-act="save"' + (n && !S.saving && !serverDown() ? '' : ' disabled') + ' title="변경 내용을 서버에 저장합니다. 모든 사용자에게 바로 적용됩니다">' + (S.saving ? '저장하는 중…' : '저장') + '</button>';
-    bar.style.display = 'flex';
+    var n = S.pending.length, canSave = n && !S.saving && !serverDown();
+    bar.className = 'jr-savebar' + (n ? ' dirty' : '');
+    bar.innerHTML = '<div class="jr-sb-head"><span class="st">' + (n ? '● 변경 대기 ' + n + '건' : '변경 없음 — 칸을 눌러 기관에 편입하세요') + '</span>' +
+      '<span class="jr-sb-btns"><button class="jr-btn" data-act="preview"' + (n ? '' : ' disabled') + '>미리보기</button><button class="jr-btn" data-act="cancel"' + (n && !S.saving ? '' : ' disabled') + '>모두 취소</button>' +
+      '<button class="jr-btn jr-primary" data-act="save"' + (canSave ? '' : ' disabled') + ' title="변경 내용을 서버에 저장합니다">' + (S.saving ? '저장 중…' : '저장') + '</button></span></div>' +
+      (n ? '<div class="jr-sb-list">' + S.pending.map(function (ev, i) { return '<div class="jr-ev"><span class="jr-evt">' + describe(ev) + '</span><button class="jr-x" data-ev="' + i + '" title="이 변경만 취소">×</button></div>'; }).join('') + '</div>' +
+        '<input id="gr-reason" class="jr-reason" placeholder="변경 사유 (선택)" maxlength="200" value="' + esc(S.reason || '') + '">' : '');
+    bar.style.display = 'block';
   }
   function stamped() {
     var now = new Date().toISOString(), reason = ($('gr-reason') && $('gr-reason').value || S.reason || '').trim(); S.reason = reason;
     return S.pending.map(function (ev) { var c = JSON.parse(JSON.stringify(ev)); delete c.n; c.at = c.at || now; if (reason) c.note = reason; return c; });
   }
   function modal(html) { var m = $('gr-modal'); m.innerHTML = '<div class="jr-dialog">' + html + '</div>'; m.style.display = 'flex'; }
+  function toast(msg) {
+    var el = $('jr-toast');
+    if (!el) { el = document.createElement('div'); el.id = 'jr-toast'; el.className = 'jr-toast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+    el.textContent = msg; el.style.display = 'block'; clearTimeout(S.toastT); S.toastT = setTimeout(function () { el.style.display = 'none'; }, 4000);
+  }
   function serverDown() { var e = window.EVENTS_SOURCE; return !!(e && /error/.test(e.grid || '')); }
   function downloadEvents(events, name) { SSEvents.download(name, SSEvents.exportJson(events)); }
   // 변경 저장: 서버(Supabase)에 한 번에 저장합니다. 모든 사용자에게 바로 적용되고, GitHub 에 올릴 필요가 없습니다.
@@ -230,7 +233,7 @@
       return SSEvents.load('grid').then(function (r) {
         GR().committed = r.source === 'server' && !r.error ? r.events : GR().committed.concat(evs);
         S.saving = false; S.pending = []; S.reason = ''; S.selected = {}; afterChange();
-        modal('<h3>저장했습니다</h3><p style="font-size:14px;line-height:1.6">변경 ' + evs.length + '건이 서버에 저장되었고, <b>모든 사용자에게 바로 적용</b>됩니다. GitHub 에 올릴 필요가 없습니다.</p><div class="jr-row"><button class="jr-btn jr-primary" data-act="close">확인</button></div>');
+        toast(evs.length + '건 저장되었습니다.');
       });
     });
   }
@@ -241,7 +244,7 @@
     modal('<h3>변경 미리보기</h3><div class="jr-tablewrap"><table class="jr-table"><thead><tr><th>기관</th><th>편입 격자 수</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       '<table class="jr-table" style="margin-top:10px"><tbody><tr><th>호출 대상 격자(합집합)</th><td>' + im.union[0] + ' → <b>' + im.union[1] + '칸</b></td></tr>' +
       '<tr><th>여러 기관 공유 격자</th><td>' + im.shared[0] + ' → ' + im.shared[1] + '칸</td></tr>' +
-      '<tr><th>하루 호출 / 무료 Worker 분할</th><td>' + im.budgetBefore.daily.toLocaleString() + '건 → <b>' + ba.daily.toLocaleString() + '건</b> · ' + ba.runs + '번(약 ' + ba.minutes + '분)</td></tr></tbody></table>' +
+      '<tr><th>하루 호출 / 수집 분할</th><td>' + im.budgetBefore.daily.toLocaleString() + '건 → <b>' + ba.daily.toLocaleString() + '건</b> · ' + ba.runs + '번(약 ' + ba.minutes + '분)</td></tr></tbody></table>' +
       '<div class="gr-badge ' + ba.level + '" style="margin-top:8px">' + esc(ba.text) + '</div><div class="jr-row"><button class="jr-btn jr-primary" data-act="close">닫기</button></div>');
   }
 
@@ -293,6 +296,7 @@
     $('gr-ring').addEventListener('change', function (e) { S.showRing = e.target.checked; restyle(); });
     $('gr-lines').addEventListener('change', function (e) { if (e.target.checked) S.lines.addTo(S.map); else S.map.removeLayer(S.lines); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && S.box) setBox(false); });
+    $('view-grid').addEventListener('input', function (e) { if (e.target.id === 'gr-reason') S.reason = e.target.value; });
     $('view-grid').addEventListener('click', function (e) {
       var t = e.target, br = t.closest && t.closest('.jr-br'); if (br) { focusBranch(br.dataset.id); return; }
       var x = t.closest && t.closest('.jr-x'); if (x) { S.pending.splice(parseInt(x.dataset.ev, 10), 1); afterChange(); return; }

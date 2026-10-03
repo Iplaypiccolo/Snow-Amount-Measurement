@@ -87,18 +87,21 @@
     return { union: union, shared: shared, pairs: pairs, perBranch: per };
   }
 
-  /* ---------- 호출량·무료 Worker 분할 ---------- */
-  var CELLS_PER_RUN = 40;          // 무료 Worker 한 번 실행에 허용된 50개 요청 중 외부 호출에 쓰는 수
-  var RUN_INTERVAL_MIN = 10;       // 10분마다 한 묶음씩
+  /* ---------- 호출량·예보 수집 분할 ----------
+     예보 수집은 Supabase 서버 함수가 맡습니다(공식 한도: 한 번 실행에 CPU 2초·최대 150초·메모리 256MB). 한 번에 모든 칸을 처리하기엔 CPU 시간이 모자라므로
+     여러 번에 나눠 수집합니다. 아래 두 숫자는 "추정값"입니다(예보 응답 하나를 읽는 데 약 10ms 로 가정) — 수집 함수를 만든 뒤 실제로 재서 고치세요. */
+  var CELLS_PER_RUN = 100;         // 한 번 실행(CPU 2초 안)에 처리할 칸 수 — 추정값
+  var RUN_INTERVAL_MIN = 5;        // 5분마다 한 묶음씩 — 추정값
   var FORECAST_CYCLE_MIN = 180;    // 단기예보는 3시간마다 발표
   var CALLS_PER_DAY_LIMIT = 10000; // 공공데이터포털 개발 계정 하루 한도(앞서 확인한 값)
   var UPDATES_PER_DAY = 8;
   function budget(unionCells) {
     var runs = Math.ceil(unionCells / CELLS_PER_RUN), minutes = runs * RUN_INTERVAL_MIN, daily = unionCells * UPDATES_PER_DAY;
-    var level = (minutes > FORECAST_CYCLE_MIN || daily > CALLS_PER_DAY_LIMIT) ? 'over' : runs > 8 ? 'warn' : 'ok';
+    // 빨강: 3시간 안에 못 끝내거나 하루 한도를 넘음 / 노랑: 시간이 한도의 절반(90분)을 넘거나 하루 호출이 한도의 80%(8,000건)를 넘어 여유가 적음
+    var level = (minutes > FORECAST_CYCLE_MIN || daily > CALLS_PER_DAY_LIMIT) ? 'over' : (minutes > FORECAST_CYCLE_MIN / 2 || daily > CALLS_PER_DAY_LIMIT * 0.8) ? 'warn' : 'ok';
     var text = level === 'over'
-      ? (minutes > FORECAST_CYCLE_MIN ? '무료 Worker로는 3시간 안에 한 바퀴를 못 끝냅니다. 격자를 줄이거나 유료 플랜이 필요합니다.' : '하루 호출 한도를 넘을 수 있습니다. 격자를 줄이세요.')
-      : level === 'warn' ? '무료로 가능하지만 분할 횟수가 많습니다(8번 초과).' : '무료 Worker로 충분합니다.';
+      ? (minutes > FORECAST_CYCLE_MIN ? '예보가 새로 나오는 3시간 안에 모든 칸을 다 읽지 못합니다. 격자를 줄이거나 수집 간격을 줄여야 합니다.' : '하루 호출 한도(공공데이터포털 개발 계정 10,000건)를 넘을 수 있습니다. 격자를 줄이세요.')
+      : level === 'warn' ? (daily > CALLS_PER_DAY_LIMIT * 0.8 ? '가능하지만 하루 호출이 한도(10,000건)의 80%를 넘어 여유가 적습니다. 격자를 더 늘리면 한도를 넘을 수 있습니다.' : '가능하지만 수집에 시간이 오래 걸립니다(한 바퀴 약 ' + minutes + '분).') : '3시간 안에 모든 칸을 읽을 수 있고, 하루 호출도 한도 안입니다.';
     return { runs: runs, minutes: minutes, daily: daily, level: level, text: text };
   }
 

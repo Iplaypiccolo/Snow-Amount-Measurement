@@ -547,8 +547,17 @@
     window.JURIS = { doc: results[3], stations: results[4], committed: committed, session: null };
     try { sessionStorage.removeItem('juris_session'); } catch(e){}
     if(window.JURIS.doc && window.JurisCore){
+      window.HIERARCHY_BASE = JSON.parse(JSON.stringify(window.HIERARCHY));       // 이벤트를 적용하기 전의 처음 지사 목록(저장 후 새로고침 없이 다시 적용할 때 씀)
       JurisCore.applyToData(window.HIERARCHY, window.SNOW_DATA, window.JURIS.doc, window.JURIS.stations, committed);
     }
+    // 관할 변경을 저장하면 새로고침 없이 강설량·관측소 지도 화면까지 새 관할로 바꿉니다.
+    window.reapplyJurisdiction = function(events){
+      if(!window.JURIS.doc || !window.JurisCore || !window.HIERARCHY_BASE) return false;
+      var r = JurisCore.reapply(window.HIERARCHY_BASE, window.SNOW_DATA, window.JURIS.doc, window.JURIS.stations, events);
+      window.HIERARCHY = r.H;
+      if(window.refreshHierarchyViews) window.refreshHierarchyViews();
+      return true;
+    };
     var s = document.createElement('script');
     s.src = 'app.js?v=' + Date.now();
     s.onload = function(){

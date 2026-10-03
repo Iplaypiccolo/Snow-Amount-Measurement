@@ -42,7 +42,7 @@ def t_tab_loads(b):
     p = open_grid(b)
     n = J(p, f"Object.keys({S}.rects).length"); check(n == 1072 + 1389, f"격자 칸 {n}")
     check("934칸" in p.locator("#gr-summary").inner_text(), p.locator("#gr-summary").inner_text())
-    check("분할 24번" in p.locator("#gr-summary").inner_text() and p.locator(".gr-badge.over").count() == 1, "934칸은 3시간 안에 못 끝남 안내")
+    check("수집 분할 10번(약 50분)" in p.locator("#gr-summary").inner_text() and "Worker" not in p.locator("#gr-summary").inner_text() and p.locator(".gr-badge.ok").count() == 1 and p.locator(".gr-badge.over").count() == 0, "934칸은 3시간 안에 충분히 끝남(초록), 무료 Worker 문구 없음")
     check(p.locator("#gr-admin").count() == 0 and "관리자 모드" not in p.locator("#view-grid").inner_text(), "관리자 모드 체크박스가 없어야 함")
     check(p.locator("#gr-tools").is_visible() and p.locator("#gr-savebar").is_visible(), "관리자에게는 편집 도구가 바로 보여야 함")
     box = p.locator("#gmap").bounding_box(); check(box and box["width"] > 500 and box["height"] > 400, f"지도 크기 {box}")
@@ -55,6 +55,12 @@ def t_popup_info_for_unselected_cell(b):
     p = open_grid(b); k = J(p, f"GRID.baseline.cells.find(c => c[2].length)[0] + ',' + GRID.baseline.cells.find(c => c[2].length)[1]")
     J(p, f"(() => {{ {S}.rects['{k}'].fire('mouseover', {{latlng: {S}.rects['{k}'].getBounds().getCenter()}}); return null }})()"); p.wait_for_timeout(200)
     check("편입" in p.locator(".gr-tip").inner_text(), "칸에 마우스를 올리면 편입 정보가 보임")
+
+def clear_toast(p): p.evaluate("(() => { const t = document.getElementById('jr-toast'); if (t) t.style.display = 'none'; })()")
+def gsaved(p, n):        # 저장 성공 안내는 "N건 저장되었습니다." 한 줄뿐이어야 함 (설명 창 없음)
+    p.wait_for_function("(() => { const t = document.getElementById('jr-toast'); return !!t && t.style.display !== 'none' && /저장되었습니다/.test(t.textContent); })()", timeout=10000)
+    check(p.locator("#jr-toast").inner_text() == f"{n}건 저장되었습니다.", p.locator("#jr-toast").inner_text())
+    check(p.locator("#gr-modal").is_hidden(), "저장 성공 시 설명 창이 뜨면 안 됨")
 
 def single_cells(p, n):          # 지금 기관이 정확히 한 곳인 칸 n개 (서로 다른 기관에서)
     return J(p, f"""(() => {{ const s = {S}, out = [], seen = new Set();
@@ -71,7 +77,7 @@ def t_remove_needs_no_branch_choice(b):
     check(sorted(e["from"] for e in ev) == sorted(owners), "칸이 속한 기관에서 각각 제외되어야 함")
     check(p.locator("#gr-modal").is_hidden() and union(p) == u0 - 3 and J(p, f"Object.keys({S}.selected).length") == 0, "창 없이 바로 반영, 호출 대상 3칸 감소, 선택 해제")
     check(all(J(p, f"{S}.res.assign.get('{k}').size") == 0 for k in ks), "제외된 칸은 어느 기관에도 속하지 않음")
-    check(p.locator("#gr-pending .jr-ev").count() == 3 and "제외" in p.locator("#gr-pending .jr-ev").first.inner_text(), "변경 대기 목록")
+    check(p.locator("#gr-savebar .jr-ev").count() == 3 and "제외" in p.locator("#gr-savebar .jr-ev").first.inner_text(), "변경 대기 목록(오른쪽 위 패널 한 곳)")
     p.click("#gr-savebar [data-act=preview]"); p.wait_for_timeout(250); check(f"{u0} → {u0 - 3}칸" in p.locator("#gr-modal").inner_text(), "미리보기에 합집합 감소")
     p.click("#gr-modal [data-act=close]")
     # 한 기관의 칸을 여러 개 한꺼번에 제외하면 그 기관의 이벤트 하나로 묶임
@@ -127,21 +133,20 @@ def t_add_remove_and_save(b):
     ev = J(p, f"{S}.pending"); check(len(ev) == 1 and ev[0]["t"] == "add" and ev[0]["to"] == br and len(ev[0]["cells"]) == 3, ev)
     check(union(p) == u0 + 3, f"호출 대상 {u0} → {union(p)}")
     check(J(p, f"{S}.rects['{ks[0]}'].options.dashArray") == "6,4", "변경 대기는 주황 점선")
-    check("변경 대기 1건" in p.locator("#gr-pending").inner_text() and p.locator("#gr-savebar [data-act=save]").is_enabled(), "대기 목록·저장 활성")
+    check("변경 대기 1건" in p.locator("#gr-savebar").inner_text() and p.locator("#gr-savebar [data-act=save]").is_enabled(), "대기 목록·저장 활성")
+    check(p.locator("#gr-pending [data-act=save], #gr-pending [data-act=cancel], #gr-pending [data-act=preview]").count() == 0, "왼쪽 패널에는 저장·되돌리기 버튼이 없어야 함(버튼은 한 곳)")
     p.click("#gr-savebar [data-act=preview]"); p.wait_for_timeout(250)
     txt = p.locator("#gr-modal").inner_text(); check(f"{u0} → {u0 + 3}칸" in txt, txt); p.click("#gr-modal [data-act=close]")
     p.fill("#gr-reason", "시험 편입")
-    p.click("#gr-savebar [data-act=save]"); p.wait_for_selector("#gr-modal:not([style*='none']) h3:has-text('저장했습니다')", timeout=10000)
+    clear_toast(p); p.click("#gr-savebar [data-act=save]"); gsaved(p, 1)
     tbl, rows = m.event_calls[-1]; r = rows[-1]
     check(tbl == "grid_events" and r["kind"] == "cellAdd" and r["payload"]["to"] == br and len(r["payload"]["cells"]) == 3 and r["note"] == "시험 편입" and "at" not in r, m.event_calls[-1])
-    d = p.locator("#gr-modal").inner_text(); check("모든 사용자에게 바로 적용" in d and "GitHub" in d and "올릴 필요가 없습니다" in d, d)
     check(J(p, "GRID.committed.length") == 1 and J(p, "GRID.committed[0].t") == "add" and J(p, "GRID.committed[0].id") == 1, "저장된 이력이 화면에 반영(예전 형식 add 로 되돌려 읽음)")
     check(len(J(p, f"{S}.pending")) == 0 and union(p) == u0 + 3 and p.locator("#gr-savebar [data-act=save]").is_disabled(), "저장 후 변경 대기가 비고 결과는 그대로 유지")
-    p.click("#gr-modal [data-act=close]")
     # 제외: 방금 넣은 칸 일부를 빼면 합집합이 줄어듦
     click_cell(p, ks[0]); click_cell(p, ks[1]); p.click("#gr-selbar [data-act=remove]"); p.wait_for_timeout(250)      # 기관을 고르지 않고 [편입 제외]만 누름
     check(union(p) == u0 + 1 and len(J(p, f"{S}.pending")) == 1, f"이미 저장한 편입 3칸 중 2칸을 제외하면 대기 1건, 합집합 {union(p)}")
-    p.locator("#gr-pending .jr-x").first.click(); p.wait_for_timeout(200)       # 제외 대기를 취소 → 저장된 편입 3칸이 그대로
+    p.locator("#gr-savebar .jr-x").first.click(); p.wait_for_timeout(200)       # 제외 대기를 취소 → 저장된 편입 3칸이 그대로
     check(len(J(p, f"{S}.pending")) == 0 and union(p) == u0 + 3, "개별 취소하면 저장된 상태로 돌아감")
     click_cell(p, ks[0]); p.click("#gr-selbar [data-act=remove]"); p.wait_for_timeout(200)
     p.click("#gr-savebar [data-act=cancel]"); p.wait_for_timeout(200)
@@ -157,12 +162,12 @@ def t_grid_save_failure_and_reload(b):
     check(len(J(p, f"{S}.pending")) == 1 and J(p, "GRID.committed.length") == 0, "실패하면 변경 대기가 남아 있어야 함")
     with p.expect_download() as dl: p.click("#gr-modal [data-act=tofile]")
     data = json.load(open(dl.value.path(), encoding="utf-8")); check(data["events"][-1]["t"] == "add" and len(data["events"][-1]["cells"]) == 2, "비상용 파일")
-    m.events_fail = None; p.click("#gr-modal [data-act=retry]"); p.wait_for_selector("#gr-modal h3:has-text('저장했습니다')", timeout=10000)
+    m.events_fail = None; clear_toast(p); p.click("#gr-modal [data-act=retry]"); gsaved(p, 1)
     # 새로고침해도 서버에 저장된 편입이 그대로: 호출 대상이 늘어난 채로 유지
     u1 = union(p); p.reload(); p.wait_for_function("window.GridUI && GridUI._state().inited", timeout=60000); p.click("#tabGridBtn"); p.wait_for_timeout(700)
     check(union(p) == u1 and J(p, "window.EVENTS_SOURCE.grid") == "server", f"새로고침 뒤에도 저장된 편입 유지 {u1} / {union(p)}")
     # 제외도 이력으로 저장되고 되돌려 읽힘
-    click_cell(p, ks[0]); p.click("#gr-selbar [data-act=remove]"); p.wait_for_timeout(250); p.click("#gr-savebar [data-act=save]"); p.wait_for_selector("#gr-modal h3:has-text('저장했습니다')", timeout=10000)
+    click_cell(p, ks[0]); p.click("#gr-selbar [data-act=remove]"); p.wait_for_timeout(250); clear_toast(p); p.click("#gr-savebar [data-act=save]"); gsaved(p, 1)
     check(m.event_calls[-1][1][-1]["kind"] == "cellRemove" and m.event_calls[-1][1][-1]["payload"]["from"] == br and union(p) == u1 - 1, m.event_calls[-1])
     # 다른 관리자 화면에서도 같은 결과
     p2 = open_grid(b, mock=m); check(union(p2) == u1 - 1, "다른 화면에서 열어도 같은 결과")
@@ -207,7 +212,7 @@ def t_budget_levels(b):
     J(p, f"(() => {{ const s = {S}; {json.dumps(ring)}.forEach(k => s.selected[k] = true); }})()")
     p.evaluate("GridUI.show()"); p.wait_for_timeout(200); p.select_option("#gr-dest", br); p.click("#gr-selbar [data-act=add]"); p.wait_for_timeout(500)
     check(union(p) == 934 + 1389, f"합집합 {union(p)}")
-    check(p.locator(".gr-badge.over").count() == 1 and "3시간 안에" in p.locator("#gr-summary").inner_text(), "한도 초과 안내")
+    check(p.locator(".gr-badge.over").count() == 1 and "하루 호출 한도" in p.locator("#gr-summary").inner_text(), "한도 초과 안내")
     # 대부분 되돌리면 안전 구간(300칸 이하)으로
     p.click("#gr-savebar [data-act=cancel]"); p.wait_for_timeout(300)
     check(union(p) == 934, "모두 취소 후 934칸")

@@ -66,6 +66,7 @@ tests/test_equipment.py   장비 지원 페이지 자동 테스트
 tests/test_grid_core.js  격자 계산 자동 테스트 (node tests/test_grid_core.js)
 tests/test_grid_ui.py    격자 편입 탭 화면 자동 테스트
 tests/test_jurisdiction_core.js  관할 변경 계산 자동 테스트 (node tests/test_jurisdiction_core.js)
+tests/test_reapply.js       저장 후 새로고침 없이 다시 적용하는 계산이 처음부터 적용한 결과와 같은지 확인(실제 자료, 7항목)
 tests/test_jurisdiction_ui.py    관할 변경 탭 화면 자동 테스트
 ```
 

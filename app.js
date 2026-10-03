@@ -34,15 +34,18 @@ function initApp(){
   });
 
   // ---------- 통계 ----------
-  var branchCount = HIERARCHY.hq.reduce(function(sum,h){return sum + h.branches.length;}, 0);
-  var withinCount = HIERARCHY.hq.reduce(function(sum,h){return sum + h.count;}, 0);
-  document.getElementById('statRoads').textContent = (new Set(ROADS_DATA.map(function(r){return r.name;}))).size;
-  document.getElementById('statHQ').textContent = HIERARCHY.hq.length;
-  document.getElementById('statBranch').textContent = branchCount;
-  document.getElementById('statWithin').textContent = withinCount;
-  document.getElementById('statUnclass').textContent = HIERARCHY.unclassified.length;
-  document.getElementById('genMeta').textContent =
-    '고속도로 중심선 반경 5km 이내 공식 적설관측지점 · 본부/지사 관할 구간 기준 배정 (' + META_DATE + ' 자료 기준)';
+  function updateStats(){
+    var branchCount = HIERARCHY.hq.reduce(function(sum,h){return sum + h.branches.length;}, 0);
+    var withinCount = HIERARCHY.hq.reduce(function(sum,h){return sum + h.count;}, 0);
+    document.getElementById('statRoads').textContent = (new Set(ROADS_DATA.map(function(r){return r.name;}))).size;
+    document.getElementById('statHQ').textContent = HIERARCHY.hq.length;
+    document.getElementById('statBranch').textContent = branchCount;
+    document.getElementById('statWithin').textContent = withinCount;
+    document.getElementById('statUnclass').textContent = HIERARCHY.unclassified.length;
+    document.getElementById('genMeta').textContent =
+      '고속도로 중심선 반경 5km 이내 공식 적설관측지점 · 본부/지사 관할 구간 기준 배정 (' + META_DATE + ' 자료 기준)';
+  }
+  updateStats();
 
   // ---------- 지도 ----------
   var map = L.map('map', {zoomControl:true}).setView([36.4, 127.9], 7);
@@ -94,6 +97,9 @@ function initApp(){
   var markerById = {};
   var allStationsFlat = [];
   var seenStationIds = {};
+  function buildMarkers(){
+  Object.keys(markerById).forEach(function(id){ map.removeLayer(markerById[id]); });      // 관할이 바뀌어 다시 만들 때 기존 마커 제거
+  markerById = {}; allStationsFlat = []; seenStationIds = {};
   HIERARCHY.hq.forEach(function(hq){
     hq.branches.forEach(function(br){
       br.stations.forEach(function(s){
@@ -131,6 +137,8 @@ function initApp(){
     marker._baseRadius = 5;
     markerById[s.id] = marker;
   });
+  }
+  buildMarkers();
 
   // ---------- 강조(하이라이트) & 표시/숨김 ----------
   var highlightLayer = L.layerGroup().addTo(map);
@@ -461,9 +469,13 @@ function initApp(){
 
   // ================= 신적설 데이터 모듈 =================
   var ALL_BRANCH_KEYS = [];
-  HIERARCHY.hq.forEach(function(hq){
-    hq.branches.forEach(function(br){ ALL_BRANCH_KEYS.push(hq.name+'|||'+br.name); });
-  });
+  function recomputeBranchKeys(){
+    ALL_BRANCH_KEYS = [];
+    HIERARCHY.hq.forEach(function(hq){
+      hq.branches.forEach(function(br){ ALL_BRANCH_KEYS.push(hq.name+'|||'+br.name); });
+    });
+  }
+  recomputeBranchKeys();
 
   function dateRangeStrs(y1,m1,d1,y2,m2,d2){
     var start = new Date(y1,m1-1,d1);
@@ -926,4 +938,13 @@ function initApp(){
   buildSnowTable();
 
   buildTree();
+
+  // 관할 변경을 저장했을 때 새로고침 없이 호출: 관할에 따라 달라지는 화면(통계·관측소 지도·지사 트리·표)을 새 HIERARCHY 로 다시 만든다.
+  // 업로드해 둔 저장 안 된 신적설 자료(SNOW_DATA)와 선택한 날짜·시즌, 지도 위치는 그대로 유지된다.
+  window.refreshHierarchyViews = function(){
+    highlightLayer.clearLayers(); snowLabelLayer.clearLayers(); visibleStationIds = null;
+    updateStats(); buildMarkers(); recomputeBranchKeys(); buildTree(); updateAllSnowBadges();
+    var vs = document.getElementById('view-snowtable'); if(vs && vs.style.display !== 'none'){ buildSnowTable(); }
+    var vo = document.getElementById('view-sources'); if(vo && vo.style.display !== 'none'){ buildSeasonsTable(); }
+  };
 }
