@@ -1,4 +1,6 @@
 function initApp(){
+  // 화면에 글자를 HTML 로 넣을 때는 항상 이 함수를 거칩니다(XSS 방지). 기관 이름은 서버의 변경 이력(신설 기관)에서도 오기 때문입니다.
+  function esc(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
   // 안전장치: href="#" 형태의 빈 링크가 클릭될 때 상위 프레임으로 이동하는 것을 전역적으로 방지
   document.addEventListener('click', function(e){
     var a = e.target.closest && e.target.closest('a');
@@ -85,7 +87,7 @@ function initApp(){
   ROADS_DATA.forEach(function(r){
     var latlngs = r.coords.map(function(c){return [c[1], c[0]];});
     L.polyline(latlngs, {color:'#0b5d38', weight:2, opacity:0.75}).addTo(map)
-      .bindTooltip(r.name, {sticky:true, direction:'top'});
+      .bindTooltip(esc(r.name), {sticky:true, direction:'top'});
   });
 
   function bandColor(distKm){
@@ -119,10 +121,10 @@ function initApp(){
       fillColor: baseColor, fillOpacity:0.9
     }).addTo(map);
     marker._baseColor = baseColor;
-    var addrLine = s.addr ? ('<div>'+s.addr+'</div>') : '';
+    var addrLine = s.addr ? ('<div>'+esc(s.addr)+'</div>') : '';
     var basePopup =
-      '<b>'+s.name+'</b> <span style="color:#6b6455">(지점 '+s.id+')</span>'+addrLine+
-      '<div>최근접 노선: '+s.road+'</div>'+
+      '<b>'+esc(s.name)+'</b> <span style="color:#6b6455">(지점 '+esc(s.id)+')</span>'+addrLine+
+      '<div>최근접 노선: '+esc(s.road)+'</div>'+
       '<div>거리: <span class="popup-dist">'+s.dist_km.toFixed(3)+' km</span></div>';
     marker.bindPopup(basePopup);
     marker.on('popupopen', function(){
@@ -297,7 +299,7 @@ function initApp(){
       var hqRow = document.createElement('div');
       hqRow.className = 'hq-row';
       hqRow.innerHTML =
-        '<span class="chev">▶</span><span class="hq-name">'+hq.name+' 본부</span>'+
+        '<span class="chev">▶</span><span class="hq-name">'+esc(hq.name)+' 본부</span>'+
         '<span class="count-badge'+(hq.count===0?' zero':'')+'">'+hq.count+'</span>';
 
       var hqChildren = document.createElement('div');
@@ -314,7 +316,7 @@ function initApp(){
         brRow.innerHTML =
           '<span class="chev">▶</span>'+
           '<span class="color-swatch" data-color="'+swatchColor+'" style="background:'+swatchColor+'"></span>'+
-          '<span class="br-name">'+br.name+' 지사'+radiusTag+'</span>'+
+          '<span class="br-name">'+esc(br.name)+' 지사'+radiusTag+'</span>'+
           '<span class="snow-badge none" style="display:none;"></span>'+
           '<span class="count-badge'+(br.count===0?' zero':'')+'">'+br.count+' 대</span>';
         rowRegistry[brKey] = {hqRow: hqRow, brRow: brRow, hq: hq, br: br};
@@ -336,7 +338,7 @@ function initApp(){
             stRow.dataset.id = s.id;
             var band = s.dist_km<=3?1:(s.dist_km<=6?2:3);
             stRow.innerHTML =
-              '<span class="st-name">'+s.name+'<span class="id">#'+s.id+(s.addr?(' · '+s.addr):'')+' · '+s.road+'</span></span>'+
+              '<span class="st-name">'+esc(s.name)+'<span class="id">#'+esc(s.id)+(s.addr?(' · '+esc(s.addr)):'')+' · '+esc(s.road)+'</span></span>'+
               '<span class="st-snow" style="font-family:var(--mono);font-weight:700;color:#1F51FF;margin-right:8px;"></span>'+
               '<span class="st-dist dist-band-'+band+'">'+s.dist_km.toFixed(3)+' km</span>';
             stationRowRegistry[brKey+'|||'+s.id] = stRow.querySelector('.st-snow');
@@ -448,7 +450,7 @@ function initApp(){
         stRow.dataset.id = s.id;
         var band = s.dist_km<=3?1:(s.dist_km<=6?2:3);
         stRow.innerHTML =
-          '<span class="st-name">'+s.name+'<span class="id">#'+s.id+' · '+s.road+'</span></span>'+
+          '<span class="st-name">'+esc(s.name)+'<span class="id">#'+esc(s.id)+' · '+esc(s.road)+'</span></span>'+
           '<span class="st-dist dist-band-'+band+'">'+s.dist_km.toFixed(3)+' km</span>';
         stRow.addEventListener('click', function(){
           clearHighlightRows();
@@ -508,7 +510,7 @@ function initApp(){
     var year = parseInt(dateStr.slice(0,4),10);
     var month = parseInt(dateStr.slice(4,6),10);
     var day = parseInt(dateStr.slice(6,8),10);
-    if(month === 11 || month === 12) return year;
+    if(month === 12 || (month === 11 && day >= 15)) return year;
     if(month < 3 || (month === 3 && day <= 15)) return year-1;
     return null; // 11.15~3.15 범위 밖
   }
@@ -531,7 +533,7 @@ function initApp(){
     var sel = document.getElementById('seasonSelect');
     var labels = Object.keys(SNOW_DATA.seasons).sort();
     var prev = sel.value;
-    sel.innerHTML = labels.map(function(l){return '<option value="'+l+'">'+l+'</option>';}).join('');
+    sel.innerHTML = labels.map(function(l){return '<option value="'+esc(l)+'">'+esc(l)+'</option>';}).join('');
     if(labels.indexOf(prev) !== -1) sel.value = prev;
     else if(labels.length) sel.value = labels[labels.length-1];
   }
@@ -551,7 +553,7 @@ function initApp(){
         }
         if(found) daysWithData++;
       }
-      return '<span class="season-chip"><b>'+label+'</b> · '+daysWithData+'/'+season.dates.length+'일 자료 보유</span>';
+      return '<span class="season-chip"><b>'+esc(label)+'</b> · '+daysWithData+'/'+season.dates.length+'일 자료 보유</span>';
     });
     bar.innerHTML = '현재 로드된 데이터: ' + chips.join(' ');
   }
@@ -660,7 +662,7 @@ function initApp(){
           if(season.branches[branchKeys[j]][i] != null){ daysWithData++; break; }
         }
       }
-      return '<tr><td>'+label+'</td><td class="mono-cell">'+season.dates.length+'일</td><td class="mono-cell">'+daysWithData+'일</td></tr>';
+      return '<tr><td>'+esc(label)+'</td><td class="mono-cell">'+season.dates.length+'일</td><td class="mono-cell">'+daysWithData+'일</td></tr>';
     }).join('');
   }
 
@@ -690,7 +692,7 @@ function initApp(){
 
       var branchSums = branchArrs.map(function(arr){ return arr.reduce(function(acc,v){ return acc + (v||0); }, 0); });
       var hqSeasonAvg = branchSums.length ? (branchSums.reduce(function(a,b){return a+b;},0) / branchSums.length) : null;
-      html += '<tr class="hq-row-label"><td class="row-label">'+hq.name+' 본부(평균)</td><td class="sum-col">'+(hqSeasonAvg!=null?hqSeasonAvg.toFixed(2):'-')+'</td>';
+      html += '<tr class="hq-row-label"><td class="row-label">'+esc(hq.name)+' 본부(평균)</td><td class="sum-col">'+(hqSeasonAvg!=null?hqSeasonAvg.toFixed(2):'-')+'</td>';
       hqAvgArr.forEach(function(v){
         var disp = v==null ? '-' : v.toFixed(1);
         html += '<td>'+disp+'</td>';
@@ -701,13 +703,13 @@ function initApp(){
         var key = hq.name+'|||'+br.name;
         var arr = branchArrs[bi];
         var sum = arr.reduce(function(acc,v){ return acc + (v||0); }, 0);
-        html += '<tr data-branch-row="'+key+'"><td class="row-label" style="padding-left:20px;">'+br.name+'</td>';
+        html += '<tr data-branch-row="'+esc(key)+'"><td class="row-label" style="padding-left:20px;">'+esc(br.name)+'</td>';
         html += '<td class="sum-col">'+(sum>0 ? sum.toFixed(1) : '-')+'</td>';
         arr.forEach(function(v, i){
           var d = dates[i];
           var cls = v==null ? '' : (v>0 ? 'has-val' : 'zero-val');
           var disp = v==null ? '-' : v.toFixed(1);
-          html += '<td class="snowcell '+cls+'" data-date="'+d+'" data-branch="'+key+'" data-col="'+i+'">'+disp+'</td>';
+          html += '<td class="snowcell '+cls+'" data-date="'+d+'" data-branch="'+esc(key)+'" data-col="'+i+'">'+disp+'</td>';
         });
         html += '</tr>';
       });
@@ -720,7 +722,7 @@ function initApp(){
       td.addEventListener('mouseenter', function(){
         var col = this.dataset.col;
         wrap.querySelectorAll('td[data-col="'+col+'"]').forEach(function(c){ c.classList.add('col-hl'); });
-        var row = wrap.querySelector('tr[data-branch-row="'+this.dataset.branch+'"]');
+        var row = wrap.querySelector('tr[data-branch-row="'+CSS.escape(this.dataset.branch)+'"]');
         if(row) row.classList.add('row-hl');
       });
       td.addEventListener('mouseleave', function(){
@@ -786,7 +788,27 @@ function initApp(){
     XLSX.writeFile(wb, '신적설_'+label+'.xlsx');
   }
 
-  document.getElementById('exportXlsxBtn').addEventListener('click', exportSnowTableToXlsx);
+  // 엑셀 라이브러리(약 300KB)는 첫 화면을 늦추지 않도록 [엑셀로 내보내기]를 처음 누를 때 불러옵니다.
+  var XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', xlsxLoading = null;
+  function loadXlsx(){
+    if(window.XLSX) return Promise.resolve();
+    if(!xlsxLoading) xlsxLoading = new Promise(function(ok, fail){
+      var sc = document.createElement('script'); sc.src = XLSX_URL;
+      sc.onload = function(){ window.XLSX ? ok() : fail(); };
+      sc.onerror = function(){ xlsxLoading = null; sc.remove(); fail(); };
+      document.head.appendChild(sc);
+    });
+    return xlsxLoading;
+  }
+  document.getElementById('exportXlsxBtn').addEventListener('click', function(){
+    var btn = this, txt = btn.textContent;
+    btn.disabled = true; btn.textContent = '엑셀 준비 중…';
+    loadXlsx().then(function(){
+      try { exportSnowTableToXlsx(); } catch(e){ window.alert('엑셀 파일을 만들지 못했습니다: ' + (e && e.message || e)); }
+    }, function(){
+      window.alert('엑셀 라이브러리를 불러오지 못했습니다. 인터넷 연결(회사망에서는 cdnjs.cloudflare.com 접속)을 확인하세요.');
+    }).then(function(){ btn.disabled = false; btn.textContent = txt; });
+  });
 
   // ---------- txt 업로드로 데이터 추가 ----------
   function parseSnowText(text){

@@ -222,7 +222,7 @@
   function saveChanges() {
     if (S.saving || !S.admin || !S.pending.length) return;
     if (serverDown()) { window.alert('서버에서 변경 이력을 불러오지 못한 상태입니다. 새로고침해서 서버에 연결된 뒤에 저장하세요.'); return; }
-    var evs = stamped(); S.saving = true; renderPending(); renderSaveBar();
+    var evs = stamped(), saved = false; S.saving = true; renderPending(); renderSaveBar();
     SSEvents.append('grid', evs).then(function (res) {
       if (!res.ok) {
         S.saving = false; renderPending(); renderSaveBar();
@@ -230,11 +230,18 @@
           '<div class="jr-row"><button class="jr-btn jr-primary" data-act="retry">다시 저장</button><button class="jr-btn" data-act="tofile">파일로 받기</button><button class="jr-btn" data-act="close">닫기</button></div>');
         return;
       }
+      saved = true;
       return SSEvents.load('grid').then(function (r) {
         GR().committed = r.source === 'server' && !r.error ? r.events : GR().committed.concat(evs);
         S.saving = false; S.pending = []; S.reason = ''; S.selected = {}; afterChange();
         toast(evs.length + '건 저장되었습니다.');
       });
+    }).catch(function (e) {          // 예상하지 못한 오류: "저장 중"에 멈추지 않게 하고, 이미 저장됐으면 같은 내용을 다시 저장하지 않도록 대기를 비움
+      if (window.console) console.error(e);
+      S.saving = false;
+      if (saved) { S.pending = []; S.reason = ''; }
+      try { renderPending(); renderSaveBar(); } catch (e2) {}
+      window.alert(saved ? '저장은 되었지만 화면을 다시 그리지 못했습니다. 새로고침(F5)해 주세요.' : '저장하지 못했습니다. 잠시 뒤에 다시 시도하세요.');
     });
   }
   function preview() {

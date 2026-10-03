@@ -507,7 +507,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="jurisdiction/core.js"></script>
 <script src="jurisdiction/requests.js"></script>
 <script src="jurisdiction/ui.js"></script>
@@ -518,22 +517,23 @@
 <script src="auth/gate.js"></script>
 <script>
 (function(){
-  var META_DATE_TEXT = "자동 업데이트(매일 새벽)";
+  var META_DATE_TEXT = "수동 업로드";
   // 로그인하기 전에는 자료(data/*.json)도 화면도 불러오지 않습니다. 로그인에 성공하면 아래 bootApp 이 실행됩니다.
   function bootApp(){
   var isAdmin = !!(window.SS_ME && window.SS_ME.role === 'admin');      // 로그인한 사람의 역할 (로그인 잠금이 채움)
+  // cache:'no-cache' = 매번 서버에 '바뀌었나?'만 묻고, 그대로면 브라우저에 있던 파일을 씀(최신 반영은 그대로, 받는 양은 줄어듦)
   Promise.all([
-    fetch('data/roads.json', {cache: 'no-store'}).then(function(r){return r.json();}),
-    fetch('data/hierarchy.json', {cache: 'no-store'}).then(function(r){return r.json();}),
-    fetch('data/snow_data.json', {cache: 'no-store'}).then(function(r){return r.json();}),
+    fetch('data/roads.json', {cache: 'no-cache'}).then(function(r){return r.json();}),
+    fetch('data/hierarchy.json', {cache: 'no-cache'}).then(function(r){return r.json();}),
+    fetch('data/snow_data.json', {cache: 'no-cache'}).then(function(r){return r.json();}),
     // 관할 구간(IC/JC 사이)·관측소 목록·변경 이력: 없어도 기존 화면은 그대로 동작
-    fetch('data/sections.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),
-    fetch('data/stations.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),
+    fetch('data/sections.json', {cache: 'no-cache'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),
+    fetch('data/stations.json', {cache: 'no-cache'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),
     // 변경 이력: 서버(Supabase)에서 읽습니다. 못 읽으면 예전 파일로 대신하고 화면에 알립니다.
     SSEvents.load('jurisdiction'),
     // 예보 격자 편입(기본 편입 + 저장된 변경): 없어도 기존 화면은 그대로 동작
     // 관리자만 불러옴: 예보 격자 편입 탭은 관리자 아이디에서만 보입니다
-    isAdmin ? fetch('data/grid_assign.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}) : Promise.resolve(null),
+    isAdmin ? fetch('data/grid_assign.json', {cache: 'no-cache'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}) : Promise.resolve(null),
     isAdmin ? SSEvents.load('grid') : Promise.resolve({events: [], source: 'skip'})
   ]).then(function(results){
     window.ROADS_DATA = results[0];

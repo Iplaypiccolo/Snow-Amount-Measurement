@@ -315,7 +315,7 @@
   /* ---------- 변경 대기 / 저장 ---------- */
   function describe(ev) {
     var st = S.view.state, nm = function (id) { return id == null || id === 'NONE' ? '미지정' : (st.branches[id] ? st.branches[id].name : id); };
-    if (ev.t === 'move') return ev.sections.length + '개 구간(' + (ev.km != null ? ev.km : '?') + 'km): ' + (ev.from || []).map(nm).join('·') + ' → <b>' + esc(nm(ev.to)) + '</b>' + (ev.req ? ' <em>요청 #' + esc(ev.req) + '</em>' : '');
+    if (ev.t === 'move') return esc((ev.sections || []).length) + '개 구간(' + esc(ev.km != null ? ev.km : '?') + 'km): ' + esc((ev.from || []).map(nm).join('·')) + ' → <b>' + esc(nm(ev.to)) + '</b>' + (ev.req ? ' <em>요청 #' + esc(ev.req) + '</em>' : '');
     if (ev.t === 'addBranch') return '신설 기관: <b>' + esc(ev.name) + '</b> (' + esc(ev.hq) + ')';
     if (ev.t === 'moveHq') return '<b>' + esc(nm(ev.branch)) + '</b>: ' + esc(ev.fromHq || '?') + ' → ' + esc(ev.hq);
     return esc(ev.t);
@@ -347,8 +347,10 @@
     if (serverDown()) { window.alert('서버에서 변경 이력을 불러오지 못한 상태입니다. 새로고침해서 서버에 연결된 뒤에 저장하세요.'); return; }
     var evs = stampPending(), reqIds = linkedRequestIds();
     S.saving = true; renderPending(); renderSaveBar();
+    var saved = false;
     SSEvents.append('jurisdiction', evs).then(function (res) {
       if (!res.ok) { S.saving = false; renderPending(); renderSaveBar(); saveFailed(res.message, evs); return; }
+      saved = true;
       return SSEvents.load('jurisdiction').then(function (r) {
         // 저장은 성공했는데 다시 읽기만 실패한 경우에도 방금 저장한 내용을 화면에 반영해 둠
         J().committed = r.source === 'server' && !r.error ? r.events : J().committed.concat(evs);
@@ -357,6 +359,12 @@
         if (reqIds.length) approveRequests(reqIds);
         toast(evs.length + '건 저장되었습니다.');
       });
+    }).catch(function (e) {          // 예상하지 못한 오류: "저장 중"에 멈추지 않게 하고, 이미 저장됐으면 같은 내용을 다시 저장하지 않도록 대기를 비움
+      if (window.console) console.error(e);
+      S.saving = false;
+      if (saved) { S.pending = []; S.reason = ''; }
+      try { renderPending(); renderSaveBar(); } catch (e2) {}
+      window.alert(saved ? '저장은 되었지만 화면을 다시 그리지 못했습니다. 새로고침(F5)해 주세요.' : '저장하지 못했습니다. 잠시 뒤에 다시 시도하세요.');
     });
   }
   function saveFailed(message, evs) {

@@ -27,7 +27,7 @@
     return ev;
   }
   function fromFile(domain) {
-    return fetch(DOM[domain].file, { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+    return fetch(DOM[domain].file, { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
       .then(function (j) { return { events: (j && Array.isArray(j.events)) ? j.events : [], source: 'file' }; });
   }
   // 반환: { events, source: 'server' | 'file', error?: true }   (file 이면 서버에서 못 읽어서 예전 파일로 대신한 것)
