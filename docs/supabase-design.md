@@ -14,6 +14,7 @@
 | 계정 관리 지원 | 로그인 강제 종료 함수, 비공개 저장소 `credentials` — `..._05_account_admin_support.sql` |
 | 기준정보 | 본부 10개(민자 포함), 지사 59개 — `supabase/seed/01_hqs_branches.sql` |
 | 계정 | **관리자 2개 + 지사 59개 = 61개** (아래 6번, 목록: `docs/accounts.md`) |
+| 구간 변경 요청 | 표 `jurisdiction_requests` (지사가 요청, 관리자가 승인·반려) — `..._06_jurisdiction_requests.sql`, 시험 `supabase/tests/requests_test.sql` |
 | 계정 발급 함수 | Edge Function `account-admin` (`supabase/functions/account-admin/`) — 발급·비밀번호 초기화·비활성화·활성화 |
 | 자료 | 본부·지사·계정만 있음. **구간·관측소·격자·적설·장비는 아직 비어 있음** |
 | 자동 시험 | `supabase/tests/rls_test.sql` — 권한·기록·임시 비밀번호 **103항목, 실패 0**, 보안 점검(advisor) 경고 없음 |

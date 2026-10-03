@@ -39,6 +39,7 @@ docs/d1-schema-design.md   Cloudflare D1 표 설계 v1(설계안), docs/d1-schem
 docs/supabase-design.md      Supabase 구성(snow-support, 서울): 표·권한·기록·시험·남은 일
 supabase/migrations/       Supabase 표·권한(RLS)·기록 트리거 SQL (실제 적용한 것)
 supabase/tests/rls_test.sql  권한·기록 자동 시험(SQL Editor 에서 실행, 103항목)
+supabase/tests/requests_test.sql  구간 변경 요청 표 권한·제한 시험
 supabase/tests/accounts_check.sql  실제 계정 점검(낯선 가입자·임시 비밀번호 계정·관리자)
 supabase/seed/            본부·지사 기준정보 SQL
 supabase/functions/account-admin/  계정 발급·초기화·비활성화·비밀번호 일괄 설정 함수(Edge Function)
@@ -50,6 +51,7 @@ docs/login-gate.md          로그인 잠금·자동 로그인·아이디 저장
 tests/test_account_admin.mjs  계정 발급 함수 자동 시험(17항목)
 tests/test_admin_policy_parity.mjs  화면·서버 비밀번호 규칙 일치 시험
 tests/test_admin_ui.py      관리 콘솔 화면 자동 시험(가짜 서버, 19항목)
+tests/test_jurisdiction_requests.py  구간 변경 요청·관리자 알림·격자 탭 관리자 전용 시험(10항목)
 tests/test_login_gate.py    첫 화면 로그인 잠금·자동 로그인·아이디 저장 자동 시험(13항목)
 tests/test_hierarchy_order.py  본부·지사 순서가 강설량 측정 화면과 같은지 실제 자료로 확인(6항목)
 tests/_sb_mock.py          가짜 Supabase 서버(화면 시험용)

@@ -51,6 +51,7 @@
     opt = opt || {};
     var h = { apikey: CFG.key }; if (opt.body !== undefined) h['Content-Type'] = 'application/json';
     if (opt.token) h.Authorization = 'Bearer ' + opt.token;
+    if (opt.headers) for (var k in opt.headers) h[k] = opt.headers[k];
     return fetch(CFG.url + path, { method: opt.method || 'GET', headers: h, body: opt.body !== undefined ? JSON.stringify(opt.body) : undefined, cache: 'no-store' })
       .then(function (r) { return r.text().then(function (t) { var j = null; try { j = t ? JSON.parse(t) : null; } catch (e) {} return { status: r.status, ok: r.ok, json: j }; }); });
   }

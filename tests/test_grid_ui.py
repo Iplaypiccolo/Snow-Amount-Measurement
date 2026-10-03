@@ -29,7 +29,7 @@ def run(name, fn, b):
             try: T.OPENED.pop().close()
             except Exception: pass
 
-def admin(p): p.check("#gr-admin"); p.wait_for_timeout(150)
+def admin(p): p.wait_for_timeout(100)      # 이 탭은 관리자에게만 보이고, 관리자 모드 체크박스는 없음(열려 있으면 바로 편집 가능)
 S = "GridUI._state()"
 def ring_cells(p, n=3): return J(p, f"GRID.baseline.ring.slice(0, {n}).map(c => c[0] + ',' + c[1])")
 def click_cell(p, k): J(p, f"(() => {{ {S}.rects['{k}'].fire('click'); return null }})()"); p.wait_for_timeout(80)
@@ -43,18 +43,18 @@ def t_tab_loads(b):
     n = J(p, f"Object.keys({S}.rects).length"); check(n == 1072 + 1389, f"격자 칸 {n}")
     check("934칸" in p.locator("#gr-summary").inner_text(), p.locator("#gr-summary").inner_text())
     check("분할 24번" in p.locator("#gr-summary").inner_text() and p.locator(".gr-badge.over").count() == 1, "934칸은 3시간 안에 못 끝남 안내")
-    check(p.locator("#gr-tools").is_hidden() and p.locator("#gr-savebar").is_hidden() and p.locator("#gr-selbar").is_hidden(), "보기 모드에서는 편집 도구가 숨겨져야 함")
+    check(p.locator("#gr-admin").count() == 0 and "관리자 모드" not in p.locator("#view-grid").inner_text(), "관리자 모드 체크박스가 없어야 함")
+    check(p.locator("#gr-tools").is_visible() and p.locator("#gr-savebar").is_visible(), "관리자에게는 편집 도구가 바로 보여야 함")
     box = p.locator("#gmap").bounding_box(); check(box and box["width"] > 500 and box["height"] > 400, f"지도 크기 {box}")
     check(p.locator("#gr-tree .jr-br").count() >= 59, "기관 목록")
     check(p.locator("#gr-tree .jr-hqname:has-text('민자')").count() == 0, "민자는 예보 대상이 아니라 목록에 없어야 함")
     p.click(".tab-btn[data-tab=jurisdiction]"); p.wait_for_timeout(500)      # 다른 탭과 함께 동작
     check(p.locator("#view-jurisdiction").is_visible() and p.locator("#view-grid").is_hidden(), "탭 전환")
 
-def t_view_mode_popup_only(b):
+def t_popup_info_for_unselected_cell(b):
     p = open_grid(b); k = J(p, f"GRID.baseline.cells.find(c => c[2].length)[0] + ',' + GRID.baseline.cells.find(c => c[2].length)[1]")
-    click_cell(p, k); p.wait_for_timeout(250)
-    check("편입" in p.locator(".leaflet-popup-content").inner_text(), "팝업")
-    check(J(p, f"Object.keys({S}.selected).length") == 0, "보기 모드에서는 선택되지 않음")
+    J(p, f"(() => {{ {S}.rects['{k}'].fire('mouseover', {{latlng: {S}.rects['{k}'].getBounds().getCenter()}}); return null }})()"); p.wait_for_timeout(200)
+    check("편입" in p.locator(".gr-tip").inner_text(), "칸에 마우스를 올리면 편입 정보가 보임")
 
 def t_add_remove_and_save(b):
     p = open_grid(b); admin(p)
@@ -150,7 +150,7 @@ def t_new_branch_from_jurisdiction_appears(b):
     check(p.locator("#gr-tree .jr-br:has-text('신설시험')").count() == 1, "관할 탭에서 만든 신설 기관이 격자 탭에도 보여야 함")
     check(p.locator("#gr-tree .jr-br:has-text('신설시험') em").count() == 1, "신설 표시")
 
-TESTS = [t_tab_loads, t_view_mode_popup_only, t_add_remove_and_save, t_share_between_branches, t_box_select, t_budget_levels, t_focus_branch,
+TESTS = [t_tab_loads, t_popup_info_for_unselected_cell, t_add_remove_and_save, t_share_between_branches, t_box_select, t_budget_levels, t_focus_branch,
          t_colors_match_other_tab, t_new_branch_from_jurisdiction_appears]
 if __name__ == "__main__":
     with sync_playwright() as pw:

@@ -35,20 +35,21 @@ results, errors = [], []
 def check(c, m):
     if not c: raise AssertionError(m)
 
+DLG = {"prompt": ""}   # 입력 창(prompt)에 넣을 글자: 시험이 필요할 때 바꿈
 OPENED = []        # 테스트가 연 화면들 (테스트가 끝나면 모두 닫아 메모리를 아낌)
 
-def open_tab(browser, session=None):
+def open_tab(browser, session=None, user="admin-01", mock=None, click_tab=True):
     p = browser.new_page(viewport={"width": 1400, "height": 900}, accept_downloads=True)
     OPENED.append(p)
     p.on("pageerror", lambda e: errors.append(str(e)))
-    p.on("dialog", lambda d: d.accept())
+    p.on("dialog", lambda d: d.accept(DLG["prompt"]) if d.type == "prompt" else d.accept())      # 확인 창은 [확인], 입력 창은 DLG["prompt"] 를 입력
     p.route("**/*", route)
-    SBM.install(p, SBM.Mock(), "admin-01")
+    SBM.install(p, mock or SBM.Mock(), user)       # 기본은 관리자 로그인. 지사·장비 계정은 user 로 지정
     if session is not None:
         p.add_init_script("sessionStorage.setItem('juris_session', %s)" % json.dumps(json.dumps(session)))
     p.goto(URL)
     p.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)   # 데이터를 다 불러올 때까지 기다림
-    p.click(".tab-btn[data-tab=jurisdiction]"); p.wait_for_timeout(700)
+    if click_tab: p.click(".tab-btn[data-tab=jurisdiction]"); p.wait_for_timeout(700)      # 관리자에게 변경 요청 알림창이 뜨는 시험은 click_tab=False
     return p
 
 def run(name, fn, browser):
@@ -60,7 +61,7 @@ def run(name, fn, browser):
             except Exception: pass
 
 J = lambda p, js: p.evaluate(js)
-def admin(p): p.check("#jr-admin"); p.wait_for_timeout(150)
+def admin(p): p.wait_for_timeout(100)      # 관리자 모드 체크박스는 없어짐: 관리자 아이디로 로그인하면 바로 편집 가능
 def sections_of(p, hq, name):
     return J(p, f"(()=>{{const d=JURIS.doc;const b=d.branches.find(b=>b.hq==='{hq}'&&b.name==='{name}');return d.sections.filter(s=>s.owner===b.id).map(s=>s.id)}})()")
 def bid(p, hq, name): return J(p, f"JURIS.doc.branches.find(b=>b.hq==='{hq}'&&b.name==='{name}').id")
@@ -68,7 +69,7 @@ def click_sec(p, sid, shift=False):
     J(p, f"(()=>{{const pl=JurisdictionUI._state().polys['{sid}'];pl.fire('click',{{latlng:pl.getCenter(),originalEvent:{{shiftKey:{str(shift).lower()}}}}})}})()"); p.wait_for_timeout(120)
 
 def t_tab_loads(b):
-    p = open_tab(b)
+    p = open_tab(b, user="equip-01")
     check(J(p, "Object.keys(JurisdictionUI._state().polys).length") == J(p, "JURIS.doc.sections.length") > 600, "구간 선이 그려지지 않음")
     check(p.locator(".jr-br").count() == 60, f"지사 59 + 미지정 1 = 60, 실제 {p.locator('.jr-br').count()}")
     check(p.locator('.jr-br[data-id="NONE"]').count() == 1, "미지정 행")
@@ -82,7 +83,7 @@ def t_tab_loads(b):
     check(p.locator("#snowTableWrap tr").count() > 30, "연도별 표")
 
 def t_view_mode_cannot_select(b):
-    p = open_tab(b); sid = sections_of(p, "강원", "춘천")[0]
+    p = open_tab(b, user="equip-01"); sid = sections_of(p, "강원", "춘천")[0]
     click_sec(p, sid)
     check(J(p, "Object.keys(JurisdictionUI._state().selected).length") == 0, "보기 모드에서 선택됨")
     check(p.locator("#jr-selbar").is_hidden(), "이동 바")
@@ -156,7 +157,7 @@ def t_apply_in_browser(b):
 
 
 def t_border_on_click_view_mode(b):
-    p = open_tab(b); sid = sections_of(p, "강원", "춘천")[0]
+    p = open_tab(b, user="equip-01"); sid = sections_of(p, "강원", "춘천")[0]
     click_sec(p, sid)                                     # 보기 모드(관리자 모드 끔)
     check(J(p, "JurisdictionUI._state().clicked") == sid, "클릭한 구간이 기억되지 않음")
     check(J(p, "JurisdictionUI._state().casing.getLayers().length") == 2, "이중 테두리(바깥 띠+테두리) 2겹")
@@ -206,20 +207,20 @@ def t_pick_destination_on_map(b):
     p.keyboard.press("Escape"); p.wait_for_timeout(100)
     check(J(p, "JurisdictionUI._state().pick") is False and p.locator("#jr-pickbar").is_hidden(), "Esc 취소")
 
-def t_popup_button_starts_edit(b):
-    p = open_tab(b); sid = sections_of(p, "강원", "춘천")[0]
-    J(p, f"(()=>{{const pl=JurisdictionUI._state().polys['{sid}'];pl.fire('click',{{latlng:pl.getCenter(),originalEvent:{{}}}});pl.openPopup(pl.getCenter())}})()"); p.wait_for_timeout(250)
-    check(p.locator(".jr-popbtn").count() == 1, "보기 모드 팝업에 [이 구간 옮기기]가 없음")
-    p.click(".jr-popbtn"); p.wait_for_timeout(250)
-    check(p.locator("#jr-admin").is_checked(), "관리자 모드로 바뀌지 않음")
-    check(J(p, "Object.keys(JurisdictionUI._state().selected)") == [sid], "구간이 선택되지 않음")
-    check(p.locator("#jr-selbar").is_visible(), "이동 바가 안 보임")
+def t_no_admin_checkbox_and_no_popup_move_button(b):
+    p = open_tab(b)
+    check(p.locator("#jr-admin").count() == 0 and "관리자 모드" not in p.locator("#view-jurisdiction").inner_text(), "관리자 모드 체크박스가 없어야 함")
+    check(p.locator("#jr-add").is_visible() and p.locator("#jr-savebar").is_visible(), "관리자 아이디로 로그인하면 바로 편집 도구가 보여야 함")
+    pv = open_tab(b, user="equip-01"); sid = sections_of(pv, "강원", "춘천")[0]
+    J(pv, f"(()=>{{const pl=JurisdictionUI._state().polys['{sid}'];pl.fire('click',{{latlng:pl.getCenter(),originalEvent:{{}}}});pl.openPopup(pl.getCenter())}})()"); pv.wait_for_timeout(250)
+    check(pv.locator(".leaflet-popup-content").count() == 1 and pv.locator(".jr-popbtn").count() == 0 and "옮기기" not in pv.locator(".leaflet-popup-content").inner_text(), "보기 전용 팝업에 옮기기 버튼이 없어야 함")
 
 def un_ids(p): return J(p, "JURIS.doc.sections.filter(s => s.owner === null).map(s => s.id)")
 
 def t_save_bar_always_visible(b):
+    pv = open_tab(b, user="equip-01")
+    check(pv.locator("#jr-savebar").is_hidden(), "보기 전용 계정에는 저장 바 없음")
     p = open_tab(b)
-    check(p.locator("#jr-savebar").is_hidden(), "보기 모드에서는 저장 바 없음")
     admin(p)
     check(p.locator("#jr-savebar").is_visible(), "관리자 모드에서 저장 바가 안 보임")
     check(p.locator("#jr-top-save").is_disabled() and "변경 없음" in p.locator("#jr-savebar").inner_text(), "변경 없을 때는 저장 비활성")
@@ -236,10 +237,11 @@ def t_save_bar_always_visible(b):
     check(p.locator(".jr-ev").count() == 0 and p.locator("#jr-top-save").is_disabled(), "모두 취소")
 
 def t_unassigned_visible_and_clickable(b):
-    p = open_tab(b); ids = un_ids(p)
+    p = open_tab(b, user="equip-01"); ids = un_ids(p)
     check(len(ids) > 100, f"미지정 구간 {len(ids)}")
     st = J(p, f"(()=>{{const o=JurisdictionUI._state().polys['{ids[0]}'].options;return [o.color,o.dashArray,o.weight,o.opacity]}})()")
-    check(st[0] == "#4a4a4a" and st[1] and st[1].startswith("1,") and st[2] >= 4 and st[3] >= 0.9, f"미지정 선 모양(둥근 점) {st}")
+    check(st[0] == "#8a8a8a" and not st[1] and st[2] >= 4 and st[3] >= 0.9, f"미지정 선 모양(회색 실선: 점선이 아님) {st}")
+    check(J(p, f"JurisdictionUI._state().polys['{ids[0]}'].options.lineCap") == "butt", "점선용 둥근 끝 모양이 남음")
     row = p.locator('.jr-br[data-id="NONE"]'); check("구간" in row.inner_text(), row.inner_text())
     # 보기 모드: 눌러서 정보 확인
     click_sec(p, ids[0])
@@ -323,7 +325,7 @@ def t_row_click_selects_and_shows(b):
     check(J(p, "Object.keys(JurisdictionUI._state().selected).length") == 4, "목록에서도 Shift+클릭 범위 선택")
 
 def t_row_click_view_mode(b):
-    p = open_tab(b)
+    p = open_tab(b, user="equip-01")
     p.click(".jr-br:has-text('춘천')"); p.wait_for_timeout(300)
     sid = p.locator(".jr-sec").nth(2).get_attribute("data-sid")
     p.locator(".jr-sec").nth(2).locator("span").first.click(); p.wait_for_timeout(400)
@@ -352,7 +354,7 @@ def t_private_hq(b):
     check(J(p, "HIERARCHY.hq.some(h => h.name === '민자')") is False, "HIERARCHY 에 민자 본부가 생기면 안 됨")
 
 TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_apply_in_browser,
-         t_border_on_click_view_mode, t_border_contrast_all_colors, t_admin_click_has_border, t_pick_destination_on_map, t_popup_button_starts_edit,
+         t_border_on_click_view_mode, t_border_contrast_all_colors, t_admin_click_has_border, t_pick_destination_on_map, t_no_admin_checkbox_and_no_popup_move_button,
          t_save_bar_always_visible, t_unassigned_visible_and_clickable, t_assign_unassigned_to_branch, t_select_all_unassigned_row,
          t_width_grows_with_zoom, t_click_tolerance_near_miss, t_nearest_prefers_closest, t_row_click_selects_and_shows, t_row_click_view_mode, t_private_hq]
 if __name__ == "__main__":

@@ -124,7 +124,8 @@ def t_branch_set_by_admin_enters_main_directly(b, ctx, m):
     x = m.users["exchungju"]; x["password"] = "Snow#Ride-2030k"; x["profile"]["must_change"] = False
     reqs = []; p = open_site(ctx, m, reqs=reqs); typed_login(p, "exchungju", "Snow#Ride-2030k"); p.wait_for_selector(".pagebar", state="visible")
     check(in_app(p) and "충주지사" in p.locator("#ssUser").inner_text() and "새 비밀번호를 먼저" not in p.locator("body").inner_text(), "변경 요구 없이 바로 들어가야 함")
-    p.wait_for_function("window.GridUI && GridUI._state().inited", timeout=60000)
+    p.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)      # 지사 계정에는 예보 격자 편입 화면이 없으므로 관할 화면으로 확인
+    check(p.locator("#tabGridBtn").count() == 0, "지사 계정에는 예보 격자 편입 탭이 없어야 함")
 
 def t_cross_tab_logout(b, ctx, m):
     p1 = open_site(ctx, m); typed_login(p1, "admin-01", SBM.ADMIN_PW, auto=True); p1.wait_for_selector(".pagebar", state="visible")

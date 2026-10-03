@@ -363,7 +363,7 @@
     <button class="tab-btn" data-tab="map">관측소 지도</button>
     <button class="tab-btn" data-tab="sources">데이터 출처</button>
     <button class="tab-btn" data-tab="jurisdiction">기관별 관할 고속도로</button>
-    <button class="tab-btn" data-tab="grid">예보 격자 편입</button>
+    <button class="tab-btn" data-tab="grid" id="tabGridBtn" style="display:none">예보 격자 편입</button>
   </div>
 
   <div id="view-map" class="view" style="display:none;">
@@ -509,6 +509,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="jurisdiction/core.js"></script>
+<script src="jurisdiction/requests.js"></script>
 <script src="jurisdiction/ui.js"></script>
 <script src="grid/core.js"></script>
 <script src="grid/ui.js"></script>
@@ -519,6 +520,7 @@
   var META_DATE_TEXT = "자동 업데이트(매일 새벽)";
   // 로그인하기 전에는 자료(data/*.json)도 화면도 불러오지 않습니다. 로그인에 성공하면 아래 bootApp 이 실행됩니다.
   function bootApp(){
+  var isAdmin = !!(window.SS_ME && window.SS_ME.role === 'admin');      // 로그인한 사람의 역할 (로그인 잠금이 채움)
   Promise.all([
     fetch('data/roads.json', {cache: 'no-store'}).then(function(r){return r.json();}),
     fetch('data/hierarchy.json', {cache: 'no-store'}).then(function(r){return r.json();}),
@@ -528,8 +530,9 @@
     fetch('data/stations.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),
     fetch('data/jurisdiction_changes.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),
     // 예보 격자 편입(기본 편입 + 저장된 변경): 없어도 기존 화면은 그대로 동작
-    fetch('data/grid_assign.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),
-    fetch('data/grid_changes.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;})
+    // 관리자만 불러옴: 예보 격자 편입 탭은 관리자 아이디에서만 보입니다
+    isAdmin ? fetch('data/grid_assign.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}) : Promise.resolve(null),
+    isAdmin ? fetch('data/grid_changes.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}) : Promise.resolve(null)
   ]).then(function(results){
     window.ROADS_DATA = results[0];
     window.HIERARCHY = results[1];
@@ -552,7 +555,22 @@
     }
     var s = document.createElement('script');
     s.src = 'app.js?v=' + Date.now();
-    s.onload = function(){ initApp(); if(window.JurisdictionUI){ JurisdictionUI.init(); } if(window.GridUI){ GridUI.init(); } };
+    s.onload = function(){
+      initApp(); if(window.JurisdictionUI){ JurisdictionUI.init(); }
+      if (isAdmin) {
+        document.getElementById('tabGridBtn').style.display = '';                       // 예보 격자 편입: 관리자에게만 탭을 보여 줌
+        if(window.GridUI){ GridUI.init(); }
+        // 지사가 올린 구간 변경 요청이 있으면 알림창·탭 표시
+        if(window.JurisRequests){ JurisRequests.startAdminWatch({
+          nameOf: function(id){ var b = (window.JURIS.doc.branches || []).filter(function(x){ return x.id === id; })[0]; return b ? b.name + ' 지사' : id; },
+          onOpen: function(){ var t = document.querySelector('.tab-btn[data-tab=jurisdiction]'); if (t) t.click(); setTimeout(function(){ if (window.JurisdictionUI) JurisdictionUI.openRequests(); }, 350); },
+          onList: function(){ if (window.JurisdictionUI && window.JurisdictionUI._state().inited) JurisdictionUI.refreshRequests(); }
+        }); }
+      } else {
+        var gv = document.getElementById('view-grid'); if (gv && gv.parentNode) gv.parentNode.removeChild(gv);          // 관리자가 아니면 화면 자체를 없앰
+        var gb = document.getElementById('tabGridBtn'); if (gb && gb.parentNode) gb.parentNode.removeChild(gb);
+      }
+    };
     document.body.appendChild(s);
   }).catch(function(err){
     document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;">데이터 로드 실패: ' + err + '</div>';

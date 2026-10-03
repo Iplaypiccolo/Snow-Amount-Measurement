@@ -3,12 +3,13 @@
    - 지도에서 구간(IC/JC 사이)을 눌러 골라 다른 지사로 옮기고, 신설 기관 추가·지사의 본부 이동을 할 수 있습니다.
    - 변경은 "변경 대기"에 쌓이고, [변경 저장]을 누르면 data/jurisdiction_changes.json 파일을 내려받습니다.
      이 파일을 저장소에 커밋하면 모든 사용자에게 적용됩니다. (계산은 jurisdiction/core.js)
-   - 관리자 모드는 화면 편의 기능입니다. 실제 반영 권한은 저장소에 쓸 수 있는 사람에게만 있습니다.
+   - 변경(이동·신설·본부 이동)은 관리자 아이디로 로그인했을 때만 할 수 있습니다(관리자 모드 체크박스는 없음). 지사 아이디는 구간을 골라 [구간 변경 요청]으로 관리자에게 부탁합니다.
+   - 화면 제한은 편의 기능입니다. 실제 반영 권한은 저장소에 쓸 수 있는 사람에게만 있고, 변경 요청의 권한은 서버(DB)가 검사합니다.
    ============================================================ */
 (function () {
   'use strict';
   var C = window.JurisCore;
-  var S = { boxes: {}, lastMove: 0, inited: false, admin: false, selected: {}, last: null, clicked: null, pick: false, pending: [], focus: null, map: null, polys: {}, casing: null, ends: null, roads: null, search: '', view: null, secMap: null };
+  var S = { boxes: {}, lastMove: 0, inited: false, admin: false, canRequest: false, reqs: [], reqErr: '', show: {}, toastT: null, selected: {}, last: null, clicked: null, pick: false, pending: [], focus: null, map: null, polys: {}, casing: null, ends: null, roads: null, search: '', view: null, secMap: null };
 
   function J() { return window.JURIS; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -19,7 +20,7 @@
   function fmt(v) { return v == null ? '-' : v + 'cm'; }
 
   /* ---------- 색: 본부마다 색상(hue), 같은 본부 안에서는 밝기를 번갈아 ---------- */
-  var NONE_COLOR = '#4a4a4a';           // 어느 지사에도 속하지 않은 고속도로: 진한 회색 점선
+  var NONE_COLOR = '#8a8a8a';           // 어느 지사에도 속하지 않은 고속도로: 회색 실선
   function colorOf(id) {
     var st = S.view.state, b = st.branches[id];
     if (id == null || id === 'NONE') return NONE_COLOR;
@@ -36,8 +37,8 @@
   var BASE_Z = 5;
   function widthFor(zoom) { return Math.round(Math.max(3, Math.min(16, 2 + (zoom - BASE_Z) * 1.15))); }
   function curWidth() { return widthFor(S.map ? S.map.getZoom() : 7); }
-  // 점선 무늬도 굵기에 비례해야 굵은 선에서도 보임 (변경 대기 = 긴 점선, 미지정 = 둥근 점)
-  function dashFor(kind, w) { return kind === 'pending' ? Math.round(w * 1.6) + ',' + Math.round(w * 1.2) : kind === 'none' ? '1,' + Math.round(w * 1.7) : null; }
+  // 점선 무늬도 굵기에 비례해야 굵은 선에서도 보임 (변경 대기 = 긴 점선. 미지정 구간은 점선이 아니라 회색 실선)
+  function dashFor(kind, w) { return kind === 'pending' ? Math.round(w * 1.6) + ',' + Math.round(w * 1.2) : null; }
 
   /* ---------- 테두리 색: 선 색의 밝기에 따라 반대로 ----------
      선이 밝으면 어두운 테두리, 선이 어두우면 흰 테두리. 지도 배경에서도 떨어져 보이도록
@@ -70,11 +71,11 @@
     root.innerHTML =
       '<div class="jr-wrap">' +
       '<div class="jr-side">' +
-        '<div class="jr-head"><b>기관별 관할 고속도로</b>' +
-        '<label class="jr-admin"><input type="checkbox" id="jr-admin"> 관리자 모드</label></div>' +
+        '<div class="jr-head"><b>기관별 관할 고속도로</b><span class="jr-role" id="jr-role"></span></div>' +
         '<div class="jr-note" id="jr-note"></div>' +
         '<div class="jr-tools"><input id="jr-search" placeholder="지사 검색 (예: 춘천)">' +
         '<button id="jr-add" class="jr-btn jr-admin-only">+ 신설 기관</button></div>' +
+        '<div id="jr-requests" class="jr-requests" style="display:none"></div>' +
         '<div id="jr-tree" class="jr-tree"></div>' +
         '<div id="jr-pending" class="jr-pending"></div>' +
       '</div>' +
@@ -82,10 +83,13 @@
         '<div id="jr-selbar" class="jr-selbar" style="display:none"></div>' +
         '<div id="jr-savebar" class="jr-savebar" style="display:none"></div>' +
         '<div id="jr-pickbar" class="jr-pickbar" style="display:none">도착 지사로 삼을 구간을 지도에서 클릭하세요 <button id="jr-pickcancel" class="jr-btn">취소 (Esc)</button></div>' +
-        '<div class="jr-legend">이중 테두리 = 선택·클릭한 구간 · 굵은 점선 = 변경 대기 · <b style="color:#4a4a4a">회색 점선 = 미지정(어느 지사에도 속하지 않음)</b> <label><input type="checkbox" id="jr-roads" checked> 배경 도로</label></div>' +
+        '<div class="jr-legend">이중 테두리 = 선택·클릭한 구간 · 굵은 점선 = 변경 대기 · <b style="color:#6f6f6f">회색 실선 = 미지정(어느 지사에도 속하지 않음)</b> <label><input type="checkbox" id="jr-roads" checked> 배경 도로</label></div>' +
       '</div></div>' +
       '<div id="jr-modal" class="jr-modal" style="display:none"></div>';
-    $('jr-note').innerHTML = '지도에서 구간을 누르면 테두리와 함께 소속 정보가 보입니다. 변경하려면 <b>관리자 모드</b>를 켜고 구간을 누르세요. 이 모드는 화면 편의 기능이며, 실제 반영은 저장 파일을 저장소에 올릴 수 있는 사람만 할 수 있습니다.';
+    $('jr-role').textContent = S.admin ? '관리자' : S.canRequest ? '변경 요청 가능' : '보기 전용';
+    $('jr-note').innerHTML = S.admin ? '구간을 눌러 선택하고(Shift+클릭: 범위, 노선명 클릭도 선택) 다른 지사로 옮기세요. 지사가 올린 <b>변경 요청</b>은 아래 목록에 나타납니다. 저장 파일을 저장소에 올려야 모두에게 적용됩니다.'
+      : S.canRequest ? '구간을 눌러 선택한 뒤 <b>[구간 변경 요청]</b>을 누르면 관리자에게 다른 기관으로 옮겨 달라고 요청할 수 있습니다. 관할 변경은 관리자만 할 수 있습니다.'
+      : '지도에서 구간을 누르면 테두리와 함께 소속 정보가 보입니다. 관할 변경은 관리자만 할 수 있습니다.';
   }
 
   function ensureMap() {
@@ -108,7 +112,7 @@
     S.map.on('click', function (e) {
       var hit = nearestSection(e.latlng, NEAR_PX); if (!hit) return;
       onSectionClick(hit, e.originalEvent);
-      if (!S.admin) S.polys[hit.id].openPopup(e.latlng);
+      if (!selectMode()) S.polys[hit.id].openPopup(e.latlng);
     });
     S.map.on('mousemove', function (e) {          // 눌릴 만큼 가까우면 손 모양 커서
       var now = Date.now(); if (now - S.lastMove < 60) return; S.lastMove = now;
@@ -118,7 +122,7 @@
     S.map.on('zoomend', function () { restyle(); });          // 확대·축소에 맞춰 굵기 다시 칠함
     S.casing = L.layerGroup().addTo(S.map);          // 선택·클릭한 구간의 이중 테두리
     S.ends = L.layerGroup().addTo(S.map);            // 시점·종점 IC/JC 표시
-    S.map.on('popupclose', function () { if (!S.admin && S.clicked) { S.clicked = null; restyle(); } });   // 보기 모드: 팝업을 닫으면 테두리도 해제
+    S.map.on('popupclose', function () { if (!selectMode() && S.clicked) { S.clicked = null; restyle(); } });   // 보기 모드: 팝업을 닫으면 테두리도 해제
     S.map.on('popupopen', function (e) {          // 닫기(X)가 href="#" 라서 상위 프레임으로 이동하는 문제 방지
       var btn = e.popup && e.popup._closeButton;
       if (btn) { btn.removeAttribute('href'); L.DomEvent.off(btn, 'click'); L.DomEvent.on(btn, 'click', function (ev) { L.DomEvent.preventDefault(ev); S.map.closePopup(e.popup); }); }
@@ -148,8 +152,7 @@
   function infoHtml(sec) {
     var st = S.view.state, o = st.branches[st.owner[sec.id]];
     return '<b>' + esc(sec.route) + '</b><br>' + esc(sec['from']) + ' → ' + esc(sec.to) + ' · ' + sec.km + 'km<br>' +
-      (o ? '소속: <b>' + esc(o.name) + '</b> 지사 (' + esc(o.hq) + ')' : '소속: <b>미지정</b> (어느 지사에도 속하지 않음)') +
-      (S.admin ? '' : '<div style="margin-top:7px"><button class="jr-btn jr-popbtn" data-sid="' + sec.id + '">이 구간 옮기기 (관리자 모드 켜기)</button></div>');
+      (o ? '소속: <b>' + esc(o.name) + '</b> 지사 (' + esc(o.hq) + ')' : '소속: <b>미지정</b> (어느 지사에도 속하지 않음)');
   }
 
   /* ---------- 지도 스타일 ---------- */
@@ -159,14 +162,15 @@
     var st = S.view.state, committed = C.resolve(J().doc, base()).owner, hl = {};
     Object.keys(S.selected).forEach(function (id) { hl[id] = true; });
     if (S.clicked) hl[S.clicked] = true;
+    Object.keys(S.show).forEach(function (id) { hl[id] = true; });         // 요청 목록의 [지도에서 보기]로 표시한 구간
     J().doc.sections.forEach(function (sec) {
       var p = S.polys[sec.id]; if (!p) return;
       var own = st.owner[sec.id], key = own || 'NONE', dim = S.focus && key !== S.focus && !hl[sec.id];
       var w = curWidth() + (hl[sec.id] || (S.focus && key === S.focus) ? 2 : 0);
       p.setStyle({
         color: colorOf(own), weight: w, opacity: dim ? 0.22 : 0.95,
-        dashArray: own !== committed[sec.id] ? dashFor('pending', w) : (own === null ? dashFor('none', w) : null),   // 긴 점선=변경 대기, 둥근 점=미지정
-        lineCap: own === null ? 'round' : 'butt'
+        dashArray: own !== committed[sec.id] ? dashFor('pending', w) : null,   // 긴 점선=변경 대기 (미지정은 회색 실선)
+        lineCap: 'butt'
       });
     });
     // 이중 테두리: 가장 바깥(반대색 띠) → 테두리 → 구간 선 순서로 겹쳐 그림
@@ -196,10 +200,12 @@
   }
 
   /* ---------- 구간 선택 ---------- */
+  function selectMode() { return S.admin || S.canRequest; }      // 구간을 골라 선택할 수 있는 계정: 관리자(이동) · 지사(변경 요청)
   function onSectionClick(sec, ev) {
-    if (!S.admin) { S.clicked = sec.id; restyle(); return; }       // 보기 모드: 팝업 + 테두리
+    S.show = {};
+    if (!selectMode()) { S.clicked = sec.id; restyle(); return; }  // 보기 전용: 팝업 + 테두리
     if (S.map) S.map.closePopup();
-    if (S.pick) { pickDestination(sec); return; }                 // 도착 지사를 지도에서 찍는 중
+    if (S.admin && S.pick) { pickDestination(sec); return; }       // 도착 지사를 지도에서 찍는 중(관리자)
     if (ev && ev.shiftKey && S.last && S.last.chain === sec.chain) {       // Shift+클릭: 같은 노선 줄에서 범위 선택
       var lo = Math.min(S.last.order, sec.order), hi = Math.max(S.last.order, sec.order);
       J().doc.sections.forEach(function (s) { if (s.chain === sec.chain && s.order >= lo && s.order <= hi) S.selected[s.id] = true; });
@@ -208,13 +214,6 @@
     }
     S.clicked = S.selected[sec.id] ? sec.id : null;
     S.last = sec; afterChange(false);
-  }
-
-  function setAdmin(on) {
-    S.admin = on; if (!on) { S.selected = {}; S.last = null; S.pick = false; S.clicked = null; }
-    $('jr-admin').checked = on;
-    $('view-jurisdiction').classList.toggle('jr-is-admin', on);
-    afterChange(false);
   }
 
   function setPick(on) {
@@ -234,8 +233,13 @@
 
   function renderSelBar() {
     var bar = $('jr-selbar'), sel = selectedList();
-    if (!S.admin || !sel.length) { bar.style.display = 'none'; return; }
+    if (!selectMode() || !sel.length) { bar.style.display = 'none'; return; }
     var st = S.view.state, km = round1(sel.reduce(function (a, s) { return a + s.km; }, 0));
+    if (!S.admin) {          // 지사: 이동은 못 하고 관리자에게 요청만 할 수 있음
+      bar.innerHTML = '<b>' + sel.length + '개 구간 · ' + km + 'km 선택</b> <span class="jr-barhint">관할 변경은 관리자만 할 수 있어요</span>' +
+        '<button id="jr-reqopen" class="jr-btn jr-primary">구간 변경 요청</button><button id="jr-clear" class="jr-btn">선택 해제</button>';
+      bar.style.display = 'flex'; return;
+    }
     var opts = st.hqs.map(function (hq) {
       var o = st.order.filter(function (id) { return st.branches[id].hq === hq; }).map(function (id) { return '<option value="' + id + '">' + esc(st.branches[id].name) + '</option>'; }).join('');
       return o ? '<optgroup label="' + esc(hq) + '">' + o + '</optgroup>' : '';
@@ -278,11 +282,13 @@
     if (S.admin && id !== 'NONE') {
       h += '<div class="jr-row">본부 변경: <select id="jr-hq">' + st.hqs.map(function (hq) { return '<option' + (hq === st.branches[id].hq ? ' selected' : '') + '>' + esc(hq) + '</option>'; }).join('') + '</select>' +
         '<button class="jr-btn" id="jr-selall">이 지사 구간 전체 선택</button></div>';
+    } else if (selectMode() && id !== 'NONE') {
+      h += '<div class="jr-row"><button class="jr-btn" id="jr-selall">이 지사 구간 전체 선택</button></div>';
     }
-    if (S.admin && id === 'NONE') h += '<div class="jr-row"><button class="jr-btn" id="jr-selall">미지정 구간 전체 선택</button></div>';
-    if (!secs.length) return h + '<div class="jr-empty">' + (id === 'NONE' ? '미지정 구간이 없습니다.' : '관할 구간이 없습니다. 지도에서 구간을 골라 이 지사로 옮기세요.') + '</div></div>';
+    if (selectMode() && id === 'NONE') h += '<div class="jr-row"><button class="jr-btn" id="jr-selall">미지정 구간 전체 선택</button></div>';
+    if (!secs.length) return h + '<div class="jr-empty">' + (id === 'NONE' ? '미지정 구간이 없습니다.' : (S.admin ? '관할 구간이 없습니다. 지도에서 구간을 골라 이 지사로 옮기세요.' : '관할 구간이 없습니다.')) + '</div></div>';
     h += secs.map(function (s) {
-      return '<div class="jr-sec' + (S.selected[s.id] ? ' sel' : '') + '" data-sid="' + s.id + '" title="' + (S.admin ? '누르면 선택/해제하고 지도에 표시합니다 (Shift+클릭: 범위 선택)' : '누르면 지도에 표시합니다') + '">' + (S.admin ? '<input type="checkbox" data-sid="' + s.id + '"' + (S.selected[s.id] ? ' checked' : '') + '> ' : '') +
+      return '<div class="jr-sec' + (S.selected[s.id] ? ' sel' : '') + '" data-sid="' + s.id + '" title="' + (selectMode() ? '누르면 선택/해제하고 지도에 표시합니다 (Shift+클릭: 범위 선택)' : '누르면 지도에 표시합니다') + '">' + (selectMode() ? '<input type="checkbox" data-sid="' + s.id + '"' + (S.selected[s.id] ? ' checked' : '') + '> ' : '') +
         '<span>' + esc(s.route) + '</span> ' + esc(s['from']) + ' → ' + esc(s.to) + ' <em>' + s.km + 'km</em></div>';
     }).join('');
     return h + '</div>';
@@ -291,7 +297,7 @@
   /* ---------- 변경 대기 / 저장 ---------- */
   function describe(ev) {
     var st = S.view.state, nm = function (id) { return id == null || id === 'NONE' ? '미지정' : (st.branches[id] ? st.branches[id].name : id); };
-    if (ev.t === 'move') return ev.sections.length + '개 구간(' + (ev.km != null ? ev.km : '?') + 'km): ' + (ev.from || []).map(nm).join('·') + ' → <b>' + esc(nm(ev.to)) + '</b>';
+    if (ev.t === 'move') return ev.sections.length + '개 구간(' + (ev.km != null ? ev.km : '?') + 'km): ' + (ev.from || []).map(nm).join('·') + ' → <b>' + esc(nm(ev.to)) + '</b>' + (ev.req ? ' <em>요청 #' + esc(ev.req) + '</em>' : '');
     if (ev.t === 'addBranch') return '신설 기관: <b>' + esc(ev.name) + '</b> (' + esc(ev.hq) + ')';
     if (ev.t === 'moveHq') return '<b>' + esc(nm(ev.branch)) + '</b>: ' + esc(ev.fromHq || '?') + ' → ' + esc(ev.hq);
     return esc(ev.t);
@@ -324,6 +330,7 @@
     var data = { version: 1, events: base().concat(stampPending()) };
     var blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
     var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'jurisdiction_changes.json'; a.click();
+    approveLinkedRequests();                       // 이 변경에 연결된 지사 요청을 승인 처리
     var up = uploadUrl(location.hostname, location.pathname);
     modal('<h3>저장 파일을 내려받았습니다</h3>' +
       '<p class="jr-hint" style="color:#8a4b00">⚠ 아직 사이트에 반영된 것이 아닙니다. 아래 순서로 올려야 모든 사용자에게 적용됩니다.</p>' +
@@ -418,7 +425,7 @@
   function afterChange(recompute) {
     S.view = C.summarize(J().doc, events());
     if (recompute) { var st = S.view.state; if (S.focus && !st.branches[S.focus]) S.focus = null; }
-    restyle(); renderTree(); renderPending(); renderSelBar(); renderSaveBar();
+    restyle(); renderTree(); renderPending(); renderSelBar(); renderSaveBar(); renderRequests();
   }
 
   /* ---------- 항상 보이는 저장 바 (관리자 모드): 지도 오른쪽 위 ---------- */
@@ -438,13 +445,13 @@
     bar.style.display = 'flex';
   }
 
-  // 왼쪽 목록에서 노선명(구간 행)을 누르면: 지도에서 그 구간을 누른 것과 똑같이 처리 (관리자 모드=선택, 보기 모드=테두리·팝업)
+  // 왼쪽 목록에서 노선명(구간 행)을 누르면: 지도에서 그 구간을 누른 것과 똑같이 처리 (관리자·지사=선택, 보기 전용=테두리·팝업)
   function pickFromList(sec, ev) {
     var p = S.polys[sec.id]; if (!p) return;
     var bounds = p.getBounds();
     if (!S.map.getBounds().pad(-0.1).contains(bounds)) S.map.fitBounds(bounds, { padding: [70, 70], maxZoom: 13 });   // 이미 화면에 보이면 지도를 움직이지 않음
     onSectionClick(sec, ev);
-    if (!S.admin) p.openPopup(p.getCenter());
+    if (!selectMode()) p.openPopup(p.getCenter());
   }
 
   function focusBranch(id) {
@@ -457,36 +464,159 @@
   }
 
   function bind() {
-    $('jr-admin').addEventListener('change', function (e) { setAdmin(e.target.checked); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && S.pick) setPick(false); });
     $('jr-search').addEventListener('input', function (e) { S.search = e.target.value; renderTree(); });
-    $('jr-add').addEventListener('click', addBranchDialog);
+    $('jr-add').addEventListener('click', function () { if (S.admin) addBranchDialog(); });
     $('jr-roads').addEventListener('change', function (e) { if (e.target.checked) S.roads.addTo(S.map); else S.map.removeLayer(S.roads); });
     document.getElementById('view-jurisdiction').addEventListener('click', function (e) {
       var t = e.target;
-      var pb = t.closest && t.closest('.jr-popbtn');                 // 팝업의 [이 구간 옮기기]: 관리자 모드로 바꾸고 그 구간을 선택
-      if (pb) { var sid = pb.dataset.sid; S.map.closePopup(); setAdmin(true); S.selected[sid] = true; S.clicked = sid; S.last = S.secMap[sid]; afterChange(false); return; }
+      var ra = t.closest && t.closest('[data-ra]');                  // 변경 요청 카드의 버튼
+      if (ra) { var rq = findReq(ra.dataset.rid); if (rq) { var a = ra.dataset.ra; if (a === 'view') viewRequest(rq); else if (a === 'prep' && S.admin) prepareMove(rq); else if (a === 'reject' && S.admin) rejectRequest(rq); else if (a === 'cancel') cancelRequest(rq); } return; }
       var br = t.closest && t.closest('.jr-br'); if (br) { focusBranch(br.dataset.id); return; }
       var sec = t.closest && t.closest('.jr-sec');
       if (sec && t.tagName === 'INPUT') { if (t.checked) S.selected[sec.dataset.sid] = true; else delete S.selected[sec.dataset.sid]; afterChange(false); return; }
       if (sec) { pickFromList(S.secMap[sec.dataset.sid], e); return; }
       var id = t.id;
-      if (id === 'jr-move') addMove();
-      else if (id === 'jr-pick') setPick(true);
+      if (id === 'jr-move' && S.admin) addMove();
+      else if (id === 'jr-reqopen' && S.canRequest) openRequestDialog();
+      else if (id === 'jr-req-send' && S.canRequest) sendRequest();
+      else if (id === 'jr-reqdestok' && S.admin) { var rr = findReq(t.dataset.rid), dv = $('jr-reqdest').value; closeModal(); if (rr && dv) prepareMove(rr, dv); }
+      else if (id === 'jr-pick' && S.admin) setPick(true);
       else if (id === 'jr-pickcancel') setPick(false);
       else if (id === 'jr-clear') { S.selected = {}; S.last = null; S.clicked = null; afterChange(false); }
       else if (id === 'jr-selall') { J().doc.sections.forEach(function (s) { if ((S.view.state.owner[s.id] || 'NONE') === S.focus) S.selected[s.id] = true; }); afterChange(false); }
       else if (id === 'jr-preview' || id === 'jr-top-preview') preview();
-      else if (id === 'jr-top-save') saveFile();
+      else if (id === 'jr-top-save' && S.admin) saveFile();
       else if (id === 'jr-top-cancel') { if (S.pending.length && window.confirm('변경 대기 ' + S.pending.length + '건을 모두 취소할까요?')) { S.pending = []; afterChange(true); } }
-      else if (id === 'jr-save') saveFile();
-      else if (id === 'jr-apply') applyHere();
+      else if (id === 'jr-save' && S.admin) saveFile();
+      else if (id === 'jr-apply' && S.admin) applyHere();
       else if (id === 'jr-cancel') { S.pending = []; afterChange(true); }
       else if (id === 'jr-close') closeModal();
-      else if (id === 'jr-newok') createBranch();
+      else if (id === 'jr-newok' && S.admin) createBranch();
       else if (t.classList && t.classList.contains('jr-x')) cancelEvent(parseInt(t.dataset.ev, 10));
     });
-    document.getElementById('view-jurisdiction').addEventListener('change', function (e) { if (e.target.id === 'jr-hq') changeHq(e.target.value); });
+    document.getElementById('view-jurisdiction').addEventListener('change', function (e) { if (e.target.id === 'jr-hq' && S.admin) changeHq(e.target.value); });
+    document.getElementById('view-jurisdiction').addEventListener('toggle', function (e) { if (e.target.id === 'jr-reqdet') S.reqOpen = e.target.open; }, true);
+  }
+
+
+  /* ---------- 구간 변경 요청 (지사 → 관리자) ---------- */
+  function toast(msg) {
+    var el = $('jr-toast');
+    if (!el) { el = document.createElement('div'); el.id = 'jr-toast'; el.className = 'jr-toast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+    el.textContent = msg; el.style.display = 'block'; clearTimeout(S.toastT); S.toastT = setTimeout(function () { el.style.display = 'none'; }, 6000);
+  }
+  function bname(id) { var b = S.view.state.branches[id]; return b ? b.name : (id || '-'); }
+  function secSnap(s) { return { id: s.id, route: s.route, from: s['from'], to: s.to, km: s.km, owner: S.view.state.owner[s.id] || null }; }
+  function fmtTime(iso) { var d = new Date(iso); if (isNaN(d)) return ''; function p2(n) { return ('0' + n).slice(-2); } return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes()); }
+  var RSTAT = { pending: '대기 중', approved: '승인', rejected: '반려', cancelled: '취소' };
+
+  function loadRequests() {
+    if (!window.JurisRequests || !selectMode()) return Promise.resolve();
+    return JurisRequests.list().then(function (rows) { S.reqs = rows; S.reqErr = ''; renderRequests(); })
+      .catch(function () { S.reqErr = '요청 목록을 불러오지 못했습니다. 잠시 뒤에 다시 시도하세요.'; renderRequests(); });
+  }
+  function queued(id) { return S.pending.some(function (ev) { return ev.req === id; }); }
+  function reqCard(r) {
+    var secs = (r.snapshot && r.snapshot.length) ? r.snapshot : (r.section_ids || []).map(function (id) { return { id: id }; });
+    var routes = [], from = [], km = round1(secs.reduce(function (a, x) { return a + (x.km || 0); }, 0));
+    secs.forEach(function (x) { if (x.route && routes.indexOf(x.route) < 0) routes.push(x.route); var n = x.owner ? bname(x.owner) : '미지정'; if (x.route && from.indexOf(n) < 0) from.push(n); });
+    var to = r.to_branch_id ? bname(r.to_branch_id) : '관리자가 정해 주세요';
+    var who = S.admin ? '<b>' + esc(bname(r.branch_id)) + ' 지사</b> 요청' : '구간 변경 요청';
+    var act = '';
+    if (r.status === 'pending') {
+      act = '<div class="jr-req-a"><button class="jr-btn" data-ra="view" data-rid="' + r.id + '">지도에서 보기</button>' + (S.admin
+        ? (queued(r.id) ? '<span class="jr-pill approved">이동 준비됨</span>' : '<button class="jr-btn jr-primary" data-ra="prep" data-rid="' + r.id + '">이동 준비</button>') + '<button class="jr-btn" data-ra="reject" data-rid="' + r.id + '">반려</button>'
+        : '<button class="jr-btn" data-ra="cancel" data-rid="' + r.id + '">요청 취소</button>') + '</div>';
+    }
+    return '<div class="jr-req" data-rid="' + r.id + '"><div class="jr-req-h">' + who + ' <span class="jr-pill ' + esc(r.status) + '">' + (RSTAT[r.status] || esc(r.status)) + '</span><span class="jr-req-t">#' + r.id + ' · ' + fmtTime(r.created_at) + '</span></div>' +
+      '<div class="jr-req-b">구간 ' + secs.length + '개 (' + km + 'km) · ' + esc(routes.slice(0, 3).join(', ') + (routes.length > 3 ? ' 외 ' + (routes.length - 3) + '개 노선' : '')) + '<br>현재 ' + esc(from.join('·') || '-') + ' → <b>' + esc(to) + '</b></div>' +
+      (r.reason ? '<div class="jr-req-r">사유: ' + esc(r.reason) + '</div>' : '') + (r.status !== 'pending' && r.resolution_note ? '<div class="jr-req-r">처리 의견: ' + esc(r.resolution_note) + '</div>' : '') + act + '</div>';
+  }
+  function renderRequests() {
+    var box = $('jr-requests'); if (!box) return;
+    if (!selectMode() || !window.JurisRequests) { box.style.display = 'none'; return; }
+    var pend = S.reqs.filter(function (r) { return r.status === 'pending'; }), done = S.reqs.filter(function (r) { return r.status !== 'pending'; }).slice(0, 15);
+    var h = '<details id="jr-reqdet"' + (S.reqOpen === false ? '' : ' open') + '><summary>' + (S.admin ? '변경 요청' : '내 변경 요청') + ' <span class="jr-cnt' + (pend.length ? ' hot' : '') + '">대기 ' + pend.length + '</span></summary>' +
+      (S.reqErr ? '<div class="jr-warn">' + esc(S.reqErr) + '</div>' : '') +
+      (pend.length ? pend.map(reqCard).join('') : '<div class="jr-empty">' + (S.admin ? '처리 대기 중인 요청이 없습니다.' : '보낸 요청이 없습니다. 구간을 선택해 [구간 변경 요청]을 누르세요.') + '</div>') +
+      (done.length ? '<details class="jr-hist"><summary>처리된 요청 ' + done.length + '건</summary>' + done.map(reqCard).join('') + '</details>' : '') + '</details>';
+    box.innerHTML = h; box.style.display = 'block';
+  }
+  function findReq(id) { return S.reqs.filter(function (r) { return String(r.id) === String(id); })[0]; }
+
+  function viewRequest(r) {
+    var ids = (r.section_ids || []).filter(function (id) { return S.polys[id]; });
+    if (!ids.length) { toast('요청한 구간이 지금 자료에 없습니다.'); return; }
+    S.show = {}; ids.forEach(function (id) { S.show[id] = true; });
+    var pts = []; ids.forEach(function (id) { S.secMap[id].coords.forEach(function (c) { pts.push([c[1], c[0]]); }); });
+    S.map.fitBounds(L.latLngBounds(pts), { padding: [70, 70], maxZoom: 13 }); restyle();
+  }
+  function pickDestDialog(r) {
+    var st = S.view.state;
+    modal('<h3>이동할 지사를 정하세요</h3><p class="jr-hint">' + esc(bname(r.branch_id)) + ' 지사가 도착 지사를 정하지 않고 관리자에게 맡겼습니다.</p>' +
+      '<div class="jr-form"><label>도착 지사 <select id="jr-reqdest">' + destOptions(st) + '</select></label></div>' +
+      '<div class="jr-row"><button class="jr-btn jr-primary" id="jr-reqdestok" data-rid="' + r.id + '">이동 준비</button><button class="jr-btn" id="jr-close">취소</button></div>');
+  }
+  function destOptions(st, withEmpty) {
+    return (withEmpty ? '<option value="">관리자가 정해 주세요</option>' : '') + st.hqs.map(function (hq) {
+      var o = st.order.filter(function (id) { return st.branches[id].hq === hq; }).map(function (id) { return '<option value="' + id + '">' + esc(st.branches[id].name) + '</option>'; }).join('');
+      return o ? '<optgroup label="' + esc(hq) + '">' + o + '</optgroup>' : '';
+    }).join('');
+  }
+  function prepareMove(r, to) {            // 요청대로 이동을 "변경 대기"에 추가 (저장하면 승인 처리됨)
+    var st = S.view.state, secs = (r.section_ids || []).map(function (id) { return S.secMap[id]; }).filter(Boolean);
+    if (!secs.length) { window.alert('요청한 구간이 지금 자료에 없습니다.'); return; }
+    to = to || r.to_branch_id; if (!to) { pickDestDialog(r); return; }
+    if (!st.branches[to]) { window.alert('요청한 도착 지사가 지금 목록에 없습니다. 반려하거나 다른 지사로 이동해 주세요.'); return; }
+    var sel = secs.filter(function (s) { return (st.owner[s.id] || 'NONE') !== to; });
+    if (!sel.length) {
+      if (window.confirm('요청한 구간이 이미 ' + bname(to) + ' 지사 소속입니다. 이 요청을 승인 처리(완료)할까요?')) JurisRequests.resolve([r.id], 'approved', '이미 요청한 지사 소속임').then(function () { loadRequests(); JurisRequests.check(true); });
+      return;
+    }
+    var from = []; sel.forEach(function (s) { var o = st.owner[s.id] || null; if (from.indexOf(o) < 0) from.push(o); });
+    S.pending.push({ t: 'move', sections: sel.map(function (s) { return s.id; }), to: to, from: from, km: round1(sel.reduce(function (a, s) { return a + s.km; }, 0)), req: r.id });
+    S.show = {}; afterChange(true); toast('변경 대기에 추가했습니다 (요청 #' + r.id + '). 아래 [변경 저장]을 누르면 반영되고 요청이 승인 처리됩니다.');
+  }
+  function rejectRequest(r) {
+    var note = window.prompt(bname(r.branch_id) + ' 지사 요청 #' + r.id + '을 반려합니다.\n반려 사유를 입력하세요 (200자 이내, 비워도 됩니다)', '');
+    if (note === null) return;
+    JurisRequests.resolve([r.id], 'rejected', note).then(function (res) { toast(res.ok ? '요청 #' + r.id + '을 반려했습니다.' : res.message); loadRequests(); JurisRequests.check(true); });
+  }
+  function cancelRequest(r) {
+    if (!window.confirm('요청 #' + r.id + '을 취소할까요?')) return;
+    JurisRequests.cancel(r.id).then(function (res) { toast(res.ok ? '요청을 취소했습니다.' : res.message); loadRequests(); });
+  }
+  function approveLinkedRequests() {         // 저장 파일에 담긴 이동 중 지사 요청에서 온 것은 승인 처리
+    var ids = []; S.pending.forEach(function (ev) { if (ev.req && ids.indexOf(ev.req) < 0) ids.push(ev.req); });
+    if (!ids.length || !window.JurisRequests) return;
+    JurisRequests.resolve(ids, 'approved', '관할 변경 저장 시 승인').then(function (r) {
+      if (!r.ok) toast('요청 승인 처리에 실패했습니다: ' + r.message); else if (r.rows.length) toast('연결된 요청 ' + r.rows.length + '건을 승인 처리했습니다.');
+      loadRequests(); JurisRequests.check(true);
+    });
+  }
+
+  // 지사: 선택한 구간을 다른 기관으로 옮겨 달라는 요청 보내기
+  function openRequestDialog() {
+    var sel = selectedList(); if (!sel.length) return;
+    var st = S.view.state, km = round1(sel.reduce(function (a, s) { return a + s.km; }, 0));
+    var rows = sel.slice(0, 8).map(function (s) { var o = st.owner[s.id]; return '<tr><td>' + esc(s.route) + '</td><td>' + esc(s['from']) + ' → ' + esc(s.to) + '</td><td>' + s.km + 'km</td><td>' + (o ? esc(bname(o)) : '미지정') + '</td></tr>'; }).join('') +
+      (sel.length > 8 ? '<tr><td colspan="4" class="jr-hint">… 외 ' + (sel.length - 8) + '개 구간</td></tr>' : '');
+    modal('<h3>구간 변경 요청</h3><p class="jr-hint">선택한 구간을 다른 기관으로 옮겨 달라고 관리자에게 요청합니다. 관리자가 확인한 뒤 반영하며, 처리 결과는 "내 변경 요청"에서 볼 수 있습니다.</p>' +
+      '<div class="jr-tablewrap"><table class="jr-table"><thead><tr><th>노선</th><th>구간</th><th>길이</th><th>현재 소속</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<div class="jr-form"><label>' + sel.length + '개 구간(' + km + 'km)을 옮길 기관 <select id="jr-req-to">' + destOptions(st, true) + '</select></label>' +
+      '<label>사유 (선택, 200자 이내) <textarea id="jr-req-reason" maxlength="200" rows="3" placeholder="예: 이 구간은 실제로 ○○지사가 제설하고 있습니다"></textarea></label></div>' +
+      '<div id="jr-req-msg"></div><div class="jr-row"><button class="jr-btn jr-primary" id="jr-req-send">요청 보내기</button><button class="jr-btn" id="jr-close">취소</button></div>');
+  }
+  function sendRequest() {
+    var sel = selectedList(), btn = $('jr-req-send'), msg = $('jr-req-msg'); if (!sel.length) return;
+    if (sel.length > 60) { msg.innerHTML = '<div class="jr-warn">한 번에 60개 구간까지 요청할 수 있습니다. 나누어 요청하세요.</div>'; return; }
+    btn.disabled = true; btn.textContent = '보내는 중…';
+    JurisRequests.create({ sections: sel.map(secSnap), to: $('jr-req-to').value, reason: $('jr-req-reason').value }).then(function (res) {
+      if (!res.ok) { msg.innerHTML = '<div class="jr-warn">' + esc(res.message) + '</div>'; btn.disabled = false; btn.textContent = '요청 보내기'; return; }
+      closeModal(); S.selected = {}; S.last = null; S.clicked = null; afterChange(false);
+      toast('요청을 보냈습니다. 관리자가 로그인하면 알림창으로 안내됩니다.'); loadRequests();
+    });
   }
 
   /* ---------- 바깥에서 쓰는 함수 ---------- */
@@ -494,13 +624,16 @@
     var root = $('view-jurisdiction'); if (!root) return;
     if (!J() || !J().doc) { root.innerHTML = '<div class="jr-empty" style="padding:30px">관할 구간 데이터(data/sections.json)를 불러오지 못했습니다.</div>'; return; }
     S.secMap = {}; J().doc.sections.forEach(function (s) { S.secMap[s.id] = s; });
-    buildShell(); bind();
+    var me = window.SS_ME || null;            // 로그인한 사람 (첫 화면 로그인 잠금이 채움). 없으면 보기 전용
+    S.admin = !!(me && me.role === 'admin'); S.canRequest = !!(me && me.role === 'branch');
+    buildShell(); bind(); $('view-jurisdiction').classList.toggle('jr-is-admin', S.admin);
     S.view = C.summarize(J().doc, events());
     S.inited = true;
   }
   function show() {
     if (!S.inited) return;
-    ensureMap(); afterChange(false);
+    ensureMap(); afterChange(false); if (selectMode()) loadRequests();
   }
-  window.JurisdictionUI = { init: init, show: show, _state: function () { return S; }, _casing: casingColors, _contrast: contrast, _uploadUrl: uploadUrl, _near: nearestSection, _width: widthFor, NEAR_PX: NEAR_PX };
+  function openRequests() { S.reqOpen = true; S.search = ''; var s = $('jr-search'); if (s) s.value = ''; return loadRequests().then(function () { var b = $('jr-requests'); if (b && b.scrollIntoView) b.scrollIntoView({ block: 'nearest' }); }); }
+  window.JurisdictionUI = { init: init, show: show, openRequests: openRequests, refreshRequests: loadRequests, _state: function () { return S; }, _casing: casingColors, _contrast: contrast, _uploadUrl: uploadUrl, _near: nearestSection, _width: widthFor, NEAR_PX: NEAR_PX };
 })();
