@@ -119,6 +119,13 @@ def t_special_accounts(b, ctx, m):
     typed_login(p, "exdisabled", "Disabled#Pass-123q"); check("비활성화된 계정" in p.locator(".ss-msg.warn").inner_text() and ls(p, "ss_session") is None and not in_app(p), "비활성 계정")
     check(not data_fetched(reqs), "끝까지 자료를 불러오지 않아야 함")
 
+def t_branch_set_by_admin_enters_main_directly(b, ctx, m):
+    """관리자가 정한 비밀번호(변경 요구 없음)로 지사 담당자가 첫 화면에 바로 들어감"""
+    x = m.users["exchungju"]; x["password"] = "Snow#Ride-2030k"; x["profile"]["must_change"] = False
+    reqs = []; p = open_site(ctx, m, reqs=reqs); typed_login(p, "exchungju", "Snow#Ride-2030k"); p.wait_for_selector(".pagebar", state="visible")
+    check(in_app(p) and "충주지사" in p.locator("#ssUser").inner_text() and "새 비밀번호를 먼저" not in p.locator("body").inner_text(), "변경 요구 없이 바로 들어가야 함")
+    p.wait_for_function("window.GridUI && GridUI._state().inited", timeout=60000)
+
 def t_cross_tab_logout(b, ctx, m):
     p1 = open_site(ctx, m); typed_login(p1, "admin-01", SBM.ADMIN_PW, auto=True); p1.wait_for_selector(".pagebar", state="visible")
     p2 = open_site(ctx, m); p2.wait_for_selector("body.authed", timeout=20000)
@@ -155,7 +162,7 @@ def t_no_secrets_and_safe_text(b, ctx, m):
     check("Xss#Pass" not in p.evaluate("document.body.innerHTML"), "화면 어디에도 비밀번호가 없어야 함")
 
 TESTS = [t_locked_before_login, t_wrong_and_empty, t_login_session_only, t_remember_id, t_auto_login, t_auto_login_expired, t_server_revoked, t_special_accounts,
-         t_cross_tab_logout, t_network_problems, t_equipment_gate, t_no_secrets_and_safe_text]
+         t_branch_set_by_admin_enters_main_directly, t_cross_tab_logout, t_network_problems, t_equipment_gate, t_no_secrets_and_safe_text]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()
