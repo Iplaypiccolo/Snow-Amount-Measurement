@@ -18,7 +18,7 @@ const rejects = (f, code) => { try { build(f); } catch (e) { assert.ok(e instanc
 await test('실제 자료 변환: 구간 1,011 · 관측소 260 · 지사-관측소 384 · 격자 1,070, 합계가 원본과 같다', () => {
   const { payload: p, summary: s } = build(files()), src = files();
   assert.equal(p.sections.length, 1011); assert.equal(p.stations.length, 260); assert.equal(p.branch_stations.length, 384); assert.equal(p.grid_assign.length, 1070);
-  assert.deepEqual(s, { sections: 1011, sections_unassigned: 325, section_points: 13862, section_km: 5362.22, stations: 260, branch_stations: 384, grid_assign: 1070, grid_cells: 934 });   // 기관이 한 곳 이상 편입된 격자 934칸
+  assert.deepEqual(s, { sections: 1011, sections_unassigned: 325, section_points: 15148, section_km: 5597.47, stations: 260, branch_stations: 384, grid_assign: 1070, grid_cells: 934 });   // 기관이 한 곳 이상 편입된 격자 934칸
   assert.equal(s.sections_unassigned, src.sections.sections.filter((x) => x.owner == null).length);
   assert.equal(s.section_points, src.sections.sections.reduce((a, x) => a + x.coords.length, 0));
 });
@@ -109,7 +109,7 @@ await test('인증: 로그인 안 함 · 엉뚱한 토큰 · 관리자가 아닌
 
 await test('plan: 관리자는 요약만 받고 DB 에는 아무것도 넣지 않는다', async () => {
   const w = world(); admin(w); const r = await J(await call(w, { action: 'plan' }, { jwt: 'jwt-a' }));
-  assert.equal(r.status, 200); assert.equal(r.body.summary.sections, 1011); assert.equal(r.body.summary.section_km, 5362.22); assert.equal(w.imported, null);
+  assert.equal(r.status, 200); assert.equal(r.body.summary.sections, 1011); assert.equal(r.body.summary.section_km, 5597.47); assert.equal(w.imported, null);
   assert.equal(w.fetched.length, 6); assert.ok(w.fetched.every((u) => u.startsWith('https://raw.githubusercontent.com/Iplaypiccolo/Snow-Amount-Measurement/main/data/')));
 });
 

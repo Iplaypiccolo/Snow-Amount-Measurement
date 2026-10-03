@@ -89,7 +89,7 @@
 **무엇을 옮겼나** (`data/*.json` → DB 표, 2026-10-03)
 | 파일 | DB 표 | 개수 |
 |---|---|---|
-| `sections.json` | `sections` (선 모양은 `coords` JSON, 소속 `owner_id`가 비면 미지정) | 1,011 (미지정 325, 좌표 13,862점, 5,362.22km) |
+| `sections.json` | `sections` (선 모양은 `coords` JSON, 소속 `owner_id`가 비면 미지정) | 1,011 (미지정 325, 좌표 15,148점, 5,597.47km — 끊김 메우기 후 값(아래 6-5)) |
 | `stations.json` + `hierarchy.json` | `stations`, `branch_stations`(지사별 관측소·거리·노선) | 260 / 384 |
 | `grid_assign.json` | `grid_assign`(기본 편입. 한 칸을 여러 기관이 가진 경우 그대로) | 1,070쌍(934칸) |
 | (본부·지사) | `hqs`, `branches` — 계정 만들 때 이미 넣음 | 10 / 59 |
@@ -109,6 +109,13 @@
 - 화면의 변경 이벤트(`move`, `add`, `remove` …)와 DB 행(`kind`, `payload`, `note`)을 바꾸는 부품: `auth/events.js`. 격자는 `add`↔`cellAdd`, `remove`↔`cellRemove`.
 - 시험: `supabase/tests/events_test.sql`(권한·종류·원자성·위조 방지·순서 24항목), 화면 시험(`tests/test_jurisdiction_ui.py`, `tests/test_grid_ui.py`)에 저장·실패·서버 이력 읽기 실패·1,000줄 초과·다른 사용자 확인 포함.
 - 예전 "저장 파일 → GitHub 에 올리기" 절차와 "이 브라우저에만 임시 적용"은 없어졌습니다. `data/*_changes.json` 은 비상용(서버에 연결하지 못할 때)으로만 남아 있고 비어 있습니다.
+
+## 6-5. 고속도로 선이 중간에 끊겨 보이던 문제 (수정)
+- **증상**: 기관별 관할 고속도로 탭에서 일부 고속도로(예: 중앙고속도로 남밀양IC·삼랑진IC 근처)가 IC/JC 부분에서 0.5~2km씩 끊겨 보임.
+- **원인**: 미지정 구간을 만드는 도구(`tools/add_unassigned_sections.py`)가 "다음 IC/JC 표시가 있는 링크 **직전까지**"를 한 구간으로 만들어서, IC/JC 를 지나는 본선(IC/JC 100m 안의 링크)이 앞 구간에도 뒷 구간에도 들어가지 않았다. 지사 구간은 IC/JC 지점에서 정확히 잘라서 끊김이 없었다. (이웃 구간 603쌍은 이어지고 196쌍이 30m 이상 끊겨 있었음)
+- **수정**: `tools/fill_section_gaps.py` 가 끊긴 끝점 사이를 실제 도로망(원본 링크)의 최단 경로로 이어 붙임. 구간 번호·소속·chain·order 는 그대로, 좌표와 길이만 늘림 → 저장된 변경 이력·변경 요청의 구간 번호가 계속 유효. 지사 구간 686개는 한 글자도 바꾸지 않음(관측소 배정 불변, 지문 시험으로 확인). 메운 곳 139곳(미지정 구간 188개, +235km), 상세와 건드리지 않은 곳은 `docs/section-gaps-report.md`.
+- **남은 끊김**: 이웃 쌍 기준 30m~4km 끊김이 166곳 → 72곳. 남은 것은 대부분 chain 순서만 이어질 뿐 실제 이웃이 아닌 쌍(DFS 순서)이거나, 원본 도로망에 이어지는 길이 없는 곳. 같은 도구를 다시 돌려도 결과가 같다(멱등).
+- 도구를 다시 쓸 때 순서: `add_unassigned_sections.py` → `fill_section_gaps.py` → `tools/reference_check.py` 로 DB 와 비교.
 
 ## 7. 남은 일 (다음 단계)
 1. **로그인 화면 + 관리자 콘솔**(비밀번호 변경, 계정 초기화·비활성화, 접속 로그 보기) — 계정 발급 함수의 관리자 로그인 경로를 실제로 시험하게 됨.

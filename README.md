@@ -45,6 +45,7 @@ supabase/tests/accounts_check.sql  실제 계정 점검(낯선 가입자·임시
 supabase/seed/            본부·지사 기준정보 SQL
 supabase/functions/import-reference/  GitHub 의 data/*.json 을 서버에서 읽어 DB 로 옮기는 함수(기준정보 이전)
 tools/reference_check.py   DB 와 data/*.json 이 같은지 확인하는 검증 SQL 생성
+tools/fill_section_gaps.py  구간 사이 끊김을 실제 도로망으로 메우는 도구(결과 docs/section-gaps-report.md)
 supabase/functions/account-admin/  계정 발급·초기화·비활성화·비밀번호 일괄 설정 함수(Edge Function)
 admin/                  관리 콘솔(로그인, 비밀번호 변경, 계정 관리, 비밀번호 일괄 설정 엑셀표, 접속 로그) — docs/admin-console.md
 auth/                   로그인 공통 부품(auth.js)·변경 이력 저장/읽기 부품(events.js)·첫 화면 로그인 잠금(gate.js·gate.css) — docs/login-gate.md
@@ -66,6 +67,7 @@ tests/test_equipment.py   장비 지원 페이지 자동 테스트
 tests/test_grid_core.js  격자 계산 자동 테스트 (node tests/test_grid_core.js)
 tests/test_grid_ui.py    격자 편입 탭 화면 자동 테스트
 tests/test_jurisdiction_core.js  관할 변경 계산 자동 테스트 (node tests/test_jurisdiction_core.js)
+tests/test_sections_continuity.py  구간 데이터가 끊김 없이 이어지는지·지사 구간이 그대로인지 확인(5항목)
 tests/test_reapply.js       저장 후 새로고침 없이 다시 적용하는 계산이 처음부터 적용한 결과와 같은지 확인(실제 자료, 7항목)
 tests/test_jurisdiction_ui.py    관할 변경 탭 화면 자동 테스트
 ```
