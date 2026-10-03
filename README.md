@@ -43,10 +43,16 @@ supabase/tests/accounts_check.sql  실제 계정 점검(낯선 가입자·임시
 supabase/seed/            본부·지사 기준정보 SQL
 supabase/functions/account-admin/  계정 발급·초기화·비활성화·비밀번호 일괄 설정 함수(Edge Function)
 admin/                  관리 콘솔(로그인, 비밀번호 변경, 계정 관리, 비밀번호 일괄 설정 엑셀표, 접속 로그) — docs/admin-console.md
+auth/                   로그인 공통 부품(auth.js)과 첫 화면 로그인 잠금(gate.js·gate.css) — docs/login-gate.md
 docs/accounts.md           계정 목록(아이디만, 비밀번호 없음)
+docs/admin-console.md       관리 콘솔 사용 안내
+docs/login-gate.md          로그인 잠금·자동 로그인·아이디 저장·용어(캐시·쿠키·브라우저 저장소) 설명
 tests/test_account_admin.mjs  계정 발급 함수 자동 시험(17항목)
 tests/test_admin_policy_parity.mjs  화면·서버 비밀번호 규칙 일치 시험
-tests/test_admin_ui.py      관리 콘솔 화면 자동 시험(가짜 서버, 16항목)
+tests/test_admin_ui.py      관리 콘솔 화면 자동 시험(가짜 서버, 18항목)
+tests/test_login_gate.py    첫 화면 로그인 잠금·자동 로그인·아이디 저장 자동 시험(12항목)
+tests/test_hierarchy_order.py  본부·지사 순서가 강설량 측정 화면과 같은지 실제 자료로 확인(6항목)
+tests/_sb_mock.py          가짜 Supabase 서버(화면 시험용)
 docs/jurisdiction-build-report.md  구간 생성·끝점 보정 결과 보고서
 docs/equipment-rules.md   장비 지원 페이지 동작 규칙 (사람이 읽는 문서: 권한 표, 저장·로그·개인정보 규칙)
 docs/decisions.md         결정 사항과 배경 (서버 이전 계획, 개인정보 메모 등. 작업 이어가기용)

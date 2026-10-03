@@ -1,11 +1,12 @@
 """
 관리 콘솔(admin/) 화면 자동 테스트 — 브라우저로 직접 눌러 봅니다.
-Supabase 는 가짜 서버(이 파일 안의 Mock)로 대신합니다. 실제 Supabase 에는 접속하지 않으며, 실제 연결은 병합 후 사용자가 로그인해서 확인합니다.
+Supabase 는 가짜 서버(tests/_sb_mock.py)로 대신합니다. 실제 Supabase 에는 접속하지 않으며, 실제 연결은 병합 후 사용자가 로그인해서 확인합니다.
   - 가짜 서버가 흉내 내는 것: 로그인·토큰 갱신·로그아웃, 내 정보/계정 목록/지사·본부/접속 로그 읽기(권한 규칙 포함), 비밀번호 변경, 계정 발급 함수(일괄 설정·초기화·비활성화)
 실행 (저장소 맨 위 폴더에서):  pip install playwright && playwright install chromium  →  python tests/test_admin_ui.py
 """
 import functools, http.server, json, os, socketserver, sys, threading, re
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from urllib.parse import urlparse, parse_qs
 from playwright.sync_api import sync_playwright
 
@@ -15,100 +16,7 @@ class Quiet(http.server.SimpleHTTPRequestHandler):
 server = socketserver.TCPServer(("127.0.0.1", 0), functools.partial(Quiet, directory=str(ROOT)))
 threading.Thread(target=server.serve_forever, daemon=True).start()
 BASE = f"http://127.0.0.1:{server.server_address[1]}/admin/index.html"
-SB = "https://yzwbnohzhnctdvufntig.supabase.co"
-DOMAIN = "snow-support.invalid"
-CORS = {"access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "*"}
-ADMIN_PW = "Admin#Pass-2026x!"
-TEMP_PW = "Tmp#Start-Ab12Cd34"
-
-class Mock:
-    def __init__(self):
-        self.users, self.tokens, self.fn_calls, self.put_calls, self.n = {}, {}, [], [], 0
-        self.fn_override = None; self.delay = 0
-        self.add("admin-01", "관리자1", "admin", None, ADMIN_PW)
-        self.add("admin-02", "관리자2", "admin", None, "Second#Admin-77qZ")
-        names = [("exchungju", "충주지사", "B019", "H04"), ("exdongseoul", "동서울지사", "B006", "H02"), ("exgurye", "구례지사", "B039", "H07"), ("exwonju", "원주지사", "B011", "H03"),
-                 ("exincheon", "인천지사", "B001", "H01"), ("exsiheung", "시흥지사", "B002", "H01"), ("exgunpo", "군포지사", "B003", "H01"), ("exhwaseong", "화성지사", "B004", "H01")]
-        for u, d, b, h in names: self.add(u, d, "branch", b, TEMP_PW, must_change=True)
-        self.add("equip-01", "지원장비", "equip", None, "Equip#Pass-8821xY")
-        self.branches = [{"id": b, "name": d.replace("지사", ""), "hq_id": h} for _, d, b, h in names]
-        self.hqs = [{"id": "H01", "name": "수도권", "sort": 1}, {"id": "H02", "name": "서울경기", "sort": 2}, {"id": "H03", "name": "강원", "sort": 3}, {"id": "H04", "name": "충북", "sort": 4}, {"id": "H07", "name": "광주전남", "sort": 7}]
-        self.users["stranger"] = {"id": "id-stranger", "username": "stranger", "password": "Stranger#Pass-123", "profile": None}
-        self.add("exdisabled", "비활성지사", "branch", "B001", "Disabled#Pass-123q", disabled=True)
-        self.audit = [{"id": 3, "at": "2026-10-02T14:22:22Z", "username": "bootstrap", "role": None, "kind": "계정생성", "tab": "account-admin", "target": "exchungju (branch:B019)", "ip": "203.0.113.5"},
-                      {"id": 2, "at": "2026-10-02T14:21:44Z", "username": "bootstrap", "role": None, "kind": "계정생성", "tab": "account-admin", "target": "admin-02 (admin)", "ip": "203.0.113.5"},
-                      {"id": 1, "at": "2026-10-02T13:00:00Z", "username": "admin-01", "role": "admin", "kind": "수정", "tab": "vehicles", "target": "vehicles:11가1111", "ip": "198.51.100.2"}]
-    def add(self, username, display, role, branch, pw, must_change=False, disabled=False):
-        self.n += 1
-        self.users[username] = {"id": f"id-{username}", "username": username, "password": pw,
-            "profile": {"id": f"id-{username}", "username": username, "display_name": display, "role": role, "branch_id": branch, "must_change": must_change, "disabled": disabled}}
-    def by_token(self, req):
-        m = re.match(r"Bearer (.+)", req.headers.get("authorization", ""))
-        uid = self.tokens.get(m.group(1)) if m else None
-        return next((u for u in self.users.values() if u["id"] == uid), None)
-    def issue(self, u):
-        self.n += 1; at, rt = f"at-{self.n}", f"rt-{self.n}"; self.tokens[at] = u["id"]; self.tokens[rt] = u["id"]
-        return {"access_token": at, "refresh_token": rt, "expires_in": 3600, "token_type": "bearer", "user": {"id": u["id"]}}
-    def active_admin(self, u): p = u and u["profile"]; return bool(p and p["role"] == "admin" and not p["must_change"] and not p["disabled"])
-    def usable(self, u): p = u and u["profile"]; return bool(p and not p["must_change"] and not p["disabled"])
-    def handle(self, route):
-        req = route.request; url = urlparse(req.url); path, q = url.path, parse_qs(url.query)
-        def send(status, body=None, extra=None):
-            h = {**CORS, "content-type": "application/json"}; h.update(extra or {})
-            route.fulfill(status=status, headers=h, body=json.dumps(body) if body is not None else "")
-        if req.method == "OPTIONS": return route.fulfill(status=204, headers=CORS)
-        if self.delay: __import__('time').sleep(self.delay)         # 느린 서버 흉내
-        body = json.loads(req.post_data) if req.post_data else None
-        if path == "/auth/v1/token" and q.get("grant_type") == ["password"]:
-            email = (body or {}).get("email", ""); name = email.split("@")[0]; u = self.users.get(name)
-            if not u or email != f"{name}@{DOMAIN}" or u["password"] != body.get("password"): return send(400, {"error_code": "invalid_credentials", "msg": "Invalid login credentials"})
-            return send(200, self.issue(u))
-        if path == "/auth/v1/token" and q.get("grant_type") == ["refresh_token"]:
-            uid = self.tokens.get(body.get("refresh_token")); u = next((x for x in self.users.values() if x["id"] == uid), None)
-            return send(200, self.issue(u)) if u else send(400, {"error_code": "refresh_token_not_found"})
-        if path == "/auth/v1/logout": return send(204)
-        u = self.by_token(req)
-        if path == "/auth/v1/user" and req.method == "PUT":
-            if not u: return send(401, {"msg": "bad jwt"})
-            self.put_calls.append(body)
-            if body.get("current_password") != u["password"]: return send(400, {"error_code": "current_password_mismatch", "msg": "Incorrect current password"})
-            if len(body.get("password", "")) < 12: return send(422, {"error_code": "weak_password"})
-            u["password"] = body["password"]; u["profile"]["must_change"] = False       # DB 트리거 흉내
-            return send(200, {"id": u["id"]})
-        if path.startswith("/rest/v1/"):
-            if not u: return send(401, {"message": "JWT required"})
-            tbl = path.split("/")[-1]; idf = q.get("id", [""])[0]
-            if tbl == "profiles":
-                if idf.startswith("eq."): rows = [x["profile"] for x in self.users.values() if x["id"] == idf[3:] and x["profile"]]
-                elif self.active_admin(u): rows = sorted([x["profile"] for x in self.users.values() if x["profile"]], key=lambda p: p["username"])
-                else: rows = [u["profile"]] if u["profile"] else []
-                if not idf.startswith("eq.") and not self.active_admin(u): rows = [r for r in rows if r["id"] == u["id"]]
-                return send(200, rows)
-            if tbl in ("branches", "hqs"): return send(200, (self.branches if tbl == "branches" else self.hqs) if self.usable(u) else [])
-            if tbl == "audit_log":
-                rows = self.audit if self.active_admin(u) else []
-                k = q.get("kind", [""])[0]
-                if k.startswith("eq."): rows = [r for r in rows if r["kind"] == k[3:]]
-                return send(200, rows)
-            return send(404, {"message": "no table"})
-        if path == "/functions/v1/account-admin":
-            if not self.active_admin(u): return send(403, {"ok": False, "error": "forbidden", "message": "관리자만 할 수 있는 작업입니다."})
-            self.fn_calls.append(body)
-            if self.fn_override:
-                r = self.fn_override(body)
-                if r: return send(*r)
-            a = body.get("action")
-            if a == "set_passwords":
-                for it in body["items"]:
-                    x = self.users.get(it["username"]); x["password"] = it["password"]; x["profile"]["must_change"] = body.get("require_change", True)
-                return send(200, {"ok": True, "updated": len(body["items"]), "failed": [], "require_change": body.get("require_change", True)})
-            if a == "reset":
-                x = self.users[body["username"]]; x["password"] = "Tmp#Reset-Zx98Yw76"; x["profile"]["must_change"] = True
-                return send(200, {"ok": True, "username": x["username"], "creds": [{"username": x["username"], "temp_password": "Tmp#Reset-Zx98Yw76"}]})
-            if a in ("disable", "enable"):
-                x = self.users[body["username"]]; x["profile"]["disabled"] = (a == "disable"); return send(200, {"ok": True, "username": x["username"], "disabled": a == "disable"})
-            return send(400, {"ok": False, "error": "bad_action", "message": "알 수 없는 작업"})
-        return send(404, {"message": "unknown"})
+from _sb_mock import Mock, SB, DOMAIN, CORS, ADMIN_PW, TEMP_PW
 
 results, errors = [], []
 def check(c, m="실패"):
@@ -313,6 +221,34 @@ def t_fast_tab_switching_no_errors(b, m):
     u = p.locator("input.pw").first.get_attribute("data-u"); p.fill(f"input.pw[data-u='{u}']", GOOD(1)); p.click("#save"); p.click('.tabs button[data-t=audit]')   # 저장 중에 화면을 옮겨도 오류 없음
     p.wait_for_timeout(1500); check(len(errors) == n0, f"저장 중 탭 이동 오류: {errors[n0:]}")
 
+HIER = ["exdisabled", "exincheon", "exsiheung", "exgunpo", "exhwaseong", "exdongseoul", "exwonju", "exchungju", "exgurye", "equip-01"]     # 강설량 측정 화면과 같은 본부·지사 순서
+
+def t_sheet_hierarchy_order(b, m):
+    p = admin_sheet(b, m)
+    heads = [h.strip() for h in p.locator("tr.grp b").all_inner_texts()]
+    check(heads == ["수수도권".replace("수수", "수"), "서울경기", "강원", "충북", "광주전남", "지원장비·기타"], heads)
+    check([i.get_attribute("data-u") for i in p.locator("input.pw").all()] == HIER, [i.get_attribute("data-u") for i in p.locator("input.pw").all()])
+    check(p.locator("tbody tr[data-u] td:first-child").all_inner_texts() == [str(i) for i in range(1, 11)], "번호는 본부를 넘어 1부터 이어져야 함")
+    g = lambda code: p.locator(f"tr.grp[data-g={code}]")
+    check("지사 5개" in g("H01").inner_text() and "지사 1개" in g("H04").inner_text() and "계정 1개" in g("_other").inner_text(), g("H01").inner_text())
+    # 접기: 보이는 줄만 숨고 입력값·순서는 그대로
+    p.fill("input.pw[data-u='exincheon']", GOOD(1)); check("입력 1" in g("H01").inner_text(), "본부 머리줄의 입력 개수가 갱신되어야 함")
+    p.click("tr.grp[data-g=H01] .gtoggle"); check(p.locator("input.pw").count() == 5 and p.locator("tr.grp").count() == 6, "접으면 지사 줄만 숨김")
+    p.click("tr.grp[data-g=H01] .gtoggle"); check(vals(p)["exincheon"] == GOOD(1), "다시 펼쳐도 입력이 그대로")
+    # 한 열 붙여넣기는 이 표의 순서(본부 → 지사)대로 채움
+    p.click("#clr"); paste(p, "\n".join(GOOD(i) for i in range(10)), "exdisabled")
+    v = vals(p); check([v[u] for u in HIER] == [GOOD(i) for i in range(10)], "붙여넣기가 표 순서대로 채워져야 함")
+    p.click("#clr"); p.click("tr.grp[data-g=H01] .gtoggle"); paste(p, "\n".join(GOOD(i) for i in range(3)), "exdongseoul")
+    v = vals(p); check(v["exdongseoul"] == GOOD(0) and v["exwonju"] == GOOD(1) and v["exchungju"] == GOOD(2), "접힌 본부 다음 칸부터 채움")
+    # 거르기: 본부 이름으로
+    p.click("#clr"); p.fill("#q", "충북"); check(p.locator("input.pw").count() == 1 and p.locator("tr.grp").count() == 1 and "충북" in p.locator("tr.grp").inner_text(), "본부 이름으로 거르기")
+
+def t_users_tab_order(b, m):
+    p = new_page(b, m); login(p, "admin-01", ADMIN_PW); p.wait_for_selector("#list table")
+    names = [t.strip() for t in p.locator("#list tbody tr td:first-child").all_inner_texts()]
+    check(names == ["admin-01", "admin-02", "equip-01"] + [u for u in HIER if u != "equip-01"], names)
+
+
 def t_token_refresh(b, m):
     p = new_page(b, m); login(p, "admin-01", ADMIN_PW); p.wait_for_selector(".tabs")
     p.evaluate("(() => { const s = JSON.parse(sessionStorage.getItem('ss_session')); s.expires_at = Date.now() + 1000; sessionStorage.setItem('ss_session', JSON.stringify(s)); })()")
@@ -322,7 +258,7 @@ def t_token_refresh(b, m):
     p.reload(); p.wait_for_selector("#u"); check("만료" in p.locator(".msg.warn").inner_text(), "갱신 실패 시 다시 로그인 안내")
 
 TESTS = [t_login_session_logout, t_unregistered_and_disabled, t_forced_change, t_checklist_live, t_sheet_rows_and_paste, t_sheet_validation_display, t_sheet_save_payload,
-         t_sheet_partial_and_validation_errors, t_sheet_random_csv_filter, t_sheet_unsaved_guard_and_clear, t_users_tab, t_audit_tab, t_non_admin_cannot_use_admin_apis, t_xss_and_csp, t_token_refresh, t_fast_tab_switching_no_errors]
+         t_sheet_partial_and_validation_errors, t_sheet_random_csv_filter, t_sheet_unsaved_guard_and_clear, t_users_tab, t_audit_tab, t_non_admin_cannot_use_admin_apis, t_xss_and_csp, t_token_refresh, t_fast_tab_switching_no_errors, t_sheet_hierarchy_order, t_users_tab_order]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch(); b.new_context()
