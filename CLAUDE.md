@@ -24,16 +24,17 @@ python tools/run_all_tests.py            # 전체 시험 (약 5분, 병렬). --f
 ## 구조 지도
 | 위치 | 내용 |
 |---|---|
-| `index.html`, `app.js` | 첫 화면(로그인 잠금 → 강설량 측정). 저장 후 새로고침 없이 `refreshHierarchyViews` 로 다시 그림 |
-| `auth/` | `auth.js` 로그인·토큰 보관, `events.js` 변경 이력 읽기/저장, `gate.js` 로그인 잠금 화면 |
+| `index.html`, `boot.js`, `app.js` | 첫 화면(로그인 잠금 → 강설량 측정). **CSP 때문에 HTML 안에 스크립트를 쓰지 않음**(시작 코드는 `boot.js`). 저장 후 새로고침 없이 `refreshHierarchyViews` 로 다시 그림 |
+| `auth/` | `auth.js` 로그인·토큰 보관, `events.js` 변경 이력 읽기/저장(+`saveJurisdiction` 저장·승인 한 번에), `gate.js` 로그인 잠금 화면, `snow.js` 적설 요약본 읽기 |
 | `jurisdiction/` | 관할 탭: `core.js`(계산, 화면 없음), `ui.js`, `requests.js`(지사의 구간 변경 요청) |
 | `grid/` | 예보 격자 편입 탭 (`core.js` 계산, `ui.js`) |
-| `admin/` | 관리 콘솔: 계정, **비밀번호 일괄 설정(엑셀표)**, 접속 로그 |
+| `admin/` | 관리 콘솔: 계정, **비밀번호 일괄 설정(엑셀표)**, **적설 자료(메모장 txt → 서버)**, 접속 로그 |
 | `equipment/` | 장비 지원 화면(iframe). **아직 샘플 자료이며 서버로 옮기지 않음** |
-| `data/*.json` | 기본(baseline) 자료. 구간 1,011 · 관측소 260 · 격자 1,070쌍. `*_changes.json` 은 서버 장애 때의 비상용(비어 있음) |
-| `supabase/migrations/` | DB 변경 SQL(01~08). `functions/` Edge Function 2개(`account-admin`, `import-reference`). `tests/*.sql` 권한 시험 |
+| `data/*.json` | 기본(baseline) 자료. 구간 1,011 · 관측소 260 · 격자 1,070쌍. `*_changes.json` 은 서버 장애 때의 비상용(비어 있음). **`snow_data.json` 은 화면이 더 이상 읽지 않음**(적설은 서버 `snow_daily`→`snapshots`; 시험·처음 옮기기용) |
+| `supabase/migrations/` | DB 변경 SQL(01~12). `functions/` Edge Function 3개(`account-admin`, `import-reference`, `import-snow`). `tests/*.sql` 권한 시험(`save_check_test.sql` 포함) |
 | `tests/` | 자동 시험. `_sb_mock.py` 는 **가짜 Supabase 서버**(실제 서버에 접속하지 않고 화면을 시험) |
-| `tools/` | 자료 만들기·검증 도구. GIS 원본(`highway_links.gpkg` 등)은 저장소에 없음 |
+| `tools/` | 자료 만들기·검증 도구. GIS 원본(`highway_links.gpkg` 등)은 저장소에 없음. `check_gaps_against_source.py` = 끊긴 구간을 원본과 대조 |
+| `tools/github-actions/` | `supabase-backup.yml` 월·목 깨우기 + 월요일 암호화 백업(비공개 저장소에서만, 비밀값 2개 필요). **`.github/workflows/` 로 옮겨야 동작**(Claude 토큰에 workflow 권한 없음) — `docs/backup.md` |
 | `docs/` | **`decisions.md`(결정 이력)**, `supabase-design.md`(서버 전체), `jurisdiction-rules.md`, `grid-assign-rules.md`, `admin-console.md`, `login-gate.md` |
 
 ## 작업 규칙 (사용자와 합의한 것)
@@ -55,7 +56,9 @@ python tools/run_all_tests.py            # 전체 시험 (약 5분, 병렬). --f
 ## 서버 요약 (자세한 것은 `docs/supabase-design.md`)
 - 로그인: 아이디 → `<아이디>@snow-support.invalid` 가짜 이메일. 계정: `admin-01`, `admin-02`, 지사 59개 `ex<지사 로마자>`. 역할 `admin`/`branch`/`equip`. 가입은 막혀 있고 계정은 관리자만 만든다.
 - 관할·격자 **변경은 이력(이벤트)으로 쌓고**, 화면이 기본 자료 위에 다시 적용해 계산한다(`JurisCore.reapply`). 기본 자료 읽기는 아직 파일(DB 사본과 동일)이며 DB 읽기로 옮기는 것이 다음 단계.
-- 지사의 구간 변경 요청: 표 `jurisdiction_requests`(지사 요청 → 관리자 알림 → 이동 준비 → 저장 시 승인).
+- 지사의 구간 변경 요청: 표 `jurisdiction_requests`(지사 요청 → 관리자 알림 → 이동 준비 → 저장 시 승인). 요청과 연결된 저장은 DB 함수 `save_jurisdiction` 이 **저장+승인을 한 번에**(하나라도 안 되면 전부 취소).
+- 관할 이력 값은 DB 트리거가 검사(신설 기관 번호 `B000` 형식, 이름 1~20자·`< > " ' & \``금지, 실제 본부 이름).
+- 적설: 원자료 `snow_daily`(관측소 680곳, 결측 -99.9 제외) → 요약본 `snapshots('snow')` → 화면이 지사별 최댓값 계산. 넣기는 관리 콘솔 '적설 자료' 탭(Edge Function `import-snow`, plan→load).
 - 일회용 시작 토큰(`settings` 의 `bootstrap_token`, 15분)으로 Edge Function 을 부르는 방식이 있다. 쓸 때는 `pg_net` 을 `extensions` 스키마에 잠시 만들고 **끝나면 반드시 지운다**.
 
 ## 알려진 함정
@@ -64,4 +67,6 @@ python tools/run_all_tests.py            # 전체 시험 (약 5분, 병렬). --f
 - `raw.githubusercontent.com` 은 몇 분 캐시한다 → 서버 이전 함수를 부를 때 **커밋 번호(`ref`)를 지정**한다.
 - 신설 기관(`addBranch`)의 `id` 는 기관 번호다. 예전 버그로 번호 없이 저장된 줄(서버 줄 번호 `10`, `11`)이 있어 **읽을 때 줄 번호를 기관 번호로 쓰는 호환 코드**가 있다 — 지우지 말 것.
 - `tools/add_unassigned_sections.py` 를 다시 돌리면 IC/JC 에서 구간이 끊긴다 → 이어서 `tools/fill_section_gaps.py`, 그다음 `tools/reference_check.py` 로 DB 와 비교.
+- 첫 화면·관리 콘솔에 CSP 가 있어 화면 시험의 `wait_for_function(문자열)` 이 막힌다 → 첫 화면 시험 페이지는 `bypass_csp=True`, CSP 자체는 `t_csp_blocks_injected_script` 가 확인.
+- 일회용 시작 토큰을 settings 에 넣는 일은 Claude Code 안전 장치가 막는다 → 서버 함수 호출은 관리자 로그인(관리 콘솔)으로.
 - 화면 시험은 가짜 서버를 쓴다. **실제 서버와 사이트에서는 아직 확인하지 못한 것이 많다**(`docs/handoff.md` 의 "확인 필요" 목록).

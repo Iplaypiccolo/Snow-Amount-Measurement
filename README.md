@@ -48,7 +48,13 @@ tools/run_all_tests.py     모든 자동 시험을 한 번에 실행하고 결�
 tools/reference_check.py   DB 와 data/*.json 이 같은지 확인하는 검증 SQL 생성
 tools/fill_section_gaps.py  구간 사이 끊김을 실제 도로망으로 메우는 도구(결과 docs/section-gaps-report.md)
 supabase/functions/account-admin/  계정 발급·초기화·비활성화·비밀번호 일괄 설정 함수(Edge Function)
-admin/                  관리 콘솔(로그인, 비밀번호 변경, 계정 관리, 비밀번호 일괄 설정 엑셀표, 접속 로그) — docs/admin-console.md
+admin/                  관리 콘솔(로그인, 비밀번호 변경, 계정 관리, 비밀번호 일괄 설정 엑셀표, 적설 자료 올리기, 접속 로그) — docs/admin-console.md
+boot.js                 첫 화면 시작 코드(보안 정책 CSP 때문에 index.html 밖으로 뺌)
+auth/snow.js            적설: 서버 요약본(snapshots 'snow')을 읽어 화면 자료로 바꿈
+supabase/functions/import-snow/  기상청 메모장(txt) → 서버 적설 표(snow_daily) → 요약본 (관리 콘솔 "적설 자료" 탭이 부름)
+tools/check_gaps_against_source.py  끊긴 구간을 원본 도로망과 대조(원본에 있는데 빠진 곳만 잇기) — docs/section-gaps-source-check.md
+tools/github-actions/supabase-backup.yml  (.github/workflows/ 로 옮겨야 동작) 서버 깨우기(월·목) + 암호화 백업(월, 비공개 저장소에서만) — docs/backup.md
+tests/test_import_snow.mjs · tests/test_snow_snapshot.js · supabase/tests/save_check_test.sql  적설 넣기·요약본 계산·저장 검사 시험
 auth/                   로그인 공통 부품(auth.js)·변경 이력 저장/읽기 부품(events.js)·첫 화면 로그인 잠금(gate.js·gate.css) — docs/login-gate.md
 docs/accounts.md           계정 목록(아이디만, 비밀번호 없음)
 CLAUDE.md                  Claude Code 가 매번 가장 먼저 읽는 안내판(규칙·구조·하지 말 것)
@@ -88,15 +94,14 @@ tests/test_jurisdiction_ui.py    관할 변경 탭 화면 자동 테스트
   `15/15 통과` 처럼 나오면 정상입니다. 하나라도 `FAIL` 이면 어디가 틀렸는지 함께 표시됩니다.
 - 현재는 샘플 데이터이며 **저장해도 새로고침하면 사라집니다.** (서버 미연결)
 
-## 데이터 갱신 방식 — 수동(크롬 콘솔)
+## 데이터 갱신 방식 — 기상청 메모장(txt) → 관리 콘솔
 
-기상청 API를 자동으로 호출하는 서버/워크플로는 두지 않습니다 (보안·IP 차단 문제로 제거함). 대신:
+기상청 API를 자동으로 호출하는 서버는 두지 않습니다 (기상청이 클라우드 IP 를 막음). 대신:
 
-1. `https://apihub.kma.go.kr` 접속 후 콘솔에서 데이터 수집 스크립트 실행 → txt 파일 다운로드
-2. 사이트의 **"연도별 신적설"** 탭 → **"+ 신적설 데이터 파일 추가"** 로 그 txt 파일 업로드
-   - 하루치만 있는 파일이든, 특정 기간만 있는 파일이든 상관없이 업로드하면 날짜를 보고 알맞은 시즌(11.15~익년3.15)에 자동으로 들어갑니다
-   - 이미 해당 시즌 전체 데이터가 채워져 있는 상태에서 겹치는 날짜를 올리면, 덮어쓸지 다시 물어봅니다
-3. (선택) **"⬇ 갱신된 데이터 JSON 저장"** 버튼으로 현재 브라우저에 반영된 전체 데이터를 내려받아, 레포에 `data/snow_data.json`으로 커밋하면 다른 방문자에게도 영구 반영됩니다 (업로드만으로는 내 브라우저 세션에만 반영되고, 새로고침하면 사라집니다)
+1. `https://apihub.kma.go.kr` 접속 후 콘솔에서 데이터 수집 스크립트 실행 → txt 파일 다운로드 (스크립트는 사이트 "데이터 출처" 탭에 있음)
+2. 관리자가 **관리 콘솔 → 적설 자료** 탭에서 txt 파일 선택 → **[검사]**(새 값·바뀔 값 개수 확인) → **[저장]**
+   - 서버(Supabase)에 저장되어 **모든 사용자 화면에 바로 반영**됩니다. 저장소에 파일을 올릴 필요가 없습니다.
+   - 날짜를 보고 시즌(11.15~익년 3.15)에 들어가며, 결측(-99.9)은 저장하지 않습니다. 이미 있는 값과 다르면 "덮어쓰기"를 켜야 바뀝니다.
 
 ## 신적설 계산 방식
 
