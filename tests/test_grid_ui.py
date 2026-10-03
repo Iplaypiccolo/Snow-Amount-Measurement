@@ -56,6 +56,67 @@ def t_popup_info_for_unselected_cell(b):
     J(p, f"(() => {{ {S}.rects['{k}'].fire('mouseover', {{latlng: {S}.rects['{k}'].getBounds().getCenter()}}); return null }})()"); p.wait_for_timeout(200)
     check("편입" in p.locator(".gr-tip").inner_text(), "칸에 마우스를 올리면 편입 정보가 보임")
 
+def single_cells(p, n):          # 지금 기관이 정확히 한 곳인 칸 n개 (서로 다른 기관에서)
+    return J(p, f"""(() => {{ const s = {S}, out = [], seen = new Set();
+      s.res.assign.forEach((set, k) => {{ if (set.size === 1 && out.length < {n}) {{ const b = [...set][0]; if (!seen.has(b)) {{ seen.add(b); out.push(k); }} }} }}); return out }})()""")
+
+def t_remove_needs_no_branch_choice(b):
+    p = open_grid(b); admin(p); ks = single_cells(p, 3); check(len(ks) == 3, ks)
+    owners = [J(p, f"[...{S}.res.assign.get('{k}')][0]") for k in ks]; check(len(set(owners)) == 3, "서로 다른 기관의 칸 3개")
+    u0 = union(p); dest0 = p.input_value("#gr-dest") if p.locator("#gr-dest").count() else None
+    for k in ks: click_cell(p, k)
+    bar = p.locator("#gr-selbar"); check("편입된 칸 3" in bar.inner_text() and "편입 제외 (3칸)" in bar.inner_text(), bar.inner_text())
+    p.click("#gr-selbar [data-act=remove]"); p.wait_for_timeout(300)            # 기관을 고르지 않음, 확인 창도 없음
+    ev = J(p, f"{S}.pending"); check(len(ev) == 3 and all(e["t"] == "remove" and len(e["cells"]) == 1 for e in ev), ev)
+    check(sorted(e["from"] for e in ev) == sorted(owners), "칸이 속한 기관에서 각각 제외되어야 함")
+    check(p.locator("#gr-modal").is_hidden() and union(p) == u0 - 3 and J(p, f"Object.keys({S}.selected).length") == 0, "창 없이 바로 반영, 호출 대상 3칸 감소, 선택 해제")
+    check(all(J(p, f"{S}.res.assign.get('{k}').size") == 0 for k in ks), "제외된 칸은 어느 기관에도 속하지 않음")
+    check(p.locator("#gr-pending .jr-ev").count() == 3 and "제외" in p.locator("#gr-pending .jr-ev").first.inner_text(), "변경 대기 목록")
+    p.click("#gr-savebar [data-act=preview]"); p.wait_for_timeout(250); check(f"{u0} → {u0 - 3}칸" in p.locator("#gr-modal").inner_text(), "미리보기에 합집합 감소")
+    p.click("#gr-modal [data-act=close]")
+    # 한 기관의 칸을 여러 개 한꺼번에 제외하면 그 기관의 이벤트 하나로 묶임
+    p2 = open_grid(b); admin(p2); one = J(p2, f"""(() => {{ const out = []; {S}.res.assign.forEach((set, k) => {{ if (set.size === 1 && [...set][0] === 'B019' && out.length < 4) out.push(k); }}); return out }})()""")
+    for k in one: click_cell(p2, k)
+    p2.click("#gr-selbar [data-act=remove]"); p2.wait_for_timeout(250); ev2 = J(p2, f"{S}.pending"); check(len(ev2) == 1 and ev2[0]["from"] == "B019" and len(ev2[0]["cells"]) == len(one), ev2)
+
+def t_remove_shared_cells_asks_which_branch(b):
+    p = open_grid(b); admin(p)
+    sh = J(p, f"""(() => {{ let r = null; {S}.res.assign.forEach((set, k) => {{ if (!r && set.size === 2) r = [k, [...set]]; }}); return r }})()"""); k, brs = sh; check(len(brs) == 2, sh)
+    u0 = union(p); sh0 = shared(p); click_cell(p, k); p.click("#gr-selbar [data-act=remove]"); p.wait_for_timeout(250)
+    dlg = p.locator("#gr-modal"); check(dlg.is_visible() and "어느 기관에서 제외할까요" in dlg.inner_text() and p.locator("#gr-modal .gr-rmchk").count() == 2, dlg.inner_text()[:150])
+    check(all(c.is_checked() for c in p.locator("#gr-modal .gr-rmchk").all()), "기본은 모두 체크")
+    check(len(J(p, f"{S}.pending")) == 0, "확인 전에는 변경 대기가 생기지 않음")
+    # 한 기관만 제외 → 칸은 남고 공유만 풀림
+    p.locator(f"#gr-modal .gr-rmchk[value='{brs[0]}']").uncheck(); p.click("#gr-modal [data-act=removeok]"); p.wait_for_timeout(250)
+    left = J(p, f"[...{S}.res.assign.get('{k}')]"); check(left == [brs[0]] and p.locator("#gr-modal").is_hidden(), f"{brs[0]} 만 남아야 함: {left}")
+    check(union(p) == u0 and shared(p) == sh0 - 1, "합집합은 그대로, 공유 1칸 감소")
+    ev = J(p, f"{S}.pending"); check(len(ev) == 1 and ev[0]["from"] == brs[1] and ev[0]["cells"] == [list(map(int, k.split(",")))], ev)
+    # 남은 기관마저 제외(모두 체크) → 칸이 비게 됨
+    click_cell(p, k); p.click("#gr-selbar [data-act=remove]"); p.wait_for_timeout(250)
+    check(p.locator("#gr-modal").is_hidden() and J(p, f"{S}.res.assign.get('{k}').size") == 0 and union(p) == u0 - 1, "한 기관만 남은 칸은 확인 없이 바로 제외")
+    # 확인 창에서 취소 / 아무것도 체크하지 않음
+    p2 = open_grid(b); admin(p2); sh2 = J(p2, f"""(() => {{ let r = null; {S}.res.assign.forEach((set, k) => {{ if (!r && set.size === 2) r = k; }}); return r }})()""")
+    click_cell(p2, sh2); p2.click("#gr-selbar [data-act=remove]"); p2.wait_for_timeout(200); p2.click("#gr-modal [data-act=close]"); p2.wait_for_timeout(150)
+    check(len(J(p2, f"{S}.pending")) == 0 and J(p2, f"Object.keys({S}.selected).length") == 1, "취소하면 변경도 없고 선택도 그대로")
+    p2.click("#gr-selbar [data-act=remove]"); p2.wait_for_timeout(200)
+    for c in p2.locator("#gr-modal .gr-rmchk").all(): c.uncheck()
+    p2.click("#gr-modal [data-act=removeok]"); p2.wait_for_timeout(200); check(len(J(p2, f"{S}.pending")) == 0 and p2.locator("#gr-modal").is_visible(), "아무것도 체크하지 않으면 진행하지 않음")
+    # 공유 칸과 한 기관 칸을 섞어 선택: 공유된 기관만 확인, 체크한 기관들에서 각각 제외
+    p3 = open_grid(b); admin(p3); a, bb = J(p3, f"""(() => {{ let s2 = null, s1 = null; {S}.res.assign.forEach((set, k) => {{ if (!s2 && set.size === 2) s2 = k; }});
+      const two = [...{S}.res.assign.get(s2)]; {S}.res.assign.forEach((set, k) => {{ if (!s1 && set.size === 1 && !two.includes([...set][0])) s1 = k; }}); return [s2, s1] }})()""")      # 공유 칸의 두 기관과 다른 기관의 칸을 고름 → 기관 3곳
+    click_cell(p3, a); click_cell(p3, bb); check("편입 제외 (2칸)" in p3.locator("#gr-selbar").inner_text(), p3.locator("#gr-selbar").inner_text()); p3.click("#gr-selbar [data-act=remove]"); p3.wait_for_timeout(200)
+    n = p3.locator("#gr-modal .gr-rmchk").count(); check(n == 3, f"기관 3곳이 나열되어야 함 {n}"); p3.click("#gr-modal [data-act=removeok]"); p3.wait_for_timeout(250)
+    check(J(p3, f"{S}.res.assign.get('{a}').size") == 0 and J(p3, f"{S}.res.assign.get('{bb}').size") == 0 and len(J(p3, f"{S}.pending")) == 3, "모두 제외")
+
+def t_remove_button_state(b):
+    p = open_grid(b); admin(p); ring = ring_cells(p, 1)[0]
+    click_cell(p, ring); rb = p.locator("#gr-selbar [data-act=remove]")
+    check(rb.is_disabled() and "편입된 칸이 없습니다" in (rb.get_attribute("title") or "") and "편입 제외" == rb.inner_text().strip(), "편입된 칸이 없으면 [편입 제외]는 꺼져 있어야 함")
+    check(p.locator("#gr-selbar [data-act=add]").is_enabled(), "편입 추가는 가능")
+    asg = single_cells(p, 1)[0]; click_cell(p, asg)
+    check(rb.is_enabled() and "편입 제외 (1칸)" in rb.inner_text(), "편입된 칸을 함께 선택하면 켜지고 개수가 보임")
+    check("편입할 기관" in p.locator("#gr-selbar").inner_text(), "기관 선택은 '편입할 기관'(추가용)으로만 표시")
+
 def t_add_remove_and_save(b):
     p = open_grid(b); admin(p)
     check(p.locator("#gr-savebar").is_visible() and p.locator("#gr-savebar [data-act=save]").is_disabled(), "저장 바(변경 없음=비활성)")
@@ -77,7 +138,7 @@ def t_add_remove_and_save(b):
     check(T.J(p, "GridUI._uploadUrl('iplaypiccolo.github.io', '/Snow-Amount-Measurement/')") == "https://github.com/iplaypiccolo/Snow-Amount-Measurement/upload/main/data", "업로드 주소")
     p.click("#gr-modal [data-act=close]")
     # 제외: 방금 넣은 칸 일부를 빼면 합집합이 줄어듦
-    click_cell(p, ks[0]); click_cell(p, ks[1]); p.select_option("#gr-dest", br); p.click("#gr-selbar [data-act=remove]"); p.wait_for_timeout(250)
+    click_cell(p, ks[0]); click_cell(p, ks[1]); p.click("#gr-selbar [data-act=remove]"); p.wait_for_timeout(250)      # 기관을 고르지 않고 [편입 제외]만 누름
     check(union(p) == u0 + 1 and len(J(p, f"{S}.pending")) == 2, f"제외 후 {union(p)}")
     p.locator("#gr-pending .jr-x").first.click(); p.wait_for_timeout(200)       # 첫 변경(편입) 취소 → 제외만 남지만 효과 없음
     check(len(J(p, f"{S}.pending")) == 1, "개별 취소")
@@ -150,7 +211,7 @@ def t_new_branch_from_jurisdiction_appears(b):
     check(p.locator("#gr-tree .jr-br:has-text('신설시험')").count() == 1, "관할 탭에서 만든 신설 기관이 격자 탭에도 보여야 함")
     check(p.locator("#gr-tree .jr-br:has-text('신설시험') em").count() == 1, "신설 표시")
 
-TESTS = [t_tab_loads, t_popup_info_for_unselected_cell, t_add_remove_and_save, t_share_between_branches, t_box_select, t_budget_levels, t_focus_branch,
+TESTS = [t_tab_loads, t_popup_info_for_unselected_cell, t_remove_needs_no_branch_choice, t_remove_shared_cells_asks_which_branch, t_remove_button_state, t_add_remove_and_save, t_share_between_branches, t_box_select, t_budget_levels, t_focus_branch,
          t_colors_match_other_tab, t_new_branch_from_jurisdiction_appears]
 if __name__ == "__main__":
     with sync_playwright() as pw:

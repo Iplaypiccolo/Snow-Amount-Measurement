@@ -20,7 +20,9 @@
   function fmt(v) { return v == null ? '-' : v + 'cm'; }
 
   /* ---------- 색: 본부마다 색상(hue), 같은 본부 안에서는 밝기를 번갈아 ---------- */
-  var NONE_COLOR = '#8a8a8a';           // 어느 지사에도 속하지 않은 고속도로: 회색 실선
+  var NONE_COLOR = '#3f3f3f';           // 어느 지사에도 속하지 않은 고속도로: 진한 회색 실선(밝은 지도에서 잘 보이도록 명도를 낮춤) + 흰 테두리 + 1px 더 굵게
+  var NONE_EXTRA_W = 1;                  // 미지정 구간은 다른 구간보다 선을 1px 굵게
+  var HALO_COLOR = '#ffffff';
   function colorOf(id) {
     var st = S.view.state, b = st.branches[id];
     if (id == null || id === 'NONE') return NONE_COLOR;
@@ -83,7 +85,7 @@
         '<div id="jr-selbar" class="jr-selbar" style="display:none"></div>' +
         '<div id="jr-savebar" class="jr-savebar" style="display:none"></div>' +
         '<div id="jr-pickbar" class="jr-pickbar" style="display:none">도착 지사로 삼을 구간을 지도에서 클릭하세요 <button id="jr-pickcancel" class="jr-btn">취소 (Esc)</button></div>' +
-        '<div class="jr-legend">이중 테두리 = 선택·클릭한 구간 · 굵은 점선 = 변경 대기 · <b style="color:#6f6f6f">회색 실선 = 미지정(어느 지사에도 속하지 않음)</b> <label><input type="checkbox" id="jr-roads" checked> 배경 도로</label></div>' +
+        '<div class="jr-legend">이중 테두리 = 선택·클릭한 구간 · 굵은 점선 = 변경 대기 · <b style="color:#3f3f3f">진한 회색 실선(흰 테두리) = 미지정(어느 지사에도 속하지 않음)</b> <label><input type="checkbox" id="jr-roads" checked> 배경 도로</label></div>' +
       '</div></div>' +
       '<div id="jr-modal" class="jr-modal" style="display:none"></div>';
     $('jr-role').textContent = S.admin ? '관리자' : S.canRequest ? '변경 요청 가능' : '보기 전용';
@@ -163,16 +165,18 @@
     Object.keys(S.selected).forEach(function (id) { hl[id] = true; });
     if (S.clicked) hl[S.clicked] = true;
     Object.keys(S.show).forEach(function (id) { hl[id] = true; });         // 요청 목록의 [지도에서 보기]로 표시한 구간
+    var dimOf = function (sec) { var own = st.owner[sec.id], key = own || 'NONE'; return S.focus && key !== S.focus && !hl[sec.id]; };
     J().doc.sections.forEach(function (sec) {
       var p = S.polys[sec.id]; if (!p) return;
       var own = st.owner[sec.id], key = own || 'NONE', dim = S.focus && key !== S.focus && !hl[sec.id];
-      var w = curWidth() + (hl[sec.id] || (S.focus && key === S.focus) ? 2 : 0);
+      var w = curWidth() + (hl[sec.id] || (S.focus && key === S.focus) ? 2 : 0) + (own === null ? NONE_EXTRA_W : 0);
       p.setStyle({
         color: colorOf(own), weight: w, opacity: dim ? 0.22 : 0.95,
         dashArray: own !== committed[sec.id] ? dashFor('pending', w) : null,   // 긴 점선=변경 대기 (미지정은 회색 실선)
         lineCap: 'butt'
       });
     });
+    updateHalo(st, dimOf);
     // 이중 테두리: 가장 바깥(반대색 띠) → 테두리 → 구간 선 순서로 겹쳐 그림
     S.casing.clearLayers(); S.ends.clearLayers();
     var ids = Object.keys(hl).filter(function (id) { return S.polys[id]; }), outers = [], cases = [];
@@ -187,6 +191,19 @@
     ids.forEach(function (id) { S.polys[id].bringToFront(); });
     var endId = S.clicked || (ids.length === 1 ? ids[0] : null);       // 시점·종점은 마지막으로 누른 구간(또는 1개 선택 시)만
     if (endId && S.secMap[endId]) addEnds(S.secMap[endId]);
+  }
+
+  // 미지정 구간 밑에 흰 테두리를 깔아 밝은 지도·배경 도로 위에서도 또렷하게 보이게 함 (소속이 바뀌면 다시 만들고, 확대·축소 때는 굵기만 바꿈)
+  function updateHalo(st, dimOf) {
+    var ids = J().doc.sections.filter(function (s) { return !st.owner[s.id]; }).map(function (s) { return s.id; }), sig = ids.join(',');
+    var w = curWidth() + NONE_EXTRA_W + 5;
+    if (!S.halo) { S.halo = L.layerGroup().addTo(S.map); S.haloPolys = {}; S.haloSig = ''; }
+    if (sig !== S.haloSig) {
+      S.halo.clearLayers(); S.haloPolys = {};
+      ids.forEach(function (id) { var h = L.polyline(latlngsOf(S.secMap[id]), { color: HALO_COLOR, weight: w, opacity: 0.9, interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(S.halo); h.bringToBack(); S.haloPolys[id] = h; });
+      S.haloSig = sig;
+    }
+    ids.forEach(function (id) { S.haloPolys[id].setStyle({ weight: w, opacity: dimOf(S.secMap[id]) ? 0.12 : 0.9 }); });
   }
 
   function addEnds(sec) {

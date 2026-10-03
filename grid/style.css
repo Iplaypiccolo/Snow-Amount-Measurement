@@ -13,3 +13,7 @@
 .gr-legend .sw0{background:rgba(200,200,180,.15);border:1px dashed #8a8a7a;} .gr-legend .sw3{border:3px solid #ff00aa;background:rgba(255,0,170,.2);} .gr-legend .sw4{border:2px dashed #d98a00;background:#fff;}
 .gr-tip{font-size:12px;line-height:1.5;}
 .gr-tip em{color:#5b1a8f;font-style:normal;font-weight:700;}
+
+.gr-grp{display:inline-flex;align-items:center;gap:6px;padding-left:10px;margin-left:4px;border-left:1px solid var(--line)}
+.gr-rmlist{display:flex;flex-direction:column;gap:6px;margin:8px 0 12px;max-height:40vh;overflow:auto}
+.gr-rm{display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--line);border-radius:7px;cursor:pointer;font-size:13.5px}.gr-rm span{margin-left:auto;color:var(--muted);font-size:12px}

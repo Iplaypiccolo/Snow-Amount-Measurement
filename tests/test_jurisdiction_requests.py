@@ -161,17 +161,44 @@ def t_grid_tab_admin_only(b):
     pa.click("#tabGridBtn"); pa.wait_for_timeout(900); check(pa.locator("#view-grid").is_visible() and pa.locator("#gr-admin").count() == 0 and pa.locator("#gr-savebar").is_visible(), "관리자: 격자 탭이 열리고 바로 편집 가능")
     check(any("grid_assign.json" in u for u in ra), "관리자는 격자 자료를 불러옴")
 
+def t_unassigned_highly_visible(b):
+    """미지정 고속도로가 밝은 지도 위에서 잘 보이는지: 명도 대비·굵기·흰 테두리·확대 때 굵기 추종·변경/강조 상태"""
+    p = open_as(b, "admin-01", SBM.Mock()); ids = [s["id"] for s in DOC["sections"] if s["owner"] is None]
+    lum = lambda h: (lambda r, g, b_: 0.2126 * r + 0.7152 * g + 0.0722 * b_)(*[(lambda c: c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4)(int(h[i:i + 2], 16) / 255) for i in (1, 3, 5)])
+    cr = lambda a, b_: (max(lum(a), lum(b_)) + 0.05) / (min(lum(a), lum(b_)) + 0.05)
+    c_new, c_old, tile, road = "#3f3f3f", "#8a8a8a", "#f2efe9", "#b9b5a5"
+    check(cr(c_new, tile) >= 9 and cr(c_new, tile) > 2.5 * cr(c_old, tile), f"지도 바탕과의 명도 대비 {cr(c_new, tile):.1f}:1 (이전 {cr(c_old, tile):.1f}:1)")
+    check(cr(c_new, road) >= 5, f"배경 도로와의 대비 {cr(c_new, road):.1f}:1")
+    first = lambda i: J(p, f"(()=>{{const o=JurisdictionUI._state().polys['{i}'].options;return [o.weight,o.color]}})()")
+    owned = next(s["id"] for s in DOC["sections"] if s["owner"]); w_un, w_ow = first(ids[0])[0], first(owned)[0]
+    check(w_un == w_ow + 1, f"미지정은 소속 구간보다 1px 굵어야 함: {w_un} / {w_ow}")
+    halo = J(p, "(()=>{const s=JurisdictionUI._state();const h=Object.values(s.haloPolys||{});return [h.length, h[0]&&h[0].options.color, h[0]&&h[0].options.weight, h[0]&&h[0].options.opacity, h[0]&&h[0].options.interactive]})()")
+    check(halo[0] == len(ids) and halo[1] == "#ffffff" and halo[2] > w_un + 3 and halo[3] >= 0.85 and halo[4] is False, f"미지정마다 흰 테두리가 깔려야 함 {halo}")
+    # 확대하면 선과 테두리가 함께 굵어짐
+    J(p, "(()=>{JurisdictionUI._state().map.setZoom(12,{animate:false});return null})()"); p.wait_for_timeout(500)
+    w2 = J(p, f"JurisdictionUI._state().polys['{ids[0]}'].options.weight"); h2 = J(p, "Object.values(JurisdictionUI._state().haloPolys)[0].options.weight")
+    check(w2 > w_un and h2 > w2 + 3, f"확대하면 같이 굵어짐 {w_un}→{w2}, 테두리 {h2}")
+    # 다른 지사를 강조하면 미지정은 흐려지고 테두리도 함께 흐려짐
+    p.click(".jr-br:has-text('춘천')"); p.wait_for_timeout(500)
+    ol, oh = J(p, f"JurisdictionUI._state().polys['{ids[0]}'].options.opacity"), J(p, "Object.values(JurisdictionUI._state().haloPolys)[0].options.opacity")
+    check(ol < 0.3 and oh < 0.2, f"강조 중에는 함께 흐려짐 {ol}/{oh}")
+    p.click(".jr-br:has-text('춘천')"); p.wait_for_timeout(300)
+    # 미지정 구간을 지사로 옮기면 그 구간의 테두리는 사라지고, 옮긴 구간이 굵기 보정도 사라짐
+    n0 = J(p, "Object.keys(JurisdictionUI._state().haloPolys).length"); T.click_sec(p, ids[0]); p.select_option("#jr-dest", J(p, "JURIS.doc.branches[0].id")); p.click("#jr-move"); p.wait_for_timeout(400)
+    n1 = J(p, "Object.keys(JurisdictionUI._state().haloPolys).length"); wm = J(p, f"JurisdictionUI._state().polys['{ids[0]}'].options.weight")
+    check(n1 == n0 - 1 and wm <= w2 + 0, f"옮기면 그 구간의 흰 테두리가 사라짐 {n0}→{n1}, 굵기 {wm}")
+
 def t_unassigned_gray_solid_everywhere(b):
     p = open_as(b, "admin-01", SBM.Mock()); ids = [s["id"] for s in DOC["sections"] if s["owner"] is None]; check(len(ids) > 100, "미지정 구간")
-    o = J(p, f"(()=>{{const o=JurisdictionUI._state().polys['{ids[0]}'].options;return [o.color,o.dashArray,o.lineCap]}})()"); check(o[0] == "#8a8a8a" and not o[1] and o[2] == "butt", o)
-    sw = p.evaluate("getComputedStyle(document.querySelector('.jr-br[data-id=NONE] i')).backgroundColor"); check(sw == "rgb(138, 138, 138)", sw)
-    leg = p.locator("#view-jurisdiction .jr-legend").inner_text(); check("회색 실선" in leg and "점선 = 미지정" not in leg and "회색 점선" not in leg, leg)
+    o = J(p, f"(()=>{{const o=JurisdictionUI._state().polys['{ids[0]}'].options;return [o.color,o.dashArray,o.lineCap]}})()"); check(o[0] == "#3f3f3f" and not o[1] and o[2] == "butt", o)
+    sw = p.evaluate("getComputedStyle(document.querySelector('.jr-br[data-id=NONE] i')).backgroundColor"); check(sw == "rgb(63, 63, 63)", sw)
+    leg = p.locator("#view-jurisdiction .jr-legend").inner_text(); check("진한 회색 실선" in leg and "점선 = 미지정" not in leg and "회색 점선" not in leg, leg)
     # 변경 대기 중인 구간은 여전히 점선(미지정과 구분)
     T.click_sec(p, ids[0]); p.select_option("#jr-dest", J(p, "JURIS.doc.branches[0].id")); p.click("#jr-move"); p.wait_for_timeout(300)
     d = J(p, f"JurisdictionUI._state().polys['{ids[0]}'].options.dashArray"); check(d and "," in d, "변경 대기는 점선")
 
 TESTS = [t_branch_requests_a_move, t_branch_request_without_destination_and_errors, t_equip_cannot_request, t_branch_cannot_use_admin_features, t_admin_sees_notice_badge_and_panel,
-         t_no_notice_when_nothing_pending, t_admin_prepares_move_and_save_approves, t_admin_chooses_destination_rejects_and_already_owned, t_grid_tab_admin_only, t_unassigned_gray_solid_everywhere]
+         t_no_notice_when_nothing_pending, t_admin_prepares_move_and_save_approves, t_admin_chooses_destination_rejects_and_already_owned, t_grid_tab_admin_only, t_unassigned_gray_solid_everywhere, t_unassigned_highly_visible]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()

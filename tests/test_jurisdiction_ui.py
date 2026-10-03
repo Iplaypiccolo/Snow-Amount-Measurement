@@ -240,7 +240,7 @@ def t_unassigned_visible_and_clickable(b):
     p = open_tab(b, user="equip-01"); ids = un_ids(p)
     check(len(ids) > 100, f"미지정 구간 {len(ids)}")
     st = J(p, f"(()=>{{const o=JurisdictionUI._state().polys['{ids[0]}'].options;return [o.color,o.dashArray,o.weight,o.opacity]}})()")
-    check(st[0] == "#8a8a8a" and not st[1] and st[2] >= 4 and st[3] >= 0.9, f"미지정 선 모양(회색 실선: 점선이 아님) {st}")
+    check(st[0] == "#3f3f3f" and not st[1] and st[2] >= 5 and st[3] >= 0.9, f"미지정 선 모양(진한 회색 실선: 점선이 아님, 1px 더 굵게) {st}")
     check(J(p, f"JurisdictionUI._state().polys['{ids[0]}'].options.lineCap") == "butt", "점선용 둥근 끝 모양이 남음")
     row = p.locator('.jr-br[data-id="NONE"]'); check("구간" in row.inner_text(), row.inner_text())
     # 보기 모드: 눌러서 정보 확인

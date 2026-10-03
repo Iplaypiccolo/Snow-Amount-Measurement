@@ -176,8 +176,10 @@
       return o ? '<optgroup label="' + esc(hq) + '">' + o + '</optgroup>' : '';
     }).join('');
     var prev = $('gr-dest') ? $('gr-dest').value : '';
-    bar.innerHTML = '<b>' + keys.length + '칸 선택</b><span class="hint">(편입된 칸 ' + assigned + ')</span> → 기관 <select id="gr-dest">' + opts + '</select>' +
-      '<button class="jr-btn jr-primary" data-act="add">편입 추가</button><button class="jr-btn" data-act="remove">편입 제외</button><button class="jr-btn" data-act="clear">선택 해제</button>';
+    bar.innerHTML = '<b>' + keys.length + '칸 선택</b><span class="hint">(편입된 칸 ' + assigned + ')</span>' +
+      '<span class="gr-grp">편입할 기관 <select id="gr-dest">' + opts + '</select><button class="jr-btn jr-primary" data-act="add">편입 추가</button></span>' +
+      '<span class="gr-grp"><button class="jr-btn" data-act="remove"' + (assigned ? '' : ' disabled title="선택한 칸 중 편입된 칸이 없습니다"') + '>편입 제외' + (assigned ? ' (' + assigned + '칸)' : '') + '</button></span>' +
+      '<button class="jr-btn" data-act="clear">선택 해제</button>';
     if (prev) $('gr-dest').value = prev;
     bar.style.display = 'flex';
   }
@@ -234,12 +236,36 @@
   }
 
   /* ---------- 변경 만들기 ---------- */
-  function applyChange(kind) {
+  function applyAdd() {
     var dest = $('gr-dest').value, keys = selectedKeys(); if (!dest || !keys.length) return;
-    var eff = keys.filter(function (k) { var has = cellBranches(k).indexOf(dest) >= 0; return kind === 'add' ? !has : has; });
-    if (!eff.length) { window.alert(kind === 'add' ? '선택한 칸이 모두 이미 ' + branchName(dest) + ' 소속입니다.' : '선택한 칸 중 ' + branchName(dest) + ' 소속인 칸이 없습니다.'); return; }
-    var ev = kind === 'add' ? { t: 'add', cells: eff.map(G.unkey), to: dest } : { t: 'remove', cells: eff.map(G.unkey), from: dest };
-    S.pending.push(ev); S.selected = {}; afterChange();
+    var eff = keys.filter(function (k) { return cellBranches(k).indexOf(dest) < 0; });
+    if (!eff.length) { window.alert('선택한 칸이 모두 이미 ' + branchName(dest) + ' 소속입니다.'); return; }
+    S.pending.push({ t: 'add', cells: eff.map(G.unkey), to: dest }); S.selected = {}; afterChange();
+  }
+
+  // 편입 제외: 기관을 고르지 않아도 됩니다. 선택한 칸이 지금 속한 기관을 찾아서 거기서 뺍니다.
+  // 한 칸을 여러 기관이 함께 가진 경우에만 "어느 기관에서 뺄지" 확인합니다. (기본은 모두 체크)
+  function branchOrderIndex(id) { var i = S.state.order.indexOf(id); return i < 0 ? 9999 : i; }
+  function applyRemove() {
+    var keys = selectedKeys(), per = {}, shared = 0;
+    keys.forEach(function (k) { var bs = cellBranches(k); if (bs.length > 1) shared++; bs.forEach(function (b) { (per[b] = per[b] || []).push(k); }); });
+    var ids = Object.keys(per).sort(function (a, b) { return branchOrderIndex(a) - branchOrderIndex(b); });
+    if (!ids.length) { window.alert('선택한 칸 중 편입된 칸이 없습니다.'); return; }
+    if (!shared) { commitRemove(per, ids); return; }
+    modal('<h3>어느 기관에서 제외할까요?</h3><p class="jr-hint">선택한 칸 중 <b>' + shared + '칸</b>은 여러 기관이 함께 편입하고 있습니다. 제외할 기관을 고르세요. (모두 체크하면 이 칸들은 어느 기관에도 속하지 않게 됩니다)</p>' +
+      '<div class="gr-rmlist">' + ids.map(function (b) {
+        return '<label class="gr-rm"><input type="checkbox" class="gr-rmchk" value="' + esc(b) + '" checked> <b>' + esc(branchName(b)) + '</b> <span>' + per[b].length + '칸</span></label>';
+      }).join('') + '</div><div class="jr-row"><button class="jr-btn jr-primary" data-act="removeok">제외</button><button class="jr-btn" data-act="close">취소</button></div>');
+  }
+  function commitRemove(per, chosen) {
+    chosen.forEach(function (b) { S.pending.push({ t: 'remove', cells: per[b].map(G.unkey), from: b }); });
+    S.selected = {}; $('gr-modal').style.display = 'none'; afterChange();
+  }
+  function removeFromDialog() {
+    var chosen = Array.prototype.map.call(document.querySelectorAll('#gr-modal .gr-rmchk:checked'), function (c) { return c.value; });
+    if (!chosen.length) { window.alert('제외할 기관을 하나 이상 고르세요.'); return; }
+    var per = {}; selectedKeys().forEach(function (k) { cellBranches(k).forEach(function (b) { if (chosen.indexOf(b) >= 0) (per[b] = per[b] || []).push(k); }); });
+    commitRemove(per, chosen.filter(function (b) { return per[b]; }));
   }
 
   function afterChange() { recompute(); restyle(); renderSummary(); renderTree(); renderPending(); renderSelBar(); renderSaveBar(); }
@@ -261,7 +287,9 @@
       var t = e.target, br = t.closest && t.closest('.jr-br'); if (br) { focusBranch(br.dataset.id); return; }
       var x = t.closest && t.closest('.jr-x'); if (x) { S.pending.splice(parseInt(x.dataset.ev, 10), 1); afterChange(); return; }
       var act = t.closest && t.closest('[data-act]'); act = act && act.dataset.act; if (!act) return;
-      if (act === 'add' || act === 'remove') applyChange(act);
+      if (act === 'add') applyAdd();
+      else if (act === 'remove') applyRemove();
+      else if (act === 'removeok') removeFromDialog();
       else if (act === 'clear') { S.selected = {}; afterChange(); }
       else if (act === 'selbranch') { S.res.assign.forEach(function (set, k) { if (set.has(S.focus)) S.selected[k] = true; }); afterChange(); }
       else if (act === 'preview') preview();
