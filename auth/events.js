@@ -46,7 +46,8 @@
   function friendly(r) {
     var code = r && r.json && r.json.code;
     if (code === '42501' || (r && (r.status === 401 || r.status === 403))) return '저장할 권한이 없습니다. 관리자 아이디로 로그인했는지 확인하세요.';
-    if (code === '23514') return '변경 내용이 서버 규칙에 맞지 않습니다.';
+    if (code === '23514') return '변경 내용이 서버 규칙에 맞지 않습니다(신설 기관 이름은 1~20자, 기호(< > 따옴표 & `)는 쓸 수 없음).';
+    if (code === '55000') return '승인하려던 지사 요청 중 이미 처리(취소·반려·승인)된 것이 있어 아무것도 저장하지 않았습니다. 새로고침해서 요청 목록을 다시 확인하세요.';
     return '서버에 저장하지 못했습니다. 잠시 뒤에 다시 시도하세요.';
   }
   // events: 화면의 변경 이벤트 목록, note: 변경 사유(이벤트에 따로 없을 때 쓰는 기본값)
@@ -58,10 +59,19 @@
       .then(function (r) { return r.ok ? { ok: true } : { ok: false, message: friendly(r) }; })
       .catch(function () { return { ok: false, message: A.NET_MSG }; });
   }
+  // 관할 변경 저장 + 지사 요청 승인을 한 번에(서버 함수 save_jurisdiction: 하나라도 안 되면 아무것도 바뀌지 않음)
+  function saveJurisdiction(events, approveIds, note) {
+    if (!events || !events.length) return Promise.resolve({ ok: true });
+    var A = root.SSAuth; if (!A) return Promise.resolve({ ok: false, message: '로그인 부품을 불러오지 못했습니다.' });
+    var rows = events.map(function (ev) { return toRow('jurisdiction', ev, note); });
+    return A.authed('/rest/v1/rpc/save_jurisdiction', { method: 'POST', body: { p_events: rows, p_approve: (approveIds || []).map(Number) } })
+      .then(function (r) { return r.ok ? { ok: true, result: r.json } : { ok: false, message: friendly(r) }; })
+      .catch(function () { return { ok: false, message: A.NET_MSG }; });
+  }
   // 백업·비상용 파일 내용 (예전 파일 형식과 같음)
   function exportJson(events) { return JSON.stringify({ version: 1, events: events.map(function (e) { var c = JSON.parse(JSON.stringify(e)); delete c.seq; return c; }) }, null, 1); }
   function download(name, text) {
     var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = name; document.body.appendChild(a); a.click(); a.remove();
   }
-  root.SSEvents = { load: load, append: append, toRow: toRow, fromRow: fromRow, exportJson: exportJson, download: download, PAGE: PAGE };
+  root.SSEvents = { load: load, append: append, saveJurisdiction: saveJurisdiction, toRow: toRow, fromRow: fromRow, exportJson: exportJson, download: download, PAGE: PAGE };
 })(window);

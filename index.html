@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- 보안 정책(CSP): 이 사이트의 파일과 지도 라이브러리(cdnjs)·지도 그림(OpenStreetMap)·서버(Supabase)만 허용. HTML 안에 직접 쓴 스크립트는 실행되지 않음 -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://cdnjs.cloudflare.com; connect-src 'self' https://*.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <title>고속도로 인접 적설관측소 지도 | 반경 5~8km(적응형) 분석</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <style>
@@ -395,12 +398,7 @@
         <select id="seasonSelect"></select>
       </label>
       <button class="upload-btn" id="exportXlsxBtn" type="button">⬇ 현재 표 엑셀(xlsx)로 내보내기</button>
-      <label class="upload-btn">
-        + 신적설 데이터 파일 추가(txt)
-        <input type="file" id="snowFileInput" accept=".txt" multiple style="display:none;" />
-      </label>
-      <button class="upload-btn" id="downloadJsonBtn" type="button">⬇ 갱신된 데이터 JSON 저장 (영구 반영용)</button>
-      <span id="uploadStatus"></span>
+      <a class="upload-btn" id="snowAdminLink" href="admin/" hidden>+ 적설 자료 올리기(관리 콘솔)</a>
     </div>
     <div class="snowtable-wrap" id="snowTableWrap"></div>
   </div>
@@ -446,8 +444,8 @@
       <p>자동 수집 서버는 두지 않습니다 (기상청 API가 클라우드 서버의 IP를 차단하는 문제가 있어서, 안전하고 확실한 수동 방식을 씁니다). 아래 절차로 추가합니다.</p>
       <ol style="font-size:13.5px;line-height:1.9;padding-left:22px;">
         <li><a href="https://apihub.kma.go.kr" target="_blank" rel="noopener">apihub.kma.go.kr</a> 접속한 상태에서 브라우저 개발자도구(F12) → Console 탭에 아래 스크립트를 붙여넣고 실행 (authKey / 시작일 / 종료일만 바꾸면 됨) → txt 파일 자동 다운로드</li>
-        <li>이 페이지의 "연도별 신적설" 탭 → <b>"+ 신적설 데이터 파일 추가"</b>로 그 txt 파일 업로드 — 날짜를 보고 자동으로 알맞은 시즌에 들어갑니다</li>
-        <li>지금 보이는 화면에는 바로 반영되지만, <b>다른 방문자에게도 영구히 남기려면</b> <b>"⬇ 갱신된 데이터 JSON 저장"</b>으로 전체 데이터를 내려받아 레포 관리자에게 전달 → <span class="mono">data/snow_data.json</span>으로 커밋</li>
+        <li>관리자가 <b>관리 콘솔 → "적설 자료"</b> 탭에서 그 txt 파일을 고르고 <b>[검사]</b> → <b>[저장]</b> — 날짜를 보고 알맞은 시즌(11.15~3.15)에 들어갑니다. 결측(-99.9)은 저장하지 않습니다</li>
+        <li>저장하면 서버(Supabase)에 남아 <b>모든 사용자 화면에 바로 반영</b>됩니다(파일을 내려받아 저장소에 올릴 필요 없음)</li>
       </ol>
 
       <div class="code-block-wrap">
@@ -515,93 +513,7 @@
 <script src="auth/auth.js"></script>
 <script src="auth/events.js"></script>
 <script src="auth/gate.js"></script>
-<script>
-(function(){
-  var META_DATE_TEXT = "수동 업로드";
-  // 로그인하기 전에는 자료(data/*.json)도 화면도 불러오지 않습니다. 로그인에 성공하면 아래 bootApp 이 실행됩니다.
-  function bootApp(){
-  var isAdmin = !!(window.SS_ME && window.SS_ME.role === 'admin');      // 로그인한 사람의 역할 (로그인 잠금이 채움)
-  // cache:'no-cache' = 매번 서버에 '바뀌었나?'만 묻고, 그대로면 브라우저에 있던 파일을 씀(최신 반영은 그대로, 받는 양은 줄어듦)
-  Promise.all([
-    fetch('data/roads.json', {cache: 'no-cache'}).then(function(r){return r.json();}),
-    fetch('data/hierarchy.json', {cache: 'no-cache'}).then(function(r){return r.json();}),
-    fetch('data/snow_data.json', {cache: 'no-cache'}).then(function(r){return r.json();}),
-    // 관할 구간(IC/JC 사이)·관측소 목록·변경 이력: 없어도 기존 화면은 그대로 동작
-    fetch('data/sections.json', {cache: 'no-cache'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),
-    fetch('data/stations.json', {cache: 'no-cache'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),
-    // 변경 이력: 서버(Supabase)에서 읽습니다. 못 읽으면 예전 파일로 대신하고 화면에 알립니다.
-    SSEvents.load('jurisdiction'),
-    // 예보 격자 편입(기본 편입 + 저장된 변경): 없어도 기존 화면은 그대로 동작
-    // 관리자만 불러옴: 예보 격자 편입 탭은 관리자 아이디에서만 보입니다
-    isAdmin ? fetch('data/grid_assign.json', {cache: 'no-cache'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}) : Promise.resolve(null),
-    isAdmin ? SSEvents.load('grid') : Promise.resolve({events: [], source: 'skip'})
-  ]).then(function(results){
-    window.ROADS_DATA = results[0];
-    window.HIERARCHY = results[1];
-    window.SNOW_DATA = results[2];
-    window.META_DATE = META_DATE_TEXT;
-    // 관할 변경 적용: 서버에 저장된 변경 이력(모든 사용자에게 같음). 예전 '이 브라우저에만 임시 적용' 기능은 저장이 바로 적용되므로 없앴습니다.
-    var committed = (results[5] && results[5].events) || [];
-    window.EVENTS_SOURCE = { jurisdiction: results[5].source + (results[5].error ? '-error' : ''), grid: results[7].source + (results[7].error ? '-error' : '') };
-    window.GRID = { baseline: results[6], committed: results[7].events || [] };
-    window.JURIS = { doc: results[3], stations: results[4], committed: committed, session: null };
-    try { sessionStorage.removeItem('juris_session'); } catch(e){}
-    if(window.JURIS.doc && window.JurisCore){
-      window.HIERARCHY_BASE = JSON.parse(JSON.stringify(window.HIERARCHY));       // 이벤트를 적용하기 전의 처음 지사 목록(저장 후 새로고침 없이 다시 적용할 때 씀)
-      JurisCore.applyToData(window.HIERARCHY, window.SNOW_DATA, window.JURIS.doc, window.JURIS.stations, committed);
-    }
-    // 관할 변경을 저장하면 새로고침 없이 강설량·관측소 지도 화면까지 새 관할로 바꿉니다.
-    window.reapplyJurisdiction = function(events){
-      if(!window.JURIS.doc || !window.JurisCore || !window.HIERARCHY_BASE) return false;
-      var r = JurisCore.reapply(window.HIERARCHY_BASE, window.SNOW_DATA, window.JURIS.doc, window.JURIS.stations, events);
-      window.HIERARCHY = r.H;
-      if(window.refreshHierarchyViews) window.refreshHierarchyViews();
-      return true;
-    };
-    var s = document.createElement('script');
-    s.src = 'app.js?v=' + Date.now();
-    s.onload = function(){
-      initApp(); if(window.JurisdictionUI){ JurisdictionUI.init(); }
-      if (isAdmin) {
-        document.getElementById('tabGridBtn').style.display = '';                       // 예보 격자 편입: 관리자에게만 탭을 보여 줌
-        if(window.GridUI){ GridUI.init(); }
-        // 지사가 올린 구간 변경 요청이 있으면 알림창·탭 표시
-        if(window.JurisRequests){ JurisRequests.startAdminWatch({
-          nameOf: function(id){ var b = (window.JURIS.doc.branches || []).filter(function(x){ return x.id === id; })[0]; return b ? b.name + ' 지사' : id; },
-          onOpen: function(){ var t = document.querySelector('.tab-btn[data-tab=jurisdiction]'); if (t) t.click(); setTimeout(function(){ if (window.JurisdictionUI) JurisdictionUI.openRequests(); }, 350); },
-          onList: function(){ if (window.JurisdictionUI && window.JurisdictionUI._state().inited) JurisdictionUI.refreshRequests(); }
-        }); }
-      } else {
-        var gv = document.getElementById('view-grid'); if (gv && gv.parentNode) gv.parentNode.removeChild(gv);          // 관리자가 아니면 화면 자체를 없앰
-        var gb = document.getElementById('tabGridBtn'); if (gb && gb.parentNode) gb.parentNode.removeChild(gb);
-      }
-    };
-    document.body.appendChild(s);
-  }).catch(function(err){
-    document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;">데이터 로드 실패: ' + err + '</div>';
-  });
-  }
-  SSGate.start({ onReady: bootApp });
-})();
-</script>
-<script>
-/* 최상위 페이지 전환: 강설량 측정 <-> 장비 지원 (장비 지원은 처음 열 때 불러옴) */
-(function(){
-  var btns = document.querySelectorAll('.page-btn');
-  var snow = document.getElementById('page-snow');
-  var equip = document.getElementById('page-equip');
-  var frame = document.getElementById('equipFrame');
-  function show(name){
-    btns.forEach(function(b){ b.classList.toggle('active', b.dataset.page === name); });
-    snow.style.display = (name === 'snow') ? '' : 'none';
-    equip.style.display = (name === 'equip') ? 'block' : 'none';
-    if(name === 'equip' && !frame.getAttribute('src')){ frame.setAttribute('src', frame.dataset.src); }
-    if(name === 'snow'){ setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, 50); } // 지도 크기 다시 맞춤
-    try{ history.replaceState(null, '', name === 'equip' ? '#equip' : location.pathname + location.search); }catch(e){}
-  }
-  btns.forEach(function(b){ b.addEventListener('click', function(){ show(b.dataset.page); }); });
-  if(location.hash === '#equip'){ show('equip'); }
-})();
-</script>
+<script src="auth/snow.js"></script>
+<script src="boot.js"></script>
 </body>
 </html>

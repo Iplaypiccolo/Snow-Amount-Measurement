@@ -348,7 +348,8 @@
     var evs = stampPending(), reqIds = linkedRequestIds();
     S.saving = true; renderPending(); renderSaveBar();
     var saved = false;
-    SSEvents.append('jurisdiction', evs).then(function (res) {
+    // 지사 요청과 연결된 이동이 있으면 '저장 + 승인'을 서버에서 한 번에 처리(승인만 실패해 요청이 대기로 남는 일 없음)
+    (reqIds.length ? SSEvents.saveJurisdiction(evs, reqIds) : SSEvents.append('jurisdiction', evs)).then(function (res) {
       if (!res.ok) { S.saving = false; renderPending(); renderSaveBar(); saveFailed(res.message, evs); return; }
       saved = true;
       return SSEvents.load('jurisdiction').then(function (r) {
@@ -356,7 +357,7 @@
         J().committed = r.source === 'server' && !r.error ? r.events : J().committed.concat(evs);
         S.saving = false; S.pending = []; S.reason = ''; afterChange(true);
         if (window.reapplyJurisdiction) window.reapplyJurisdiction(J().committed);      // 새로고침 없이 강설량·관측소 지도 화면까지 새 관할로 바꿈
-        if (reqIds.length) approveRequests(reqIds);
+        if (reqIds.length) { loadRequests(); if (window.JurisRequests) JurisRequests.check(true); }         // 승인은 저장과 함께 끝남 → 목록만 새로 읽음
         toast(evs.length + '건 저장되었습니다.');
       });
     }).catch(function (e) {          // 예상하지 못한 오류: "저장 중"에 멈추지 않게 하고, 이미 저장됐으면 같은 내용을 다시 저장하지 않도록 대기를 비움
@@ -371,13 +372,6 @@
     modal('<h3>저장하지 못했습니다</h3><p class="jr-warn" style="font-size:13.5px">' + esc(message) + '</p>' +
       '<p style="font-size:13.5px;line-height:1.6">변경 대기는 그대로 남아 있습니다. 잠시 뒤 다시 [저장]을 누르거나, 급하면 아래 <b>[파일로 받기]</b>로 내용을 보관해 두세요.</p>' +
       '<div class="jr-row"><button class="jr-btn jr-primary" id="jr-retry">다시 저장</button><button class="jr-btn" id="jr-tofile">파일로 받기</button><button class="jr-btn" id="jr-close">닫기</button></div>');
-  }
-  function approveRequests(ids) {          // 이 변경에 연결된 지사 요청을 승인 처리
-    if (!window.JurisRequests) return;
-    JurisRequests.resolve(ids, 'approved', '관할 변경 저장 시 승인').then(function (r) {
-      if (!r.ok) toast('요청 승인 처리에 실패했습니다: ' + r.message);
-      loadRequests(); JurisRequests.check(true);
-    });
   }
 
   /* ---------- 미리보기 ---------- */
@@ -423,7 +417,7 @@
 
   function addBranchDialog() {
     var st = S.view.state;
-    modal('<h3>신설 기관 추가</h3><div class="jr-form"><label>기관 이름 <input id="jr-newname" placeholder="예: 새만금"></label>' +
+    modal('<h3>신설 기관 추가</h3><div class="jr-form"><label>기관 이름 <input id="jr-newname" placeholder="예: 새만금" maxlength="20"></label>' +
       '<label>소속 본부 <select id="jr-newhq">' + st.hqs.map(function (h) { return '<option>' + esc(h) + '</option>'; }).join('') + '</select></label></div>' +
       '<p class="jr-hint">만든 뒤 지도에서 구간을 골라 이 기관으로 옮기면 관측소와 신적설이 계산됩니다.</p>' +
       '<div class="jr-row"><button class="jr-btn jr-primary" id="jr-newok">추가</button><button class="jr-btn" id="jr-close">취소</button></div>');
@@ -433,6 +427,7 @@
   function createBranch() {
     var name = $('jr-newname').value.trim(), hq = $('jr-newhq').value;
     if (!name) { window.alert('기관 이름을 입력하세요.'); return; }
+    if (name.length > 20 || /[<>"'&`]/.test(name)) { window.alert('기관 이름은 20자 이내로, 기호(< > 따옴표 & `)는 쓸 수 없습니다.'); return; }      // 서버(DB)도 같은 규칙으로 검사
     var dup = Object.keys(S.view.state.branches).some(function (id) { return S.view.state.branches[id].name === name; });
     if (dup) { window.alert('같은 이름의 기관이 이미 있습니다.'); return; }
     var id = nextBranchId();

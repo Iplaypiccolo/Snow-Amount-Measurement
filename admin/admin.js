@@ -90,12 +90,12 @@
   /* ---------- 홈(탭) ---------- */
   function viewHome() {
     var admin = S.me.role === 'admin';
-    var tabs = admin ? [['users', '계정 관리'], ['sheet', '비밀번호 일괄 설정'], ['audit', '접속 로그'], ['me', '내 정보']] : [['me', '내 정보']];
+    var tabs = admin ? [['users', '계정 관리'], ['sheet', '비밀번호 일괄 설정'], ['snow', '적설 자료'], ['audit', '접속 로그'], ['me', '내 정보']] : [['me', '내 정보']];
     if (!tabs.some(function (t) { return t[0] === S.tab; })) S.tab = tabs[0][0];
     S.vt++;                                   // 화면을 새로 그릴 때마다 번호표를 올려서, 이전 화면의 늦은 응답을 무시함
     app.innerHTML = '<div class="tabs" role="tablist">' + tabs.map(function (t) { return '<button role="tab" type="button" data-t="' + t[0] + '" class="' + (S.tab === t[0] ? 'on' : '') + '">' + t[1] + '</button>'; }).join('') + '</div><div id="pane"></div>';
     Array.prototype.forEach.call(app.querySelectorAll('.tabs button'), function (b) { b.onclick = function () { if (S.tab === 'sheet' && b.dataset.t !== 'sheet' && sheetDirty() && !window.confirm('저장하지 않은 비밀번호 입력이 있습니다. 탭을 옮기면 사라집니다. 계속할까요?')) return; S.tab = b.dataset.t; if (b.dataset.t !== 'sheet') S.sheet = null; viewHome(); }; });
-    ({ users: tabUsers, sheet: tabSheet, audit: tabAudit, me: tabMe })[S.tab]();
+    ({ users: tabUsers, sheet: tabSheet, snow: tabSnow, audit: tabAudit, me: tabMe })[S.tab]();
   }
   var pane = function () { return $('pane'); };
 
@@ -270,6 +270,68 @@
   }
 
   /* ---------- 접속 로그 ---------- */
+  /* ---------- 적설 자료 (관리자 전용): 기상청 메모장 파일 → 서버(snow_daily) → 화면용 요약본 ----------
+     서버 함수 import-snow 가 관리자 로그인을 다시 확인하고, 검사(plan) → 저장(load) 순서로 넣습니다. 결측(-99.9)·시즌 밖 날짜는 서버가 거릅니다. */
+  function snowCall(body) {
+    return authed('/functions/v1/import-snow', { method: 'POST', body: body }).then(function (r) { return { ok: r.ok, j: r.json || {} }; });
+  }
+  function snowSummary(j) {
+    var c = j.counts || {}, s = j.summary || {}, d = s.dates || [];
+    return (s.values != null ? '읽은 값 ' + s.values + '개 (관측소 ' + s.stations + '곳, ' + (d[0] || '?') + ' ~ ' + (d[1] || '?') + ')\n' : '') +
+      '새 값 ' + (c['new'] || 0) + ' · 기존과 다른 값 ' + (c.changed || 0) + ' · 같은 값 ' + (c.same || 0) +
+      ' · 결측(-99.9)이라 뺌 ' + (c.skipped_missing || 0) + ' · 시즌(11.15~3.15) 밖이라 뺌 ' + (c.skipped_out_of_season || 0) +
+      (j.action === 'load' ? '\n저장한 값 ' + (c.written || 0) + '개' : '') + (j.message ? '\n' + j.message : '');
+  }
+  function tabSnow() {
+    var vt = S.vt, txt = null, planned = null;
+    pane().innerHTML = '<div class="card"><h2>적설 자료 (일 신적설)</h2>' +
+      '<p class="hint">기상청 API허브 콘솔 스크립트로 받은 <b>메모장(txt) 파일</b>을 올리면 서버에 저장되고, 모든 사용자의 "연도별 신적설" 표·지도에 바로 반영됩니다. ' +
+      '먼저 <b>[검사]</b>로 새 값·바뀔 값 개수를 확인한 뒤 <b>[저장]</b>하세요. 결측(-99.9)과 시즌(11.15~3.15) 밖 날짜는 저장하지 않습니다.</p>' +
+      '<div class="row"><input type="file" id="sf" accept=".txt,text/plain" multiple> <label class="inline"><input type="checkbox" id="sow"> 이미 있는 값과 다르면 바꾸기(덮어쓰기)</label></div>' +
+      '<div class="row"><button type="button" id="splan">검사</button> <button type="button" id="sload" disabled>저장</button></div><div id="sm"></div>' +
+      '<h3>예전 파일에서 처음 옮기기 (한 번만)</h3><p class="hint">저장소의 data/snow_data.json(2017~2026 시즌)을 서버로 옮깁니다. 이미 옮겼으면 "새 값 0"으로 나오며 다시 해도 바뀌지 않습니다.</p>' +
+      '<div class="row"><button type="button" id="gplan">검사</button> <button type="button" id="gload">옮기기</button></div><div id="gm"></div>' +
+      '<h3>최근 저장 기록</h3><div class="tw" id="sup">불러오는 중…</div></div>';
+    function busy(on) { ['splan', 'sload', 'gplan', 'gload'].forEach(function (id) { if ($(id)) $(id).disabled = on || (id === 'sload' && !planned); }); }
+    function readFiles() {
+      var fs = $('sf').files; if (!fs || !fs.length) return Promise.reject(new Error('nofile'));
+      return Promise.all(Array.prototype.map.call(fs, function (f) { return f.text(); })).then(function (ts) { return ts.join('\n'); });
+    }
+    function run(box, body, after) {
+      busy(true); $(box).innerHTML = msg('warn', '서버에서 처리하는 중… (큰 파일은 1분 가까이 걸릴 수 있습니다)');
+      return snowCall(body).then(function (r) {
+        if (vt !== S.vt) return;
+        $(box).innerHTML = msg(r.ok ? (r.j.counts && r.j.counts.changed && body.action === 'plan' ? 'warn' : 'ok') : 'err', r.ok ? snowSummary(r.j) : (r.j.message || '처리하지 못했습니다.'));
+        if (after) after(r);
+      }).catch(function () { if (vt === S.vt) $(box).innerHTML = msg('err', netErr()); }).then(function () { if (vt === S.vt) busy(false); });
+    }
+    $('sf').onchange = $('sow').onchange = function () { planned = null; txt = null; busy(false); $('sm').innerHTML = ''; };
+    $('splan').onclick = function () {
+      readFiles().then(function (t) { txt = t; return run('sm', { action: 'plan', txt: t, overwrite: $('sow').checked }, function (r) { planned = r.ok ? true : null; }); })
+        .catch(function () { $('sm').innerHTML = msg('err', '메모장 파일을 먼저 고르세요.'); });
+    };
+    $('sload').onclick = function () {
+      if (!planned || txt == null) return;
+      if (!window.confirm('검사한 내용대로 서버에 저장할까요?' + ($('sow').checked ? '\n(덮어쓰기: 기존과 다른 값은 새 값으로 바뀝니다)' : ''))) return;
+      run('sm', { action: 'load', txt: txt, overwrite: $('sow').checked }, function (r) { if (r.ok) { planned = null; loadUploads(); } });
+    };
+    $('gplan').onclick = function () { run('gm', { action: 'plan', source: 'github', ref: 'main' }); };
+    $('gload').onclick = function () {
+      if (!window.confirm('예전 파일(data/snow_data.json)의 적설 자료를 서버로 옮길까요? 이미 있는 값은 그대로 둡니다.')) return;
+      run('gm', { action: 'load', source: 'github', ref: 'main' }, function (r) { if (r.ok) loadUploads(); });
+    };
+    function loadUploads() {
+      rest('snow_uploads?select=at,date_from,date_to,stations,rows_written,ok,note&order=id.desc&limit=20').then(function (r) {
+        if (vt !== S.vt || !$('sup')) return;
+        if (!r.ok) { $('sup').innerHTML = msg('err', '불러오지 못했습니다.'); return; }
+        $('sup').innerHTML = '<table><thead><tr><th>일시</th><th>기간</th><th>관측소</th><th>저장한 값</th><th>내용</th></tr></thead><tbody>' + ((r.json || []).map(function (x) {
+          return '<tr><td>' + fmt(x.at) + '</td><td>' + esc((x.date_from || '?') + ' ~ ' + (x.date_to || '?')) + '</td><td>' + esc(x.stations) + '</td><td>' + esc(x.rows_written) + '</td><td>' + esc(x.note || '') + '</td></tr>';
+        }).join('') || '<tr><td colspan="5" class="hint">아직 저장한 적이 없습니다.</td></tr>') + '</tbody></table>';
+      }).catch(function () { if (vt === S.vt && $('sup')) $('sup').innerHTML = msg('err', netErr()); });
+    }
+    loadUploads();
+  }
+
   function tabAudit() {
     var vt = S.vt;
     pane().innerHTML = '<div class="card"><h2>접속·수정 로그</h2><div class="row"><label class="inline">구분 <select id="k"><option value="">전체</option><option>계정생성</option><option>비밀번호설정</option><option>비밀번호초기화</option><option>계정비활성화</option><option>계정활성화</option><option>수정</option><option>추가</option><option>삭제</option></select></label><button type="button" id="go">조회</button></div>' +
