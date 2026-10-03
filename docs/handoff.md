@@ -65,6 +65,12 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-10-04 · 점검에서 나온 버그·보안 수정 (Claude Code)
+- 한 일: ① `app.js` 모든 이름 안전 처리(XSS), `jurisdiction/ui.js` 이력 문구의 `from` 이름 안전 처리 ② 관할·격자 저장 체인에 오류 복구(`.catch`, 이미 저장됐으면 대기 비움) ③ xlsx 를 내보내기 누를 때 불러오기(`index.html` 에서 제거) ④ 자료 파일 `no-store`→`no-cache` ⑤ 헤더 문구 "자동 업데이트(매일 새벽)"→"수동 업로드" ⑥ 11/1~14 자료 업로드 시 빈 시즌이 생기던 것 수정 ⑦ 시험 서버 3곳 동시 처리(`ThreadingTCPServer`) ⑧ 시험 추가 `t_html_in_branch_name_is_text`.
+- 확인한 것: 전체 시험 181/181 통과(가짜 서버). 새 시험은 고치기 전 코드에서 실패(HTML 실행됨)함을 확인. 엑셀 내보내기는 Playwright 로 눌러 파일이 받아지는 것 확인(가짜 서버). 실제 사이트에서 로그인 후 화면은 **확인 못 함**.
+- 서버에 한 변경: 없음
+- 남은 제안(채팅에서 정할 것): 바로 아래 2026-10-03 기록의 2(CSP·SRI), 4 중 "저장+승인 한 번에(원자적)"(DB 함수 필요), 5, 6, 그리고 DB 에서 `addBranch` 이름 형식 검사(구조 변경이라 확인 필요). 함께: CDN 대신 Leaflet·xlsx 를 저장소에 넣기(회사망 차단·SRI·오프라인 시험이 한 번에 해결).
+
 ### 2026-10-03 · 전체 점검: 동작·버그·보안·운영 (Claude Code)
 - 한 일: 코드·문서 전체 읽기, 전체 시험 실행, 실제 사이트·서버 읽기 전용 확인. **코드 변경 없음**(이 기록만 추가).
 - 확인한 것(실제 사이트·서버): 사이트 로그인 화면 정상·콘솔 오류 없음. 로그인 없이 공개 키로 `profiles`·`sections`·`jurisdiction_events`·`jurisdiction_requests`·`audit_log`·`settings`·`vehicles` 읽기 → 모두 거절(42501). 가입 시도 → `signup_disabled`. `account-admin` 무인증 호출 → `not_logged_in`. 압축 전송량 방문당 약 1MB(snow_data 545KB).
