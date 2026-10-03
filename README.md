@@ -44,12 +44,16 @@ supabase/tests/requests_test.sql  구간 변경 요청 표 권한·제한 시험
 supabase/tests/accounts_check.sql  실제 계정 점검(낯선 가입자·임시 비밀번호 계정·관리자)
 supabase/seed/            본부·지사 기준정보 SQL
 supabase/functions/import-reference/  GitHub 의 data/*.json 을 서버에서 읽어 DB 로 옮기는 함수(기준정보 이전)
+tools/run_all_tests.py     모든 자동 시험을 한 번에 실행하고 결과 표를 보여 줌(--fast 는 화면 시험 제외)
 tools/reference_check.py   DB 와 data/*.json 이 같은지 확인하는 검증 SQL 생성
 tools/fill_section_gaps.py  구간 사이 끊김을 실제 도로망으로 메우는 도구(결과 docs/section-gaps-report.md)
 supabase/functions/account-admin/  계정 발급·초기화·비활성화·비밀번호 일괄 설정 함수(Edge Function)
 admin/                  관리 콘솔(로그인, 비밀번호 변경, 계정 관리, 비밀번호 일괄 설정 엑셀표, 접속 로그) — docs/admin-console.md
 auth/                   로그인 공통 부품(auth.js)·변경 이력 저장/읽기 부품(events.js)·첫 화면 로그인 잠금(gate.js·gate.css) — docs/login-gate.md
 docs/accounts.md           계정 목록(아이디만, 비밀번호 없음)
+CLAUDE.md                  Claude Code 가 매번 가장 먼저 읽는 안내판(규칙·구조·하지 말 것)
+docs/claude-code-setup.md  내 컴퓨터에서 Claude Code(데스크톱 앱) 시작하기, 채팅과 이어 가는 법, 마무리 체크리스트
+docs/handoff.md            채팅의 Claude 와 Claude Code 가 서로 알 수 있는 유일한 통로(인계 메모)
 docs/admin-console.md       관리 콘솔 사용 안내
 docs/login-gate.md          로그인 잠금·자동 로그인·아이디 저장·용어(캐시·쿠키·브라우저 저장소) 설명
 tests/test_account_admin.mjs  계정 발급 함수 자동 시험(17항목)

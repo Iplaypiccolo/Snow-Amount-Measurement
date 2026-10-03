@@ -1,0 +1,67 @@
+# CLAUDE.md — 제설 업무 시스템 (이 파일은 Claude Code 가 매번 가장 먼저 읽는 안내판입니다)
+
+> 길게 쓰지 않습니다. 자세한 내용은 `docs/` 에 있고, 여기에는 **위치와 규칙**만 적습니다.
+
+## 이 프로젝트
+고속도로 제설 업무용 웹 시스템. 화면은 **GitHub Pages**(정적 파일), 서버는 **Supabase**(서울, 무료 플랜).
+- 저장소: `Iplaypiccolo/Snow-Amount-Measurement` (공개) · 사이트: `https://iplaypiccolo.github.io/Snow-Amount-Measurement/`
+- Supabase 프로젝트: `snow-support` (ref `yzwbnohzhnctdvufntig`). **다른 프로젝트 `Snowpath`(도쿄)는 건드리지 않는다.**
+- 화면 4개: 강설량 측정 / 기관별 관할 고속도로 / 예보 격자 편입(관리자만) / 장비 지원. 관리 콘솔 `/admin/`.
+
+## 사용자와 역할 분담 (중요)
+- 사용자는 **비전공자**입니다. 한국어로, 새 용어는 풀어서 설명하세요. 확인하지 못한 것을 "확인했다"고 쓰지 마세요(확인한 것/못 한 것을 구분).
+- 새 기능과 큰 설계는 사용자가 **claude.ai 채팅**에서 Claude 와 합니다. **그 채팅은 이 세션의 내용을 볼 수 없습니다.**
+- 그래서 Claude Code 는 **① 실제 서버·사이트 연결 확인 ② 버그 조사·수정 ③ 시험 실행** 위주로 합니다. 설계 변경이 필요해 보이면 구현하지 말고 `docs/handoff.md` 에 **"제안"** 으로 적고 멈추세요.
+- **작업을 마칠 때마다 `docs/handoff.md` 맨 위에 항목을 추가하고 커밋·푸시하세요.** 이것이 채팅 쪽 Claude 가 알 수 있는 유일한 통로입니다.
+
+## 명령어
+```
+python tools/run_all_tests.py            # 전체 시험 (약 5분, 병렬). --fast 는 화면 시험 제외, --only 이름 으로 일부만
+```
+필요: Node 22 · Python 3 · `pip install playwright` · `playwright install chromium`. 개별 시험은 `tests/` 에 있고 파일 맨 위에 실행법이 적혀 있습니다.
+인터넷이 막힌 곳에서는 환경변수 `LEAFLET_DIR`·`XLSX_FILE` 로 지도 라이브러리 위치를 지정합니다(보통 필요 없음).
+
+## 구조 지도
+| 위치 | 내용 |
+|---|---|
+| `index.html`, `app.js` | 첫 화면(로그인 잠금 → 강설량 측정). 저장 후 새로고침 없이 `refreshHierarchyViews` 로 다시 그림 |
+| `auth/` | `auth.js` 로그인·토큰 보관, `events.js` 변경 이력 읽기/저장, `gate.js` 로그인 잠금 화면 |
+| `jurisdiction/` | 관할 탭: `core.js`(계산, 화면 없음), `ui.js`, `requests.js`(지사의 구간 변경 요청) |
+| `grid/` | 예보 격자 편입 탭 (`core.js` 계산, `ui.js`) |
+| `admin/` | 관리 콘솔: 계정, **비밀번호 일괄 설정(엑셀표)**, 접속 로그 |
+| `equipment/` | 장비 지원 화면(iframe). **아직 샘플 자료이며 서버로 옮기지 않음** |
+| `data/*.json` | 기본(baseline) 자료. 구간 1,011 · 관측소 260 · 격자 1,070쌍. `*_changes.json` 은 서버 장애 때의 비상용(비어 있음) |
+| `supabase/migrations/` | DB 변경 SQL(01~08). `functions/` Edge Function 2개(`account-admin`, `import-reference`). `tests/*.sql` 권한 시험 |
+| `tests/` | 자동 시험. `_sb_mock.py` 는 **가짜 Supabase 서버**(실제 서버에 접속하지 않고 화면을 시험) |
+| `tools/` | 자료 만들기·검증 도구. GIS 원본(`highway_links.gpkg` 등)은 저장소에 없음 |
+| `docs/` | **`decisions.md`(결정 이력)**, `supabase-design.md`(서버 전체), `jurisdiction-rules.md`, `grid-assign-rules.md`, `admin-console.md`, `login-gate.md` |
+
+## 작업 규칙 (사용자와 합의한 것)
+1. **반영 전에 `tools/run_all_tests.py` 를 통과**시킨다. 변경은 작게 나눠 커밋하고, 커밋 메시지는 한국어로 "무엇을, 왜"를 쓴다.
+2. 반영은 **`main` 에 직접**(브랜치·PR 없음). 데스크톱 앱이 작업 사본(worktree)에서 일했더라도 끝낼 때: `git fetch` → `git rebase origin/main` → 시험 통과 → `git push origin HEAD:main`.
+   채팅 쪽 Claude 도 같은 `main` 에 푸시하므로 **일 시작 전에 항상 `git pull`**, 푸시 전에 `git fetch` 로 새 커밋이 있는지 확인.
+3. **되돌리기 어려운 일은 실행 전에 사용자에게 먼저 알리고 확인**받는다: 데이터 삭제(`delete`/`truncate`/`drop`), 권한 규칙(RLS) 변경, 계정 대량 변경·비밀번호 변경, 변경 이력 수정, DB 구조 변경. **실행할 SQL 을 먼저 보여 준다.**
+4. 서버(Supabase)에 한 변경은 **`supabase/migrations/` 에 SQL 파일로도 남긴다**(파일 번호 이어서). 무료 플랜은 **자동 백업이 없으므로** 위험한 변경 전에 필요한 자료를 내려받아 둔다.
+5. 권한은 **화면이 아니라 서버(DB)가 지킨다.** 화면에서 버튼을 숨기는 것은 편의 기능일 뿐이다.
+6. 결정이나 알게 된 함정은 `docs/decisions.md` 에 날짜와 함께 추가한다.
+
+## 하지 말 것
+- **비밀값을 파일·커밋·대화에 쓰지 않는다**: GitHub 토큰, Supabase `service_role` 키, 계정 비밀번호. (화면 코드의 `sb_publishable_…` 키는 원래 공개용이라 괜찮음.) 비밀번호가 필요하면 환경변수로만.
+- `data/sections.json` 의 **지사 소속 구간 686개의 좌표·길이를 바꾸지 않는다**(관측소 배정이 달라짐. `tests/test_sections_continuity.py` 가 지문으로 막음).
+- **구간 번호(S0001…)·지사 번호(B001…)를 바꾸지 않는다**: 저장된 변경 이력·요청이 번호를 가리킨다.
+- 이미 저장된 `jurisdiction_events`·`grid_events` 줄을 고치거나 지우지 않는다(DB 가 막고 있음. 우회하지 말 것).
+- 운영 DB 에 시험용 자료를 남기지 않는다. 시험 SQL 은 마지막에 일부러 오류를 내어 되돌리는 방식이다.
+
+## 서버 요약 (자세한 것은 `docs/supabase-design.md`)
+- 로그인: 아이디 → `<아이디>@snow-support.invalid` 가짜 이메일. 계정: `admin-01`, `admin-02`, 지사 59개 `ex<지사 로마자>`. 역할 `admin`/`branch`/`equip`. 가입은 막혀 있고 계정은 관리자만 만든다.
+- 관할·격자 **변경은 이력(이벤트)으로 쌓고**, 화면이 기본 자료 위에 다시 적용해 계산한다(`JurisCore.reapply`). 기본 자료 읽기는 아직 파일(DB 사본과 동일)이며 DB 읽기로 옮기는 것이 다음 단계.
+- 지사의 구간 변경 요청: 표 `jurisdiction_requests`(지사 요청 → 관리자 알림 → 이동 준비 → 저장 시 승인).
+- 일회용 시작 토큰(`settings` 의 `bootstrap_token`, 15분)으로 Edge Function 을 부르는 방식이 있다. 쓸 때는 `pg_net` 을 `extensions` 스키마에 잠시 만들고 **끝나면 반드시 지운다**.
+
+## 알려진 함정
+- Supabase API 경로는 **WHERE 없는 DELETE 를 막는다**(`where true` 필요).
+- 서버는 한 번에 **1,000줄**까지만 돌려준다 → `auth/events.js` 가 나눠 읽는다.
+- `raw.githubusercontent.com` 은 몇 분 캐시한다 → 서버 이전 함수를 부를 때 **커밋 번호(`ref`)를 지정**한다.
+- 신설 기관(`addBranch`)의 `id` 는 기관 번호다. 예전 버그로 번호 없이 저장된 줄(서버 줄 번호 `10`, `11`)이 있어 **읽을 때 줄 번호를 기관 번호로 쓰는 호환 코드**가 있다 — 지우지 말 것.
+- `tools/add_unassigned_sections.py` 를 다시 돌리면 IC/JC 에서 구간이 끊긴다 → 이어서 `tools/fill_section_gaps.py`, 그다음 `tools/reference_check.py` 로 DB 와 비교.
+- 화면 시험은 가짜 서버를 쓴다. **실제 서버와 사이트에서는 아직 확인하지 못한 것이 많다**(`docs/handoff.md` 의 "확인 필요" 목록).
