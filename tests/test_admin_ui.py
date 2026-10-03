@@ -131,18 +131,21 @@ def t_sheet_save_payload(b, m):
     for i, u in enumerate(users[:3]): p.fill(f"input.pw[data-u='{u}']", GOOD(i))
     check(p.locator("input.pw").first.get_attribute("type") == "password", "기본은 가리기"); p.uncheck("#mk"); check(p.locator("input.pw").first.get_attribute("type") == "text", "보이기"); p.check("#mk")
     p.click("#save"); p.wait_for_selector("text=개 저장했습니다")
-    check(any("처음 로그인할 때" in d and "3개 계정" in d for d in dl), dl)
-    call = m.fn_calls[-1]; check(call["action"] == "set_passwords" and call["require_change"] is True, call)
+    check(any("바로 쓰게" in d and "3개 계정" in d for d in dl), dl)
+    check(p.locator("#rc").is_checked() is False, "기본은 체크 해제")
+    call = m.fn_calls[-1]; check(call["action"] == "set_passwords" and call["require_change"] is False, call)
     check(call["items"] == [{"username": u, "password": GOOD(i)} for i, u in enumerate(users[:3])], "보낸 내용이 입력과 같아야 함")
     v = vals(p); check(all(x == "" for x in v.values()), "저장 후 입력칸을 비워야 함")
     check(p.locator("tr.saved").count() == 3 and "저장됨" in p.locator("tr.saved").first.inner_text(), "저장됨 표시")
     check(p.locator("#save").is_disabled(), "저장 후 저장 버튼 비활성")
     dump = p.evaluate("JSON.stringify([sessionStorage, localStorage, location.href, document.body.innerText])")
     check(not any(GOOD(i) in dump for i in range(3)), "비밀번호가 화면 글자·저장소·주소에 남음")
-    check(m.users[users[0]]["profile"]["must_change"] is True, "기본은 다음 로그인 때 변경 요구")
+    check(m.users[users[0]]["profile"]["must_change"] is False, "기본은 변경을 요구하지 않음(정한 비밀번호를 그대로 사용)")
+    check("바로 로그인하고" in p.locator(".msg").inner_text(), p.locator(".msg").inner_text())
     p.fill(f"input.pw[data-u='{users[4]}']", GOOD(10)); check(p.locator("tr.saved").count() == 3, "다른 칸을 입력해도 앞서 저장한 줄의 '저장됨' 표시가 남아야 함")
-    p.uncheck("#rc"); p.click("#save"); p.wait_for_selector("tr.saved >> nth=3")
-    check(m.fn_calls[-1]["require_change"] is False and any("바로 쓰게" in d for d in dl), "체크를 풀면 바로 쓰게 저장")
+    p.check("#rc"); p.click("#save"); p.wait_for_selector("tr.saved >> nth=3")
+    check(m.fn_calls[-1]["require_change"] is True and any("다시 정하게" in d for d in dl), "체크하면 처음 로그인할 때 변경을 요구")
+    check(m.users[users[4]]["profile"]["must_change"] is True and "새 비밀번호를 정합니다" in p.locator(".msg").inner_text(), "체크한 줄만 변경 요구")
 
 def t_sheet_partial_and_validation_errors(b, m):
     p = admin_sheet(b, m); users = [i.get_attribute("data-u") for i in p.locator("input.pw").all()]
@@ -249,6 +252,17 @@ def t_users_tab_order(b, m):
     check(names == ["admin-01", "admin-02", "equip-01"] + [u for u in HIER if u != "equip-01"], names)
 
 
+def t_set_then_branch_logs_in_directly(b, m):
+    """관리자가 일괄 설정 → 지사 담당자는 비밀번호를 바꾸라는 요구 없이 바로 로그인"""
+    p = admin_sheet(b, m); check(m.users["exchungju"]["profile"]["must_change"] is True, "처음엔 임시 비밀번호 상태")
+    paste(p, f"exchungju\t{GOOD(1)}\nexgurye\t{GOOD(2)}", "exchungju"); p.click("#save"); p.wait_for_selector("tr.saved >> nth=1")
+    p.click("#logoutBtn"); p.wait_for_selector("#u")
+    login(p, "exchungju", TEMP_PW); check(p.locator(".msg.err").count() == 1, "예전 임시 비밀번호는 더 못 씀")
+    login(p, "exchungju", GOOD(1)); p.wait_for_selector(".tabs")
+    check(p.locator("#chk").count() == 0 and "새 비밀번호를 정해야" not in p.locator("body").inner_text(), "비밀번호 변경 화면이 나오면 안 됨")
+    check(p.locator(".tabs button").all_inner_texts() == ["내 정보"] and "충주지사" in p.locator("#who").inner_text(), "바로 로그인됨")
+    p.click("#logoutBtn"); p.wait_for_selector("#u"); login(p, "exgurye", GOOD(2)); p.wait_for_selector(".tabs"); check(p.locator("#chk").count() == 0, "다른 지사도 마찬가지")
+
 def t_token_refresh(b, m):
     p = new_page(b, m); login(p, "admin-01", ADMIN_PW); p.wait_for_selector(".tabs")
     p.evaluate("(() => { const s = JSON.parse(sessionStorage.getItem('ss_session')); s.expires_at = Date.now() + 1000; sessionStorage.setItem('ss_session', JSON.stringify(s)); })()")
@@ -258,7 +272,7 @@ def t_token_refresh(b, m):
     p.reload(); p.wait_for_selector("#u"); check("만료" in p.locator(".msg.warn").inner_text(), "갱신 실패 시 다시 로그인 안내")
 
 TESTS = [t_login_session_logout, t_unregistered_and_disabled, t_forced_change, t_checklist_live, t_sheet_rows_and_paste, t_sheet_validation_display, t_sheet_save_payload,
-         t_sheet_partial_and_validation_errors, t_sheet_random_csv_filter, t_sheet_unsaved_guard_and_clear, t_users_tab, t_audit_tab, t_non_admin_cannot_use_admin_apis, t_xss_and_csp, t_token_refresh, t_fast_tab_switching_no_errors, t_sheet_hierarchy_order, t_users_tab_order]
+         t_sheet_partial_and_validation_errors, t_sheet_random_csv_filter, t_sheet_unsaved_guard_and_clear, t_users_tab, t_audit_tab, t_non_admin_cannot_use_admin_apis, t_xss_and_csp, t_token_refresh, t_fast_tab_switching_no_errors, t_sheet_hierarchy_order, t_users_tab_order, t_set_then_branch_logs_in_directly]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch(); b.new_context()

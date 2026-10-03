@@ -167,8 +167,8 @@
   function tabSheet() {
     var vt = S.vt;
     pane().innerHTML = '<div class="card"><h2>비밀번호 일괄 설정</h2>' +
-      '<p class="hint">지사·지원장비 계정의 비밀번호를 한 번에 정합니다. 표는 <b>강설량 측정 화면과 같은 본부·지사 순서</b>입니다(엑셀 목록을 같은 순서로 만들어 붙여넣으세요). <b>엑셀에서 비밀번호 열(또는 "아이디 + 비밀번호" 두 열)을 복사해 아무 입력칸에 붙여넣으세요.</b> 한 열만 붙여넣으면 눌러 둔 칸부터 아래로 채워지고, 두 열이면 아이디로 찾아 채웁니다. 관리자 계정은 이 표에 나오지 않습니다.</p>' +
-      '<div id="m"></div><div class="row"><label class="inline"><input type="checkbox" id="rc" checked> 저장 후 처음 로그인할 때 본인이 비밀번호를 바꾸게 하기</label>' +
+      '<p class="hint">지사·지원장비 계정의 비밀번호를 한 번에 정합니다. <b>저장한 비밀번호는 담당자가 그대로 계속 쓸 수 있습니다</b>(처음 로그인할 때 바꾸라고 요구하지 않음. 담당자가 원하면 \'내 정보\'에서 언제든 바꿀 수 있고, 관리자가 다시 정하면 그 비밀번호로 돌아갑니다). 표는 <b>강설량 측정 화면과 같은 본부·지사 순서</b>입니다(엑셀 목록을 같은 순서로 만들어 붙여넣으세요). <b>엑셀에서 비밀번호 열(또는 "아이디 + 비밀번호" 두 열)을 복사해 아무 입력칸에 붙여넣으세요.</b> 한 열만 붙여넣으면 눌러 둔 칸부터 아래로 채워지고, 두 열이면 아이디로 찾아 채웁니다. 관리자 계정은 이 표에 나오지 않습니다.</p>' +
+      '<div id="m"></div><div class="row"><label class="inline"><input type="checkbox" id="rc"> 저장 후 처음 로그인할 때 본인이 비밀번호를 바꾸게 하기</label>' +
       '<label class="inline"><input type="checkbox" id="mk" checked> 입력한 비밀번호 가리기</label><input id="q" placeholder="본부·이름·아이디로 거르기" style="min-width:220px"></div>' +
       '<div class="row"><button type="button" id="rnd">빈 칸을 무작위 비밀번호로 채우기</button><button type="button" id="clr">입력 모두 지우기</button><button type="button" id="csv">입력한 비밀번호 CSV로 받기</button><span class="sp"></span><span id="sum" class="hint"></span><button type="button" class="primary" id="save" disabled>저장</button></div>' +
       '<div class="tw sheet" id="grid">불러오는 중…</div></div>';
@@ -252,7 +252,7 @@
   function saveSheet() {
     var dups = dupMap(), items = S.sheet.rows.filter(function (r) { return r.pw; });
     if (!items.length || items.some(function (r) { return rowProblems(r, dups).length; })) return;
-    if (!window.confirm(items.length + '개 계정의 비밀번호를 저장할까요?\n' + (val('rc') !== '' && $('rc').checked ? '각 계정은 처음 로그인할 때 비밀번호를 다시 정하게 됩니다.' : '저장한 비밀번호를 바로 쓰게 됩니다.') + '\n이 계정들의 기존 로그인은 모두 끊깁니다.')) return;
+    if (!window.confirm(items.length + '개 계정의 비밀번호를 저장할까요?\n' + ($('rc').checked ? '각 계정은 처음 로그인할 때 비밀번호를 다시 정하게 됩니다.' : '저장한 비밀번호를 바로 쓰게 됩니다(처음 로그인할 때 바꾸라고 요구하지 않음).') + '\n이 계정들의 기존 로그인은 모두 끊깁니다.')) return;
     $('save').disabled = true; $('m').innerHTML = msg('warn', '저장하는 중…');
     var body = { action: 'set_passwords', require_change: $('rc').checked, items: items.map(function (r) { return { username: r.username, password: r.pw }; }) };
     fn(body).then(function (r) {
@@ -264,7 +264,7 @@
       if (!r.ok && r.status !== 207) { $('m').innerHTML = msg('err', j.message || '저장하지 못했습니다.'); updateSummary(); return; }
       var failed = {}; (j.failed || []).forEach(function (f) { failed[f.username] = f.error; });
       var done = 0; items.forEach(function (it) { if (failed[it.username]) it.note = failed[it.username]; else { it.pw = ''; it.state = 'saved'; it.note = ''; done++; } });
-      $('m').innerHTML = msg(Object.keys(failed).length ? 'warn' : 'ok', done + '개 저장했습니다.' + (Object.keys(failed).length ? '\n실패 ' + Object.keys(failed).length + '개는 표에 이유가 표시되어 있습니다.' : '') + (body.require_change ? '\n각 계정은 처음 로그인할 때 새 비밀번호를 정합니다.' : ''));
+      $('m').innerHTML = msg(Object.keys(failed).length ? 'warn' : 'ok', done + '개 저장했습니다.' + (Object.keys(failed).length ? '\n실패 ' + Object.keys(failed).length + '개는 표에 이유가 표시되어 있습니다.' : '') + (body.require_change ? '\n각 계정은 처음 로그인할 때 새 비밀번호를 정합니다.' : '\n담당자는 정한 비밀번호로 바로 로그인하고, 비밀번호를 바꾸라는 요구는 나오지 않습니다.'));
       drawSheet();
     }).catch(function () { $('m').innerHTML = msg('err', netErr()); updateSummary(); });
   }
