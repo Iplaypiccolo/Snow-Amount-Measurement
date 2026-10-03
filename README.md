@@ -17,10 +17,10 @@ jurisdiction/           '기관별 관할 고속도로' 탭 (구간을 눌러 �
 grid/                   '예보 격자 편입' 탭 (기상청 5km 격자를 지도에서 골라 기관에 편입, 여러 기관 공유 가능)
   core.js                 격자 변환·편입 계산·호출량 판정 / ui.js·style.css 화면
 data/grid_assign.json   격자 기본 편입(칸별 기관)과 후보 칸
-data/grid_changes.json  저장된 격자 편입 변경 이력
+data/grid_changes.json  (비상용) 서버에 연결하지 못할 때 대신 읽는 격자 변경 이력 — 실제 이력은 서버(Supabase)에 저장
 tools/build_grid_assign.py  격자 기본 편입 생성 도구
 data/sections.json      관할 구간(IC/JC 사이) 모양과 기본 소속
-data/jurisdiction_changes.json  저장된 관할 변경 이력 (화면에서 받은 파일을 여기에 덮어쓰고 커밋)
+data/jurisdiction_changes.json  (비상용) 서버에 연결하지 못할 때 대신 읽는 관할 변경 이력 — 실제 이력은 서버(Supabase)에 저장
 data/stations.json      관측소 좌표 목록 (지금은 배정된 적 있는 관측소만)
 tools/build_jurisdiction.py  구간 생성 도구 (표준노드링크에서 걸러낸 파일 필요)
 tools/add_unassigned_sections.py  미지정 고속도로(어느 지사에도 속하지 않은 도로) 구간 추가 도구
@@ -39,6 +39,7 @@ docs/d1-schema-design.md   Cloudflare D1 표 설계 v1(설계안), docs/d1-schem
 docs/supabase-design.md      Supabase 구성(snow-support, 서울): 표·권한·기록·시험·남은 일
 supabase/migrations/       Supabase 표·권한(RLS)·기록 트리거 SQL (실제 적용한 것)
 supabase/tests/rls_test.sql  권한·기록 자동 시험(SQL Editor 에서 실행, 103항목)
+supabase/tests/events_test.sql  변경 이력 표 권한·종류·원자성 시험(24항목)
 supabase/tests/requests_test.sql  구간 변경 요청 표 권한·제한 시험
 supabase/tests/accounts_check.sql  실제 계정 점검(낯선 가입자·임시 비밀번호 계정·관리자)
 supabase/seed/            본부·지사 기준정보 SQL
@@ -46,7 +47,7 @@ supabase/functions/import-reference/  GitHub 의 data/*.json 을 서버에서 �
 tools/reference_check.py   DB 와 data/*.json 이 같은지 확인하는 검증 SQL 생성
 supabase/functions/account-admin/  계정 발급·초기화·비활성화·비밀번호 일괄 설정 함수(Edge Function)
 admin/                  관리 콘솔(로그인, 비밀번호 변경, 계정 관리, 비밀번호 일괄 설정 엑셀표, 접속 로그) — docs/admin-console.md
-auth/                   로그인 공통 부품(auth.js)과 첫 화면 로그인 잠금(gate.js·gate.css) — docs/login-gate.md
+auth/                   로그인 공통 부품(auth.js)·변경 이력 저장/읽기 부품(events.js)·첫 화면 로그인 잠금(gate.js·gate.css) — docs/login-gate.md
 docs/accounts.md           계정 목록(아이디만, 비밀번호 없음)
 docs/admin-console.md       관리 콘솔 사용 안내
 docs/login-gate.md          로그인 잠금·자동 로그인·아이디 저장·용어(캐시·쿠키·브라우저 저장소) 설명

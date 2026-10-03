@@ -514,6 +514,7 @@
 <script src="grid/core.js"></script>
 <script src="grid/ui.js"></script>
 <script src="auth/auth.js"></script>
+<script src="auth/events.js"></script>
 <script src="auth/gate.js"></script>
 <script>
 (function(){
@@ -528,30 +529,25 @@
     // 관할 구간(IC/JC 사이)·관측소 목록·변경 이력: 없어도 기존 화면은 그대로 동작
     fetch('data/sections.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),
     fetch('data/stations.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),
-    fetch('data/jurisdiction_changes.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),
+    // 변경 이력: 서버(Supabase)에서 읽습니다. 못 읽으면 예전 파일로 대신하고 화면에 알립니다.
+    SSEvents.load('jurisdiction'),
     // 예보 격자 편입(기본 편입 + 저장된 변경): 없어도 기존 화면은 그대로 동작
     // 관리자만 불러옴: 예보 격자 편입 탭은 관리자 아이디에서만 보입니다
     isAdmin ? fetch('data/grid_assign.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}) : Promise.resolve(null),
-    isAdmin ? fetch('data/grid_changes.json', {cache: 'no-store'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}) : Promise.resolve(null)
+    isAdmin ? SSEvents.load('grid') : Promise.resolve({events: [], source: 'skip'})
   ]).then(function(results){
     window.ROADS_DATA = results[0];
     window.HIERARCHY = results[1];
     window.SNOW_DATA = results[2];
     window.META_DATE = META_DATE_TEXT;
-    // 관할 변경 적용: 저장된 변경(jurisdiction_changes.json) + 이 브라우저에만 임시 적용한 변경
+    // 관할 변경 적용: 서버에 저장된 변경 이력(모든 사용자에게 같음). 예전 '이 브라우저에만 임시 적용' 기능은 저장이 바로 적용되므로 없앴습니다.
     var committed = (results[5] && results[5].events) || [];
-    window.GRID = { baseline: results[6], committed: (results[7] && results[7].events) || [] };
+    window.EVENTS_SOURCE = { jurisdiction: results[5].source + (results[5].error ? '-error' : ''), grid: results[7].source + (results[7].error ? '-error' : '') };
+    window.GRID = { baseline: results[6], committed: results[7].events || [] };
     window.JURIS = { doc: results[3], stations: results[4], committed: committed, session: null };
-    try {
-      var raw = sessionStorage.getItem('juris_session');
-      if(raw){
-        var ss = JSON.parse(raw).events || [];
-        if(ss.length >= committed.length && JSON.stringify(ss.slice(0, committed.length)) === JSON.stringify(committed)){ window.JURIS.session = ss; }
-        else { sessionStorage.removeItem('juris_session'); }   // 저장소 쪽 변경이 더 최신이면 임시 적용분은 버림
-      }
-    } catch(e){}
+    try { sessionStorage.removeItem('juris_session'); } catch(e){}
     if(window.JURIS.doc && window.JurisCore){
-      JurisCore.applyToData(window.HIERARCHY, window.SNOW_DATA, window.JURIS.doc, window.JURIS.stations, window.JURIS.session || committed);
+      JurisCore.applyToData(window.HIERARCHY, window.SNOW_DATA, window.JURIS.doc, window.JURIS.stations, committed);
     }
     var s = document.createElement('script');
     s.src = 'app.js?v=' + Date.now();

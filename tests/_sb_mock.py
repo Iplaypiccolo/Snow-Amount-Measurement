@@ -16,6 +16,8 @@ class Mock:
         self.users, self.tokens, self.fn_calls, self.put_calls, self.n = {}, {}, [], [], 0
         self.fn_override = None; self.delay = 0
         self.requests, self.rid, self.req_calls = [], 0, []          # 구간 변경 요청(jurisdiction_requests)
+        self.events = {"jurisdiction_events": [], "grid_events": []}  # 변경 이력 표 (저장하면 쌓이고, 모든 사용자가 같은 것을 읽음)
+        self.event_calls, self.events_fail = [], None                 # 저장 요청 기록 / 저장·읽기 오류 흉내 (status, body)
         self.add("admin-01", "관리자1", "admin", None, ADMIN_PW)
         self.add("admin-02", "관리자2", "admin", None, "Second#Admin-77qZ")
         names = [("exchungju", "충주지사", "B019", "H04"), ("exdongseoul", "동서울지사", "B006", "H02"), ("exgurye", "구례지사", "B039", "H07"), ("exwonju", "원주지사", "B011", "H03"),
@@ -49,6 +51,24 @@ class Mock:
         return {"access_token": at, "refresh_token": rt, "expires_in": 3600, "token_type": "bearer", "user": {"id": u["id"]}}
     def active_admin(self, u): p = u and u["profile"]; return bool(p and p["role"] == "admin" and not p["must_change"] and not p["disabled"])
     def usable(self, u): p = u and u["profile"]; return bool(p and not p["must_change"] and not p["disabled"])
+    def events_api(self, tbl, req, u, q, body, send):
+        """변경 이력 표와 같은 권한 규칙: 읽기=활성 로그인 사용자(임시 비밀번호·비활성 제외), 쓰기=관리자만(종류 검사, 한 줄이라도 틀리면 전부 취소), 지우기·고치기 없음"""
+        kinds = {"jurisdiction_events": ("move", "addBranch", "moveHq"), "grid_events": ("cellAdd", "cellRemove")}[tbl]
+        rows = self.events[tbl]
+        if self.events_fail and (req.method != "GET" or self.events_fail[0] == "get"):
+            return send(*self.events_fail[1])
+        if req.method == "GET":
+            if not self.usable(u): return send(200, [])
+            off, lim = int(q.get("offset", ["0"])[0]), int(q.get("limit", ["1000"])[0])
+            return send(200, sorted(rows, key=lambda r: r["id"])[off: off + min(lim, 1000)])        # 서버는 한 번에 최대 1000줄
+        if req.method == "POST":
+            self.event_calls.append((tbl, body))
+            if not self.active_admin(u): return send(403, {"code": "42501", "message": "new row violates row-level security policy"})
+            if not isinstance(body, list) or any(not isinstance(b, dict) or b.get("kind") not in kinds or not isinstance(b.get("payload"), dict) for b in body): return send(400, {"code": "23514", "message": "check violation"})
+            for b in body:
+                rows.append({"id": len(rows) + 1 + getattr(self, "event_id_base", 0), "at": "2026-10-03T05:00:%02dZ" % (len(rows) % 60), "by_user": u["id"], "kind": b["kind"], "payload": b["payload"], "note": b.get("note")})
+            return send(201)
+        return send(405, {"message": "no"})
     def requests_api(self, route, req, u, q, body, send):
         """구간 변경 요청 표와 같은 권한 규칙을 흉내: 지사만 요청·자기 지사 것만 읽기·관리자만 승인/반려·지사는 자기 대기 요청만 취소"""
         import re as _re
@@ -117,6 +137,7 @@ class Mock:
                 return send(200, rows)
             if tbl in ("branches", "hqs"): return send(200, (self.branches if tbl == "branches" else self.hqs) if self.usable(u) else [])
             if tbl == "jurisdiction_requests": return self.requests_api(route, req, u, q, body, send)
+            if tbl in self.events: return self.events_api(tbl, req, u, q, body, send)
             if tbl == "audit_log":
                 rows = self.audit if self.active_admin(u) else []
                 k = q.get("kind", [""])[0]

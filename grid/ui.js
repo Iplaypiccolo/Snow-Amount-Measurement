@@ -190,12 +190,14 @@
   }
   function renderPending() {
     var box = $('gr-pending'), com = base(), h = '';
+    if (serverDown()) h += '<div class="jr-warn">⚠ 서버에서 변경 이력을 불러오지 못해 예전 파일 기준으로 보고 있습니다. 새로고침해서 서버에 연결된 뒤에 저장하세요.</div>';
     if (S.pending.length) {
       h += '<div class="jr-ptitle">변경 대기 ' + S.pending.length + '건</div>' + S.pending.map(function (ev, i) { return '<div class="jr-ev">' + describe(ev) + '<button class="jr-x" data-ev="' + i + '" title="이 변경 취소">×</button></div>'; }).join('') +
         '<input id="gr-reason" class="jr-reason" placeholder="변경 사유 (선택)" value="' + esc(S.reason || '') + '">' +
-        '<div class="jr-row"><button class="jr-btn" data-act="preview">미리보기</button><button class="jr-btn jr-primary" data-act="save">변경 저장(파일 받기)</button><button class="jr-btn" data-act="cancel">모두 취소</button></div>';
+        '<div class="jr-row"><button class="jr-btn" data-act="preview">미리보기</button><button class="jr-btn jr-primary" data-act="save"' + (S.saving || serverDown() ? ' disabled' : '') + '>' + (S.saving ? '저장하는 중…' : '변경 저장') + '</button><button class="jr-btn" data-act="cancel">모두 취소</button></div>';
     }
-    if (com.length) h += '<details class="jr-hist"><summary>저장된 변경 이력 ' + com.length + '건</summary>' + com.slice().reverse().slice(0, 30).map(function (ev) { return '<div class="jr-ev old">' + (ev.at ? esc(String(ev.at).slice(0, 10)) + ' ' : '') + describe(ev) + (ev.note ? ' <em>' + esc(ev.note) + '</em>' : '') + '</div>'; }).join('') + '</details>';
+    if (com.length) h += '<details class="jr-hist"><summary>저장된 변경 이력 ' + com.length + '건</summary>' + com.slice().reverse().slice(0, 30).map(function (ev) { return '<div class="jr-ev old">' + (ev.at ? esc(String(ev.at).slice(0, 10)) + ' ' : '') + describe(ev) + (ev.note ? ' <em>' + esc(ev.note) + '</em>' : '') + '</div>'; }).join('') +
+      (S.admin ? '<div class="jr-row"><button class="jr-btn" data-act="export" title="변경 이력 전체를 파일로 보관합니다">이력 파일로 내려받기(백업)</button></div>' : '') + '</details>';
     box.innerHTML = h; box.style.display = h ? 'block' : 'none';
   }
   function renderSaveBar() {
@@ -203,26 +205,34 @@
     var n = S.pending.length; bar.className = 'jr-savebar' + (n ? ' dirty' : '');
     bar.innerHTML = '<span class="st">' + (n ? '● 저장하지 않은 변경 ' + n + '건' : '변경 없음 — 칸을 눌러 기관에 편입하세요') + '</span>' +
       '<button class="jr-btn" data-act="preview"' + (n ? '' : ' disabled') + '>미리보기</button><button class="jr-btn" data-act="cancel"' + (n ? '' : ' disabled') + '>모두 취소</button>' +
-      '<button class="jr-btn jr-primary" data-act="save"' + (n ? '' : ' disabled') + '>저장</button>';
+      '<button class="jr-btn jr-primary" data-act="save"' + (n && !S.saving && !serverDown() ? '' : ' disabled') + ' title="변경 내용을 서버에 저장합니다. 모든 사용자에게 바로 적용됩니다">' + (S.saving ? '저장하는 중…' : '저장') + '</button>';
     bar.style.display = 'flex';
   }
   function stamped() {
     var now = new Date().toISOString(), reason = ($('gr-reason') && $('gr-reason').value || S.reason || '').trim(); S.reason = reason;
     return S.pending.map(function (ev) { var c = JSON.parse(JSON.stringify(ev)); delete c.n; c.at = c.at || now; if (reason) c.note = reason; return c; });
   }
-  function uploadUrl(host, path) {
-    var m = /^([^.]+)\.github\.io$/.exec(host || ''), repo = (path || '').split('/')[1];
-    return m && repo ? 'https://github.com/' + m[1] + '/' + repo + '/upload/main/data' : null;
-  }
   function modal(html) { var m = $('gr-modal'); m.innerHTML = '<div class="jr-dialog">' + html + '</div>'; m.style.display = 'flex'; }
-  function saveFile() {
-    var data = { version: 1, events: base().concat(stamped()) }, blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
-    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'grid_changes.json'; a.click();
-    var up = uploadUrl(location.hostname, location.pathname);
-    modal('<h3>저장 파일을 내려받았습니다</h3><p class="jr-hint" style="color:#8a4b00">⚠ 아직 사이트에 반영된 것이 아닙니다. 아래 순서로 올려야 모든 사용자에게 적용됩니다.</p>' +
-      '<ol style="line-height:1.7;font-size:13.5px;padding-left:20px"><li>내려받은 <b>grid_changes.json</b> 파일을 준비합니다.</li><li>GitHub 저장소의 <code>data</code> 폴더에 같은 이름으로 올립니다. 같은 이름이면 기존 파일이 바뀝니다.</li><li><b>Commit changes</b>를 누르면 1~2분 뒤 반영됩니다.</li></ol>' +
-      '<p class="jr-hint">되돌리려면 GitHub에서 그 파일의 이전 커밋 내용으로 되돌리면 됩니다.</p><div class="jr-row">' +
-      (up ? '<a class="jr-btn jr-primary" style="text-decoration:none" href="' + esc(up) + '" target="_blank" rel="noopener">GitHub에서 파일 올리기 ↗</a>' : '') + '<button class="jr-btn" data-act="close">닫기</button></div>');
+  function serverDown() { var e = window.EVENTS_SOURCE; return !!(e && /error/.test(e.grid || '')); }
+  function downloadEvents(events, name) { SSEvents.download(name, SSEvents.exportJson(events)); }
+  // 변경 저장: 서버(Supabase)에 한 번에 저장합니다. 모든 사용자에게 바로 적용되고, GitHub 에 올릴 필요가 없습니다.
+  function saveChanges() {
+    if (S.saving || !S.admin || !S.pending.length) return;
+    if (serverDown()) { window.alert('서버에서 변경 이력을 불러오지 못한 상태입니다. 새로고침해서 서버에 연결된 뒤에 저장하세요.'); return; }
+    var evs = stamped(); S.saving = true; renderPending(); renderSaveBar();
+    SSEvents.append('grid', evs).then(function (res) {
+      if (!res.ok) {
+        S.saving = false; renderPending(); renderSaveBar();
+        modal('<h3>저장하지 못했습니다</h3><p class="jr-warn" style="font-size:13.5px">' + esc(res.message) + '</p><p style="font-size:13.5px;line-height:1.6">변경 대기는 그대로 남아 있습니다. 잠시 뒤 다시 [저장]을 누르거나, 급하면 <b>[파일로 받기]</b>로 내용을 보관해 두세요.</p>' +
+          '<div class="jr-row"><button class="jr-btn jr-primary" data-act="retry">다시 저장</button><button class="jr-btn" data-act="tofile">파일로 받기</button><button class="jr-btn" data-act="close">닫기</button></div>');
+        return;
+      }
+      return SSEvents.load('grid').then(function (r) {
+        GR().committed = r.source === 'server' && !r.error ? r.events : GR().committed.concat(evs);
+        S.saving = false; S.pending = []; S.reason = ''; S.selected = {}; afterChange();
+        modal('<h3>저장했습니다</h3><p style="font-size:14px;line-height:1.6">변경 ' + evs.length + '건이 서버에 저장되었고, <b>모든 사용자에게 바로 적용</b>됩니다. GitHub 에 올릴 필요가 없습니다.</p><div class="jr-row"><button class="jr-btn jr-primary" data-act="close">확인</button></div>');
+      });
+    });
   }
   function preview() {
     var im = G.impact(GR().baseline, S.ids, base(), events());
@@ -293,7 +303,10 @@
       else if (act === 'clear') { S.selected = {}; afterChange(); }
       else if (act === 'selbranch') { S.res.assign.forEach(function (set, k) { if (set.has(S.focus)) S.selected[k] = true; }); afterChange(); }
       else if (act === 'preview') preview();
-      else if (act === 'save') saveFile();
+      else if (act === 'save') saveChanges();
+      else if (act === 'retry') { $('gr-modal').style.display = 'none'; saveChanges(); }
+      else if (act === 'tofile') downloadEvents(base().concat(stamped()), 'grid_changes.json');
+      else if (act === 'export') downloadEvents(base(), 'grid_changes_backup.json');
       else if (act === 'cancel') { if (S.pending.length && window.confirm('변경 대기 ' + S.pending.length + '건을 모두 취소할까요?')) { S.pending = []; afterChange(); } }
       else if (act === 'close') $('gr-modal').style.display = 'none';
     });
@@ -306,5 +319,5 @@
     buildShell(); bind(); recompute(); $('view-grid').classList.toggle('jr-is-admin', S.admin); S.inited = true;
   }
   function show() { if (!S.inited) return; ensureMap(); afterChange(); }
-  window.GridUI = { init: init, show: show, _state: function () { return S; }, _uploadUrl: uploadUrl };
+  window.GridUI = { init: init, show: show, _state: function () { return S; } };
 })();

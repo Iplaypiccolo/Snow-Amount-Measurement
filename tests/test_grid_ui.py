@@ -12,11 +12,11 @@ from playwright.sync_api import sync_playwright
 check, J = T.check, T.J
 results, errors = [], T.errors
 
-def open_grid(browser):
+def open_grid(browser, mock=None):
     p = browser.new_page(viewport={"width": 1400, "height": 900}, accept_downloads=True)
     T.OPENED.append(p)
     p.on("pageerror", lambda e: errors.append(str(e))); p.on("dialog", lambda d: d.accept()); p.route("**/*", T.route)
-    SBM.install(p, SBM.Mock(), "admin-01")
+    SBM.install(p, mock or SBM.Mock(), "admin-01")
     p.goto(T.URL); p.wait_for_function("window.GridUI && GridUI._state().inited", timeout=60000)
     p.click(".tab-btn[data-tab=grid]"); p.wait_for_timeout(900)
     return p
@@ -118,7 +118,7 @@ def t_remove_button_state(b):
     check("편입할 기관" in p.locator("#gr-selbar").inner_text(), "기관 선택은 '편입할 기관'(추가용)으로만 표시")
 
 def t_add_remove_and_save(b):
-    p = open_grid(b); admin(p)
+    m = SBM.Mock(); p = open_grid(b, mock=m); admin(p)
     check(p.locator("#gr-savebar").is_visible() and p.locator("#gr-savebar [data-act=save]").is_disabled(), "저장 바(변경 없음=비활성)")
     ks = ring_cells(p, 3); br = first_branch(p); u0 = union(p)
     for k in ks: click_cell(p, k)
@@ -131,19 +131,47 @@ def t_add_remove_and_save(b):
     p.click("#gr-savebar [data-act=preview]"); p.wait_for_timeout(250)
     txt = p.locator("#gr-modal").inner_text(); check(f"{u0} → {u0 + 3}칸" in txt, txt); p.click("#gr-modal [data-act=close]")
     p.fill("#gr-reason", "시험 편입")
-    with p.expect_download() as dl: p.click("#gr-savebar [data-act=save]")
-    data = json.load(open(dl.value.path(), encoding="utf-8")); e = data["events"][-1]
-    check(data["version"] == 1 and e["t"] == "add" and e["to"] == br and len(e["cells"]) == 3 and e.get("note") == "시험 편입" and e.get("at"), e)
-    check("아직 사이트에 반영된 것이 아닙니다" in p.locator("#gr-modal").inner_text(), "저장 안내")
-    check(T.J(p, "GridUI._uploadUrl('iplaypiccolo.github.io', '/Snow-Amount-Measurement/')") == "https://github.com/iplaypiccolo/Snow-Amount-Measurement/upload/main/data", "업로드 주소")
+    p.click("#gr-savebar [data-act=save]"); p.wait_for_selector("#gr-modal:not([style*='none']) h3:has-text('저장했습니다')", timeout=10000)
+    tbl, rows = m.event_calls[-1]; r = rows[-1]
+    check(tbl == "grid_events" and r["kind"] == "cellAdd" and r["payload"]["to"] == br and len(r["payload"]["cells"]) == 3 and r["note"] == "시험 편입" and "at" not in r, m.event_calls[-1])
+    d = p.locator("#gr-modal").inner_text(); check("모든 사용자에게 바로 적용" in d and "GitHub" in d and "올릴 필요가 없습니다" in d, d)
+    check(J(p, "GRID.committed.length") == 1 and J(p, "GRID.committed[0].t") == "add" and J(p, "GRID.committed[0].id") == 1, "저장된 이력이 화면에 반영(예전 형식 add 로 되돌려 읽음)")
+    check(len(J(p, f"{S}.pending")) == 0 and union(p) == u0 + 3 and p.locator("#gr-savebar [data-act=save]").is_disabled(), "저장 후 변경 대기가 비고 결과는 그대로 유지")
     p.click("#gr-modal [data-act=close]")
     # 제외: 방금 넣은 칸 일부를 빼면 합집합이 줄어듦
     click_cell(p, ks[0]); click_cell(p, ks[1]); p.click("#gr-selbar [data-act=remove]"); p.wait_for_timeout(250)      # 기관을 고르지 않고 [편입 제외]만 누름
-    check(union(p) == u0 + 1 and len(J(p, f"{S}.pending")) == 2, f"제외 후 {union(p)}")
-    p.locator("#gr-pending .jr-x").first.click(); p.wait_for_timeout(200)       # 첫 변경(편입) 취소 → 제외만 남지만 효과 없음
-    check(len(J(p, f"{S}.pending")) == 1, "개별 취소")
+    check(union(p) == u0 + 1 and len(J(p, f"{S}.pending")) == 1, f"이미 저장한 편입 3칸 중 2칸을 제외하면 대기 1건, 합집합 {union(p)}")
+    p.locator("#gr-pending .jr-x").first.click(); p.wait_for_timeout(200)       # 제외 대기를 취소 → 저장된 편입 3칸이 그대로
+    check(len(J(p, f"{S}.pending")) == 0 and union(p) == u0 + 3, "개별 취소하면 저장된 상태로 돌아감")
+    click_cell(p, ks[0]); p.click("#gr-selbar [data-act=remove]"); p.wait_for_timeout(200)
     p.click("#gr-savebar [data-act=cancel]"); p.wait_for_timeout(200)
-    check(len(J(p, f"{S}.pending")) == 0 and union(p) == u0, "모두 취소")
+    check(len(J(p, f"{S}.pending")) == 0 and union(p) == u0 + 3, "모두 취소해도 이미 저장된 것은 그대로")
+
+def t_grid_save_failure_and_reload(b):
+    m = SBM.Mock(); p = open_grid(b, mock=m); admin(p); ks = ring_cells(p, 2); br = first_branch(p)
+    for k in ks: click_cell(p, k)
+    p.select_option("#gr-dest", br); p.click("#gr-selbar [data-act=add]"); p.wait_for_timeout(250)
+    m.events_fail = ("post", (500, {"message": "boom"}))
+    p.click("#gr-savebar [data-act=save]"); p.wait_for_selector("#gr-modal [data-act=retry]", timeout=10000)
+    d = p.locator("#gr-modal").inner_text(); check("저장하지 못했습니다" in d and "변경 대기는 그대로" in d, d)
+    check(len(J(p, f"{S}.pending")) == 1 and J(p, "GRID.committed.length") == 0, "실패하면 변경 대기가 남아 있어야 함")
+    with p.expect_download() as dl: p.click("#gr-modal [data-act=tofile]")
+    data = json.load(open(dl.value.path(), encoding="utf-8")); check(data["events"][-1]["t"] == "add" and len(data["events"][-1]["cells"]) == 2, "비상용 파일")
+    m.events_fail = None; p.click("#gr-modal [data-act=retry]"); p.wait_for_selector("#gr-modal h3:has-text('저장했습니다')", timeout=10000)
+    # 새로고침해도 서버에 저장된 편입이 그대로: 호출 대상이 늘어난 채로 유지
+    u1 = union(p); p.reload(); p.wait_for_function("window.GridUI && GridUI._state().inited", timeout=60000); p.click("#tabGridBtn"); p.wait_for_timeout(700)
+    check(union(p) == u1 and J(p, "window.EVENTS_SOURCE.grid") == "server", f"새로고침 뒤에도 저장된 편입 유지 {u1} / {union(p)}")
+    # 제외도 이력으로 저장되고 되돌려 읽힘
+    click_cell(p, ks[0]); p.click("#gr-selbar [data-act=remove]"); p.wait_for_timeout(250); p.click("#gr-savebar [data-act=save]"); p.wait_for_selector("#gr-modal h3:has-text('저장했습니다')", timeout=10000)
+    check(m.event_calls[-1][1][-1]["kind"] == "cellRemove" and m.event_calls[-1][1][-1]["payload"]["from"] == br and union(p) == u1 - 1, m.event_calls[-1])
+    # 다른 관리자 화면에서도 같은 결과
+    p2 = open_grid(b, mock=m); check(union(p2) == u1 - 1, "다른 화면에서 열어도 같은 결과")
+
+def t_grid_history_failure_blocks_save(b):
+    m = SBM.Mock(); m.events_fail = ("get", (500, {"message": "down"})); p = open_grid(b, mock=m); admin(p)
+    check(J(p, "window.EVENTS_SOURCE.grid") == "file-error", "서버 이력을 못 읽으면 파일로 대신")
+    k = ring_cells(p, 1)[0]; click_cell(p, k); p.select_option("#gr-dest", first_branch(p)); p.click("#gr-selbar [data-act=add]"); p.wait_for_timeout(250)
+    check("서버에서 변경 이력을 불러오지 못해" in p.locator("#gr-pending").inner_text() and p.locator("#gr-savebar [data-act=save]").is_disabled(), "경고 + 저장 차단")
 
 def t_share_between_branches(b):
     p = open_grid(b); admin(p)
@@ -204,14 +232,14 @@ def t_colors_match_other_tab(b):
 
 def t_new_branch_from_jurisdiction_appears(b):
     p = b.new_page(viewport={"width": 1400, "height": 900}); T.OPENED.append(p)
-    sess = {"events": [{"t": "addBranch", "id": "B900", "hq": "강원", "name": "신설시험"}]}
-    p.add_init_script("sessionStorage.setItem('juris_session', %s)" % json.dumps(json.dumps(sess)))
-    p.on("pageerror", lambda e: errors.append(str(e))); p.route("**/*", T.route); SBM.install(p, SBM.Mock(), "admin-01"); p.goto(T.URL)
+    m = SBM.Mock()           # 관할 탭에서 신설 기관을 만들어 서버에 저장해 둔 상태(변경 이력 표에 이미 쌓여 있음)
+    m.events["jurisdiction_events"].append({"id": 1, "at": "2026-10-03T01:00:00Z", "by_user": None, "kind": "addBranch", "payload": {"id": "B900", "hq": "강원", "name": "신설시험"}, "note": None})
+    p.on("pageerror", lambda e: errors.append(str(e))); p.route("**/*", T.route); SBM.install(p, m, "admin-01"); p.goto(T.URL)
     p.wait_for_function("window.GridUI && GridUI._state().inited", timeout=60000); p.click(".tab-btn[data-tab=grid]"); p.wait_for_timeout(700)
     check(p.locator("#gr-tree .jr-br:has-text('신설시험')").count() == 1, "관할 탭에서 만든 신설 기관이 격자 탭에도 보여야 함")
     check(p.locator("#gr-tree .jr-br:has-text('신설시험') em").count() == 1, "신설 표시")
 
-TESTS = [t_tab_loads, t_popup_info_for_unselected_cell, t_remove_needs_no_branch_choice, t_remove_shared_cells_asks_which_branch, t_remove_button_state, t_add_remove_and_save, t_share_between_branches, t_box_select, t_budget_levels, t_focus_branch,
+TESTS = [t_tab_loads, t_popup_info_for_unselected_cell, t_remove_needs_no_branch_choice, t_remove_shared_cells_asks_which_branch, t_remove_button_state, t_add_remove_and_save, t_grid_save_failure_and_reload, t_grid_history_failure_blocks_save, t_share_between_branches, t_box_select, t_budget_levels, t_focus_branch,
          t_colors_match_other_tab, t_new_branch_from_jurisdiction_appears]
 if __name__ == "__main__":
     with sync_playwright() as pw:

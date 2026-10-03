@@ -323,16 +323,17 @@
   function renderPending() {
     var box = $('jr-pending'), com = base();
     var h = '';
-    if (J().session) h += '<div class="jr-warn">⚠ 이 브라우저에만 임시 적용된 변경이 있습니다. 저장 파일을 저장소에 올리면 모두에게 적용됩니다.</div>';
+    if (serverDown()) h += '<div class="jr-warn">⚠ 서버에서 변경 이력을 불러오지 못해 예전 파일 기준으로 보고 있습니다. 새로고침해서 서버에 연결된 뒤에 저장하세요.</div>';
     if (S.pending.length) {
       h += '<div class="jr-ptitle">변경 대기 ' + S.pending.length + '건</div>' +
         S.pending.map(function (ev, i) { return '<div class="jr-ev">' + describe(ev) + '<button class="jr-x" data-ev="' + i + '" title="이 변경 취소">×</button></div>'; }).join('') +
         '<input id="jr-reason" class="jr-reason" placeholder="변경 사유 (선택)" value="' + esc(S.reason || '') + '">' +
-        '<div class="jr-row"><button class="jr-btn" id="jr-preview">미리보기</button><button class="jr-btn jr-primary" id="jr-save">변경 저장(파일 받기)</button></div>' +
-        '<div class="jr-row"><button class="jr-btn" id="jr-apply">이 브라우저에 바로 적용</button><button class="jr-btn" id="jr-cancel">모두 취소</button></div>';
+        '<div class="jr-row"><button class="jr-btn" id="jr-preview">미리보기</button><button class="jr-btn jr-primary" id="jr-save"' + (S.saving || serverDown() ? ' disabled' : '') + '>' + (S.saving ? '저장하는 중…' : '변경 저장') + '</button></div>' +
+        '<div class="jr-row"><button class="jr-btn" id="jr-cancel">모두 취소</button></div>';
     }
     if (com.length) h += '<details class="jr-hist"><summary>저장된 변경 이력 ' + com.length + '건</summary>' +
-      com.slice().reverse().slice(0, 30).map(function (ev) { return '<div class="jr-ev old">' + (ev.at ? esc(String(ev.at).slice(0, 10)) + ' ' : '') + describe(ev) + (ev.note ? ' <em>' + esc(ev.note) + '</em>' : '') + '</div>'; }).join('') + '</details>';
+      com.slice().reverse().slice(0, 30).map(function (ev) { return '<div class="jr-ev old">' + (ev.at ? esc(String(ev.at).slice(0, 10)) + ' ' : '') + describe(ev) + (ev.note ? ' <em>' + esc(ev.note) + '</em>' : '') + '</div>'; }).join('') +
+      (S.admin ? '<div class="jr-row"><button class="jr-btn" id="jr-export" title="변경 이력 전체를 파일로 보관합니다">이력 파일로 내려받기(백업)</button></div>' : '') + '</details>';
     box.innerHTML = h;
     box.style.display = h ? 'block' : 'none';
   }
@@ -343,26 +344,40 @@
     return S.pending.map(function (ev) { var c = JSON.parse(JSON.stringify(ev)); c.at = c.at || now; if (reason) c.note = reason; return c; });
   }
 
-  function saveFile() {
-    var data = { version: 1, events: base().concat(stampPending()) };
-    var blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
-    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'jurisdiction_changes.json'; a.click();
-    approveLinkedRequests();                       // 이 변경에 연결된 지사 요청을 승인 처리
-    var up = uploadUrl(location.hostname, location.pathname);
-    modal('<h3>저장 파일을 내려받았습니다</h3>' +
-      '<p class="jr-hint" style="color:#8a4b00">⚠ 아직 사이트에 반영된 것이 아닙니다. 아래 순서로 올려야 모든 사용자에게 적용됩니다.</p>' +
-      '<ol style="line-height:1.7;font-size:13.5px;padding-left:20px"><li>내려받은 <b>jurisdiction_changes.json</b> 파일을 준비합니다. (다운로드 폴더)</li>' +
-      '<li>GitHub 저장소의 <code>data</code> 폴더에 같은 이름으로 올립니다. 같은 이름이면 기존 파일이 바뀝니다.</li>' +
-      '<li>화면 아래 <b>Commit changes</b>를 누르면 1~2분 뒤 사이트에 반영됩니다.</li></ol>' +
-      '<p class="jr-hint">되돌리려면 GitHub에서 그 파일의 이전 커밋 내용으로 되돌리면 됩니다.</p>' +
-      '<div class="jr-row">' + (up ? '<a class="jr-btn jr-primary" style="text-decoration:none" href="' + esc(up) + '" target="_blank" rel="noopener">GitHub에서 파일 올리기 ↗</a>' : '') +
-      '<button class="jr-btn" id="jr-close">닫기</button></div>');
-  }
+  function serverDown() { var e = window.EVENTS_SOURCE; return !!(e && /error/.test(e.jurisdiction || '')); }
+  function linkedRequestIds() { var ids = []; S.pending.forEach(function (ev) { if (ev.req && ids.indexOf(ev.req) < 0) ids.push(ev.req); }); return ids; }
+  function downloadEvents(events, name) { SSEvents.download(name, SSEvents.exportJson(events)); }
 
-  function applyHere() {
-    if (!window.confirm('이 브라우저에 바로 적용하려면 페이지를 새로고침합니다.\n지금 업로드해 둔 신적설 데이터(저장하지 않은 것)가 사라질 수 있습니다. 계속할까요?')) return;
-    try { sessionStorage.setItem('juris_session', JSON.stringify({ events: base().concat(stampPending()) })); } catch (e) { window.alert('이 브라우저에서는 임시 적용을 할 수 없습니다.'); return; }
-    location.reload();
+  // 변경 저장: 서버(Supabase)에 한 번에 저장합니다. 모든 사용자에게 바로 적용되고, GitHub 에 올릴 필요가 없습니다.
+  function saveChanges() {
+    if (!S.admin || S.saving || !S.pending.length) return;
+    if (serverDown()) { window.alert('서버에서 변경 이력을 불러오지 못한 상태입니다. 새로고침해서 서버에 연결된 뒤에 저장하세요.'); return; }
+    var evs = stampPending(), reqIds = linkedRequestIds();
+    S.saving = true; renderPending(); renderSaveBar();
+    SSEvents.append('jurisdiction', evs).then(function (res) {
+      if (!res.ok) { S.saving = false; renderPending(); renderSaveBar(); saveFailed(res.message, evs); return; }
+      return SSEvents.load('jurisdiction').then(function (r) {
+        // 저장은 성공했는데 다시 읽기만 실패한 경우에도 방금 저장한 내용을 화면에 반영해 둠
+        J().committed = r.source === 'server' && !r.error ? r.events : J().committed.concat(evs);
+        S.saving = false; S.pending = []; S.reason = ''; afterChange(true);
+        if (reqIds.length) approveRequests(reqIds);
+        modal('<h3>저장했습니다</h3><p style="font-size:14px;line-height:1.6">변경 ' + evs.length + '건이 서버에 저장되었고, <b>모든 사용자에게 바로 적용</b>됩니다. GitHub 에 올릴 필요가 없습니다.' + (reqIds.length ? '<br>연결된 지사 요청 ' + reqIds.length + '건은 승인 처리됩니다.' : '') + '</p>' +
+          '<p class="jr-hint">다른 탭(연도별 신적설·관측소 지도)의 적설 계산에도 새 관할을 반영하려면 화면을 새로고침하세요. 지금 이 탭의 지도와 목록은 이미 새 관할로 바뀌었습니다.</p>' +
+          '<div class="jr-row"><button class="jr-btn jr-primary" id="jr-reload">새로고침해서 모두 반영</button><button class="jr-btn" id="jr-close">닫기</button></div>');
+      });
+    });
+  }
+  function saveFailed(message, evs) {
+    modal('<h3>저장하지 못했습니다</h3><p class="jr-warn" style="font-size:13.5px">' + esc(message) + '</p>' +
+      '<p style="font-size:13.5px;line-height:1.6">변경 대기는 그대로 남아 있습니다. 잠시 뒤 다시 [저장]을 누르거나, 급하면 아래 <b>[파일로 받기]</b>로 내용을 보관해 두세요.</p>' +
+      '<div class="jr-row"><button class="jr-btn jr-primary" id="jr-retry">다시 저장</button><button class="jr-btn" id="jr-tofile">파일로 받기</button><button class="jr-btn" id="jr-close">닫기</button></div>');
+  }
+  function approveRequests(ids) {          // 이 변경에 연결된 지사 요청을 승인 처리
+    if (!window.JurisRequests) return;
+    JurisRequests.resolve(ids, 'approved', '관할 변경 저장 시 승인').then(function (r) {
+      if (!r.ok) toast('요청 승인 처리에 실패했습니다: ' + r.message); else if (r.rows.length) toast('연결된 요청 ' + r.rows.length + '건을 승인 처리했습니다.');
+      loadRequests(); JurisRequests.check(true);
+    });
   }
 
   /* ---------- 미리보기 ---------- */
@@ -446,10 +461,6 @@
   }
 
   /* ---------- 항상 보이는 저장 바 (관리자 모드): 지도 오른쪽 위 ---------- */
-  function uploadUrl(host, path) {          // github.io 에서 열었을 때 data 폴더 업로드 화면 주소를 만들어 줌
-    var m = /^([^.]+)\.github\.io$/.exec(host || ''), repo = (path || '').split('/')[1];
-    return m && repo ? 'https://github.com/' + m[1] + '/' + repo + '/upload/main/data' : null;
-  }
   function renderSaveBar() {
     var bar = $('jr-savebar'); if (!bar) return;
     if (!S.admin) { bar.style.display = 'none'; return; }
@@ -458,7 +469,7 @@
     bar.innerHTML = '<span class="st">' + (n ? '● 저장하지 않은 변경 ' + n + '건' : '변경 없음 — 구간을 눌러 지사를 옮기세요') + '</span>' +
       '<button class="jr-btn" id="jr-top-preview"' + (n ? '' : ' disabled') + '>미리보기</button>' +
       '<button class="jr-btn" id="jr-top-cancel"' + (n ? '' : ' disabled') + '>모두 취소</button>' +
-      '<button class="jr-btn jr-primary" id="jr-top-save"' + (n ? '' : ' disabled') + ' title="변경 내용을 파일로 저장합니다">저장</button>';
+      '<button class="jr-btn jr-primary" id="jr-top-save"' + (n && !S.saving && !serverDown() ? '' : ' disabled') + ' title="변경 내용을 서버에 저장합니다. 모든 사용자에게 바로 적용됩니다">' + (S.saving ? '저장하는 중…' : '저장') + '</button>';
     bar.style.display = 'flex';
   }
 
@@ -503,10 +514,13 @@
       else if (id === 'jr-clear') { S.selected = {}; S.last = null; S.clicked = null; afterChange(false); }
       else if (id === 'jr-selall') { J().doc.sections.forEach(function (s) { if ((S.view.state.owner[s.id] || 'NONE') === S.focus) S.selected[s.id] = true; }); afterChange(false); }
       else if (id === 'jr-preview' || id === 'jr-top-preview') preview();
-      else if (id === 'jr-top-save' && S.admin) saveFile();
+      else if (id === 'jr-top-save' && S.admin) saveChanges();
       else if (id === 'jr-top-cancel') { if (S.pending.length && window.confirm('변경 대기 ' + S.pending.length + '건을 모두 취소할까요?')) { S.pending = []; afterChange(true); } }
-      else if (id === 'jr-save' && S.admin) saveFile();
-      else if (id === 'jr-apply' && S.admin) applyHere();
+      else if (id === 'jr-save' && S.admin) saveChanges();
+      else if (id === 'jr-retry' && S.admin) { closeModal(); saveChanges(); }
+      else if (id === 'jr-tofile' && S.admin) downloadEvents(base().concat(stampPending()), 'jurisdiction_changes.json');
+      else if (id === 'jr-export' && S.admin) downloadEvents(base(), 'jurisdiction_changes_backup.json');
+      else if (id === 'jr-reload') location.reload();
       else if (id === 'jr-cancel') { S.pending = []; afterChange(true); }
       else if (id === 'jr-close') closeModal();
       else if (id === 'jr-newok' && S.admin) createBranch();
@@ -604,14 +618,6 @@
     if (!window.confirm('요청 #' + r.id + '을 취소할까요?')) return;
     JurisRequests.cancel(r.id).then(function (res) { toast(res.ok ? '요청을 취소했습니다.' : res.message); loadRequests(); });
   }
-  function approveLinkedRequests() {         // 저장 파일에 담긴 이동 중 지사 요청에서 온 것은 승인 처리
-    var ids = []; S.pending.forEach(function (ev) { if (ev.req && ids.indexOf(ev.req) < 0) ids.push(ev.req); });
-    if (!ids.length || !window.JurisRequests) return;
-    JurisRequests.resolve(ids, 'approved', '관할 변경 저장 시 승인').then(function (r) {
-      if (!r.ok) toast('요청 승인 처리에 실패했습니다: ' + r.message); else if (r.rows.length) toast('연결된 요청 ' + r.rows.length + '건을 승인 처리했습니다.');
-      loadRequests(); JurisRequests.check(true);
-    });
-  }
 
   // 지사: 선택한 구간을 다른 기관으로 옮겨 달라는 요청 보내기
   function openRequestDialog() {
@@ -652,5 +658,5 @@
     ensureMap(); afterChange(false); if (selectMode()) loadRequests();
   }
   function openRequests() { S.reqOpen = true; S.search = ''; var s = $('jr-search'); if (s) s.value = ''; return loadRequests().then(function () { var b = $('jr-requests'); if (b && b.scrollIntoView) b.scrollIntoView({ block: 'nearest' }); }); }
-  window.JurisdictionUI = { init: init, show: show, openRequests: openRequests, refreshRequests: loadRequests, _state: function () { return S; }, _casing: casingColors, _contrast: contrast, _uploadUrl: uploadUrl, _near: nearestSection, _width: widthFor, NEAR_PX: NEAR_PX };
+  window.JurisdictionUI = { init: init, show: show, openRequests: openRequests, refreshRequests: loadRequests, _state: function () { return S; }, _casing: casingColors, _contrast: contrast, _near: nearestSection, _width: widthFor, NEAR_PX: NEAR_PX };
 })();
