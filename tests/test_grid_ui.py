@@ -141,7 +141,7 @@ def t_add_remove_and_save(b):
     clear_toast(p); p.click("#gr-savebar [data-act=save]"); gsaved(p, 1)
     tbl, rows = m.event_calls[-1]; r = rows[-1]
     check(tbl == "grid_events" and r["kind"] == "cellAdd" and r["payload"]["to"] == br and len(r["payload"]["cells"]) == 3 and r["note"] == "시험 편입" and "at" not in r, m.event_calls[-1])
-    check(J(p, "GRID.committed.length") == 1 and J(p, "GRID.committed[0].t") == "add" and J(p, "GRID.committed[0].id") == 1, "저장된 이력이 화면에 반영(예전 형식 add 로 되돌려 읽음)")
+    check(J(p, "GRID.committed.length") == 1 and J(p, "GRID.committed[0].t") == "add" and J(p, "GRID.committed[0].seq") == 1, "저장된 이력이 화면에 반영(예전 형식 add 로 되돌려 읽음)")
     check(len(J(p, f"{S}.pending")) == 0 and union(p) == u0 + 3 and p.locator("#gr-savebar [data-act=save]").is_disabled(), "저장 후 변경 대기가 비고 결과는 그대로 유지")
     # 제외: 방금 넣은 칸 일부를 빼면 합집합이 줄어듦
     click_cell(p, ks[0]); click_cell(p, ks[1]); p.click("#gr-selbar [data-act=remove]"); p.wait_for_timeout(250)      # 기관을 고르지 않고 [편입 제외]만 누름

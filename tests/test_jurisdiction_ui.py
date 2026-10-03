@@ -113,7 +113,7 @@ def t_move_preview_save(b):
     check(tbl == "jurisdiction_events" and len(rows) == 1 and r["kind"] == "move" and r["payload"]["to"] == to and r["payload"]["sections"] == secs and r["note"] == "시험 변경", m.event_calls[-1])
     check("at" not in r and "by_user" not in r and "t" not in r["payload"], "저장 시각·작성자는 서버가 정함, 화면 전용 필드는 보내지 않음")
     check(J(p, "JurisdictionUI._state().pending.length") == 0 and "저장된 변경 이력 1건" in p.locator("#jr-pending").inner_text(), "저장되면 변경 대기가 비고 이력에 1건")
-    check(J(p, "JURIS.committed.length") == 1 and J(p, "JURIS.committed[0].id") == 1 and J(p, "JURIS.committed[0].t") == "move", "서버에 저장된 이력이 화면에 반영(번호 포함)")
+    check(J(p, "JURIS.committed.length") == 1 and J(p, "JURIS.committed[0].seq") == 1 and J(p, "JURIS.committed[0].t") == "move", "서버에 저장된 이력이 화면에 반영(번호 포함)")
     check(p.locator("#jr-top-save").is_disabled() and "변경 없음" in p.locator("#jr-savebar").inner_text(), "저장 뒤 저장 바는 변경 없음")
     check(J(p, f"JurisdictionUI._state().view.state.owner['{secs[0]}']") == to, "지도·목록이 새 관할로 바뀜")
 
@@ -207,6 +207,38 @@ def t_live_refresh_without_reload(b):
     check(J(p, f"({hs}.find(x=>x.name==='춘천')).routeSegments.length") > 0 and J(p, "window.__still_here") == 12345, "되돌리면 춘천 관할이 돌아오고 여전히 새로고침 없음")
     check(J(p, f"({hs}.find(x=>x.name==='홍천')).stations.length") == before_n, "홍천 관측소가 원래대로")
 
+def t_new_branch_id_survives_save(b):
+    """신설 기관을 저장했다가 다시 읽어도 기관 번호가 그대로이고, 그 기관으로 옮긴 구간이 계속 그 기관 소속이다 (예전 버그: 서버 줄 번호로 바뀌어 번호가 사라짐)"""
+    m = SBM.Mock(); p = open_tab(b, mock=m); admin(p)
+    p.click("#jr-add"); p.fill("#jr-newname", "시험신설"); p.select_option("#jr-newhq", "민자"); p.click("#jr-newok"); p.wait_for_timeout(300)
+    nid = J(p, "JurisdictionUI._state().pending[0].id"); check(nid and nid.startswith("B"), f"신설 기관 번호 {nid}")
+    un = un_ids(p)[:2]
+    for u in un: click_sec(p, u)
+    p.select_option("#jr-dest", nid); p.click("#jr-move"); p.wait_for_timeout(300)
+    clear_toast(p); p.click("#jr-top-save"); saved(p, 2)
+    rows = m.events["jurisdiction_events"]; add = next(r for r in rows if r["kind"] == "addBranch"); mv = next(r for r in rows if r["kind"] == "move")
+    check(add["payload"].get("id") == nid and add["payload"]["name"] == "시험신설" and mv["payload"]["to"] == nid, f"저장된 신설 기관에 번호가 있어야 함: {add['payload']} / 이동 도착 {mv['payload'].get('to')}")
+    check(J(p, "JURIS.committed.find(e => e.t === 'addBranch').id") == nid, "저장 직후에도 같은 번호")
+    p.reload(); p.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)
+    check(J(p, "JURIS.committed.find(e => e.t === 'addBranch').id") == nid and J(p, f"JurisdictionUI._state().view.state.owner['{un[0]}']") == nid, "새로고침 뒤에도 기관 번호와 소속이 그대로")
+    check(J(p, f"JurisdictionUI._state().view.state.branches['{nid}'].name") == "시험신설" and J(p, f"JurisdictionUI._state().view.state.branches['{nid}'].hq") == "민자", "기관 이름·본부")
+    # 백업 파일에도 번호가 남아야 함
+    p.click(".tab-btn[data-tab=jurisdiction]"); p.wait_for_timeout(500); p.locator("#jr-pending .jr-hist summary").first.click(); p.wait_for_timeout(200)
+    with p.expect_download() as dl: p.click("#jr-export")
+    data = json.load(open(dl.value.path(), encoding="utf-8")); ex = next(e for e in data["events"] if e["t"] == "addBranch"); check(ex.get("id") == nid and "seq" not in ex, f"백업 파일의 신설 기관: {ex}")
+
+def t_legacy_new_branch_without_id_still_works(b):
+    """예전 버그로 번호 없이 저장된 신설 기관(서버 줄 번호가 곧 기관 번호로 쓰이던 것)도 계속 읽힌다"""
+    m = SBM.Mock(); un = [s["id"] for s in json.load(open(ROOT / "data/sections.json", encoding="utf-8"))["sections"] if s["owner"] is None][:3]
+    m.events["jurisdiction_events"] += [{"id": 10, "at": "2026-10-03T10:09:15Z", "by_user": None, "kind": "addBranch", "payload": {"hq": "광주전남", "name": "영암"}, "note": None},
+        {"id": 11, "at": "2026-10-03T10:44:44Z", "by_user": None, "kind": "addBranch", "payload": {"hq": "민자", "name": "민자"}, "note": None},
+        {"id": 12, "at": "2026-10-03T10:45:32Z", "by_user": None, "kind": "move", "payload": {"sections": un, "to": "11", "from": [None], "km": 3}, "note": None}]
+    p = open_tab(b, mock=m)
+    check(J(p, "JURIS.committed.filter(e => e.t === 'addBranch').map(e => e.id)") == ["10", "11"], "번호 없는 신설 기관은 서버 줄 번호를 기관 번호로 씀")
+    check(all(J(p, f"JurisdictionUI._state().view.state.owner['{u}']") == "11" for u in un) and J(p, "JurisdictionUI._state().view.state.branches['11'].name") == "민자", "이미 저장된 이동 이력이 그대로 적용됨")
+    p.click("#jr-add"); p.fill("#jr-newname", "또신설"); p.click("#jr-newok"); p.wait_for_timeout(300)
+    nid = J(p, "JurisdictionUI._state().pending[0].id"); check(nid == "B060", f"예전 번호('10','11')가 있어도 다음 기관 번호는 B060 이어야 함: {nid}")
+
 def t_save_failure_keeps_pending_and_offers_file(b):
     m = SBM.Mock(); p = open_tab(b, mock=m); admin(p)
     secs = sections_of(p, "강원", "춘천")[:1]; to = bid(p, "강원", "홍천")
@@ -237,10 +269,10 @@ def t_history_paging_and_backup_export(b):
     for i in range(1205):           # 서버가 한 번에 1000줄만 주므로 나눠 읽어야 전부 보임
         m.events["jurisdiction_events"].append({"id": i + 1, "at": "2026-10-03T01:00:00Z", "by_user": None, "kind": "moveHq", "payload": {"branch": "B001", "hq": "수도권", "fromHq": "수도권"}, "note": None})
     p = open_tab(b, mock=m); admin(p)
-    check(J(p, "JURIS.committed.length") == 1205 and J(p, "JURIS.committed[1204].id") == 1205 and J(p, "JURIS.committed[0].id") == 1, "1000줄을 넘는 이력도 순서대로 전부 읽음")
+    check(J(p, "JURIS.committed.length") == 1205 and J(p, "JURIS.committed[1204].seq") == 1205 and J(p, "JURIS.committed[0].seq") == 1, "1000줄을 넘는 이력도 순서대로 전부 읽음")
     p.click(".jr-hist summary"); p.click("#jr-export") if p.locator("#jr-export").count() else None
     with p.expect_download() as dl: p.click("#jr-export")
-    data = json.load(open(dl.value.path(), encoding="utf-8")); check(data["version"] == 1 and len(data["events"]) == 1205 and "id" not in data["events"][0] and data["events"][0]["t"] == "moveHq", "백업 파일: 예전 파일과 같은 형식(번호 제외)")
+    data = json.load(open(dl.value.path(), encoding="utf-8")); check(data["version"] == 1 and len(data["events"]) == 1205 and "seq" not in data["events"][0] and "id" not in data["events"][0] and data["events"][0]["t"] == "moveHq", "백업 파일: 예전 파일과 같은 형식(번호 제외)")
     pv = open_tab(b, mock=m, user="equip-01"); check(pv.locator("#jr-export").count() == 0, "관리자가 아니면 백업 버튼 없음")
 
 
@@ -438,7 +470,7 @@ def t_private_hq(b):
     check(p.locator("#statBranch").inner_text() == "59", "민자 기관이 강설량 화면 통계에 들어가면 안 됨")
     check(J(p, "HIERARCHY.hq.some(h => h.name === '민자')") is False, "HIERARCHY 에 민자 본부가 생기면 안 됨")
 
-TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload,
+TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload, t_new_branch_id_survives_save, t_legacy_new_branch_without_id_still_works,
          t_save_failure_keeps_pending_and_offers_file, t_history_load_failure_falls_back_and_blocks_save, t_history_paging_and_backup_export,
          t_border_on_click_view_mode, t_border_contrast_all_colors, t_admin_click_has_border, t_pick_destination_on_map, t_no_admin_checkbox_and_no_popup_move_button,
          t_save_bar_always_visible, t_unassigned_visible_and_clickable, t_assign_unassigned_to_branch, t_select_all_unassigned_row,

@@ -15,12 +15,16 @@
   var PAGE = 1000;          // 서버가 한 번에 돌려주는 최대 줄 수(그 이상은 나눠서 읽음)
 
   function toRow(domain, ev, defaultNote) {
-    var payload = {}; Object.keys(ev).forEach(function (k) { if (k !== 't' && k !== 'at' && k !== 'note' && k !== 'id') payload[k] = ev[k]; });
+    // 주의: 신설 기관(addBranch)은 자기 번호를 id 로 가지므로 id 를 빼면 안 됩니다. 서버 줄 번호는 따로 seq 에 담습니다.
+    var payload = {}; Object.keys(ev).forEach(function (k) { if (k !== 't' && k !== 'at' && k !== 'note' && k !== 'seq') payload[k] = ev[k]; });
     return { kind: DOM[domain].toKind(ev.t), payload: payload, note: ev.note || defaultNote || null };     // 저장 시각·작성자는 서버가 정함
   }
   function fromRow(domain, row) {
     var ev = {}; var p = row.payload || {}; Object.keys(p).forEach(function (k) { ev[k] = p[k]; });
-    ev.t = DOM[domain].fromKind(row.kind); ev.at = row.at; ev.id = row.id; if (row.note) ev.note = row.note; return ev;
+    ev.t = DOM[domain].fromKind(row.kind); ev.at = row.at; ev.seq = row.id; if (row.note) ev.note = row.note;
+    // 예전 버그로 번호 없이 저장된 신설 기관(addBranch)은 그때 화면에서 쓰던 번호(서버 줄 번호)를 그대로 기관 번호로 씁니다 — 이미 저장된 이동 이력이 그 번호를 가리키기 때문
+    if (ev.t === 'addBranch' && (ev.id == null || ev.id === '')) ev.id = String(row.id);
+    return ev;
   }
   function fromFile(domain) {
     return fetch(DOM[domain].file, { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
@@ -55,7 +59,7 @@
       .catch(function () { return { ok: false, message: A.NET_MSG }; });
   }
   // 백업·비상용 파일 내용 (예전 파일 형식과 같음)
-  function exportJson(events) { return JSON.stringify({ version: 1, events: events.map(function (e) { var c = JSON.parse(JSON.stringify(e)); delete c.id; return c; }) }, null, 1); }
+  function exportJson(events) { return JSON.stringify({ version: 1, events: events.map(function (e) { var c = JSON.parse(JSON.stringify(e)); delete c.seq; return c; }) }, null, 1); }
   function download(name, text) {
     var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = name; document.body.appendChild(a); a.click(); a.remove();
   }
