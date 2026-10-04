@@ -27,7 +27,7 @@ def check(cond, msg):
 
 def run(name, fn, pw_browser):
     page = pw_browser.new_page(viewport={"width": 1440, "height": 1000})
-    page.on("pageerror", lambda e: errors.append(f"[{name}] {e}"))
+    page.on("pageerror", lambda e: None if "새로 불러옵니다" in str(e) else errors.append(f"[{name}] {e}"))   # 예전 틀 감지 후 일부러 멈추는 것은 오류 아님
     page.on("dialog", lambda d: d.accept())
     page.goto(URL); page.wait_for_selector("#matrix tbody tr", timeout=15000)
     try:
@@ -306,11 +306,21 @@ def t_pending_branches_shown_grey(p):
     check(opts == ["춘천"], opts)
     check("확정 전(요청만): 춘천" in p.locator("#fleetRound").inner_text(), p.locator("#fleetRound").inner_text())
 
+def t_ui_version_reload_once(p):
+    """화면 틀 판번호가 맞아야 함 + 예전 틀(판번호 다름)이 남아 있으면 한 번만 새로 받음(무한 반복 없음)"""
+    check(ev(p, "document.querySelector('meta[name=ui-version]').content") == ev(p, "UI_VERSION"), "index.html 과 app.js 판번호가 같아야 함")
+    ver = ev(p, "UI_VERSION")                  # 예전 index.html 흉내: 판번호만 다른 틀을 돌려줌(새로 받는 주소 _v= 는 그대로 통과)
+    p.route("**/equipment/index.html*", lambda r: r.fulfill(status=200, content_type="text/html; charset=utf-8",
+        body=r.fetch().text().replace('content="' + ver + '"', 'content="old"')) if "_v=" not in r.request.url else r.continue_())
+    p.goto(URL); p.wait_for_selector("#matrix tbody tr", timeout=15000)
+    check("_v=" in p.url and p.locator("#eqTable tbody tr").count() > 0, f"한 번 새로 받아 정상 표시: {p.url}")
+    p.unroute_all(behavior="ignoreErrors")
+
 TESTS = [t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
-         t_typing_then_clicking_next_input_keeps_both, t_round_delete, t_pending_branches_shown_grey]
+         t_typing_then_clicking_next_input_keeps_both, t_round_delete, t_pending_branches_shown_grey, t_ui_version_reload_once]
 
 # ---------------------------------------------------------------- 서버 모드(가짜 Supabase, tests/_sb_mock.py) — 실제 로그인 권한·저장 함수 호출
 sys.path.insert(0, str(Path(__file__).resolve().parent))

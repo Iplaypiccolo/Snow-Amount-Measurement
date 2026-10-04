@@ -29,7 +29,7 @@ python tools/run_all_tests.py            # 전체 시험 (약 5분, 병렬). --f
 | `jurisdiction/` | 관할 탭: `core.js`(계산, 화면 없음), `ui.js`, `requests.js`(지사의 구간 변경 요청) |
 | `grid/` | 예보 격자 편입 탭 (`core.js` 계산, `ui.js`) |
 | `admin/` | 관리 콘솔: 계정 관리, **산하기관 아이디 관리**(비밀번호 일괄 설정·권한·순서·새 아이디/추천 13개), **적설 자료(메모장 txt → 서버)**, 접속 로그. 탭은 권한대로 |
-| `equipment/` | 장비 지원 화면(iframe). **서버 저장**(장비·날짜별 경로·기준일자·지사 요청). `?sample=1` = 샘플 시연. 규칙 `docs/equipment-rules.md` |
+| `equipment/` | 장비 지원 화면(iframe). **서버 저장**(장비·날짜별 경로·기준일자·지사 요청). `?sample=1` = 샘플 시연. 규칙 `docs/equipment-rules.md`. **index.html 의 칸(id) 구성을 바꾸면 `<meta name="ui-version">` 과 `app.js` 의 `UI_VERSION` 을 함께 올릴 것**(배포 직후 예전 틀이 남은 브라우저가 한 번 새로 받음) |
 | `data/*.json` | 기본(baseline) 자료. 구간 1,011 · 관측소 260 · 격자 1,070쌍. `*_changes.json` 은 서버 장애 때의 비상용(비어 있음). **적설 파일(`snow_data.json`)은 서버로 옮긴 뒤 지움** — 적설은 서버 `snow_daily`→`snapshots`, 시험은 `tests/fixtures/snow_sample.json` |
 | `supabase/migrations/` | DB 변경 SQL(01~19; 15 세부 권한, 16~19 장비 서버). `functions/` Edge Function 3개(`account-admin`, `import-reference`, `import-snow`). `tests/*.sql` 권한 시험(`rls_test.sql`·`equipment_save_test.sql` 등) |
 | `tests/` | 자동 시험. `_sb_mock.py` 는 **가짜 Supabase 서버**(실제 서버에 접속하지 않고 화면을 시험) |

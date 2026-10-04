@@ -9,6 +9,15 @@
    - 경로는 (날짜, 장비)마다 한 줄로 서버에 남습니다. 다른 날짜를 확정해도 지난 날짜 경로는 지워지지 않습니다.
    - 사람이 읽는 규칙 설명: docs/equipment-rules.md
    ============================================================ */
+// 배포 직후 브라우저에 예전 index.html(최대 10분 저장)이 남아 있으면 새 app.js 와 화면 틀이 맞지 않아 탭이 비어 보임
+// (GitHub Pages 는 ?v= 꼬리표와 관계없이 최신 파일을 줌). 판번호가 다르면 주소를 바꿔 한 번만 새로 받는다.
+const UI_VERSION = "2026100403";
+(() => {
+  const m = document.querySelector('meta[name="ui-version"]');
+  if ((m && m.content) === UI_VERSION) return;
+  let first = true; try { const k = "eq_reload_" + UI_VERSION; first = !sessionStorage.getItem(k); sessionStorage.setItem(k, "1"); } catch (e) {}
+  if (first) { const u = new URL(location.href); u.searchParams.set("_v", UI_VERSION); location.replace(u.href); throw new Error("화면 틀이 예전 판이라 새로 불러옵니다"); }
+})();
 const $ = id => document.getElementById(id);
 function esc(v) {   // XSS 방지: 화면에 글자를 넣을 땐 항상 이 함수를 거칩니다
   return String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -137,7 +146,10 @@ async function boot() {
   buildUserSel();
   await Promise.all([ensureRoutes(), loadReqs(), loadAudit()]);
   $("loading").hidden = true; document.querySelector("main").hidden = false;
-  refresh();
+  try { refresh(); }
+  catch (e) {          // 그리다가 오류가 나면 빈 탭 대신 알림(원인 찾기용)
+    toast("화면을 그리다 오류가 났습니다. Ctrl+F5 로 새로고침해 보세요. (" + (e && e.message) + ")", true); throw e;
+  }
 }
 
 /* ============================================================
