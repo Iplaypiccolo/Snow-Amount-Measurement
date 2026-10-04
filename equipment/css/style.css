@@ -463,3 +463,17 @@ table.matrix { font-size: 15px; min-width: 900px; }
 .filters.split .fgroup { overflow: visible; }
 .filters.split.stacked .fgroup { width: 100%; row-gap: 6px; }
 .filters.split.stacked .fgroup .flabel { margin-right: 2px; }
+
+/* ---------- 이동 현황 제목의 큰 날짜(누르면 달력), 필터 두 줄(이름은 작은 첨자, 좁으면 글자 축소) ---------- */
+.move-title { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.move-title .dnav { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; width: 30px; height: 30px; font-size: 18px; line-height: 1; cursor: pointer; color: var(--ink); }
+.bigdate { position: relative; display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 8px; border: 1px dashed var(--line); cursor: pointer; font-size: 21px; font-weight: 800; }
+.bigdate:hover { border-color: var(--plow); background: color-mix(in srgb, var(--plow) 10%, transparent); }
+.bigdate input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; border: 0; padding: 0; cursor: pointer; }
+.move-title #moveTitle { margin-left: 6px; }
+.filters.two { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; --s: 1; }
+.filters.two .frow { display: flex; align-items: flex-start; gap: calc(var(--s) * 4px); max-width: 100%; }
+.filters.two .flabel { background: none; border: 0; padding: 0; margin: 0; font-size: 10.5px; font-weight: 700; color: var(--ink-soft); letter-spacing: 0; white-space: nowrap; line-height: 1; transform: translateY(-2px); }
+.filters.two .chips { display: flex; gap: calc(var(--s) * 6px); flex-wrap: nowrap; }
+.filters.two .chip { flex-shrink: 0; white-space: nowrap; font-size: calc(var(--s) * 14px); padding: calc(var(--s) * 6px) calc(var(--s) * 13px); }
+.filters.two .flabel { font-size: max(7px, calc(var(--s) * 10.5px)); }

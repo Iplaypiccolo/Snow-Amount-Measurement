@@ -135,7 +135,7 @@ const Api = (() => {
         const nv = { status: "", active: true, ...v }; db.vehicles.push(nv); log("추가", "vehicles", "vehicles:" + v.id, null, nv); return done({ ok: true, vehicle: clone(nv) });
       },
       deleteVehicle(id) {
-        if (!can("equip.edit.all")) return done({ ok: false, message: ERR["42501"] });
+        if (!vehOk(id)) return done({ ok: false, message: ERR["42501"] });      // 관리자 또는 자기 기관 장비
         db.vehicles = db.vehicles.filter(x => x.id !== id); db.routes = db.routes.filter(x => x.vehicle_id !== id); log("삭제", "vehicles", "vehicles:" + id, { id }, null); return done({ ok: true });
       }
     };

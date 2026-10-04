@@ -76,7 +76,7 @@ def t_move_hierarchy(p):
 
 def t_dest_order_and_day_tag(p):
     heads = p.locator("#destList .hq-head").all_inner_texts(); check(heads == ["강원본부", "충북본부"], heads)
-    check(p.locator(".fgroup.left .flabel").inner_text() == "지원기관" and p.locator("[data-type='이동정비차']").count() == 0, "필터: 지원기관, 이동정비차 없음")
+    check(p.locator(".frow .flabel").all_inner_texts() == ["지원기관", "장비"] and p.locator("[data-type='이동정비차']").count() == 0, "필터: 지원기관·장비 두 줄, 이동정비차 없음")
     check("이동정비차" not in p.locator("#destList").inner_text() and "편성 제설차" not in p.locator("#destList").inner_text(), "장비 세부에 이동정비차·편성 대수 없음")
     card = p.locator("#destList .dest").first
     check("도착 예상" in card.locator(".dest-time").inner_text() and "21:30" in card.locator(".dest-time").inner_text() and "도착 요청" in card.locator(".tag.req").inner_text(), "큰 시각 = 도착 예상, 도착 요청은 아래 표지")
@@ -159,7 +159,9 @@ def t_permissions_equip_own(p):
     check(p.locator("#logTabBtn").is_hidden(), "로그 탭 숨김")
     check(p.locator("[data-vs=V013]").count() == 1 and p.locator("[data-vp=V013]").count() == 1 and p.locator("[data-vs=V001]").count() == 0, "충북 장비의 도공번호·지원 여부만")
     check(p.locator("select[data-rv]").count() == 0, "경로 칸은 보기만")
-    check(p.locator("[data-vdel]").count() == 0 and p.locator("#day1In").count() == 0 and p.locator("#fleetReset").count() == 0, "삭제·지원일 1·초기화 없음")
+    check(p.locator("#day1In").count() == 0 and p.locator("#fleetReset").count() == 0, "지원일 1·초기화 없음")
+    dels = set(x.get_attribute("data-vdel") for x in p.locator("[data-vdel]").all())
+    check(dels == set(ev(p, "S.vehicles.filter(v => v.org === '충북').map(v => v.id)")), f"삭제는 자기 기관 장비만: {sorted(dels)}")
     check(p.locator("#nvOrg option").all_inner_texts() == ["충북"], "장비 추가는 자기 기관만")
     p.fill("#nvPlate", "950"); p.click("#vehAdd"); p.wait_for_timeout(250); check("추가했습니다" in toast(p), toast(p))
     p.select_option("[data-vs=V013]", "M"); p.wait_for_timeout(150); confirm_fleet(p); check("확정했습니다" in toast(p) and ev(p, "vehById('V013').status") == "M", toast(p))
@@ -368,24 +370,32 @@ def t_bulk_confirm_and_no_holdings(p):
     as_user(p, "br1"); tab(p, "branch"); check(p.locator("#confirmAll").count() == 0, "지사는 일괄 확정 없음")
 
 def t_filters_fit_any_width(p):
-    """이동 현황 필터: 넓으면 한 줄·구분선 가운데, 좁으면 구분선 없이 모두 오른쪽 정렬. 어느 폭에서도 버튼 글자가 꺾이지 않음"""
-    for w, stacked in ((1440, False), (900, True), (420, True)):
+    """이동 현황 필터: 지원기관 줄·장비 줄 항상 두 줄, 이름은 작은 첨자, 좁으면 글자를 줄임(글자는 항상 가로, 넘치지 않음)"""
+    for w in (1440, 900, 420, 340):
         p.set_viewport_size({"width": w, "height": 800}); p.wait_for_timeout(250)
-        r = p.evaluate("""(() => { const f = document.getElementById('filters'), sep = f.querySelector('.fsep').getBoundingClientRect(), fr = f.getBoundingClientRect();
-          const chips = [...f.querySelectorAll('.chip, .flabel')]; return { stacked: f.classList.contains('stacked'), center: Math.abs((sep.left + sep.width / 2) - (fr.left + fr.width / 2)),
-          oneLine: chips.every(c => c.getBoundingClientRect().height < 46), right: Math.max(...chips.map(c => c.getBoundingClientRect().right)) - fr.right }; })()""")
-        check(r["stacked"] == stacked and r["oneLine"], f"{w}px: {r}")
-        if not stacked: check(r["center"] < 3, f"{w}px 구분선이 가운데: {r}")
-        else: check(abs(r["right"]) < 3, f"{w}px 오른쪽 정렬: {r}")
+        r = p.evaluate("""(() => { const f = document.getElementById('filters'), fr = f.getBoundingClientRect(), rows = [...f.querySelectorAll('.frow')];
+          const chips = [...f.querySelectorAll('.chip')]; return { rows: rows.length, tops: rows.map(r => Math.round(r.getBoundingClientRect().top)), s: +getComputedStyle(f).getPropertyValue('--s'),
+          oneLine: chips.every(c => c.getBoundingClientRect().height < 40 && c.scrollHeight <= c.clientHeight + 2), inside: rows.every(r => r.getBoundingClientRect().right <= fr.right + 1 && r.scrollWidth <= f.clientWidth + 1),
+          small: parseFloat(getComputedStyle(f.querySelector('.flabel')).fontSize) < parseFloat(getComputedStyle(chips[0]).fontSize) }; })()""")
+        check(r["rows"] == 2 and r["tops"][0] < r["tops"][1] and r["oneLine"] and r["inside"] and r["small"], f"{w}px: {r}")
+        if w >= 900: check(r["s"] == 1, f"{w}px 원래 크기: {r}")
+        else: check(r["s"] < 1, f"{w}px 글자 축소: {r}")
     p.click("[data-tab=fleet]"); p.set_viewport_size({"width": 1440, "height": 800}); p.wait_for_timeout(150); p.click("[data-tab=move]"); p.wait_for_timeout(250)
-    check(not p.evaluate("document.getElementById('filters').classList.contains('stacked')"), "다른 탭에서 넓힌 뒤 돌아와도 맞게")
+    check(p.evaluate("+getComputedStyle(document.getElementById('filters')).getPropertyValue('--s')") == 1, "다른 탭에서 넓힌 뒤 돌아와도 맞게")
+
+def t_date_in_title(p):
+    """맨 위 날짜 칸은 없고, 이동 현황 제목의 큰 날짜를 눌러 바꿈(‹ › 도 제목 옆)"""
+    check(p.locator(".topbar .date-nav").count() == 0, "맨 위 날짜 칸 없음")
+    check(p.locator("#dateText").inner_text() == ev(p, "fmtMD(todayISO())") and "장비 지원 현황" in p.locator(".move-title").inner_text(), p.locator(".move-title").inner_text())
+    p.click("#nextDay"); p.wait_for_timeout(200); check(p.locator("#dateText").inner_text() == ev(p, "fmtMD(addDays(todayISO(), 1))"), "다음날")
+    go_date(p, day(p, -7)); check(p.locator("#dateText").inner_text() == ev(p, "fmtMD(addDays(todayISO(), -7))") and "춘천" in p.locator("#matrix").inner_text(), "달력으로 고른 날짜")
 
 TESTS = [t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
          t_typing_then_clicking_next_input_keeps_both, t_round_delete, t_pending_branches_shown_grey, t_ui_version_reload_once,
-         t_route_kind_and_eta, t_equip_can_edit_eta, t_bulk_confirm_and_no_holdings, t_filters_fit_any_width]
+         t_route_kind_and_eta, t_equip_can_edit_eta, t_bulk_confirm_and_no_holdings, t_filters_fit_any_width, t_date_in_title]
 
 # ---------------------------------------------------------------- 서버 모드(가짜 Supabase, tests/_sb_mock.py) — 실제 로그인 권한·저장 함수 호출
 sys.path.insert(0, str(Path(__file__).resolve().parent))

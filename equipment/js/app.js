@@ -11,7 +11,7 @@
    ============================================================ */
 // 배포 직후 브라우저에 예전 index.html(최대 10분 저장)이 남아 있으면 새 app.js 와 화면 틀이 맞지 않아 탭이 비어 보임
 // (GitHub Pages 는 ?v= 꼬리표와 관계없이 최신 파일을 줌). 판번호가 다르면 주소를 바꿔 한 번만 새로 받는다.
-const UI_VERSION = "2026100404";
+const UI_VERSION = "2026100405";
 (() => {
   const m = document.querySelector('meta[name="ui-version"]');
   if ((m && m.content) === UI_VERSION) return;
@@ -237,25 +237,25 @@ function renderMatrix() {
     `<tbody>${body || `<tr><td class="empty" colspan="${cols.length * 2 + 1}">${esc(fmtMD(S.date))}에 이동하는 장비가 없습니다.</td></tr>`}</tbody>` +
     `<tfoot><tr><th scope="row">합계</th>${cells(null)}</tr></tfoot>`;
   const tr = moves.filter(m => m.v.type === "제설차").length, bl = moves.filter(m => m.v.type === "제설기").length;
-  $("moveTitle").textContent = `${fmtMD(S.date)} 장비 지원 현황`;
+  $("dateText").textContent = fmtMD(S.date); $("dateInput").value = S.date;      // 제목의 큰 날짜(누르면 달력)
   $("summaryNote").innerHTML = `<b>제설차 ${tr}대</b> · <b>제설기 ${bl}대</b>` + (moves.some(m => m.stops.length > 1) ? `<span class="hint"> 하루에 여러 지사를 들르는 장비는 각 지사에 모두 세고, 합계는 1대로 셉니다</span>` : "");
 }
 function renderFilters() {
-  const f = $("filters"); f.className = "filters split";
-  f.innerHTML = `<div class="fgroup left" role="group" aria-label="지원기관"><span class="flabel">지원기관</span>` +
-    ["전체", ...SOURCE_ORGS()].map(o => `<button type="button" class="chip" data-org="${esc(o)}" aria-pressed="${S.org === o}">${o === "전체" ? "모든 기관" : esc(o)}</button>`).join("") + `</div>` +
-    `<div class="fsep" aria-hidden="true"></div>` +
-    `<div class="fgroup right" role="group" aria-label="장비 종류"><span class="flabel">장비</span>` +
-    ["전체", ...MOVE_TYPES].map(t => `<button type="button" class="chip" data-type="${esc(t)}" aria-pressed="${S.type === t}">${t === "전체" ? "모든 장비" : esc(t)}</button>`).join("") + `</div>`;
+  const f = $("filters"); f.className = "filters two";
+  f.innerHTML = `<div class="frow" role="group" aria-label="지원기관"><span class="flabel">지원기관</span><span class="chips">` +
+    ["전체", ...SOURCE_ORGS()].map(o => `<button type="button" class="chip" data-org="${esc(o)}" aria-pressed="${S.org === o}">${o === "전체" ? "모든 기관" : esc(o)}</button>`).join("") + `</span></div>` +
+    `<div class="frow" role="group" aria-label="장비 종류"><span class="flabel">장비</span><span class="chips">` +
+    ["전체", ...MOVE_TYPES].map(t => `<button type="button" class="chip" data-type="${esc(t)}" aria-pressed="${S.type === t}">${t === "전체" ? "모든 장비" : esc(t)}</button>`).join("") + `</span></div>`;
   fitFilters();
 }
-// 구분선은 화면 가운데. 두 묶음이 각자 절반 폭에 다 안 들어가면 구분선 없이 모두 오른쪽 정렬(버튼 글자는 줄바꿈하지 않음)
+// 지원기관 줄·장비 줄은 항상 두 줄. 화면이 좁아 한 줄에 안 들어가면 버튼 글자·여백을 같은 비율로 줄임(글자는 항상 가로, 최소 55%)
 function fitFilters() {
   const f = $("filters"); if (!f || !f.offsetWidth) return;
-  const gs = [...f.querySelectorAll(".fgroup")]; if (!gs.length) return;
-  const need = g => [...g.children].reduce((a, c) => a + c.getBoundingClientRect().width, 0) + 6 * (g.children.length - 1);   // 버튼 폭 합 + 간격
-  const half = (f.clientWidth - 40) / 2;                                   // 가운데 구분선과 양쪽 여백을 뺀 절반
-  f.classList.toggle("stacked", gs.some(g => need(g) > half));
+  const rows = [...f.querySelectorAll(".frow")], over = () => Math.max(...rows.map(r => r.scrollWidth)) - (f.clientWidth - 2);
+  let s = 1; f.style.setProperty("--s", s);
+  for (let i = 0; i < 6 && over() > 0 && s > 0.55; i++) {          // 이름표는 그대로라 비율만으로는 모자랄 수 있어 다시 재며 줄임
+    s = Math.max(0.55, s * (f.clientWidth - 2) / (f.clientWidth - 2 + over()) - 0.01); f.style.setProperty("--s", s.toFixed(3));
+  }
 }
 addEventListener("resize", fitFilters);
 if (window.ResizeObserver) new ResizeObserver(() => fitFilters()).observe($("filters"));   // 탭을 옮겨 다시 보일 때·iframe 크기가 바뀔 때도
@@ -327,7 +327,7 @@ function renderFleet() {
   const dates = windowDates(), head = dates.map((d, i) => `<th class="dayh">지원일 ${i + 1}<span class="sub">` +
     (i === 0 && all ? `<input class="ci" type="date" id="day1In" value="${esc(d)}" aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동)">` : esc(fmtMD(d))) + `</span></th>`).join("");
   const rows = fleetRows().map(v => fleetRowHtml(v, dates, choices, all)).join("");
-  $("eqTable").innerHTML = `<thead><tr><th>도공번호</th><th>장비</th><th>기관</th><th>지원 여부</th>${head}${all ? "<th></th>" : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${5 + dates.length}" class="empty">장비가 없습니다.${canAddVeh() ? " 위의 [장비 추가]로 넣으세요." : ""}</td></tr>`}</tbody>`;
+  $("eqTable").innerHTML = `<thead><tr><th>도공번호</th><th>장비</th><th>기관</th><th>지원 여부</th>${head}${canAnyVeh() ? "<th></th>" : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${5 + dates.length}" class="empty">장비가 없습니다.${canAddVeh() ? " 위의 [장비 추가]로 넣으세요." : ""}</td></tr>`}</tbody>`;
 }
 function fleetRowHtml(v, dates, choices, all) {
     const ed = canVeh(v), st = vval(v, "status"), [cls, label] = STATUS[st] || STATUS[""], tv = "vehicles:" + v.id;
@@ -338,7 +338,7 @@ function fleetRowHtml(v, dates, choices, all) {
       : H(tv, "plate", `<span class="plate">${esc(vval(v, "plate"))}</span>`);
     const changed = S.vdraft.has(v.id) ? " changed" : "";
     return `<tr class="${changed}" data-vrow="${esc(v.id)}"><td>${plateCell}</td><td>${esc(v.type)}</td><td>${esc(v.org)}</td><td>${statusCell}</td>${dates.map(d => `<td data-cell="${esc(rk(d, v.id))}">${slotCell(v, d, canRoute(), choices)}</td>`).join("")}` +
-      (all ? `<td><button type="button" class="btn sm danger" data-vdel="${esc(v.id)}" title="장비를 목록에서 지웁니다(경로 기록도 함께 지워짐)">삭제</button></td>` : "") + `</tr>`;
+      (canAnyVeh() ? `<td>${ed ? `<button type="button" class="btn sm danger" data-vdel="${esc(v.id)}" title="장비를 목록에서 지웁니다(경로 기록도 함께 지워짐)">삭제</button>` : ""}</td>` : "") + `</tr>`;
 }
 function renderOrgGrid() {
   $("orgGrid").innerHTML = S.orgs.map(org => {
@@ -435,7 +435,7 @@ async function addVehicle() {
   S.vehicles.push(r.vehicle); await loadAudit(); refresh(); toast(`장비를 추가했습니다 (${plate})`);
 }
 async function deleteVehicle(id) {
-  const v = vehById(id); if (!v) return;
+  const v = vehById(id); if (!v || !canVeh(v)) return;
   if (S.preview) return toast("미리보기에서는 장비를 지울 수 없습니다.", true);
   if (!confirm(`${v.plate} (${v.org} ${v.type})를 지울까요?\n이 장비의 날짜별 경로 기록도 함께 지워집니다. 잠시 쓰지 않는 장비라면 지원 여부를 '지원 불가'·'정비중'으로 두세요.`)) return;
   const r = await Api.deleteVehicle(id);
@@ -744,6 +744,7 @@ document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
 const dateInput = $("dateInput"); dateInput.value = S.date;
 async function setDate(v) { if (!v) return; S.date = v; dateInput.value = v; await ensureRoutes(); renderMatrix(); renderDest(); }   // 이동 현황은 고른 날짜 기준
 dateInput.onchange = () => setDate(dateInput.value);
+dateInput.addEventListener("click", () => { try { dateInput.showPicker(); } catch (e) {} });   // 제목의 큰 날짜를 누르면 달력이 바로 열림
 $("prevDay").onclick = () => setDate(addDays(S.date, -1));
 $("nextDay").onclick = () => setDate(addDays(S.date, 1));
 // 화면 모드: [라이트 모드] [다크 모드] 두 칸 버튼. 고른 모드는 이 브라우저에 기억
