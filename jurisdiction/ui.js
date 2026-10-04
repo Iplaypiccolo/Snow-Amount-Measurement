@@ -83,7 +83,7 @@
         '<div id="jr-selbar" class="jr-selbar" style="display:none"></div>' +
         '<div id="jr-savebar" class="jr-savebar" style="display:none"></div>' +
         '<div id="jr-pickbar" class="jr-pickbar" style="display:none">도착 지사로 삼을 구간을 지도에서 클릭하세요 <button id="jr-pickcancel" class="jr-btn">취소 (Esc)</button></div>' +
-        '<div class="jr-legend"><span>이중 테두리 = 선택한 구간</span><span>점선 = 변경 대기</span><span><b style="color:#3f3f3f">진한 회색 = 미지정</b></span> <label><input type="checkbox" id="jr-roads" checked> 배경 도로</label></div>' +
+        '<div class="jr-legend"><span>이중 테두리 = 선택한 구간</span><span>점선 = 변경 대기</span><span><b style="color:#3f3f3f">진한 회색 = 미지정</b></span> <label><input type="checkbox" id="jr-none" checked> 미지정 고속도로</label> <label><input type="checkbox" id="jr-roads" checked> 배경 도로</label></div>' +
       '</div></div>' +
       '<div id="jr-modal" class="jr-modal" style="display:none"></div>';
     $('jr-role').textContent = S.admin ? '관리자' : S.canRequest ? '변경 요청 가능' : '보기 전용';
@@ -159,6 +159,15 @@
   /* ---------- 지도 스타일 ---------- */
   function latlngsOf(sec) { return sec.coords.map(function (c) { return [c[1], c[0]]; }); }
 
+  // 미지정 고속도로 보기/숨기기 — 목록의 "미지정 고속도로" 줄 버튼과 지도 범례 체크칸이 같은 설정. 이 브라우저에 기억(다음에 열어도 유지)
+  var NONE_KEY = 'jr_show_none';
+  function loadShowNone() { try { return localStorage.getItem(NONE_KEY) !== '0'; } catch (e) { return true; } }
+  function setShowNone(on) {
+    S.showNone = on; try { localStorage.setItem(NONE_KEY, on ? '1' : '0'); } catch (e) {}
+    var cb = $('jr-none'); if (cb) cb.checked = on;
+    if (!on && S.focus === 'NONE') S.focus = null;
+    afterChange(false);
+  }
   function inView(st, own) { return S.hqView === 'ALL' || !own || (st.branches[own] && st.branches[own].hq === S.hqView); }
   function restyle() {
     var st = S.view.state, committed = C.resolve(J().doc, base()).owner, hl = {};
@@ -169,7 +178,8 @@
     J().doc.sections.forEach(function (sec) {
       var p = S.polys[sec.id]; if (!p) return;
       var own = st.owner[sec.id], key = own || 'NONE', dim = S.focus && key !== S.focus && !hl[sec.id];
-      if (!inView(st, own) && !hl[sec.id]) { if (S.map.hasLayer(p)) S.map.removeLayer(p); return; }
+      var hideNone = own === null && S.showNone === false && S.focus !== 'NONE';
+      if ((!inView(st, own) || hideNone) && !hl[sec.id]) { if (S.map.hasLayer(p)) S.map.removeLayer(p); return; }
       if (!S.map.hasLayer(p)) p.addTo(S.map);
       var w = curWidth() + (hl[sec.id] || (S.focus && key === S.focus) ? 2 : 0) + (own === null ? NONE_EXTRA_W : 0);
       p.setStyle({
@@ -205,7 +215,7 @@
       ids.forEach(function (id) { var h = L.polyline(latlngsOf(S.secMap[id]), { color: HALO_COLOR, weight: w, opacity: 0.9, interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(S.halo); h.bringToBack(); S.haloPolys[id] = h; });
       S.haloSig = sig;
     }
-    ids.forEach(function (id) { S.haloPolys[id].setStyle({ weight: w, opacity: dimOf(S.secMap[id]) ? 0.12 : 0.9 }); });
+    ids.forEach(function (id) { var shown = S.polys[id] && S.map.hasLayer(S.polys[id]); S.haloPolys[id].setStyle({ weight: w, opacity: !shown ? 0 : dimOf(S.secMap[id]) ? 0.12 : 0.9 }); });
   }
 
   function addEnds(sec) {
@@ -293,7 +303,8 @@
         }).join('') : '') + '</div>';
     }).join('');
     if (!q || '미지정'.indexOf(q) >= 0) {                      // 어느 지사에도 속하지 않은 고속도로 (맨 위)
-      var none = '<div class="jr-hq open"><div class="jr-hqname">미지정 고속도로 <span>' + round1(km.NONE || 0) + 'km</span></div>' +
+      var none = '<div class="jr-hq open"><div class="jr-hqname jr-nonehead">미지정 고속도로 <span>' + round1(km.NONE || 0) + 'km</span>' +
+        '<button type="button" class="jr-nonetoggle' + (S.showNone ? '' : ' off') + '" data-nonetoggle="1" title="지도에서 미지정 고속도로를 ' + (S.showNone ? '숨깁니다' : '보입니다') + '">' + (S.showNone ? '숨기기' : '보기') + '</button></div>' +
         '<div class="jr-br' + (S.focus === 'NONE' ? ' on' : '') + '" data-id="NONE"><span class="chev">▶</span><i style="background:' + NONE_COLOR + '"></i>' +
         '<span class="n">어느 지사에도 속하지 않음</span><span class="k">' + (cnt.NONE || 0) + '구간</span></div>' + (S.focus === 'NONE' ? branchDetail('NONE') : '') + '</div>';
       html = none + html;
@@ -533,11 +544,13 @@
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && S.pick) setPick(false); });
     $('jr-search').addEventListener('input', function (e) { S.search = e.target.value; renderTree(); });
     $('jr-add').addEventListener('click', function () { if (S.admin) addBranchDialog(); });
+    $('jr-none').addEventListener('change', function (e) { setShowNone(e.target.checked); });
     $('jr-roads').addEventListener('change', function (e) { if (e.target.checked) S.roads.addTo(S.map); else S.map.removeLayer(S.roads); });
     document.getElementById('view-jurisdiction').addEventListener('click', function (e) {
       var t = e.target;
       var ra = t.closest && t.closest('[data-ra]');                  // 변경 요청 카드의 버튼
       if (ra) { var rq = findReq(ra.dataset.rid); if (rq) { var a = ra.dataset.ra; if (a === 'view') viewRequest(rq); else if (a === 'prep' && S.admin) prepareMove(rq); else if (a === 'reject' && S.admin) rejectRequest(rq); else if (a === 'cancel') cancelRequest(rq); } return; }
+      if (t.closest && t.closest('[data-nonetoggle]')) { setShowNone(!S.showNone); return; }
       var pick = t.closest && t.closest('[data-hqpick]'); if (pick) { var same = S.hqView === pick.dataset.hqpick; S.focus = null; setHqView(same ? 'ALL' : pick.dataset.hqpick); return; }   // 본부 줄: 펼치기/접기
       var br = t.closest && t.closest('.jr-br'); if (br) { focusBranch(br.dataset.id); return; }
       var sec = t.closest && t.closest('.jr-sec');
@@ -689,13 +702,14 @@
     buildShell(); bind(); $('view-jurisdiction').classList.toggle('jr-is-admin', S.admin);
     S.view = C.summarize(J().doc, events());
     var myBr = me && me.role === 'branch' && me.branch_id && S.view.state.branches[me.branch_id];
-    S.hqView = myBr ? myBr.hq : 'ALL';                 // 처음 열 때: 관리자·그 밖은 '전체', 지사는 자기 본부
+    S.hqView = myBr ? myBr.hq : 'ALL';
+    S.showNone = loadShowNone();                 // 처음 열 때: 관리자·그 밖은 '전체', 지사는 자기 본부
     S.firstFit = !!myBr;
     S.inited = true;
   }
   function show() {
     if (!S.inited) return;
-    ensureMap(); afterChange(false); if (selectMode()) loadRequests();
+    ensureMap(); var cbn = $('jr-none'); if (cbn) cbn.checked = S.showNone !== false; afterChange(false); if (selectMode()) loadRequests();
     if (S.firstFit) { S.firstFit = false; setTimeout(function () { setHqView(S.hqView); }, 60); }       // 지사: 자기 본부 범위로
   }
   function openRequests() { S.reqOpen = true; S.search = ''; var s = $('jr-search'); if (s) s.value = ''; return loadRequests().then(function () { var b = $('jr-requests'); if (b && b.scrollIntoView) b.scrollIntoView({ block: 'nearest' }); }); }

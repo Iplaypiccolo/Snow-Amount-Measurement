@@ -364,6 +364,22 @@ def t_hq_tabs_branch_starts_with_own_hq(b):
       Object.entries(st.polys).forEach(([id, pl]) => { if (st.map.hasLayer(pl)) { const o = s.owner[id]; h.add(o ? s.branches[o].hq : 'NONE'); } }); return [...h].sort(); })()""")
     check(shown == ["NONE", "충북"], shown)
 
+def t_unassigned_toggle(b):
+    """미지정 고속도로 보기/숨기기: 목록 줄의 버튼과 범례 체크칸이 같은 설정, 숨기면 선·흰 테두리·클릭 모두 사라지고, 다시 열어도 기억. 미지정 줄을 고르면 숨김 중에도 보임"""
+    p = open_tab(b); un = [s["id"] for s in J(p, "JURIS.doc.sections") if s["owner"] is None]
+    vis = lambda: J(p, f"JurisdictionUI._state().map.hasLayer(JurisdictionUI._state().polys['{un[0]}'])")
+    check(vis() and p.locator("#jr-none").is_checked() and p.locator("[data-nonetoggle]").inner_text() == "숨기기", "처음엔 보임")
+    p.click("[data-nonetoggle]"); p.wait_for_timeout(300)
+    check(not vis() and not p.locator("#jr-none").is_checked() and p.locator("[data-nonetoggle]").inner_text() == "보기", "버튼으로 숨김(범례 체크칸도 꺼짐)")
+    check(J(p, f"JurisdictionUI._state().haloPolys['{un[0]}'].options.opacity") == 0, "흰 테두리도 숨김")
+    c = J(p, f"JURIS.doc.sections.find(s => s.id === '{un[0]}').coords[0]")
+    check(J(p, f"(() => {{ const r = JurisdictionUI._near(L.latLng({c[1]}, {c[0]}), 4); return !!r && r.id === '{un[0]}'; }})()") is False, "숨긴 미지정 선은 눌리지 않음")
+    p.click('.jr-br[data-id="NONE"]'); p.wait_for_timeout(300); check(vis(), "미지정 줄을 고르면 숨김 중에도 보임")
+    p.click('.jr-br[data-id="NONE"]'); p.wait_for_timeout(300); check(not vis(), "고르기를 풀면 다시 숨김")
+    p.reload(); p.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000); p.click(".tab-btn[data-tab=jurisdiction]"); p.wait_for_timeout(700)
+    check(not vis() and not p.locator("#jr-none").is_checked(), "다시 열어도 숨김 상태 기억")
+    p.check("#jr-none"); p.wait_for_timeout(300); check(vis() and p.locator("[data-nonetoggle]").inner_text() == "숨기기", "범례 체크칸으로 다시 보임")
+
 def t_save_failure_keeps_pending_and_offers_file(b):
     m = SBM.Mock(); p = open_tab(b, mock=m); admin(p)
     secs = sections_of(p, "강원", "춘천")[:1]; to = bid(p, "강원", "홍천")
@@ -599,7 +615,7 @@ def t_private_hq(b):
     check(p.locator("#statBranch").inner_text() == "59", "민자 기관이 강설량 화면 통계에 들어가면 안 됨")
     check(J(p, "HIERARCHY.hq.some(h => h.name === '민자')") is False, "HIERARCHY 에 민자 본부가 생기면 안 됨")
 
-TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload, t_new_branch_id_survives_save, t_legacy_new_branch_without_id_still_works, t_html_in_branch_name_is_text, t_new_branch_position_and_reorder, t_hq_tabs_admin_all_then_hq_only, t_branch_click_yellow_others_gray, t_hq_tabs_branch_starts_with_own_hq, t_csp_blocks_injected_script, t_snow_from_server_not_public_file, t_snow_server_empty_shows_no_data,
+TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload, t_new_branch_id_survives_save, t_legacy_new_branch_without_id_still_works, t_html_in_branch_name_is_text, t_new_branch_position_and_reorder, t_hq_tabs_admin_all_then_hq_only, t_branch_click_yellow_others_gray, t_unassigned_toggle, t_hq_tabs_branch_starts_with_own_hq, t_csp_blocks_injected_script, t_snow_from_server_not_public_file, t_snow_server_empty_shows_no_data,
          t_save_failure_keeps_pending_and_offers_file, t_history_load_failure_falls_back_and_blocks_save, t_history_paging_and_backup_export,
          t_border_on_click_view_mode, t_border_contrast_all_colors, t_admin_click_has_border, t_pick_destination_on_map, t_no_admin_checkbox_and_no_popup_move_button,
          t_save_bar_always_visible, t_unassigned_visible_and_clickable, t_assign_unassigned_to_branch, t_select_all_unassigned_row,

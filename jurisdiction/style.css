@@ -125,3 +125,7 @@
 .jr-br .chev{margin-left:10px}
 .jr-br.on .chev{transform:rotate(90deg)}
 .jr-br.on{background:#FFF3A3;box-shadow:inset 3px 0 0 #FFE400}
+/* 미지정 고속도로 보기/숨기기 버튼(목록의 미지정 줄 오른쪽) */
+.jr-nonehead{display:flex;align-items:center;gap:6px}
+.jr-nonetoggle{margin-left:auto;font:inherit;font-size:11px;font-weight:600;padding:2px 10px;border-radius:10px;border:1px solid #3f3f3f;background:#3f3f3f;color:#fff;cursor:pointer}
+.jr-nonetoggle.off{background:#fff;color:#3f3f3f}
