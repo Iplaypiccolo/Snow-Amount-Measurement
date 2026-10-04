@@ -319,18 +319,26 @@
     return { state: st, km: km, count: cnt };
   }
 
-  /* ---------- 8) 기관 색 (관할 고속도로 탭과 격자 편입 탭이 같은 색을 씀) ---------- */
-  function colorOf(st, id) {
+  /* ---------- 8) 기관 색 (관할 고속도로 탭과 격자 편입 탭이 같은 색을 씀) ----------
+     view = 'ALL'(또는 없음): 본부마다 색 하나 → 본부 경계·담당 범위를 보는 용도
+     view = 본부 이름: 그 본부의 지사들을 12색 팔레트로 서로 다르게(본부 안 순서대로). 관측소 지도(app.js)와 같은 팔레트·같은 순서라 같은 지사는 두 화면에서 같은 색 */
+  var BRANCH_PALETTE = ['#39FF14','#00FFFF','#FF00FF','#FF3131','#1F51FF','#FF6EC7','#CCFF00','#FF9500','#9D00FF','#00FF7F','#FFFB00','#00B3FF'];
+  function hqColor(st, hq) {
+    if (hq === PRIVATE_HQ) return 'hsl(278,48%,42%)';
+    var regular = st.hqs.filter(function (h) { return h !== PRIVATE_HQ; });
+    return 'hsl(' + Math.round(regular.indexOf(hq) * 360 / regular.length + 8) + ',72%,40%)';
+  }
+  function colorOf(st, id, view) {
     if (id == null || id === 'NONE') return '#4a4a4a';
     var b = st.branches[id]; if (!b) return '#999';
-    var regular = st.hqs.filter(function (h) { return h !== PRIVATE_HQ; }), idx = 0;
-    for (var i = 0; i < st.order.length; i++) { var o = st.branches[st.order[i]]; if (o.hq === b.hq) { if (o.id === id) break; idx++; } }
-    if (b.hq === PRIVATE_HQ) return 'hsl(278,48%,' + [38, 54, 28, 62][idx % 4] + '%)';
-    return 'hsl(' + Math.round(regular.indexOf(b.hq) * 360 / regular.length + 8) + ',72%,' + [36, 50, 26, 58][idx % 4] + '%)';
+    if (!view || view === 'ALL' || b.hq !== view) return hqColor(st, b.hq);
+    var idx = st.order.filter(function (x) { return st.branches[x].hq === b.hq; }).indexOf(id);
+    return BRANCH_PALETTE[idx % BRANCH_PALETTE.length];
   }
 
+
   var api = {
-    reapply: reapply, rebuildAllSeries: rebuildAllSeries, colorOf: colorOf, resolve: resolve, buildSegments: buildSegments, pickStations: pickStations, distToSegments: distToSegments,
+    reapply: reapply, rebuildAllSeries: rebuildAllSeries, colorOf: colorOf, hqColor: hqColor, BRANCH_PALETTE: BRANCH_PALETTE, resolve: resolve, buildSegments: buildSegments, pickStations: pickStations, distToSegments: distToSegments,
     isPrivate: isPrivate, PRIVATE_HQ: PRIVATE_HQ, applyToData: applyToData, impact: impact, evaluate: evaluate, summarize: summarize,
     seasonSeries: seasonSeries, clone: clone, latestSeasonKey: latestSeasonKey
   };

@@ -244,7 +244,25 @@ def t_new_branch_from_jurisdiction_appears(b):
     check(p.locator("#gr-tree .jr-br:has-text('신설시험')").count() == 1, "관할 탭에서 만든 신설 기관이 격자 탭에도 보여야 함")
     check(p.locator("#gr-tree .jr-br:has-text('신설시험') em").count() == 1, "신설 표시")
 
-TESTS = [t_tab_loads, t_popup_info_for_unselected_cell, t_remove_needs_no_branch_choice, t_remove_shared_cells_asks_which_branch, t_remove_button_state, t_add_remove_and_save, t_grid_save_failure_and_reload, t_grid_history_failure_blocks_save, t_share_between_branches, t_box_select, t_budget_levels, t_focus_branch,
+
+def t_hq_tabs_and_per_branch_view(b):
+    """격자 탭: '전체'로 시작, 본부를 고르면 다른 본부에만 편입된 칸은 숨김. 지사별 칸 수(많은 순)와 목표를 넘는 지사 표시"""
+    p = open_grid(b)
+    check(p.locator("#gr-hqtabs .jr-hqtab.on").inner_text() == "전체" and "민자" not in p.locator("#gr-hqtabs").inner_text(), "전체로 시작, 민자 탭 없음(예보 대상 아님)")
+    p.click("#gr-per-wrap summary"); p.wait_for_timeout(200)
+    rows = p.locator("#gr-per .gr-per-row .k").all_inner_texts(); nums = [int(x) for x in rows]
+    check(len(nums) >= 59 and nums == sorted(nums, reverse=True), f"지사 {len(nums)}곳 많은 순")
+    p.fill("#gr-target", "3"); p.wait_for_timeout(200)
+    over = p.locator("#gr-per .gr-per-row.over").count()
+    check(over == sum(1 for n in nums if n > 3) and "목표(3칸) 넘는 지사" in p.locator("#gr-per").inner_text(), f"목표 넘는 지사 {over}")
+    p.click("#gr-hqtabs [data-hqtab='강원']"); p.wait_for_timeout(400)
+    r = p.evaluate("""(() => { const st = GridUI._state(), out = { other: 0, mine: 0 };
+      Object.entries(st.rects).forEach(([k, rc]) => { const set = st.res.assign.get(k); if (!set || !set.size) return; const inHq = [...set].some(id => st.state.branches[id].hq === '강원');
+        if (st.map.hasLayer(rc)) { if (inHq) out.mine++; else out.other++; } }); return out; })()""")
+    check(r["mine"] > 0 and r["other"] == 0, f"강원 칸만 보임 {r}")
+    check(p.locator("#gr-per .gr-per-row").count() == 6, "목록도 강원 지사만")
+
+TESTS = [t_hq_tabs_and_per_branch_view, t_tab_loads, t_popup_info_for_unselected_cell, t_remove_needs_no_branch_choice, t_remove_shared_cells_asks_which_branch, t_remove_button_state, t_add_remove_and_save, t_grid_save_failure_and_reload, t_grid_history_failure_blocks_save, t_share_between_branches, t_box_select, t_budget_levels, t_focus_branch,
          t_colors_match_other_tab, t_new_branch_from_jurisdiction_appears]
 if __name__ == "__main__":
     with sync_playwright() as pw:

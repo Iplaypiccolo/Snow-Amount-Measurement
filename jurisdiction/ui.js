@@ -23,16 +23,12 @@
   var NONE_COLOR = '#3f3f3f';           // 어느 지사에도 속하지 않은 고속도로: 진한 회색 실선(밝은 지도에서 잘 보이도록 명도를 낮춤) + 흰 테두리 + 1px 더 굵게
   var NONE_EXTRA_W = 1;                  // 미지정 구간은 다른 구간보다 선을 1px 굵게
   var HALO_COLOR = '#ffffff';
-  function colorOf(id) {
-    var st = S.view.state, b = st.branches[id];
+  function colorOf(id) {          // 본부 탭: '전체'면 본부마다 색 하나, 본부를 고르면 그 본부 지사마다 다른 색(core.js colorOf)
     if (id == null || id === 'NONE') return NONE_COLOR;
-    if (!b) return '#999';
-    var regular = st.hqs.filter(function (h) { return h !== C.PRIVATE_HQ; }), idx = 0;
-    for (var i = 0; i < st.order.length; i++) { var o = st.branches[st.order[i]]; if (o.hq === b.hq) { if (o.id === id) break; idx++; } }
-    var light = [36, 50, 26, 58][idx % 4];
-    if (b.hq === C.PRIVATE_HQ) return 'hsl(278,48%,' + [38, 54, 28, 62][idx % 4] + '%)';        // 민자: 보라 계열 (일반 본부 색은 그대로)
-    return 'hsl(' + Math.round(regular.indexOf(b.hq) * 360 / regular.length + 8) + ',72%,' + light + '%)';
+    if (!S.view.state.branches[id]) return '#999';
+    return C.colorOf(S.view.state, id, S.hqView);
   }
+
 
   /* ---------- 굵기: 지도를 확대할수록 굵어짐 (배경 지도의 도로도 확대하면 넓어지므로) ----------
      줌 7(전국)=4px, 9=7px, 11=9px, 13=11px, 15=14px, 17=16px */
@@ -82,6 +78,7 @@
         '<div id="jr-pending" class="jr-pending"></div>' +
       '</div>' +
       '<div class="jr-mapbox"><div id="jmap"></div>' +
+        '<div id="jr-hqtabs" class="jr-hqtabs" role="tablist" aria-label="본부 선택"></div>' +
         '<div id="jr-selbar" class="jr-selbar" style="display:none"></div>' +
         '<div id="jr-savebar" class="jr-savebar" style="display:none"></div>' +
         '<div id="jr-pickbar" class="jr-pickbar" style="display:none">도착 지사로 삼을 구간을 지도에서 클릭하세요 <button id="jr-pickcancel" class="jr-btn">취소 (Esc)</button></div>' +
@@ -139,6 +136,7 @@
     var padLat = maxPx * (b.getNorth() - b.getSouth()) / size.y, padLon = maxPx * (b.getEast() - b.getWest()) / size.x;
     var p = m.latLngToLayerPoint(latlng), best = null, bd = maxPx + 1;
     J().doc.sections.forEach(function (sec) {
+      if (!m.hasLayer(S.polys[sec.id])) return;                    // 숨긴 선(다른 본부)은 눌리지 않음
       var bx = S.boxes[sec.id];
       if (latlng.lat < bx[0] - padLat || latlng.lat > bx[2] + padLat || latlng.lng < bx[1] - padLon || latlng.lng > bx[3] + padLon) return;
       var c = sec.coords, prev = m.latLngToLayerPoint([c[0][1], c[0][0]]);
@@ -160,6 +158,7 @@
   /* ---------- 지도 스타일 ---------- */
   function latlngsOf(sec) { return sec.coords.map(function (c) { return [c[1], c[0]]; }); }
 
+  function inView(st, own) { return S.hqView === 'ALL' || !own || (st.branches[own] && st.branches[own].hq === S.hqView); }
   function restyle() {
     var st = S.view.state, committed = C.resolve(J().doc, base()).owner, hl = {};
     Object.keys(S.selected).forEach(function (id) { hl[id] = true; });
@@ -169,6 +168,8 @@
     J().doc.sections.forEach(function (sec) {
       var p = S.polys[sec.id]; if (!p) return;
       var own = st.owner[sec.id], key = own || 'NONE', dim = S.focus && key !== S.focus && !hl[sec.id];
+      if (!inView(st, own) && !hl[sec.id]) { if (S.map.hasLayer(p)) S.map.removeLayer(p); return; }
+      if (!S.map.hasLayer(p)) p.addTo(S.map);
       var w = curWidth() + (hl[sec.id] || (S.focus && key === S.focus) ? 2 : 0) + (own === null ? NONE_EXTRA_W : 0);
       p.setStyle({
         color: colorOf(own), weight: w, opacity: dim ? 0.22 : 0.95,
@@ -273,7 +274,7 @@
   /* ---------- 지사 목록(트리) ---------- */
   function renderTree() {
     var st = S.view.state, km = S.view.km, cnt = S.view.count, q = S.search.trim();
-    var html = st.hqs.map(function (hq) {
+    var html = st.hqs.filter(function (hq) { return S.hqView === 'ALL' || hq === S.hqView; }).map(function (hq) {
       var ids = st.order.filter(function (id) { return st.branches[id].hq === hq && (!q || st.branches[id].name.indexOf(q) >= 0); });
       if (!ids.length && !(hq === C.PRIVATE_HQ && !q)) return '';
       var total = round1(ids.reduce(function (a, id) { return a + (km[id] || 0); }, 0));
@@ -469,10 +470,26 @@
   }
 
   /* ---------- 화면 갱신 ---------- */
+  function renderHqTabs() {
+    var box = $('jr-hqtabs'); if (!box) return;
+    var tabs = [['ALL', '전체']].concat(S.view.state.hqs.map(function (h) { return [h, h]; }));
+    box.innerHTML = tabs.map(function (t) { return '<button type="button" role="tab" class="jr-hqtab' + (S.hqView === t[0] ? ' on' : '') + '" aria-selected="' + (S.hqView === t[0]) + '" data-hqtab="' + esc(t[0]) + '">' + esc(t[1]) + '</button>'; }).join('');
+  }
+  // 본부 탭 바꾸기: 그 본부 지사만 지도·목록에 보이고, 지사마다 다른 색. 지도는 그 본부 범위로
+  function setHqView(v, fit) {
+    var st = S.view.state; S.hqView = v;
+    if (S.focus && S.focus !== 'NONE' && st.branches[S.focus] && v !== 'ALL' && st.branches[S.focus].hq !== v) S.focus = null;
+    afterChange(false);
+    if (fit === false || !S.map) return;
+    var pts = [];
+    if (v !== 'ALL') J().doc.sections.forEach(function (s) { var o = st.owner[s.id]; if (o && st.branches[o] && st.branches[o].hq === v) s.coords.forEach(function (c) { pts.push([c[1], c[0]]); }); });
+    if (pts.length) S.map.fitBounds(L.latLngBounds(pts), { padding: [40, 40], maxZoom: 11 }); else if (v === 'ALL') S.map.setView([36.4, 127.9], 7);
+  }
+
   function afterChange(recompute) {
     S.view = C.summarize(J().doc, events());
     if (recompute) { var st = S.view.state; if (S.focus && !st.branches[S.focus]) S.focus = null; }
-    restyle(); renderTree(); renderPending(); renderSelBar(); renderSaveBar(); renderRequests();
+    renderHqTabs(); restyle(); renderTree(); renderPending(); renderSelBar(); renderSaveBar(); renderRequests();
   }
 
   /* ---------- 항상 보이는 저장 바 (관리자 모드): 지도 오른쪽 위 ---------- */
@@ -517,6 +534,7 @@
       var t = e.target;
       var ra = t.closest && t.closest('[data-ra]');                  // 변경 요청 카드의 버튼
       if (ra) { var rq = findReq(ra.dataset.rid); if (rq) { var a = ra.dataset.ra; if (a === 'view') viewRequest(rq); else if (a === 'prep' && S.admin) prepareMove(rq); else if (a === 'reject' && S.admin) rejectRequest(rq); else if (a === 'cancel') cancelRequest(rq); } return; }
+      var tab = t.closest && t.closest('[data-hqtab]'); if (tab) { setHqView(tab.dataset.hqtab); return; }
       var br = t.closest && t.closest('.jr-br'); if (br) { focusBranch(br.dataset.id); return; }
       var sec = t.closest && t.closest('.jr-sec');
       if (sec && t.tagName === 'INPUT') { if (t.checked) S.selected[sec.dataset.sid] = true; else delete S.selected[sec.dataset.sid]; afterChange(false); return; }
@@ -666,12 +684,16 @@
     S.admin = !!(me && me.role === 'admin'); S.canRequest = !!(me && me.role === 'branch');
     buildShell(); bind(); $('view-jurisdiction').classList.toggle('jr-is-admin', S.admin);
     S.view = C.summarize(J().doc, events());
+    var myBr = me && me.role === 'branch' && me.branch_id && S.view.state.branches[me.branch_id];
+    S.hqView = myBr ? myBr.hq : 'ALL';                 // 처음 열 때: 관리자·그 밖은 '전체', 지사는 자기 본부
+    S.firstFit = !!myBr;
     S.inited = true;
   }
   function show() {
     if (!S.inited) return;
     ensureMap(); afterChange(false); if (selectMode()) loadRequests();
+    if (S.firstFit) { S.firstFit = false; setTimeout(function () { setHqView(S.hqView); }, 60); }       // 지사: 자기 본부 범위로
   }
   function openRequests() { S.reqOpen = true; S.search = ''; var s = $('jr-search'); if (s) s.value = ''; return loadRequests().then(function () { var b = $('jr-requests'); if (b && b.scrollIntoView) b.scrollIntoView({ block: 'nearest' }); }); }
-  window.JurisdictionUI = { init: init, show: show, openRequests: openRequests, refreshRequests: loadRequests, _state: function () { return S; }, _casing: casingColors, _contrast: contrast, _near: nearestSection, _width: widthFor, NEAR_PX: NEAR_PX };
+  window.JurisdictionUI = { init: init, show: show, setHqView: setHqView, openRequests: openRequests, refreshRequests: loadRequests, _state: function () { return S; }, _casing: casingColors, _contrast: contrast, _near: nearestSection, _width: widthFor, NEAR_PX: NEAR_PX };
 })();

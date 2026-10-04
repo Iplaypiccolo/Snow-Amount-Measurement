@@ -9,7 +9,7 @@
   'use strict';
   var G = window.GridCore, JC = window.JurisCore;
   var S = { inited: false, admin: false, map: null, rects: {}, lines: null, selected: {}, pending: [], focus: null, search: '', box: false,
-            boxStart: null, boxRect: null, justBoxed: false, state: null, res: null, committedRes: null, ids: null, showRing: true, tip: null };
+            boxStart: null, boxRect: null, justBoxed: false, state: null, res: null, committedRes: null, ids: null, showRing: true, tip: null, hqView: 'ALL', target: 5 };
 
   function GR() { return window.GRID; }
   function $(id) { return document.getElementById(id); }
@@ -17,7 +17,8 @@
   function base() { return GR().committed; }
   function events() { return base().concat(S.pending); }
   function branchName(id) { var b = S.state.branches[id]; return b ? b.name : id; }
-  function colorOf(id) { return JC.colorOf(S.state, id); }
+  function colorOf(id) { return JC.colorOf(S.state, id, S.hqView); }           // 전체 = 본부 색, 본부 = 그 본부 지사마다 다른 색(관할 탭과 같음)
+  function inView(id) { return S.hqView === 'ALL' || (S.state.branches[id] && S.state.branches[id].hq === S.hqView); }
 
   /* ---------- 상태 다시 계산 ---------- */
   function recompute() {
@@ -44,6 +45,7 @@
         '<div id="gr-pending" class="jr-pending"></div>' +
       '</div>' +
       '<div class="jr-mapbox"><div id="gmap"></div>' +
+        '<div id="gr-hqtabs" class="jr-hqtabs" role="tablist" aria-label="본부 선택"></div>' +
         '<div id="gr-savebar" class="jr-savebar" style="display:none"></div>' +
         '<div id="gr-tools" class="gr-tools" style="display:none"><button class="jr-btn" id="gr-box">▭ 영역 선택(드래그)</button><span class="hint">Shift+드래그도 됩니다</span></div>' +
         '<div id="gr-selbar" class="jr-selbar" style="display:none"></div>' +
@@ -87,7 +89,7 @@
     var dim = S.focus && bs.indexOf(S.focus) < 0, hit = S.focus && bs.indexOf(S.focus) >= 0, st;
     if (!bs.length) st = { color: '#8a8a7a', weight: 1, dashArray: '3,3', fillColor: '#cfcfc0', fillOpacity: 0.12, opacity: 0.8 };
     else if (bs.length === 1) { var c1 = colorOf(bs[0]); st = { color: c1, weight: 1.5, dashArray: null, fillColor: c1, fillOpacity: 0.38, opacity: 0.9 }; }
-    else st = { color: '#5b1a8f', weight: 3, dashArray: null, fillColor: colorOf(bs[0]), fillOpacity: 0.45, opacity: 1 };
+    else st = { color: '#5b1a8f', weight: 3, dashArray: null, fillColor: colorOf(bs.filter(inView)[0] || bs[0]), fillOpacity: 0.45, opacity: 1 };
     if (changed) { st.color = '#d98a00'; st.weight = 3; st.dashArray = '6,4'; }
     if (sel) { st.color = '#ff00aa'; st.weight = 4; st.dashArray = null; st.fillOpacity = 0.6; }
     if (S.focus && !sel) { if (dim) { st.fillOpacity *= 0.3; st.opacity = 0.3; } else if (hit) st.fillOpacity = Math.min(0.7, st.fillOpacity + 0.2); }
@@ -97,7 +99,8 @@
     S.res.cells.forEach(function (k) { if (!S.rects[k]) rectFor(k); });
     Object.keys(S.rects).forEach(function (k) {
       var r = S.rects[k], isRing = !cellBranches(k).length && !S.res.cells.has(k);
-      var show = S.showRing || cellBranches(k).length || S.selected[k];
+      var bs = cellBranches(k);
+      var show = S.selected[k] || (bs.length ? bs.some(inView) : S.showRing);         // 본부를 고르면 다른 본부에만 편입된 칸은 숨김(후보 칸은 그대로)
       if (!show) { if (S.map.hasLayer(r)) S.map.removeLayer(r); return; }
       if (!S.map.hasLayer(r)) r.addTo(S.map);
       r.setStyle(styleOf(k));
@@ -146,13 +149,31 @@
   function renderSummary() {
     var b = G.budget(S.sum.union), cls = { ok: 'ok', warn: 'warn', over: 'over' }[b.level];
     $('gr-summary').innerHTML = '<div class="gr-big">호출 대상 격자 <b>' + S.sum.union + '칸</b> <span>(여러 기관 공유 ' + S.sum.shared + '칸)</span></div>' +
-      '<div class="gr-sub">하루 호출 약 ' + b.daily.toLocaleString() + '건 · 수집 분할 ' + b.runs + '번(약 ' + b.minutes + '분)</div><div class="gr-badge ' + cls + '">' + esc(b.text) + '</div>';
+      '<div class="gr-sub">하루 호출 약 ' + b.daily.toLocaleString() + '건 · 수집 분할 ' + b.runs + '번(약 ' + b.minutes + '분)</div><div class="gr-badge ' + cls + '">' + esc(b.text) + '</div>' +
+      '<details class="gr-per" id="gr-per-wrap"' + (S.perOpen ? ' open' : '') + '><summary>지사별 칸 수 (많은 순) — 쏠림 보기</summary>' +
+      '<div class="gr-per-tools">지사당 목표 <input id="gr-target" type="number" min="1" max="99" value="' + S.target + '"> 칸</div><div id="gr-per"></div></details>';
+    $('gr-per-wrap').addEventListener('toggle', function (e) { S.perOpen = e.target.open; });
+    renderPerBranch();
+  }
+  // 지사별 칸 수: 막대 길이 = 칸 수, 목표를 넘으면 빨간색. 지금 보는 본부(전체면 모두) 기준. 목표대로 줄이면 호출 대상이 최대 몇 칸인지(공유 칸이 있으면 더 줄어듦)
+  function renderPerBranch() {
+    var box = $('gr-per'); if (!box) return;
+    var per = S.sum.perBranch, st = S.state, T = S.target;
+    var ids = st.order.filter(function (id) { return S.ids.has(id) && inView(id); }).sort(function (a, b) { return (per[b] || 0) - (per[a] || 0); });
+    var max = ids.reduce(function (m, id) { return Math.max(m, per[id] || 0); }, 1), over = ids.filter(function (id) { return (per[id] || 0) > T; });
+    var capped = ids.reduce(function (a, id) { return a + Math.min(per[id] || 0, T); }, 0), zero = ids.filter(function (id) { return !per[id]; }).length;
+    box.innerHTML = '<div class="gr-per-sum">목표(' + T + '칸) 넘는 지사 <b>' + over.length + '곳</b>' + (zero ? ' · 편입 없음 ' + zero + '곳' : '') + ' · 목표대로면 호출 대상 최대 약 <b>' + capped + '칸</b></div>' +
+      ids.map(function (id) {
+        var n = per[id] || 0, b = st.branches[id];
+        return '<div class="gr-per-row' + (n > T ? ' over' : '') + '" data-id="' + esc(id) + '"><span class="n">' + esc(b.name) + (S.hqView === 'ALL' ? ' <em>' + esc(b.hq) + '</em>' : '') + '</span>' +
+          '<span class="bar"><i style="width:' + Math.round(n / max * 100) + '%;background:' + (n > T ? '#d0453a' : colorOf(id)) + '"></i></span><span class="k">' + n + '</span></div>';
+      }).join('');
   }
 
   /* ---------- 기관 목록 ---------- */
   function renderTree() {
     var q = S.search.trim(), per = S.sum.perBranch, st = S.state;
-    var html = st.hqs.filter(function (h) { return !JC.isPrivate(h); }).map(function (hq) {
+    var html = st.hqs.filter(function (h) { return !JC.isPrivate(h) && (S.hqView === 'ALL' || h === S.hqView); }).map(function (hq) {
       var ids = st.order.filter(function (id) { return st.branches[id].hq === hq && S.ids.has(id) && (!q || st.branches[id].name.indexOf(q) >= 0); });
       if (!ids.length) return '';
       var total = ids.reduce(function (a, id) { return a + (per[id] || 0); }, 0);
@@ -288,7 +309,17 @@
     commitRemove(per, chosen.filter(function (b) { return per[b]; }));
   }
 
-  function afterChange() { recompute(); restyle(); renderSummary(); renderTree(); renderPending(); renderSelBar(); renderSaveBar(); }
+  function renderHqTabs() {
+    var box = $('gr-hqtabs'); if (!box) return;
+    var tabs = [['ALL', '전체']].concat(S.state.hqs.filter(function (h) { return !JC.isPrivate(h); }).map(function (h) { return [h, h]; }));
+    box.innerHTML = tabs.map(function (t) { return '<button type="button" role="tab" class="jr-hqtab' + (S.hqView === t[0] ? ' on' : '') + '" aria-selected="' + (S.hqView === t[0]) + '" data-hqtab="' + esc(t[0]) + '">' + esc(t[1]) + '</button>'; }).join('');
+  }
+  function setHqView(v) {
+    S.hqView = v; if (S.focus && !inView(S.focus)) S.focus = null; afterChange();
+    var pts = []; if (v !== 'ALL') S.res.assign.forEach(function (set, k) { if (Array.from(set).some(inView)) pts.push(G.cellCenter.apply(null, G.unkey(k))); });
+    if (pts.length) S.map.fitBounds(L.latLngBounds(pts), { padding: [40, 40], maxZoom: 10 }); else if (v === 'ALL') S.map.setView([36.4, 127.9], 7);
+  }
+  function afterChange() { recompute(); renderHqTabs(); restyle(); renderSummary(); renderTree(); renderPending(); renderSelBar(); renderSaveBar(); }
   function focusBranch(id) {
     S.focus = S.focus === id ? null : id; afterChange();
     if (S.focus) {
@@ -303,9 +334,10 @@
     $('gr-ring').addEventListener('change', function (e) { S.showRing = e.target.checked; restyle(); });
     $('gr-lines').addEventListener('change', function (e) { if (e.target.checked) S.lines.addTo(S.map); else S.map.removeLayer(S.lines); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && S.box) setBox(false); });
-    $('view-grid').addEventListener('input', function (e) { if (e.target.id === 'gr-reason') S.reason = e.target.value; });
+    $('view-grid').addEventListener('input', function (e) { if (e.target.id === 'gr-reason') S.reason = e.target.value; else if (e.target.id === 'gr-target') { var n = parseInt(e.target.value, 10); if (n >= 1 && n <= 99) { S.target = n; renderPerBranch(); } } });
     $('view-grid').addEventListener('click', function (e) {
-      var t = e.target, br = t.closest && t.closest('.jr-br'); if (br) { focusBranch(br.dataset.id); return; }
+      var t = e.target, tab = t.closest && t.closest('[data-hqtab]'); if (tab) { setHqView(tab.dataset.hqtab); return; }
+      var br = t.closest && (t.closest('.jr-br') || t.closest('.gr-per-row')); if (br) { focusBranch(br.dataset.id); return; }
       var x = t.closest && t.closest('.jr-x'); if (x) { S.pending.splice(parseInt(x.dataset.ev, 10), 1); afterChange(); return; }
       var act = t.closest && t.closest('[data-act]'); act = act && act.dataset.act; if (!act) return;
       if (act === 'add') applyAdd();
@@ -330,5 +362,5 @@
     buildShell(); bind(); recompute(); $('view-grid').classList.toggle('jr-is-admin', S.admin); S.inited = true;
   }
   function show() { if (!S.inited) return; ensureMap(); afterChange(); }
-  window.GridUI = { init: init, show: show, _state: function () { return S; } };
+  window.GridUI = { setHqView: function (v) { setHqView(v); }, init: init, show: show, _state: function () { return S; } };
 })();

@@ -145,7 +145,8 @@ function initApp(){
   // ---------- 강조(하이라이트) & 표시/숨김 ----------
   var highlightLayer = L.layerGroup().addTo(map);
   var snowLabelLayer = L.layerGroup().addTo(map);
-  var NEON_PALETTE = ['#39FF14','#00FFFF','#FF00FF','#FF3131','#1F51FF','#FF6EC7','#CCFF00','#FF9500','#9D00FF','#00FF7F','#FFFB00','#00B3FF'];
+  // 본부를 고르면 지사마다 다른 색: 관할·격자 탭과 같은 팔레트(JurisCore.BRANCH_PALETTE)를 씀
+  var NEON_PALETTE = (window.JurisCore && JurisCore.BRANCH_PALETTE) || ['#39FF14','#00FFFF','#FF00FF','#FF3131','#1F51FF','#FF6EC7','#CCFF00','#FF9500','#9D00FF','#00FF7F','#FFFB00','#00B3FF'];
   var visibleStationIds = null; // null = 전체 표시
 
   function showSnowLabels(stationList){

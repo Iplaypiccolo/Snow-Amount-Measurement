@@ -17,3 +17,15 @@
 .gr-grp{display:inline-flex;align-items:center;gap:6px;padding-left:10px;margin-left:4px;border-left:1px solid var(--line)}
 .gr-rmlist{display:flex;flex-direction:column;gap:6px;margin:8px 0 12px;max-height:40vh;overflow:auto}
 .gr-rm{display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--line);border-radius:7px;cursor:pointer;font-size:13.5px}.gr-rm span{margin-left:auto;color:var(--muted);font-size:12px}
+/* 지사별 칸 수(쏠림 보기) */
+.gr-per{margin-top:8px;font-size:12px}
+.gr-per summary{cursor:pointer;color:var(--hwy-green-dark);font-weight:600}
+.gr-per-tools{margin:6px 0 4px;color:var(--muted)} .gr-per-tools input{width:52px;padding:2px 4px;font:inherit}
+.gr-per-sum{margin:2px 0 6px;color:#3d3a33}
+#gr-per{max-height:260px;overflow:auto}
+.gr-per-row{display:grid;grid-template-columns:minmax(0,1fr) 90px 26px;gap:6px;align-items:center;padding:2px 0;cursor:pointer}
+.gr-per-row .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .gr-per-row .n em{color:var(--muted);font-style:normal;font-size:11px}
+.gr-per-row .bar{height:8px;background:#eee;border-radius:4px;overflow:hidden} .gr-per-row .bar i{display:block;height:100%}
+.gr-per-row .k{text-align:right;font-family:var(--mono)} .gr-per-row.over .k{color:#b5432f;font-weight:700}
+/* 격자 탭: 맨 위의 "영역 선택" 도구 막대와 겹치지 않게 본부 탭은 그 아래 줄에 */
+#view-grid .jr-hqtabs{top:54px}
