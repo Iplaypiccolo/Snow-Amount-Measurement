@@ -85,7 +85,10 @@ const Api = (() => {
       requests(round) { return done({ ok: true, rows: clone(db.requests.filter(r => r.round_id === +round)) }); },
       audit() { return done({ ok: true, rows: can("log.view") ? clone(db.audit) : [] }); },
       saveFleet(vehicles, routes) {
-        if (vehicles.some(v => !vehOk(v.id)) || (routes.length && !can("equip.edit.all"))) return done({ ok: false, message: ERR["42501"] });   // 경로는 관리자(equip.edit.all)만
+        // 경로는 관리자(equip.edit.all)만. 지원장비는 자기 기관 장비의 정해진 경로(지사 그대로)에서 도착 예상 시각만
+        const timeOnlyOk = r => vehOk(r.vehicle_id) && db.routes.some(x => x.date === r.date && x.vehicle_id === r.vehicle_id && JSON.stringify(x.stops) === JSON.stringify(r.stops));
+        if (vehicles.some(v => !vehOk(v.id)) || (!can("equip.edit.all") && routes.some(r => !timeOnlyOk(r)))) return done({ ok: false, message: ERR["42501"] });
+        if (!can("equip.edit.all")) routes = routes.map(r => { const x = db.routes.find(y => y.date === r.date && y.vehicle_id === r.vehicle_id); return { ...r, revised: !!x.revised }; });
         if (!can("equip.edit.all") && vehicles.some(v => Object.keys(v).some(k => !["id", "plate", "status"].includes(k)))) return done({ ok: false, message: ERR["42501"] });
         const plates = new Map(db.vehicles.map(v => [v.id, v.plate])); vehicles.forEach(v => { if ("plate" in v) plates.set(v.id, v.plate); });
         if (new Set(plates.values()).size !== plates.size) return done({ ok: false, message: ERR["23505"] });

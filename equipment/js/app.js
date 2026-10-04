@@ -11,7 +11,7 @@
    ============================================================ */
 // 배포 직후 브라우저에 예전 index.html(최대 10분 저장)이 남아 있으면 새 app.js 와 화면 틀이 맞지 않아 탭이 비어 보임
 // (GitHub Pages 는 ?v= 꼬리표와 관계없이 최신 파일을 줌). 판번호가 다르면 주소를 바꿔 한 번만 새로 받는다.
-const UI_VERSION = "2026100403";
+const UI_VERSION = "2026100404";
 (() => {
   const m = document.querySelector('meta[name="ui-version"]');
   if ((m && m.content) === UI_VERSION) return;
@@ -52,12 +52,12 @@ const S = {
   me: null, real: null, uid: "admin1", preview: false,
   hqs: [], branches: [], order: [], brById: {}, hqById: {}, vehicles: [], rounds: [], orgs: [], holdings: null,
   routes: new Map(), loaded: null, reqs: {}, audit: [],
-  draft: new Map(), vdraft: new Map(), rdraft: new Map(), blankKind: new Map(),          // 아직 확정·저장하지 않은 변경(경로 / 장비 / 지사 요청)
+  draft: new Map(), vdraft: new Map(), rdraft: new Map(), revisedMode: false,   // revisedMode: 표 위 [최초 지원]/[수정본] — 고르는 지사 목록과 저장 구분          // 아직 확정·저장하지 않은 변경(경로 / 장비 / 지사 요청)
   date: todayISO(), day1: todayISO(), cols: 4, round: null,
   org: "전체", type: "전체", fleetOrg: "전체", onlyActive: true, closedHq: new Set(), extraStop: new Set(),
   logUser: "전체", logKind: "전체", logToday: false
 };
-const SOURCE_ORGS = () => [...S.orgs, "지역본부"];        // 이동 현황 출발 기관 열. 지역본부 장비는 나중에 '지역본부' 탭에서 연동(지금은 0)
+const SOURCE_ORGS = () => [...S.orgs, "지역본부"];        // 이동 현황 지원기관 열. 지역본부 장비는 나중에 '지역본부' 탭에서 연동(지금은 0)
 const can = p => !!S.me && (S.me.role === "admin" || (S.me.perms || []).includes(p));
 const canVeh = v => can("equip.edit.all") || (can("equip.edit.own") && v.org === S.me.org);
 const canAnyVeh = () => can("equip.edit.all") || can("equip.edit.own");
@@ -77,7 +77,7 @@ function normRec(r) {
   (r.stops || []).forEach((s, i) => { if (s && !seen.has(s)) { seen.add(s); stops.push(s); times.push((r.times || [])[i] || null); } });
   return stops.length ? { stops, revised: !!r.revised, times } : EMPTY;
 }
-const recOf = (date, vid) => { const k = rk(date, vid); const r = S.draft.has(k) ? S.draft.get(k) : (S.routes.get(k) || EMPTY); return r.stops.length || !S.blankKind.has(k) ? r : { ...EMPTY, revised: S.blankKind.get(k) }; };
+const recOf = (date, vid) => { const k = rk(date, vid); return S.draft.has(k) ? S.draft.get(k) : (S.routes.get(k) || EMPTY); };
 const routeOf = (date, vid) => recOf(date, vid).stops;
 const vval = (v, f) => { const d = S.vdraft.get(v.id); return d && f in d ? d[f] : v[f]; };
 const REQ_DEF = { snow_cm: null, warning: false, req_truck: 0, req_blower: 0, assigned_truck: 0, assigned_blower: 0, arrive_at: null, reason: null, confirmed: false };
@@ -85,7 +85,7 @@ const rbase = (b, f) => { const r = S.reqs[b]; return r ? r[f] : REQ_DEF[f]; };
 const rval = (b, f) => { const d = S.rdraft.get(b); return d && f in d ? d[f] : rbase(b, f); };
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 function setRoute(date, vid, rec) {
-  rec = normRec(rec); const k = rk(date, vid); S.blankKind.delete(k);
+  rec = normRec(rec); const k = rk(date, vid);
   if (same(rec, S.routes.get(k) || EMPTY)) S.draft.delete(k); else S.draft.set(k, rec);
 }
 function setVeh(vid, f, val) {
@@ -213,45 +213,56 @@ function roundSel(id) {
 /* ============================================================
    [4] 이동 현황 (모두 보기만)
    ============================================================ */
-const movesOn = date => S.vehicles.map(v => { const rec = recOf(date, v.id); return { v, rec, stops: rec.stops }; }).filter(m => m.stops.length);
+const MOVE_TYPES = ["제설차", "제설기"];          // 이동 현황은 제설차·제설기만(이동정비차는 보이지 않음)
+const movesOn = date => S.vehicles.filter(v => MOVE_TYPES.includes(v.type)).map(v => { const rec = recOf(date, v.id); return { v, rec, stops: rec.stops }; }).filter(m => m.stops.length);
 function runOf(vid, date) {     // 그날을 포함해 하루씩 이어지는 지원 기간: k일차 / n일
   let back = 0; while (back < 30 && routeOf(addDays(date, -(back + 1)), vid).length) back++;
   let fwd = 0; while (fwd < 30 && routeOf(addDays(date, fwd + 1), vid).length) fwd++;
   return { k: back + 1, n: back + fwd + 1, first: addDays(date, -back) };
 }
 function renderMatrix() {
-  // 세로 = 본부 → 지사(그날 지원받는 지사만), 가로 = 출발 기관. 본부 줄은 그 본부 지사들로 가는 장비 대수(장비 1대는 한 번만 셈)
-  const moves = movesOn(S.date), src = SOURCE_ORGS(), used = new Set(moves.flatMap(m => m.stops));
-  const pick = (org, ids) => moves.filter(m => (org == null || m.v.org === org) && m.stops.some(s => ids.has(s)));
-  const td = l => l.length ? `<td>${l.length}<span class="sub">차 ${l.filter(m => m.v.type === "제설차").length} · 기 ${l.filter(m => m.v.type === "제설기").length}</span></td>` : `<td class="zero">0</td>`;
+  // 세로 = 본부 → 지사(그날 지원받는 지사만), 가로 = 지원기관마다 제설차·제설기. 본부 줄·합계는 장비 1대를 한 번만 셈(여러 지사를 들러도)
+  const moves = movesOn(S.date), src = SOURCE_ORGS(), cols = [...src, null], used = new Set(moves.flatMap(m => m.stops));
+  const cnt = (org, ids, type) => moves.filter(m => (org == null || m.v.org === org) && m.v.type === type && (!ids || m.stops.some(s => ids.has(s)))).length;
+  const cells = ids => cols.map(o => MOVE_TYPES.map((t, k) => { const n = o === "지역본부" ? 0 : cnt(o, ids, t);
+    return `<td class="${k ? "c2" : "c1"}${o == null ? " tot" : ""}${n ? "" : " zero"}">${n || "·"}</td>`; }).join("")).join("");
   let body = "";
   S.hqs.forEach(h => {
     const brs = S.order.filter(b => b.hq_id === h.id && used.has(b.id)); if (!brs.length) return;
-    const ids = new Set(brs.map(b => b.id));
-    body += `<tr class="hqrow"><th scope="row">${esc(h.name)}<span class="sub">본부</span></th>${src.map(o => td(o === "지역본부" ? [] : pick(o, ids))).join("")}<td><strong>${pick(null, ids).length}</strong></td></tr>`;
-    brs.forEach(b => { const one = new Set([b.id]); body += `<tr class="brrow"><th scope="row"><span class="ind" aria-hidden="true">└</span>${esc(b.name)}</th>${src.map(o => td(o === "지역본부" ? [] : pick(o, one))).join("")}<td><strong>${pick(null, one).length}</strong></td></tr>`; });
+    body += `<tr class="hqrow"><th scope="row">${esc(h.name)}<span class="sub">본부</span></th>${cells(new Set(brs.map(b => b.id)))}</tr>`;
+    brs.forEach(b => { body += `<tr class="brrow"><th scope="row"><span class="ind" aria-hidden="true">└</span>${esc(b.name)}</th>${cells(new Set([b.id]))}</tr>`; });
   });
-  $("matrix").innerHTML = `<thead><tr><th class="l" scope="col">본부 · 피지원 지사</th>${src.map(o => `<th scope="col">${esc(o)}${o === "지역본부" ? '<span class="sub">연동 예정</span>' : ""}</th>`).join("")}<th scope="col">합계</th></tr></thead>` +
-    `<tbody>${body || `<tr><td class="empty" colspan="${src.length + 2}">${esc(fmtMD(S.date))}에 이동하는 장비가 없습니다.</td></tr>`}</tbody>` +
-    `<tfoot><tr><th scope="row">합계</th>${src.map(o => `<td>${moves.filter(m => m.v.org === o).length}</td>`).join("")}<td>${moves.length}</td></tr></tfoot>`;
+  $("matrix").innerHTML = `<thead><tr><th class="l" scope="col" rowspan="2">본부 · 피지원 지사</th>${cols.map(o => `<th scope="colgroup" colspan="2" class="orgh${o == null ? " tot" : ""}">${o == null ? "합계" : esc(o)}${o === "지역본부" ? '<span class="sub">연동 예정</span>' : ""}</th>`).join("")}</tr>` +
+    `<tr>${cols.map(o => MOVE_TYPES.map((t, k) => `<th scope="col" class="${k ? "c2" : "c1"}${o == null ? " tot" : ""}">${t}</th>`).join("")).join("")}</tr></thead>` +
+    `<tbody>${body || `<tr><td class="empty" colspan="${cols.length * 2 + 1}">${esc(fmtMD(S.date))}에 이동하는 장비가 없습니다.</td></tr>`}</tbody>` +
+    `<tfoot><tr><th scope="row">합계</th>${cells(null)}</tr></tfoot>`;
   const tr = moves.filter(m => m.v.type === "제설차").length, bl = moves.filter(m => m.v.type === "제설기").length;
-  $("summaryNote").textContent = `${fmtMD(S.date)} · 제설차 ${tr}대, 제설기 ${bl}대, 이동정비차 ${moves.length - tr - bl}대 (차 = 제설차, 기 = 제설기)` +
-    (moves.some(m => m.stops.length > 1) ? " · 하루에 여러 지사를 들르는 장비는 각 지사에 모두 표시되고, 합계는 장비 1대로 셉니다" : "");
+  $("moveTitle").textContent = `${fmtMD(S.date)} 장비 지원 현황`;
+  $("summaryNote").innerHTML = `<b>제설차 ${tr}대</b> · <b>제설기 ${bl}대</b>` + (moves.some(m => m.stops.length > 1) ? `<span class="hint"> 하루에 여러 지사를 들르는 장비는 각 지사에 모두 세고, 합계는 1대로 셉니다</span>` : "");
 }
 function renderFilters() {
   const f = $("filters"); f.className = "filters split";
-  f.innerHTML = `<div class="fgroup" role="group" aria-label="출발 기관"><span class="flabel">출발 기관</span>` +
+  f.innerHTML = `<div class="fgroup left" role="group" aria-label="지원기관"><span class="flabel">지원기관</span>` +
     ["전체", ...SOURCE_ORGS()].map(o => `<button type="button" class="chip" data-org="${esc(o)}" aria-pressed="${S.org === o}">${o === "전체" ? "모든 기관" : esc(o)}</button>`).join("") + `</div>` +
+    `<div class="fsep" aria-hidden="true"></div>` +
     `<div class="fgroup right" role="group" aria-label="장비 종류"><span class="flabel">장비</span>` +
-    ["전체", ...TYPES].map(t => `<button type="button" class="chip" data-type="${esc(t)}" aria-pressed="${S.type === t}">${t === "전체" ? "모든 장비" : esc(t)}</button>`).join("") + `</div>`;
+    ["전체", ...MOVE_TYPES].map(t => `<button type="button" class="chip" data-type="${esc(t)}" aria-pressed="${S.type === t}">${t === "전체" ? "모든 장비" : esc(t)}</button>`).join("") + `</div>`;
+  fitFilters();
 }
+// 구분선은 화면 가운데. 두 묶음이 한 줄에 다 안 들어가면 구분선 없이 모두 오른쪽 정렬
+function fitFilters() {
+  const f = $("filters"); if (!f || !f.offsetWidth) return;
+  f.classList.remove("stacked");
+  if ([...f.querySelectorAll(".fgroup")].some(g => g.scrollWidth > g.clientWidth + 1)) f.classList.add("stacked");
+}
+addEventListener("resize", fitFilters);
 const matches = v => (S.org === "전체" || v.org === S.org) && (S.type === "전체" || v.type === S.type);
 function vehicleRow(v, stops, rec, bid) {
   const st = vval(v, "status"), [cls, label] = STATUS[st] || STATUS[""], run = runOf(v.id, S.date);
-  const eta = rec && bid ? rec.times[rec.stops.indexOf(bid)] : null;   // 이 지사 도착 예상 시각(기관별 장비에서 입력)
+  const eta = rec && bid ? rec.times[rec.stops.indexOf(bid)] : null;   // 이 장비가 이 지사에 도착할 예상 시각(기관별 장비에서 입력)
   const dayTag = run.n > 1 ? `<span class="tag day" title="${esc(fmtMD(run.first))}부터 연속">${run.k}일차 / ${run.n}일</span>` : "";
   return `<button type="button" class="vrow" data-vid="${esc(v.id)}"><span class="plate">${esc(vval(v, "plate"))}</span><span class="vtype">${esc(v.type)}</span><span class="vfrom">${esc(v.org)}</span>
-    <span class="status-wrap">${eta ? `<span class="tag eta" title="기관별 장비에서 입력한 도착 예상 시각">도착 예상 ${esc(eta)}</span>` : ""}${rec && rec.revised ? '<span class="tag rev">수정본</span>' : ""}${dayTag}<span class="status ${cls}">${label}</span>${stops.length > 1 ? `<span class="tag" title="${esc(stops.map(bn).join(" → "))}">${stops.length}곳 경유</span>` : ""}</span></button>`;
+    <span class="status-wrap">${eta ? `<span class="tag eta" title="이 장비의 도착 예상 시각">${esc(eta)} 도착 예상</span>` : ""}${rec && rec.revised ? '<span class="tag rev">수정본</span>' : ""}${dayTag}<span class="status ${cls}">${label}</span>${stops.length > 1 ? `<span class="tag" title="${esc(stops.map(bn).join(" → "))}">${stops.length}곳 경유</span>` : ""}</span></button>`;
 }
 function renderDest() {
   const moves = movesOn(S.date), filtered = S.org !== "전체" || S.type !== "전체", out = [];
@@ -262,11 +273,12 @@ function renderDest() {
       const arriveToday = arr && arr.slice(0, 10) === S.date && rval(b.id, "confirmed");
       if (!list.length && (filtered || !arriveToday)) return;       // 그날 이동도, 확정된 도착 요청도 없는 지사는 숨김
       const t = `round_requests:${S.round},${b.id}`, snow = rval(b.id, "snow_cm"), why = rval(b.id, "reason");
+      const etas = [...new Set(list.map(m => m.rec.times[m.rec.stops.indexOf(b.id)]).filter(Boolean))].sort();
       cards.push(`<article class="dest"><div class="dest-head">
         <h3 class="dest-name">${esc(b.name)}<span>${esc(h.name)}본부</span></h3>
-        <div class="dest-time"><strong>${H(t, "arrive_at", esc(fmtTime(arr)))}</strong><small>도착 요청</small></div>
-        <div class="dest-meta">${snow != null ? `<span class="tag snow">예상 적설 ${H(t, "snow_cm", esc(snow) + "cm")}</span>` : ""}${rval(b.id, "warning") ? `<span class="tag warn">${H(t, "warning", "대설 특보")}</span>` : ""}
-          <span class="tag">편성 제설차 ${H(t, "assigned_truck", rval(b.id, "assigned_truck"))} · 제설기 ${H(t, "assigned_blower", rval(b.id, "assigned_blower"))}</span>${why ? `<span class="tag">사유: ${H(t, "reason", esc(why))}</span>` : ""}
+        <div class="dest-time"><strong>${etas.length ? esc(fmtMD(S.date) + " " + etas[0]) : "미정"}</strong><small>도착 예상${etas.length > 1 ? " (가장 이른 장비, 장비마다 다름)" : ""}</small></div>
+        <div class="dest-meta"><span class="tag req">도착 요청 ${H(t, "arrive_at", esc(fmtTime(arr)))}</span>${snow != null ? `<span class="tag snow">예상 적설 ${H(t, "snow_cm", esc(snow) + "cm")}</span>` : ""}${rval(b.id, "warning") ? `<span class="tag warn">${H(t, "warning", "대설 특보")}</span>` : ""}
+          ${why ? `<span class="tag">사유: ${H(t, "reason", esc(why))}</span>` : ""}
           <span class="tag api">날씨·특보 연동 예정</span></div></div>
         ${list.length ? list.map(m => vehicleRow(m.v, m.stops, m.rec, b.id)).join("") : `<div class="empty-state" style="border:0">조건에 맞는 장비가 없습니다.</div>`}</article>`);
     });
@@ -304,9 +316,11 @@ function renderFleet() {
     `<div class="tb-row"><span class="tb-label">기관</span><span class="fgroup">${["전체", ...S.orgs].map(o => `<button type="button" class="chip" data-fo="${esc(o)}" aria-pressed="${S.fleetOrg === o}">${o === "전체" ? "모든 기관" : esc(o)}</button>`).join("")}</span>` +
     `<span class="tb-right"><label class="ctl">지원일 칸 <select class="ci" id="colsSel">${Array.from({ length: 9 }, (_, k) => k + 2).map(n => `<option value="${n}" ${n === S.cols ? "selected" : ""}>${n}개</option>`).join("")}</select></label>` +
     (all ? `<button type="button" class="btn" id="fleetReset" title="보이는 장비의 지원일 칸 경로와 지원 여부를 비웁니다(확정 전까지는 되돌리기 가능)">초기화</button>` : "") + `</span></div>` +
-    (canAddVeh() && myOrgs.length ? `<div class="tb-row"><span class="tb-label">장비 추가</span><select class="ci" id="nvOrg" aria-label="새 장비 기관">${myOrgs.map(o => `<option>${esc(o)}</option>`).join("")}</select>` +
+    (canAddVeh() && myOrgs.length || all ? `<div class="tb-row">` + (canAddVeh() && myOrgs.length ? `<span class="tb-label">장비 추가</span><select class="ci" id="nvOrg" aria-label="새 장비 기관">${myOrgs.map(o => `<option>${esc(o)}</option>`).join("")}</select>` +
       `<select class="ci" id="nvType" aria-label="새 장비 종류">${TYPES.map(t => `<option>${t}</option>`).join("")}</select>` +
-      `<span class="pnum"><span class="pfx" id="nvPfx">${esc(myOrgs[0])}</span><input class="ci" id="nvPlate" inputmode="numeric" maxlength="5" placeholder="901" aria-label="새 장비 도공번호(숫자만)"></span><button type="button" class="btn" id="vehAdd">추가</button></div>` : "");
+      `<span class="pnum"><span class="pfx" id="nvPfx">${esc(myOrgs[0])}</span><input class="ci" id="nvPlate" inputmode="numeric" maxlength="5" placeholder="901" aria-label="새 장비 도공번호(숫자만)"></span><button type="button" class="btn" id="vehAdd">추가</button>` : "") +
+      (all ? `<span class="tb-right mode" role="group" aria-label="지원 구분"><label title="이 기준일자에 확정된 지사만 고름"><input type="checkbox" id="modeInit" ${S.revisedMode ? "" : "checked"}> 최초 지원</label>` +
+        `<label title="모든 지사 중에서 고름"><input type="checkbox" id="modeRev" ${S.revisedMode ? "checked" : ""}> 수정본</label></span>` : "") + `</div>` : "");
   const dates = windowDates(), head = dates.map((d, i) => `<th class="dayh">지원일 ${i + 1}<span class="sub">` +
     (i === 0 && all ? `<input class="ci" type="date" id="day1In" value="${esc(d)}" aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동)">` : esc(fmtMD(d))) + `</span></th>`).join("");
   const rows = fleetRows().map(v => fleetRowHtml(v, dates, choices, all)).join("");
@@ -345,29 +359,42 @@ function patchCell(vid, d) {
   afterAnyChange();
 }
 function afterAnyChange() { hideTip(); renderMatrix(); renderDest(); updateSavebars(); }   // 다른 탭(이동 현황)과 저장 바만 새로
-const TIMES = Array.from({ length: 144 }, (_, i) => p2(Math.floor(i / 6)) + ":" + p2(i % 6 * 10));   // 00:00 ~ 23:50, 10분 단위
+// 도착 예상 시각: 직접 입력. 0730 / 730 / 7:30 → 07:30, 7 → 07:00, 빈칸 → 없음. 잘못된 값은 undefined
+function normTime(x) {
+  x = String(x || "").trim(); if (!x) return null;
+  let h, m; const c = x.match(/^(\d{1,2}):(\d{1,2})$/);
+  if (c) { h = +c[1]; m = +c[2]; }
+  else if (/^\d{1,4}$/.test(x)) { if (x.length <= 2) { h = +x; m = 0; } else { h = +x.slice(0, -2); m = +x.slice(-2); } }
+  else return undefined;
+  return h <= 23 && m <= 59 ? p2(h) + ":" + p2(m) : undefined;
+}
 function slotCell(v, d, ed, confirmed) {
   const rec = recOf(d, v.id), stops = rec.stops, k = rk(d, v.id), t = `vehicle_routes:${d},${v.id}`, changed = S.draft.has(k), vid = esc(v.id);
-  if (!ed) return stops.length ? `<div class="slot${changed ? " changed" : ""}"${hvA(t)}>${stops.map((x, j) => `<div class="sl-x">${esc(bn(x))}${rec.times[j] ? ` <small>${esc(rec.times[j])}</small>` : ""}</div>`).join("")}${rec.revised ? '<span class="tag rev">수정본</span>' : ""}</div>` : `<span class="muted">-</span>`;
-  // 최초 지원 = 이 기준일자에 확정된 지사만 / 수정본 = 모든 지사
-  const choices = rec.revised ? S.order : confirmed, off = vval(v, "status") !== "O", ids = new Set(choices.map(b => b.id)), pend = rec.revised ? [] : pendingChoices();
+  const rev = rec.revised ? '<span class="tag rev">수정본</span>' : "";
+  const tIn = (val, j, extra, dis) => `<input class="ci tm" data-rt="${vid}" data-rd="${d}" data-fk="${extra ? "tn" : "t"}:${d}:${vid}:${j}" value="${esc(val || "")}" placeholder="--:--" maxlength="5" inputmode="numeric" ${dis ? "disabled" : ""} title="도착 예상 시각(예: 0730 → 07:30)" aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))} 지사 ${j + 1} 도착 예상 시각">`;
+  if (!ed) {                     // 경로의 지사는 못 고침. 지원장비 계정은 자기 기관 장비의 도착 예상 시각만 고침
+    if (!stops.length) return `<span class="muted">-</span>`;
+    const timeEd = canVeh(v);
+    return `<div class="slot${changed ? " changed" : ""}"${hvA(t)}>${stops.map((x, j) => `<div class="sl-x slot-x"><span class="sl-n">${esc(bn(x))}</span>${timeEd ? tIn(rec.times[j], j, false, false) : rec.times[j] ? ` <small>${esc(rec.times[j])}</small>` : ""}</div>`).join("")}${rev}</div>`;
+  }
+  // 표 위 [최초 지원] = 이 기준일자에 확정된 지사만 / [수정본] = 모든 지사 (한 번에 적용)
+  const choices = S.revisedMode ? S.order : confirmed, off = vval(v, "status") !== "O", ids = new Set(choices.map(b => b.id)), pend = S.revisedMode ? [] : pendingChoices();
   const opts = cur => `<option value="">지사 선택</option>` + S.hqs.map(h => { const l = choices.filter(b => b.hq_id === h.id); return l.length ? `<optgroup label="${esc(h.name)}">${l.map(b => `<option value="${b.id}" ${cur === b.id ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</optgroup>` : ""; }).join("") +
     (cur && !ids.has(cur) ? `<option value="${esc(cur)}" selected>${esc(bn(cur))} (미확정)</option>` : "") +
     (pend.length ? `<optgroup label="확정 전(요청만) — 고를 수 없음">${pend.map(b => `<option disabled>${esc(b.name)}</option>`).join("")}</optgroup>` : "") + `<option value="__del">지우기</option>`;
   const sel = (cur, j, extra) => `<select class="ci" data-rv="${vid}" data-rd="${d}" data-fk="${extra ? "rn" : "r"}:${d}:${vid}:${j}" ${off ? "disabled" : ""} aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))} 피지원 지사 ${j + 1}">${opts(cur)}</select>` +
-    `<select class="ci tm" data-rt="${vid}" data-rd="${d}" data-fk="${extra ? "tn" : "t"}:${d}:${vid}:${j}" ${off ? "disabled" : ""} title="도착 예상 시각" aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))} 지사 ${j + 1} 도착 예상 시각"><option value="">시각</option>${TIMES.map(x => `<option ${x === (extra ? "" : rec.times[j] || "") ? "selected" : ""}>${x}</option>`).join("")}</select>`;
+    tIn(extra ? "" : rec.times[j], j, extra, off);
   const extra = S.extraStop.has(k), list = stops.length ? stops : [""];
-  const kind = `<div class="kind"><label><input type="checkbox" data-kind="0" data-kv="${vid}" data-rd="${d}" data-fk="k0:${d}:${vid}" ${rec.revised ? "" : "checked"} ${off ? "disabled" : ""}> 최초 지원</label>` +
-    `<label title="체크하면 모든 지사 중에서 고를 수 있음"><input type="checkbox" data-kind="1" data-kv="${vid}" data-rd="${d}" data-fk="k1:${d}:${vid}" ${rec.revised ? "checked" : ""} ${off ? "disabled" : ""}> 수정본</label></div>`;
   const plus = `<button type="button" class="btn sm" data-stop-add="${esc(k)}" ${off || !stops.length ? "disabled" : ""} aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))}에 들르는 지사 추가" title="이 날 들르는 지사 추가">＋</button>`;
-  return `<div class="slot${changed ? " changed" : ""}"${hvA(t)}>${list.map((x, j) => `<div class="slot-x">${sel(x, j, false)}${j === list.length - 1 && !extra ? plus : ""}</div>`).join("")}${extra ? `<div class="slot-x">${sel("", list.length, true)}</div>` : ""}${kind}</div>`;
+  return `<div class="slot${changed ? " changed" : ""}"${hvA(t)}>${list.map((x, j) => `<div class="slot-x">${sel(x, j, false)}${j === list.length - 1 && !extra ? plus : ""}</div>`).join("")}${extra ? `<div class="slot-x">${sel("", list.length, true)}</div>` : ""}${rev}</div>`;
 }
-// 칸 안의 줄(지사 + 도착 예상 시각)을 모아 경로 기록으로. 구분(최초/수정본)은 지금 값을 그대로
-function readCell(vid, d) {
-  const td = document.querySelector(`#eqTable td[data-cell="${CSS.escape(rk(d, vid))}"]`), stops = [], times = [];
-  if (td) td.querySelectorAll(".slot-x").forEach(row => { const s = row.querySelector("select[data-rv]"), tm = row.querySelector("select[data-rt]");
-    if (s && s.value && s.value !== "__del") { stops.push(s.value); times.push(tm && tm.value ? tm.value : null); } });
-  return { stops, times, revised: recOf(d, vid).revised };
+// 칸 안의 줄(지사 + 도착 예상 시각)을 모아 경로 기록으로. 지사를 고치면 구분 = 표 위 [최초 지원]/[수정본], 시각만 고치면 구분은 그대로
+function readCell(vid, d, timeOnly) {
+  const td = document.querySelector(`#eqTable td[data-cell="${CSS.escape(rk(d, vid))}"]`), rec = recOf(d, vid), stops = [], times = [];
+  if (td) td.querySelectorAll(".slot-x").forEach((row, j) => { const s = row.querySelector("select[data-rv]"), tm = row.querySelector("input[data-rt]");
+    const stop = s ? s.value : rec.stops[j];
+    if (stop && stop !== "__del") { stops.push(stop); times.push(tm ? normTime(tm.value) || null : rec.times[j] || null); } });
+  return { stops, times, revised: timeOnly ? rec.revised : S.revisedMode };
 }
 async function confirmFleet() {
   if (S.preview) return toast("미리보기에서는 확정할 수 없습니다. '내 아이디'로 돌아오세요.", true);
@@ -585,7 +612,7 @@ async function openSheet(vid) {
   const [cls, label] = STATUS[vval(v, "status")] || STATUS[""], rec = recOf(S.date, v.id), cur = rec.stops;
   sheet.innerHTML = `<button type="button" class="sheet-close" id="sheetClose">닫기</button><span class="plate" style="font-size:18px">${esc(vval(v, "plate"))}</span>
     <h2 id="sheetTitle">${esc(v.org)} ${esc(v.type)}</h2>${H("vehicles:" + v.id, "status", `<span class="status ${cls}">${label}</span>`)}
-    <section><h3>${esc(fmtMD(S.date))} 이동</h3><dl class="kv"><dt>출발</dt><dd>${esc(v.org)} 기계화부</dd>
+    <section><h3>${esc(fmtMD(S.date))} 이동</h3><dl class="kv"><dt>지원기관</dt><dd>${esc(v.org)} 기계화부</dd>
       <dt>들르는 지사</dt><dd>${cur.length ? cur.map(x => esc(bn(x))).join(" → ") + (rec.revised ? ' <span class="tag rev">수정본</span>' : "") : "-"}</dd>
       <dt>도착 예상</dt><dd>${cur.length ? cur.map((x, j) => `${esc(bn(x))} ${esc(rec.times[j] ? fmtMD(S.date) + " " + rec.times[j] : "미정")}`).join("<br>") : "-"}</dd></dl></section>
     <section><h3>날짜별 경로 기록</h3><div id="vhist" class="muted">불러오는 중…</div></section>`;
@@ -618,7 +645,6 @@ function updateSavebars() {
 addEventListener("beforeunload", e => { if (fleetDirty() || branchDirty()) { e.preventDefault(); e.returnValue = ""; } });
 function refresh() {
   hideTip();
-  banner("perm-move", false, "", "위에서 고른 날짜(‹ ›)에 이동하는 장비를 본부 → 지사 순서로 보여 줍니다. 수정은 권한에 따라 '기관별 장비'·'지사별 요청·편성'에서 합니다.");
   renderMatrix(); renderFilters(); renderDest(); renderFleet(); renderBranch(); renderLog(); updateSavebars();
   $("logTabBtn").hidden = !can("log.view");
   if (!can("log.view") && !$("panel-log").hidden) document.querySelector('[data-tab="move"]').click();
@@ -643,15 +669,14 @@ document.addEventListener("change", async e => {
     const vid = t.dataset.rv, d = t.dataset.rd, v = vehById(vid); if (!v || !canRoute()) return refresh();
     S.extraStop.delete(rk(d, vid)); setRoute(d, vid, readCell(vid, d)); return patchCell(vid, d);
   }
-  if (t.dataset.rt) {                       // 도착 예상 시각
-    const vid = t.dataset.rt, d = t.dataset.rd; if (!canRoute()) return refresh();
-    setRoute(d, vid, readCell(vid, d)); return patchCell(vid, d);
+  if (t.dataset.rt) {                       // 도착 예상 시각(관리자, 또는 지원장비 = 자기 기관 장비의 정해진 경로)
+    const vid = t.dataset.rt, d = t.dataset.rd, v = vehById(vid); if (!v || !(canRoute() || canVeh(v))) return refresh();
+    const nt = normTime(t.value);
+    if (nt === undefined) { toast("시각은 0730 또는 07:30 처럼 넣으세요 (00:00~23:59)", true); return patchCell(vid, d); }
+    t.value = nt || ""; setRoute(d, vid, readCell(vid, d, true)); return patchCell(vid, d);
   }
-  if (t.dataset.kind !== undefined) {       // 최초 지원 / 수정본(둘 중 하나): 수정본이면 모든 지사 중에서 고름
-    const vid = t.dataset.kv, d = t.dataset.rd; if (!canRoute()) return refresh();
-    const revised = t.dataset.kind === "1" ? t.checked : !t.checked, rec = recOf(d, vid);
-    if (rec.stops.length) setRoute(d, vid, { ...rec, revised }); else S.blankKind.set(rk(d, vid), revised);   // 빈 칸은 저장할 것이 없으니 고를 목록만 바꿈
-    return patchCell(vid, d);
+  if (t.id === "modeInit" || t.id === "modeRev") {     // [최초 지원]/[수정본]: 둘 중 하나, 표 전체에 한 번에 적용
+    S.revisedMode = t.id === "modeRev" ? t.checked : !t.checked; return renderFleet();
   }
   if (t.dataset.vs) {                       // 지원 여부: 지원이 아니면 오늘 이후 칸의 경로를 비움(확정 전 되돌리기 가능)
     const v = vehById(t.dataset.vs); if (!v || !canVeh(v)) return refresh();
@@ -711,7 +736,7 @@ document.addEventListener("keydown", e => { const tr = e.target.closest && e.tar
 document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
   document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", x === t));
   document.querySelectorAll(".panel").forEach(p => p.hidden = p.id !== "panel-" + t.dataset.tab);
-  hideTip();
+  hideTip(); if (t.dataset.tab === "move") fitFilters();
 });
 const dateInput = $("dateInput"); dateInput.value = S.date;
 async function setDate(v) { if (!v) return; S.date = v; dateInput.value = v; await ensureRoutes(); renderMatrix(); renderDest(); }   // 이동 현황은 고른 날짜 기준

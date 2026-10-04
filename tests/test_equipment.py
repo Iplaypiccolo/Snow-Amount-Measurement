@@ -60,11 +60,14 @@ def t_load(p):
 def t_move_hierarchy(p):
     """이동 현황: 본부 → 지사 계층, 그날 지원받는 지사만, 본부 줄은 장비 1대를 한 번만 셈"""
     check(rows(p) == ["강원\n본부", "└대관령", "└양양", "충북\n본부", "└엄정"], rows(p))
-    hq = p.locator("#matrix tbody tr.hqrow").first.locator("td").all_inner_texts()
-    check(hq[-1].strip() == "22", f"강원 합계 22대(대관령 11 + 양양 11, 겹치는 장비 없음): {hq}")
-    go_date(p, day(p, 2))            # 모레: V001 이 대관령 → 양양 두 곳
-    t = p.locator("#matrix tbody tr.hqrow").first.locator("td").last.inner_text().strip()
-    b = [x.locator("td").last.inner_text().strip() for x in p.locator("#matrix tbody tr.brrow").all()]
+    head = p.locator("#matrix thead").inner_text(); check("제설차" in head and "제설기" in head and "이동정비차" not in head and "차 " not in p.locator("#matrix").inner_text(), "제설차·제설기로 정확히, 이동정비차 없음")
+    hq = [x.strip() for x in p.locator("#matrix tbody tr.hqrow").first.locator("td").all_inner_texts()]
+    want = ev(p, "(() => { const ids = new Set(S.branches.filter(b => S.hqById[b.hq_id].name === '강원').map(b => b.id)); const m = movesOn(todayISO()).filter(x => x.stops.some(s => ids.has(s))); return ['제설차','제설기'].map(t => String(m.filter(x => x.v.type === t).length)); })()")
+    check(hq[-2:] == want, f"강원 합계(제설차·제설기, 이동정비차 제외): {hq[-2:]} vs {want}")
+    check(p.locator("#moveTitle").inner_text().endswith("장비 지원 현황") and p.locator("#perm-move").count() == 0 and "어느 기관에서" not in p.locator("body").inner_text(), "제목·안내 정리")
+    go_date(p, day(p, 2))            # 모레: V001(제설차)이 대관령 → 양양 두 곳
+    t = p.locator("#matrix tbody tr.hqrow").first.locator("td").nth(-2).inner_text().strip()
+    b = [x.locator("td").nth(-2).inner_text().strip() for x in p.locator("#matrix tbody tr.brrow").all()]
     check(int(t) == int(b[0]) + int(b[1]) - 1, f"두 곳을 들른 장비는 본부 합계에서 1대로: {t} vs {b}")
     go_date(p, day(p, -7))
     check(rows(p) == ["강원\n본부", "└춘천", "충북\n본부", "└엄정"], rows(p))
@@ -73,6 +76,10 @@ def t_move_hierarchy(p):
 
 def t_dest_order_and_day_tag(p):
     heads = p.locator("#destList .hq-head").all_inner_texts(); check(heads == ["강원본부", "충북본부"], heads)
+    check(p.locator(".fgroup.left .flabel").inner_text() == "지원기관" and p.locator("[data-type='이동정비차']").count() == 0, "필터: 지원기관, 이동정비차 없음")
+    check("이동정비차" not in p.locator("#destList").inner_text() and "편성 제설차" not in p.locator("#destList").inner_text(), "장비 세부에 이동정비차·편성 대수 없음")
+    card = p.locator("#destList .dest").first
+    check("도착 예상" in card.locator(".dest-time").inner_text() and "21:30" in card.locator(".dest-time").inner_text() and "도착 요청" in card.locator(".tag.req").inner_text(), "큰 시각 = 도착 예상, 도착 요청은 아래 표지")
     names = p.locator("#destList .dest-name").evaluate_all("hs => hs.map(h => h.childNodes[0].textContent.trim())"); check(names == ["대관령", "양양", "엄정"], names)
     v1 = p.locator(".vrow[data-vid=V001]").first.inner_text(); check("1일차 / 5일" in v1, v1)
     go_date(p, day(p, 1)); check("2일차 / 5일" in p.locator(".vrow[data-vid=V001]").first.inner_text(), "다음 날 2일차")
@@ -320,28 +327,36 @@ def t_ui_version_reload_once(p):
     p.unroute_all(behavior="ignoreErrors")
 
 def t_route_kind_and_eta(p):
-    """경로 칸: 최초 지원(확정된 지사만) / 수정본(모든 지사) 체크, 지사 옆 도착 예상 시각 → 이동 현황 장비 줄·장비 상세에 '도착 예상'"""
+    """표 위 [최초 지원]/[수정본] 한 곳(표 전체 적용), 지사 옆 도착 예상 시각은 직접 입력 → 이동 현황 장비 줄·상세에 도착 예상"""
     tab(p, "fleet"); d3 = day(p, 3)
-    k0, k1 = f"[data-fk='k0:{d3}:V002']", f"[data-fk='k1:{d3}:V002']"
-    check(p.locator(k0).is_checked() and not p.locator(k1).is_checked(), "처음은 최초 지원")
+    check(p.locator("#modeInit").is_checked() and not p.locator("#modeRev").is_checked() and p.locator("[data-kind]").count() == 0, "구분은 표 위 한 곳(칸마다 없음)")
     enabled = lambda: [o for o in p.locator(rsel("V002", d3) + " option:not([disabled])").all_inner_texts() if o not in ("지사 선택", "지우기")]
     check(enabled() == ["대관령", "양양", "엄정"], enabled())
-    p.check(k1); p.wait_for_timeout(150)
-    check(p.locator(k1).is_checked() and not p.locator(k0).is_checked() and len(enabled()) == ev(p, "S.branches.length"), "수정본이면 모든 지사")
+    p.check("#modeRev"); p.wait_for_timeout(150)
+    check(not p.locator("#modeInit").is_checked() and len(enabled()) == ev(p, "S.branches.length") and len([o for o in p.locator(rsel("V003", d3) + " option:not([disabled])").all_inner_texts() if o not in ("지사 선택", "지우기")]) == ev(p, "S.branches.length"), "수정본이면 모든 칸에서 모든 지사")
     p.select_option(rsel("V002", d3), bid(p, "인천")); p.wait_for_timeout(150)
-    p.select_option(f"select[data-fk='t:{d3}:V002:0']", "07:30"); p.wait_for_timeout(150)
-    tms = p.locator(f"select[data-fk='t:{d3}:V002:0'] option").all_inner_texts(); check(tms[0] == "시각" and tms[1] == "00:00" and tms[-1] == "23:50" and len(tms) == 145, "시각 00:00~23:50, 10분 단위")
-    check(ev(p, f"JSON.stringify(recOf('{d3}', 'V002'))") == '{"stops":["%s"],"revised":true,"times":["07:30"]}' % bid(p, "인천"), ev(p, f"JSON.stringify(recOf('{d3}', 'V002'))"))
+    ti = f"input[data-fk='t:{d3}:V002:0']"
+    p.fill(ti, "735"); p.press(ti, "Tab"); p.wait_for_timeout(150); check(p.locator(ti).input_value() == "07:35", "735 → 07:35 (분은 아무 숫자)")
+    p.fill(ti, "2561"); p.press(ti, "Tab"); p.wait_for_timeout(150); check("0730" in toast(p) and p.locator(ti).input_value() == "07:35", "잘못된 시각 거절")
+    check(ev(p, f"JSON.stringify(recOf('{d3}', 'V002'))") == '{"stops":["%s"],"revised":true,"times":["07:35"]}' % bid(p, "인천"), ev(p, f"JSON.stringify(recOf('{d3}', 'V002'))"))
     confirm_fleet(p); check("확정했습니다" in toast(p), toast(p))
-    p.uncheck(k1); p.wait_for_timeout(150)                         # 최초 지원으로 되돌리면 확정 안 된 인천은 '(미확정)'으로 남음
-    check("인천 (미확정)" in p.locator(rsel("V002", d3)).inner_text() and p.locator(k0).is_checked(), "최초 지원으로 바꾸면 미확정 표시")
-    p.click("#save-fleet [data-revert]"); p.wait_for_timeout(150)
+    p.check("#modeInit"); p.wait_for_timeout(150)
+    check("인천 (미확정)" in p.locator(rsel("V002", d3)).inner_text() and "수정본" in p.locator(f"td[data-cell='{d3}|V002']").inner_text(), "최초 지원 목록에서는 미확정 표시, 칸에 수정본 표지")
     tab(p, "move"); go_date(p, d3)
-    row = p.locator(".vrow[data-vid=V002]").first.inner_text(); check("도착 예상 07:30" in row and "수정본" in row, row)
+    row = p.locator(".vrow[data-vid=V002]").first.inner_text(); check("07:35 도착 예상" in row and "수정본" in row, row)
+    check("07:35" in p.locator(".dest", has_text="인천").locator(".dest-time").inner_text(), "카드 큰 시각 = 도착 예상")
     p.click(".vrow[data-vid=V002]"); p.wait_for_selector("ol.vhist li")
-    sh = p.locator("#sheet").inner_text(); check("도착 예상" in sh and "07:30" in sh and "도착 요청" not in sh, sh)
-    check("인천 07:30" in p.locator("ol.vhist").inner_text(), "날짜별 기록에도 시각")
+    sh = p.locator("#sheet").inner_text(); check("도착 예상" in sh and "07:35" in sh and "도착 요청" not in sh and "지원기관" in sh, sh)
+    check("인천 07:35" in p.locator("ol.vhist").inner_text(), "날짜별 기록에도 시각")
     p.click("#sheetClose")
+
+def t_equip_can_edit_eta(p):
+    """지원장비 계정: 자기 기관 장비의 정해진 경로에서 도착 예상 시각만 입력(지사는 못 바꿈)"""
+    as_user(p, "eq-cb"); tab(p, "fleet"); d0 = day(p, 0)
+    check(p.locator("select[data-rv]").count() == 0 and p.locator(f"input[data-fk='t:{d0}:V014:0']").count() == 1 and p.locator(f"input[data-fk='t:{d0}:V001:0']").count() == 0, "자기 기관 장비의 시각 칸만")
+    ti = f"input[data-fk='t:{d0}:V014:0']"; p.fill(ti, "0845"); p.press(ti, "Tab"); p.wait_for_timeout(150)
+    confirm_fleet(p); check("확정했습니다" in toast(p) and route(p, "V014", d0) == ["양양"] and ev(p, f"recOf('{d0}', 'V014').times[0]") == "08:45", toast(p))
+    check(p.locator("#modeInit").count() == 0, "최초/수정본은 관리자만")
 
 def t_bulk_confirm_and_no_holdings(p):
     tab(p, "branch")
@@ -357,7 +372,7 @@ TESTS = [t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_con
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
          t_typing_then_clicking_next_input_keeps_both, t_round_delete, t_pending_branches_shown_grey, t_ui_version_reload_once,
-         t_route_kind_and_eta, t_bulk_confirm_and_no_holdings]
+         t_route_kind_and_eta, t_equip_can_edit_eta, t_bulk_confirm_and_no_holdings]
 
 # ---------------------------------------------------------------- 서버 모드(가짜 Supabase, tests/_sb_mock.py) — 실제 로그인 권한·저장 함수 호출
 sys.path.insert(0, str(Path(__file__).resolve().parent))

@@ -421,3 +421,40 @@ table.branch { min-width: 1020px; width: 100%; }
 .tag.eta { background: var(--go-bg); color: var(--go); font-weight: 600; }
 .tag.rev { background: color-mix(in srgb, var(--plow) 22%, transparent); color: var(--ink); }
 .slot { min-width: 210px; }
+
+/* ---------- 이동 현황 다듬기(2026-10-04): 큰 제목, 지원기관마다 제설차·제설기 칸, 가운데 구분선 필터 ---------- */
+.summary-head h2 { font-size: 21px; font-weight: 800; letter-spacing: -0.01em; }
+.summary-head p { font-size: 15px; color: var(--ink); } .summary-head p b { font-weight: 800; }
+.summary-head p .hint { color: var(--ink-soft); font-size: 12.5px; margin-left: 8px; }
+table.matrix { font-size: 15px; min-width: 900px; }
+.matrix thead th { background: var(--bg); color: var(--ink); font-weight: 700; font-size: 14px; padding: 9px 8px; }
+.matrix thead tr:first-child th.orgh { border-bottom: 2px solid var(--line); font-size: 15px; }
+.matrix thead tr:nth-child(2) th { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); top: 40px; }
+.matrix th.c2, .matrix td.c2 { border-right: 1px solid var(--line); }
+.matrix td { font-weight: 700; font-variant-numeric: tabular-nums; }
+.matrix td.zero { color: var(--line); font-weight: 400; }
+.matrix .tot { background: color-mix(in srgb, var(--plow) 10%, var(--surface)); }
+.matrix tr.hqrow th, .matrix tr.hqrow td { background: color-mix(in srgb, var(--ink) 7%, var(--surface)); font-weight: 800; }
+.matrix tr.hqrow td.tot { background: color-mix(in srgb, var(--plow) 18%, var(--surface)); }
+.matrix tr.brrow th { font-size: 15px; }
+.matrix tbody tr:hover td, .matrix tbody tr:hover th { background: color-mix(in srgb, var(--plow) 8%, var(--surface)); }
+.matrix tfoot th, .matrix tfoot td { border-top: 2px solid var(--ink); font-size: 15.5px; }
+/* 필터: 구분선이 가운데, 한 줄에 안 들어가면 모두 오른쪽 정렬(구분선 없음) */
+.filters.split { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0 18px; align-items: center; }
+.filters.split .fgroup { flex-wrap: nowrap; min-width: 0; overflow: hidden; }
+.filters.split .fgroup.left { justify-content: flex-end; }
+.filters.split .fgroup.right { justify-content: flex-start; margin: 0; padding: 0; border: 0; }
+.filters.split .fsep { width: 2px; align-self: stretch; background: var(--line); }
+.filters.split.stacked { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.filters.split.stacked .fsep { display: none; }
+.filters.split.stacked .fgroup { flex-wrap: wrap; justify-content: flex-end; overflow: visible; }
+@media (max-width: 720px) { .filters.split .fgroup.right { border-top: 0; padding-top: 0; width: auto; } }
+.vfrom::before { content: "지원기관 "; }
+.tag.req { background: var(--wait-bg); color: var(--ink); font-weight: 600; }
+/* 기관별 장비: 도착 예상 시각 직접 입력, 표 위 최초 지원/수정본 */
+.eq input.ci.tm { width: 62px; min-height: 30px; font-size: 12.5px; padding: 2px 4px; text-align: center; font-variant-numeric: tabular-nums; }
+.slot .sl-x.slot-x { display: flex; gap: 6px; align-items: center; }
+.tb-right.mode { gap: 12px; font-size: 13.5px; }
+.tb-right.mode label { display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
+.slot { min-width: 190px; }
+.slot .tag.rev { align-self: flex-start; }
