@@ -1,19 +1,17 @@
 """
-장비 지원 페이지 자동 테스트
-- 하는 일: 브라우저를 직접 띄워서 역할별 권한, 저장, 수정기록, 로그, 일자별 지원 기관 등이
-          "전과 똑같이 동작하는지" 확인합니다. 하나라도 틀리면 FAIL 로 표시하고 종료 코드 1을 돌려줍니다.
+장비 지원 페이지 자동 테스트 (샘플 모드 ?sample=1 — 서버 없이 같은 권한 규칙을 흉내 내는 샘플 자료로)
+- 하는 일: 브라우저를 직접 띄워서 권한별 화면, 날짜별 경로 확정·기록 유지, 기준일자·확정 지사, 이동 현황 계층, 수정 기록 말풍선 등을 확인합니다.
+  하나라도 틀리면 FAIL 로 표시하고 종료 코드 1을 돌려줍니다.
 - 실행 방법 (저장소 맨 위 폴더에서):
       pip install playwright
       playwright install chromium
       python tests/test_equipment.py
 """
-import functools, http.server, socketserver, sys, threading, traceback
+import functools, http.server, socketserver, sys, threading
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent
-handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(ROOT))
-handler.log_message = lambda *a, **k: None
 class Quiet(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a, **k): pass
 # 여러 요청을 동시에 처리(한 번에 하나씩이면 큰 JSON 을 보내는 동안 스크립트 요청이 밀려 시험이 시간 초과로 흔들림)
@@ -21,7 +19,7 @@ socketserver.ThreadingTCPServer.daemon_threads = True
 server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), functools.partial(Quiet, directory=str(ROOT)))
 PORT = server.server_address[1]
 threading.Thread(target=server.serve_forever, daemon=True).start()
-URL = f"http://127.0.0.1:{PORT}/equipment/index.html"
+URL = f"http://127.0.0.1:{PORT}/equipment/index.html?sample=1"
 
 results, errors = [], []
 def check(cond, msg):
@@ -31,8 +29,7 @@ def run(name, fn, pw_browser):
     page = pw_browser.new_page(viewport={"width": 1440, "height": 1000})
     page.on("pageerror", lambda e: errors.append(f"[{name}] {e}"))
     page.on("dialog", lambda d: d.accept())
-    page.add_init_script("localStorage.setItem('ss_session', JSON.stringify({access_token:'t',refresh_token:'r',expires_at:Date.now()+3.6e6,user_id:'u',persist:true,auto_until:Date.now()+1e9}))")   # 로그인한 상태로 시작
-    page.goto(URL); page.wait_for_timeout(250)
+    page.goto(URL); page.wait_for_selector("#matrix tbody tr", timeout=15000)
     try:
         fn(page); results.append((name, True, ""))
     except Exception as e:
@@ -40,145 +37,193 @@ def run(name, fn, pw_browser):
     finally:
         page.close()
 
-def as_user(p, uid): p.select_option("#userSel", uid); p.wait_for_timeout(150)
-def tab(p, t): p.click(f"[data-tab={t}]"); p.wait_for_timeout(150)
 def ev(p, js): return p.evaluate(js)
-def bars(p): return ev(p, "['fleet','branch'].map(t=>!document.getElementById('save-'+t).hidden)")
+def as_user(p, uid): p.select_option("#userSel", uid); p.wait_for_timeout(200)
+def tab(p, t): p.click(f"[data-tab={t}]"); p.wait_for_timeout(150)
+def day(p, n): return ev(p, f"addDays(todayISO(), {n})")
+def go_date(p, iso): p.fill("#dateInput", iso); p.dispatch_event("#dateInput", "change"); p.wait_for_timeout(200)
 def toast(p): return p.locator("#toast").inner_text()
-def save(p, t): p.click(f"#save-{t} [data-save]"); p.wait_for_timeout(250)
-def vehicle(p, cond): return ev(p, f"DATA.vehicles.find(v => {cond}).id")          # 장비 고유 번호(차량번호를 고쳐도 그대로)
-def days(p, vid): return ev(p, f"DATA.vehicles.find(v => v.id === '{vid}').days")
-def go_date(p, iso): p.fill("#dateInput", iso); p.dispatch_event("#dateInput", "change"); p.wait_for_timeout(150)
+def route(p, vid, d): return ev(p, f"routeOf('{d}', '{vid}').map(bn)")
+def rsel(vid, d, j=0): return f"select[data-fk='r:{d}:{vid}:{j}']"
+def confirm_fleet(p): p.click("#save-fleet [data-save]"); p.wait_for_timeout(300)
+def save_branch(p): p.click("#save-branch [data-save]"); p.wait_for_timeout(300)
+def rows(p): return [t.split("\t")[0].strip() for t in p.locator("#matrix tbody tr").all_inner_texts()]
+def bid(p, name): return ev(p, f"S.branches.find(b => b.name === '{name}').id")
 
 # ---------------------------------------------------------------- 테스트 목록
 def t_load(p):
     names = p.locator(".tab:visible").all_inner_texts()
     check(names == ["이동 현황", "기관별 장비", "지사별 요청·편성", "로그 기록"], names)
+    check(p.locator("#dateInput").input_value() == day(p, 0), "오늘 날짜로 시작")
+    check(not p.locator("#loading").is_visible(), "불러오는 중 표시가 사라져야 함")
 
-def t_role_bars_and_tabs(p):
-    check(bars(p) == [True, True], "관리자: 저장 바 2개")
-    check(p.locator("#logTabBtn").is_visible(), "관리자: 로그 탭 보임")
-    as_user(p, "br1");  check(bars(p) == [False, True], f"지사: {bars(p)}")
-    check(p.locator("#logTabBtn").is_hidden(), "지사: 로그 탭 숨김")
-    as_user(p, "eq1");  check(bars(p) == [True, False], f"지원장비: {bars(p)}")
+def t_move_hierarchy(p):
+    """이동 현황: 본부 → 지사 계층, 그날 지원받는 지사만, 본부 줄은 장비 1대를 한 번만 셈"""
+    check(rows(p) == ["강원\n본부", "└대관령", "└양양", "충북\n본부", "└엄정"], rows(p))
+    hq = p.locator("#matrix tbody tr.hqrow").first.locator("td").all_inner_texts()
+    check(hq[-1].strip() == "22", f"강원 합계 22대(대관령 11 + 양양 11, 겹치는 장비 없음): {hq}")
+    go_date(p, day(p, 2))            # 모레: V001 이 대관령 → 양양 두 곳
+    t = p.locator("#matrix tbody tr.hqrow").first.locator("td").last.inner_text().strip()
+    b = [x.locator("td").last.inner_text().strip() for x in p.locator("#matrix tbody tr.brrow").all()]
+    check(int(t) == int(b[0]) + int(b[1]) - 1, f"두 곳을 들른 장비는 본부 합계에서 1대로: {t} vs {b}")
+    go_date(p, day(p, -7))
+    check(rows(p) == ["강원\n본부", "└춘천", "충북\n본부", "└엄정"], rows(p))
+    go_date(p, day(p, 30)); check("이동하는 장비가 없습니다" in p.locator("#matrix").inner_text(), "빈 날")
+    check(p.locator("#destList .hq-head").count() == 0, "카드 없음")
 
-def t_permission_bypass_blocked(p):
-    as_user(p, "br1")      # 대관령지사
-    before = ev(p, "JSON.stringify(DATA.requests)")
-    ev(p, "commit('req:양양:req.truck', 77)")                                  # 다른 지사
-    ev(p, "commit('veh:' + DATA.vehicles[0].id + ':status', 'X')")         # 장비
-    check(ev(p, "JSON.stringify(DATA.requests)") == before, "지사 아이디가 다른 지사 값을 바꿈")
-    check(ev(p, "DATA.vehicles[0].status") != "X" or True, "")
-    as_user(p, "eq1")
-    ev(p, "commit('req:대관령:req.truck', 55)")
-    check(ev(p, "DATA.requests['대관령'].req.truck") != 55, "지원장비 아이디가 지사 요청을 바꿈")
+def t_dest_order_and_day_tag(p):
+    heads = p.locator("#destList .hq-head").all_inner_texts(); check(heads == ["강원본부", "충북본부"], heads)
+    names = p.locator("#destList .dest-name").evaluate_all("hs => hs.map(h => h.childNodes[0].textContent.trim())"); check(names == ["대관령", "양양", "엄정"], names)
+    v1 = p.locator(".vrow[data-vid=V001]").first.inner_text(); check("1일차 / 5일" in v1, v1)
+    go_date(p, day(p, 1)); check("2일차 / 5일" in p.locator(".vrow[data-vid=V001]").first.inner_text(), "다음 날 2일차")
+    p.click("[data-type='제설기']"); check(all("제설기" in x for x in p.locator("#destList .vrow").all_inner_texts()), "장비 거르기")
 
-def t_branch_user_sees_only_own_row_inputs(p):
-    as_user(p, "br2"); tab(p, "branch")
-    rows = ev(p, "[...new Set([...document.querySelectorAll('#branchTable input')].map(i => i.dataset.edit.split(':')[1]))]")
-    check(rows == ["양양"], rows)
+def t_route_choices_confirmed_only(p):
+    """경로의 피지원 지사는 고른 기준일자에서 편성이 확정된 지사만(춘천은 요청만 하고 미확정)"""
+    tab(p, "fleet"); d0 = day(p, 0)
+    opts = p.locator(rsel("V004", d0) + " option").all_inner_texts()
+    check([o for o in opts if o not in ("지사 선택", "지우기")] == ["대관령", "양양", "엄정"], opts)
+    old = ev(p, "S.rounds.find(r => r.start_date === addDays(todayISO(), -7)).id")
+    p.select_option("#roundSelFleet", str(old)); p.wait_for_timeout(300)
+    check(p.locator("#day1In").input_value() == day(p, -7), "기준일자를 고르면 지원일 1도 그 날짜로")
+    opts = p.locator(rsel("V004", day(p, -7)) + " option").all_inner_texts()
+    check([o for o in opts if o not in ("지사 선택", "지우기")] == ["춘천", "엄정"], opts)
+    check(p.locator(rsel("V024", day(p, -7))).input_value() == bid(p, "춘천"), "지난 기록이 그대로 보임")
 
-def t_save_and_revert(p):
-    tab(p, "branch")
-    check(p.locator("#save-branch .save-state").inner_text() == "변경 사항 없음", "초기 상태")
-    i = p.locator('[data-edit="req:양양:req.truck"]'); old = i.input_value()
-    i.fill("9"); i.press("Tab"); p.wait_for_timeout(250)
-    check("저장하지 않은" in p.locator("#save-branch .save-state").inner_text(), "수정 후 표시")
-    n = ev(p, "LOG.length"); save(p, "branch")
-    check("저장했습니다" in toast(p), toast(p))
-    check(ev(p, "LOG.length") == n + 1, "저장 시 로그 1건")
-    last = ev(p, "LOG[LOG.length-1]"); check(last["kind"] == "수정" and last["to"] == 9, last)
-    i = p.locator('[data-edit="req:양양:req.blower"]'); i.fill("7"); i.press("Tab"); p.wait_for_timeout(250)
-    p.click("#save-branch [data-revert]"); p.wait_for_timeout(250)
-    check(ev(p, "DATA.requests['양양'].req.blower") != 7, "되돌리기 실패")
+def t_confirm_keeps_history(p):
+    """오늘 다른 지사로 확정해도 지난 날짜 경로는 남는다 — (날짜, 장비)마다 따로 저장"""
+    tab(p, "fleet"); d0 = day(p, 0)
+    p.select_option(rsel("V005", d0), bid(p, "대관령")); p.wait_for_timeout(200)
+    check(p.locator(rsel("V005", d0)).evaluate("e => e.closest('.slot').classList.contains('changed')"), "확정 전 칸 표시")
+    check("경로 1칸" in p.locator("#save-fleet .save-state").inner_text(), p.locator("#save-fleet .save-state").inner_text())
+    confirm_fleet(p); check("확정했습니다" in toast(p), toast(p))
+    check(ev(p, "S.draft.size") == 0 and route(p, "V005", d0) == ["대관령"], "확정 후 값")
+    tab(p, "move"); p.click(".vrow[data-vid=V005]"); p.wait_for_selector("ol.vhist li")
+    hist = p.locator("ol.vhist").inner_text(); check("엄정" in hist and "대관령" in hist and hist.count("\n") >= 2, hist)
+    p.click("#sheetClose")
+    go_date(p, day(p, -7)); check(p.locator(".vrow[data-vid=V005]").count() == 1, "1주 전 이동 기록 그대로")
 
-def t_unsaved_discarded_on_user_switch(p):
-    tab(p, "branch")
-    i = p.locator('[data-edit="req:양양:req.truck"]'); old = ev(p, "DATA.requests['양양'].req.truck")
-    i.fill("33"); i.press("Tab"); p.wait_for_timeout(250)
-    as_user(p, "br2")   # confirm 자동 승인 → 버리고 전환
-    check(ev(p, "DATA.requests['양양'].req.truck") == old, "저장 안 한 변경이 남음")
+def t_day1_header_and_columns(p):
+    tab(p, "fleet")
+    heads = lambda: [h.split("\n")[0] for h in p.locator("#eqTable thead th.dayh").all_inner_texts()]
+    check(heads() == ["지원일 1", "지원일 2", "지원일 3", "지원일 4"], heads())
+    check(p.locator("#eqTable select[data-rv='V001']").count() >= 4, "장비마다 날짜 칸")
+    p.fill("#day1In", day(p, 2)); p.dispatch_event("#day1In", "change"); p.wait_for_timeout(250)
+    check(p.locator(rsel("V001", day(p, 2), 0)).input_value() == bid(p, "대관령") and p.locator(rsel("V001", day(p, 2), 1)).input_value() == bid(p, "양양"), "지원일 1을 옮기면 모든 칸이 그 날짜부터")
+    check(p.locator("#eqTable thead th.dayh").nth(1).inner_text().find(ev(p, f"fmtMD('{day(p, 3)}')")) >= 0, "지원일 2 제목 = 다음 날")
+    p.select_option("#colsSel", "10"); p.wait_for_timeout(200); check(len(heads()) == 10, "10칸")
+    p.select_option("#colsSel", "2"); p.wait_for_timeout(200); check(len(heads()) == 2, "2칸")
+    as_user(p, "eq-sg"); tab(p, "fleet")
+    check(p.locator("#day1In").count() == 0 and "지원일 1" in p.locator("#eqTable thead").inner_text(), "지원장비 계정은 지원일 1 날짜를 못 바꿈(보기만)")
 
-def t_history_tooltip_today_max3(p):
-    tab(p, "branch")
-    # 양양 예상 적설: 오늘 4건 + 어제 1건 → 말풍선은 최신 3건만
-    p.locator('[data-edit="req:양양:snowCm"]').hover(); p.wait_for_timeout(200)
-    lines = p.locator("#tip div").count(); check(lines == 3, f"말풍선 줄 수 {lines}")
-    check("오늘 수정 기록" in p.locator("#tip").inner_text(), "제목")
-    p.mouse.move(0, 0); p.wait_for_timeout(100)
-    # 대관령 요청 제설차: 어제 기록뿐 → 표시 없음
-    check(p.locator('[data-edit="req:대관령:req.truck"]').get_attribute("data-hv") is None, "어제 기록이 보임")
-    # 비관리자에게는 표시 없음
-    as_user(p, "br2"); tab(p, "branch")
-    check(p.locator("[data-hv]").count() == 0, "관리자 아닌데 말풍선 대상이 있음")
+def t_multi_stop_add_and_delete(p):
+    tab(p, "fleet"); d1 = day(p, 1)
+    p.click(f"[data-stop-add='{d1}|V002']"); p.wait_for_timeout(150)
+    p.select_option(f"select[data-fk='rn:{d1}:V002:1']", bid(p, "양양")); p.wait_for_timeout(200)
+    check(route(p, "V002", d1) == ["대관령", "양양"], route(p, "V002", d1))
+    p.select_option(rsel("V002", d1, 0), "__del"); p.wait_for_timeout(200)
+    check(route(p, "V002", d1) == ["양양"], "지우기")
+    p.select_option(rsel("V002", d1, 0), "__del"); p.wait_for_timeout(200)
+    check(route(p, "V002", d1) == [] and ev(p, f"S.draft.get('{d1}|V002').length") == 0, "모두 지우면 빈 경로(확정하면 그 날짜 줄 삭제)")
+    confirm_fleet(p); check(ev(p, f"S.routes.has('{d1}|V002')") is False, "확정 후 서버에서도 삭제")
+
+def t_status_maintenance(p):
+    tab(p, "fleet"); d0 = day(p, 0)
+    opts = p.locator("[data-vs=V002] option").all_inner_texts(); check(opts == ["미정", "지원", "지원 불가", "정비중"], opts)
+    p.select_option("[data-vs=V002]", "M"); p.wait_for_timeout(250)
+    check("경로를 비웠습니다" in toast(p) and route(p, "V002", d0) == [], "정비중이면 오늘 이후 경로를 비움")
+    check(p.locator(rsel("V002", d0)).is_disabled(), "정비중이면 경로 입력 잠금")
+    check("정비중" in p.locator(".org").first.inner_text(), "기관 요약에 정비중")
+    p.click("#save-fleet [data-revert]"); p.wait_for_timeout(200)
+    check(route(p, "V002", d0) == ["대관령"] and p.locator("[data-vs=V002]").input_value() == "O", "되돌리기")
+
+def t_reset_button(p):
+    tab(p, "fleet"); p.click("[data-fo='서울경기']"); p.wait_for_timeout(150)
+    p.click("#fleetReset"); p.wait_for_timeout(250)
+    sg = ev(p, "S.vehicles.filter(v => v.org === '서울경기').map(v => v.id)")
+    check(all(ev(p, f"windowDates().every(d => routeOf(d, '{v}').length === 0) && vval(vehById('{v}'), 'status') === ''") for v in sg), "서울경기 장비 칸이 모두 비워짐")
+    check(route(p, "V014", day(p, 0)) == ["양양"], "보이지 않는(다른 기관) 장비는 그대로")
+    check(ev(p, "S.routes.get(rk(todayISO(), 'V001'))") is not None, "확정 전에는 서버 값 그대로")
+    p.click("#save-fleet [data-revert]"); p.wait_for_timeout(200); check(route(p, "V001", day(p, 0)) == ["대관령"], "되돌리기로 복구")
+
+def t_permissions_equip_own(p):
+    as_user(p, "eq-cb"); tab(p, "fleet")
+    check(p.locator("#logTabBtn").is_hidden(), "로그 탭 숨김")
+    check(p.locator("[data-vs=V013]").count() == 1 and p.locator("[data-vs=V001]").count() == 0, "충북 장비만 고칠 수 있음")
+    check(p.locator("#vehAdd").count() == 0 and p.locator("[data-vdel]").count() == 0, "장비 추가·삭제 없음")
+    check(p.locator("#save-fleet").is_visible() and not p.locator("#save-branch").is_visible(), "저장 바: 기관별 장비만")
+    p.select_option(rsel("V014", day(p, 2)), bid(p, "양양")); confirm_fleet(p); check("확정했습니다" in toast(p), toast(p))
+    ev(p, "S.vdraft.set('V001', { status: 'X' }), updateSavebars()"); confirm_fleet(p)          # 화면을 우회해도 서버 규칙이 막음
+    check("권한이 없습니다" in toast(p), toast(p))
+
+def t_branch_permissions(p):
+    as_user(p, "br1"); tab(p, "branch"); b = bid(p, "대관령")
+    ins = set(x.get_attribute("data-rq") for x in p.locator("#branchTable [data-rq]").all())
+    check(ins == {b}, f"대관령 행만 입력: {ins}")
+    check(p.locator(f"[data-rq={b}][data-f=assigned_truck]").count() == 0 and p.locator(f"[data-rq={b}][data-f=confirmed]").count() == 0, "편성·확정은 못 고침")
+    check(p.locator("#roundMake").count() == 0, "기준일자 만들기 없음")
+    as_user(p, "hq-gw"); tab(p, "branch"); p.click("#onlyActive"); p.wait_for_timeout(150)
+    ins = set(x.get_attribute("data-rq") for x in p.locator("#branchTable [data-rq]").all())
+    check(ins == set(ev(p, "S.branches.filter(b => b.hq_id === S.hqs.find(h => h.name === '강원').id).map(b => b.id)")), f"강원본부 지사들만: {ins}")
+    as_user(p, "viewer"); tab(p, "branch")
+    check(p.locator("#branchTable [data-rq], #branchTable [data-arr]").count() == 0 and not p.locator("#save-branch").is_visible() and not p.locator("#save-fleet").is_visible(), "보기 전용")
+
+def t_branch_save_confirm_and_arrive(p):
+    tab(p, "branch"); ch, dg = bid(p, "춘천"), bid(p, "대관령")
+    h = p.locator(f"[data-arr={dg}][data-part=h] option").all_inner_texts(); m = p.locator(f"[data-arr={dg}][data-part=m] option").all_inner_texts()
+    check(h == [f"{i:02d}" for i in range(24)] and m == ["00", "10", "20", "30", "40", "50"], f"시 00~23, 분 10분 단위: {h} {m}")
+    p.select_option(f"[data-arr={dg}][data-part=h]", "05"); p.wait_for_timeout(150); p.select_option(f"[data-arr={dg}][data-part=m]", "30"); p.wait_for_timeout(150)
+    p.check(f"[data-rq={ch}][data-f=confirmed]"); p.wait_for_timeout(150)
+    p.fill(f"[data-rq={ch}][data-f=req_blower]", "3"); p.press(f"[data-rq={ch}][data-f=req_blower]", "Tab"); p.wait_for_timeout(150)
+    check("2개 지사" in p.locator("#save-branch .save-state").inner_text(), p.locator("#save-branch .save-state").inner_text())
+    save_branch(p); check("저장했습니다" in toast(p), toast(p))
+    check(ev(p, f"S.reqs['{dg}'].arrive_at") == day(p, 0) + "T05:30" and ev(p, f"S.reqs['{ch}'].confirmed") is True and ev(p, f"S.reqs['{ch}'].req_blower") == 3, "저장값")
+    tab(p, "fleet"); opts = p.locator(rsel("V004", day(p, 0)) + " option").all_inner_texts()
+    check("춘천" in opts, f"확정한 지사가 경로 선택지에 생김: {opts}")
+    tab(p, "move"); check("05:30" in p.locator("#destList").inner_text(), "도착 요청 시각 반영")
+
+def t_round_create(p):
+    tab(p, "branch"); d = day(p, 3)
+    p.fill("#newRoundDate", d); p.click("#roundMake"); p.wait_for_timeout(300)
+    check("기준일자를 만들었습니다" in toast(p), toast(p))
+    check(p.locator("#roundSelBranch").input_value() == str(ev(p, "S.round")) and ev(p, "curRound().start_date") == d, "새 기준일자 선택됨")
+    check(p.locator("#branchTable tbody tr").count() == 0, "새 기준일자는 요청 없음")
+    tab(p, "fleet"); check(p.locator("#day1In").input_value() == d, "지원일 1 = 새 기준일자")
+    tab(p, "branch"); p.fill("#newRoundDate", d); p.click("#roundMake"); p.wait_for_timeout(200); check("이미 있습니다" in toast(p), "같은 날짜 거절")
+
+def t_history_tooltip_per_cell(p):
+    """말풍선은 그 칸(그 날짜·그 장비 / 그 지사·그 열)의 오늘 수정 기록만"""
+    tab(p, "fleet"); d0 = day(p, 0)
+    cell = p.locator(rsel("V001", d0)).locator("xpath=ancestor::div[contains(concat(' ',@class,' '),' slot ')]")
+    check(cell.get_attribute("data-hv") == f"vehicle_routes:{d0},V001", "오늘 고친 칸에 기록 표시")
+    check(p.locator(rsel("V001", day(p, 1))).locator("xpath=ancestor::div[contains(concat(' ',@class,' '),' slot ')]").get_attribute("data-hv") is None, "고치지 않은 칸에는 없음")
+    cell.hover(); p.wait_for_timeout(150); t = p.locator("#tip").inner_text()
+    check("이 칸의 오늘 수정 기록" in t and t.count("→") == 2 and "양양 → 대관령" in t, t)
+    tab(p, "branch"); y = bid(p, "양양")
+    p.hover(f"[data-rq={y}][data-f=snow_cm]"); p.wait_for_timeout(150); t = p.locator("#tip").inner_text()
+    check(t.count("→") == 3 and "14cm → 15cm" in t and "10cm" not in t, f"최근 3건만: {t}")
+    check(p.locator(f"[data-rq={y}][data-f=req_truck]").get_attribute("data-hv") is None, "다른 열에는 없음")
+    as_user(p, "br1"); tab(p, "fleet"); check(p.locator("[data-hv]").count() == 0, "log.view 권한이 없으면 기록 표시 없음")
 
 def t_log_tab(p):
-    tab(p, "log")
-    total = p.locator("#logTable tbody tr").count(); check(total >= 10, total)
-    p.click('[data-lk="접속"]'); p.wait_for_timeout(100)
-    kinds = p.locator("#logTable tbody tr td:nth-child(3)").all_inner_texts()
-    check(kinds and all(k.strip() == "접속" for k in kinds), kinds)
-    p.click('[data-lk="전체"]'); p.click("#logToday"); p.wait_for_timeout(100)
-    check(p.locator("#logTable tbody tr").count() < total, "오늘만 필터")
-    as_user(p, "br1")
-    check(p.locator("#logTable").inner_html() == "", "비관리자에게 로그 내용이 그려짐")
+    tab(p, "log"); check(p.locator("#logTable tbody tr").count() == 9, p.locator("#logTable tbody tr").count())
+    p.click("[data-lk='추가']"); p.wait_for_timeout(100); check(p.locator("#logTable tbody tr").count() == 1, "구분 거르기")
+    p.click("[data-lk='전체']"); tab(p, "fleet"); p.select_option(rsel("V002", day(p, 3)), bid(p, "엄정")); confirm_fleet(p)
+    tab(p, "log"); first = p.locator("#logTable tbody tr").first.inner_text()
+    check("경로" in first and "12가1074" in first and "엄정" in first, first)
 
-def t_fleet_days_and_stops(p):
-    """지원일 1 날짜만 관리자가 고르고, 지원일 2부터는 하루씩 자동. 날마다 기관(하루 여러 기관은 ＋)"""
-    tab(p, "fleet")
-    vid = vehicle(p, "v.status === ''")
-    p.select_option(f'[data-edit="veh:{vid}:status"]', "O"); p.wait_for_timeout(250)
-    check(p.locator(f'select[data-sx="{vid}"][data-i="0"]').is_disabled(), "지원일 1 전에는 기관 선택 불가")
-    check(p.locator(f'input[data-sd="{vid}"]').count() == 1, "날짜 입력칸은 지원일 1 하나뿐")
-    p.locator(f'input[data-sd="{vid}"]').fill("2026-03-12"); p.wait_for_timeout(300)
-    p.select_option(f'select[data-sx="{vid}"][data-i="0"]', "대관령"); p.wait_for_timeout(300)
-    p.click(f'[data-stop-add="{vid}|0"]'); p.wait_for_timeout(200)
-    p.select_option(f'select[data-sx="{vid}"][data-extra]', "양양"); p.wait_for_timeout(300)
-    check(days(p, vid) == [["2026-03-12", ["대관령", "양양"]]], days(p, vid))
-    p.select_option(f'select[data-sx="{vid}"][data-i="2"]', "엄정"); p.wait_for_timeout(300)
-    check(days(p, vid) == [["2026-03-12", ["대관령", "양양"]], ["2026-03-13", [""]], ["2026-03-14", ["엄정"]]], f"지원일 3 = 지원일 1 + 2일: {days(p, vid)}")
-    # 지원일 1을 바꾸면 나머지 날짜가 함께 밀림(기관은 그대로)
-    p.locator(f'input[data-sd="{vid}"]').fill("2026-03-20"); p.wait_for_timeout(300)
-    check([d[0] for d in days(p, vid)] == ["2026-03-20", "2026-03-21", "2026-03-22"] and days(p, vid)[2][1] == ["엄정"], days(p, vid))
-    # 마지막 기관을 지우면 끝쪽 빈 날은 정리
-    p.select_option(f'select[data-sx="{vid}"][data-i="2"]', "__del"); p.wait_for_timeout(300)
-    check(len(days(p, vid)) == 1, days(p, vid))
-    # 지원장비 아이디: 기관은 고를 수 있지만 지원일 1 날짜는 못 고름
-    save(p, "fleet"); as_user(p, "eq1"); tab(p, "fleet")
-    check(p.locator(f'input[data-sd="{vid}"]').count() == 0 and "관리자" in p.locator(f'tr:has([data-edit="veh:{vid}:status"]) .sl-d.auto >> nth=0').get_attribute("title"), "지원장비는 지원일 1을 못 고름")
-    p.select_option(f'select[data-sx="{vid}"][data-i="1"]', "양양"); p.wait_for_timeout(300)
-    check(days(p, vid)[1] == ["2026-03-21", ["양양"]], days(p, vid))
-    # 지원 아님으로 바꾸면 일자 비움
-    p.select_option(f'[data-edit="veh:{vid}:status"]', "X"); p.wait_for_timeout(300)
-    check(days(p, vid) == [], "지원 아님인데 일자가 남음")
+def t_plate_edit(p):
+    tab(p, "fleet"); i = "[data-vp=V004]"
+    p.fill(i, "abc"); p.press(i, "Tab"); p.wait_for_timeout(200); check("형식" in toast(p) and p.locator(i).input_value() == "14가1148", "형식 검사")
+    p.fill(i, "11가1037"); p.press(i, "Tab"); p.wait_for_timeout(200); check("이미 있습니다" in toast(p), "중복 검사")
+    p.fill(i, "99하9999"); p.press(i, "Tab"); p.wait_for_timeout(200); confirm_fleet(p)
+    check(ev(p, "vehById('V004').plate") == "99하9999", "차량번호 확정")
 
-def t_fleet_columns_2_to_10(p):
-    """지원일 칸 수는 2~10개 모두 고를 수 있음. 기관이 들어 있는 날보다 줄이면 확인 후 그 뒤 기관을 지움(되돌리기 가능)"""
-    tab(p, "fleet")
-    opts = p.locator("#colsSel option").evaluate_all("o => o.map(x => [+x.value, x.disabled])")
-    check([v for v, _ in opts] == list(range(2, 11)) and not any(d for _, d in opts), f"2~10 모두 고를 수 있어야 함: {opts}")
-    p.select_option("#colsSel", "2"); p.wait_for_timeout(300)
-    check(p.locator("#eqTable thead th").count() - 4 == 2, "2칸")
-    check(ev(p, "DATA.vehicles.every(v => (v.days || []).length <= 2)"), "칸 수보다 긴 일정은 줄어듦")
-    p.click("#save-fleet [data-revert]"); p.wait_for_timeout(300)
-    check(ev(p, "DATA.vehicles.find(v => v.id === 'V001').days.length") == 5, "되돌리기로 원래 일정 복구")
-    p.select_option("#colsSel", "10"); p.wait_for_timeout(200)
-    check(p.locator("#eqTable thead th").count() - 4 == 10, "10칸")
-
-def t_fleet_plate_edit(p):
-    """차량번호: 관리자·지원장비만 고칠 수 있음, 형식·중복 검사, 고쳐도 일정·기록은 그대로(고유 번호 기준)"""
-    tab(p, "fleet")
-    inp = p.locator('[data-edit="veh:V001:plate"]'); check(inp.input_value() == "11가1037", inp.input_value())
-    before = days(p, "V001")
-    inp.fill("99가9999"); inp.press("Tab"); p.wait_for_timeout(300)
-    check(ev(p, "DATA.vehicles.find(v => v.id === 'V001').plate") == "99가9999" and days(p, "V001") == before, "번호만 바뀌고 일정 그대로")
-    p.locator('[data-edit="veh:V002:plate"]').fill("99가9999"); p.locator('[data-edit="veh:V002:plate"]').press("Tab"); p.wait_for_timeout(300)
-    check("같은 차량번호" in toast(p) and ev(p, "DATA.vehicles.find(v => v.id === 'V002').plate") == "12가1074", "중복 거부")
-    p.locator('[data-edit="veh:V002:plate"]').fill("abc"); p.locator('[data-edit="veh:V002:plate"]').press("Tab"); p.wait_for_timeout(300)
-    check("형식" in toast(p), "형식 거부")
-    save(p, "fleet"); last = ev(p, "LOG[LOG.length-1]"); check(last["key"] == "veh:V001:plate" and last["to"] == "99가9999" and "99가9999" in last["target"], last)
-    as_user(p, "eq1"); tab(p, "fleet"); check(p.locator('[data-edit="veh:V001:plate"]').count() == 1, "지원장비도 수정 가능")
-    as_user(p, "br1"); tab(p, "fleet"); check(p.locator('[data-edit="veh:V001:plate"]').count() == 0, "지사는 보기만")
+def t_vehicle_add_delete(p):
+    tab(p, "fleet"); p.select_option("#nvOrg", "전북"); p.select_option("#nvType", "제설기"); p.fill("#nvPlate", "98가7654"); p.click("#vehAdd"); p.wait_for_timeout(250)
+    vid = ev(p, "(S.vehicles.find(v => v.plate === '98가7654') || {}).id"); check("추가했습니다" in toast(p) and vid == "V044", f"장비 추가: {vid}")
+    check(p.locator(f"[data-vp={vid}]").input_value() == "98가7654" and p.locator(f"[data-vs={vid}]").input_value() == "", "새 장비 줄(지원 여부 미정)")
+    p.click(f"[data-vdel={vid}]"); p.wait_for_timeout(250); check(p.locator(f"[data-vp={vid}]").count() == 0, "장비 삭제")
 
 def t_fleet_header_stays_on_top(p):
     """기관별 장비 표를 스크롤해도 제목 줄이 맨 위에 불투명하게 고정(입력칸·첫 열이 제목 위로 올라오지 않음)"""
@@ -192,72 +237,91 @@ def t_fleet_header_stays_on_top(p):
     check(all(x[2] for x in r), f"제목 위에 다른 칸이 올라오면 안 됨: {[x[0] for x in r if not x[2]]}")
     check(all(not x[3].endswith(", 0)") and x[3] != "transparent" for x in r), f"제목 배경이 불투명해야 함: {r}")
 
-def t_overview_by_date_and_multistop(p):
-    """오늘 날짜로 시작. 이동 현황 표는 세로 = 피지원 기관, 가로 = 출발 기관 5곳(지역본부 포함). 몇 일차인지 표시. 검색칸 없음, 기관·장비 필터 분리"""
-    import datetime
-    t = datetime.date.today()
-    check(p.locator("#dateInput").input_value() == t.isoformat(), f"오늘 날짜로 시작: {p.locator('#dateInput').input_value()}")
-    heads = [x.split("\n")[0].strip() for x in p.locator("#matrix thead th").all_inner_texts()]
-    check(heads == ["피지원 기관", "서울경기", "충북", "전북", "대구경북", "지역본부", "합계"], heads)
-    rows = [x.split("\n")[0].strip() for x in p.locator("#matrix tbody th").all_inner_texts()]
-    check(rows == ["대관령", "양양", "엄정"], rows)
-    check(p.locator("#search").count() == 0, "검색칸 없음")
-    check(p.locator("#filters .fgroup").count() == 2 and "출발 기관" in p.locator("#filters .fgroup >> nth=0").inner_text() and "장비" in p.locator("#filters .fgroup.right").inner_text(), "기관·장비 필터가 나뉨")
-    go_date(p, "2026-03-11")
-    check("3/11" in p.locator("#summaryNote").inner_text(), p.locator("#summaryNote").inner_text())
-    dg = p.locator("#matrix tbody tr:has-text('대관령') td").all_inner_texts()
-    nums = [int(x.split("\n")[0]) for x in dg]
-    check(nums[0] > 0 and sum(nums[:-1]) == nums[-1], f"대관령 행: 출발 기관별 대수의 합 = 합계 {dg}")
-    check("1일차" in p.locator("#destList").inner_text(), "몇 일차 표시")
-    p.click("#nextDay"); p.click("#nextDay"); p.wait_for_timeout(200)           # 3/13
-    check(p.locator(".status-wrap .tag").count() >= 1, "여러 기관 경유 표시가 없음")
-    check("3일차" in p.locator("#destList").inner_text(), "3일차 표시")
-    for _ in range(3): p.click("#nextDay")                                        # 3/16
-    p.wait_for_timeout(200)
-    check("이동하는 장비가 없습니다" in p.locator("#destList").inner_text(), "빈 날짜 안내")
-
 def t_theme_toggle(p):
-    """화면 모드: '라이트 모드' / '다크 모드' 글자로 명확히, 고른 쪽이 눌린 상태, 이 브라우저에 기억"""
     btns = p.locator("[data-theme-set]").all_inner_texts(); check(btns == ["라이트 모드", "다크 모드"], btns)
-    check(p.locator("#themeBtn").count() == 0 and "화면 밝기" not in p.locator("header").inner_text(), "예전 '화면 밝기' 버튼 없음")
     p.click("[data-theme-set=dark]"); p.wait_for_timeout(100)
     check(ev(p, "document.documentElement.dataset.theme") == "dark" and p.locator("[data-theme-set=dark]").get_attribute("aria-pressed") == "true", "다크 모드")
-    p.reload(); p.wait_for_timeout(300)
+    p.reload(); p.wait_for_selector("#matrix tbody tr")
     check(ev(p, "document.documentElement.dataset.theme") == "dark", "다시 열어도 기억")
-    p.click("[data-theme-set=light]"); p.wait_for_timeout(100)
-    check(p.locator("[data-theme-set=light]").get_attribute("aria-pressed") == "true", "라이트 모드")
+    p.click("[data-theme-set=light]"); p.wait_for_timeout(100); check(p.locator("[data-theme-set=light]").get_attribute("aria-pressed") == "true", "라이트 모드")
+
+def t_unsaved_guard_on_user_switch(p):
+    tab(p, "fleet"); p.select_option(rsel("V002", day(p, 3)), bid(p, "양양")); p.wait_for_timeout(150)
+    as_user(p, "eq-sg"); check(ev(p, "S.draft.size") == 0 and route(p, "V002", day(p, 3)) == [], "아이디를 바꾸면 확정 안 한 변경은 버림")
+    check(p.locator(rsel("V004", day(p, 0))).is_disabled(), "지원 여부가 '지원'이 아니면 경로 칸 잠금")
 
 def t_xss_text_is_escaped(p):
-    as_user(p, "br1"); tab(p, "branch")
-    i = p.locator('[data-edit="req:대관령:reason"]'); i.fill("<img src=x onerror=window.__x=1>"); i.press("Tab"); p.wait_for_timeout(250)
-    save(p, "branch"); p.wait_for_timeout(200)
-    check(ev(p, "window.__x") is None, "스크립트가 실행됨")
-    as_user(p, "eq1"); tab(p, "branch"); tab(p, "fleet"); tab(p, "move")
-    check(p.locator("#branchTable img, #eqTable img, #destList img").count() == 0, "이미지 태그가 만들어짐")
-    as_user(p, "admin1"); tab(p, "branch")
-    check("<img" in p.locator("#branchTable").inner_text() or "<img" in p.locator('[data-edit="req:대관령:reason"]').input_value(), "글자로 보여야 함")
+    as_user(p, "br1"); tab(p, "branch"); b = bid(p, "대관령")
+    i = p.locator(f"[data-rq={b}][data-f=reason]"); i.fill("<img src=x onerror=window.__x=1>"); i.press("Tab"); p.wait_for_timeout(200)
+    save_branch(p); check(ev(p, "window.__x") is None, "스크립트가 실행됨")
+    as_user(p, "admin1"); tab(p, "move"); tab(p, "log")
+    check(p.locator("#branchTable img, #eqTable img, #destList img, #logTable img").count() == 0, "이미지 태그가 만들어짐")
+    check("<img" in p.locator("#destList").inner_text(), "글자로 보여야 함")
     check(ev(p, "window.__x") is None, "스크립트가 실행됨")
 
 def t_no_driver_info_anywhere(p):
-    html = ev(p, "document.documentElement.outerHTML")
     for word in ("운전원", "전화번호", "연락처"):
         check(word not in p.locator("body").inner_text(), f"화면에 '{word}'가 남아 있음")
-    check(ev(p, "typeof DATA.drivers") == "undefined", "DATA.drivers 가 남아 있음")
-    check(ev(p, "DATA.vehicles.every(v => !('driverIds' in v) && !('kinds' in v))"), "장비에 운전원 정보가 남아 있음")
-    check(p.locator('[data-tab="driver"]').count() == 0 and p.locator("#panel-driver").count() == 0, "운전원 탭이 남아 있음")
-    tab(p, "fleet"); heads = p.locator("#eqTable thead th").all_inner_texts()
-    check(not any("운전원" in h for h in heads), heads)
-    p.click(".vrow >> nth=0") if False else None
+    check(ev(p, "S.vehicles.every(v => !('driverIds' in v))"), "장비에 운전원 정보가 남아 있음")
 
-TESTS = [t_fleet_plate_edit, t_fleet_header_stays_on_top, t_theme_toggle, t_load, t_role_bars_and_tabs, t_permission_bypass_blocked, t_branch_user_sees_only_own_row_inputs,
-         t_save_and_revert, t_unsaved_discarded_on_user_switch, t_history_tooltip_today_max3, t_log_tab,
-         t_fleet_days_and_stops, t_fleet_columns_2_to_10, t_overview_by_date_and_multistop,
-         t_no_driver_info_anywhere, t_xss_text_is_escaped]
+TESTS = [t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+         t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
+         t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_fleet_header_stays_on_top, t_theme_toggle,
+         t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere]
+
+# ---------------------------------------------------------------- 서버 모드(가짜 Supabase, tests/_sb_mock.py) — 실제 로그인 권한·저장 함수 호출
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _sb_mock import Mock, install
+SERVER_URL = f"http://127.0.0.1:{PORT}/equipment/index.html"
+
+def server_page(b, mock, user):
+    p = b.new_page(viewport={"width": 1440, "height": 1000}); p.on("dialog", lambda d: d.accept())
+    p.on("pageerror", lambda e: errors.append(f"[server] {e}"))
+    install(p, mock, user); p.goto(SERVER_URL); p.wait_for_selector("#matrix tbody tr", timeout=15000); return p
+
+def t_server_equip_confirm(b):
+    """지원장비 계정(서울경기)으로 로그인: 자기 기관 장비만, [확정]은 save_fleet 에 바뀐 칸만 보냄. 다른 아이디는 미리보기(확정 불가)"""
+    m = Mock(); p = server_page(b, m, "equip-01")
+    check(p.locator("#userSel").input_value() == "__me" and "내 아이디" in p.locator("#userSel option").first.inner_text(), "내 아이디로 시작")
+    tab(p, "fleet"); check(p.locator("[data-vs=V001]").count() == 1 and p.locator("[data-vs=V002]").count() == 0, "자기 기관 장비만 입력칸")
+    d0 = m.today; opts = p.locator(rsel("V001", d0) + " option").all_inner_texts()
+    check([o for o in opts if o not in ("지사 선택", "지우기")] == ["충주"], f"확정된 지사만: {opts}")
+    p.select_option(rsel("V001", d0), "B019"); p.wait_for_timeout(150); confirm_fleet(p)
+    check(m.eq_calls[-1] == ("save_fleet", {"p_vehicles": [], "p_routes": [{"date": d0, "vehicle_id": "V001", "stops": ["B019"]}]}), m.eq_calls)
+    check("확정했습니다" in toast(p), toast(p))
+    tab(p, "move"); check("└충주" in rows(p) and "2" in p.locator("#matrix tbody tr.brrow").first.inner_text(), rows(p))
+    as_user(p, "admin1"); tab(p, "fleet")
+    check("미리보기" in p.locator("#perm-fleet").inner_text(), "미리보기 안내")
+    p.select_option(rsel("V002", d0), "__del"); p.wait_for_timeout(150)
+    check(p.locator("#save-fleet [data-save]").is_disabled() and "확정 불가" in p.locator("#save-fleet .save-state").inner_text(), "미리보기는 확정 불가")
+    n = len(m.eq_calls); ev(p, "confirmFleet()"); p.wait_for_timeout(200); check(len(m.eq_calls) == n, "미리보기에서 서버로 보내면 안 됨")
+    p.close()
+
+def t_server_branch_save(b):
+    """지사 계정: 자기 지사 행만, [저장]은 save_requests 에 바뀐 열만(도착 시각은 ISO)"""
+    m = Mock(); m.users["exchungju"]["profile"]["must_change"] = False
+    p = server_page(b, m, "exchungju"); tab(p, "branch")
+    check(set(x.get_attribute("data-rq") for x in p.locator("#branchTable [data-rq]").all()) == {"B019"}, "자기 지사만")
+    p.fill("[data-rq=B019][data-f=req_truck]", "5"); p.press("[data-rq=B019][data-f=req_truck]", "Tab"); p.wait_for_timeout(150)
+    p.select_option("[data-arr=B019][data-part=m]", "40"); p.wait_for_timeout(150)
+    save_branch(p)
+    name, body = m.eq_calls[-1]; row = body["p_rows"][0]
+    check(name == "save_requests" and body["p_round"] == 1 and set(row) == {"branch_id", "req_truck", "arrive_at"} and row["req_truck"] == 5, m.eq_calls)
+    check(row["arrive_at"].endswith("Z") and ev(p, f"localInput('{row['arrive_at']}')").endswith(":40"), row)
+    check("저장했습니다" in toast(p), toast(p)); p.close()
+
+SERVER_TESTS = [t_server_equip_confirm, t_server_branch_save]
 
 if __name__ == "__main__":
+    only = sys.argv[1:]
     with sync_playwright() as pw:
         b = pw.chromium.launch()
-        for fn in TESTS: run(fn.__name__, fn, b)
+        for fn in TESTS:
+            if not only or fn.__name__ in only: run(fn.__name__, fn, b)
+        for fn in SERVER_TESTS:
+            if only and fn.__name__ not in only: continue
+            try: fn(b); results.append((fn.__name__, True, ""))
+            except Exception as e: results.append((fn.__name__, False, f"{e.__class__.__name__}: {e}"))
         b.close()
     server.shutdown()
     ok = sum(1 for _, o, _ in results if o)

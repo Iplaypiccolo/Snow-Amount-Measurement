@@ -5,12 +5,12 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>제설장비 지원 현황</title>
-<link rel="stylesheet" href="css/style.css?v=d7d79f62">
-<script src="../auth/auth.js?v=e7ef129a"></script>
+<link rel="stylesheet" href="css/style.css?v=6a316c1b">
+<script src="../auth/auth.js?v=671ac2b8"></script>
 <script>
-/* 로그인 잠금(가벼운 확인): 로그인 정보가 이 브라우저에 없으면 화면을 만들지 않고 안내만 보여 줍니다.
+/* 로그인 잠금(가벼운 확인): 로그인 정보가 이 브라우저에 없으면 화면을 만들지 않고 안내만 보여 줍니다(?sample=1 시연 화면은 예외).
    첫 화면(../)에서 로그인한 뒤 들어오면 항상 통과합니다. (실제 권한 검사는 서버가 하며, 이 확인은 화면을 가리는 용도) */
-if (!window.SSAuth || !SSAuth.hasSession()) {
+if (!/[?&]sample(=|&|$)/.test(location.search) && (!window.SSAuth || !SSAuth.hasSession())) {      // ?sample=1(시연)은 로그인 없이
   document.documentElement.innerHTML = '<head><meta charset="UTF-8"><title>로그인 필요</title></head><body style="font-family:-apple-system,\'Malgun Gothic\',sans-serif;padding:40px;text-align:center;color:#0d1b14"><h2>로그인이 필요합니다</h2><p><a href="../" target="_top">첫 화면으로 가서 로그인하세요</a></p></body>';
   window.stop();
 }
@@ -29,7 +29,7 @@ if (!window.SSAuth || !SSAuth.hasSession()) {
       <input type="date" id="dateInput" aria-label="지원일자">
       <button type="button" id="nextDay" aria-label="다음날">›</button>
     </div>
-    <label class="user-box">접속 아이디(데모)
+    <label class="user-box">접속 아이디(데모·미리보기)
       <select id="userSel" aria-label="접속 아이디 선택(데모용)"></select>
     </label>
     <div class="theme-toggle" role="group" aria-label="화면 모드">
@@ -45,7 +45,8 @@ if (!window.SSAuth || !SSAuth.hasSession()) {
   </nav>
 </header>
 
-<main>
+<div id="loading" role="status">불러오는 중…</div>
+<main hidden>
   <!-- ===== 이동 현황 ===== -->
   <section class="panel" id="panel-move">
     <div class="perm" id="perm-move"></div>
@@ -63,22 +64,20 @@ if (!window.SSAuth || !SSAuth.hasSession()) {
   <!-- ===== 기관별 장비 ===== -->
   <section class="panel" id="panel-fleet" hidden>
     <div class="perm" id="perm-fleet"></div>
-    <div class="org-grid" id="orgGrid"></div>
     <div class="filters" id="fleetFilters"></div>
+    <div class="org-grid" id="orgGrid"></div>
     <div class="table-wrap tall"><table class="eq" id="eqTable"></table></div>
     <div class="savebar" id="save-fleet" hidden>
       <span class="save-state" aria-live="polite"></span>
       <button type="button" class="btn" data-revert="fleet">되돌리기</button>
-      <button type="button" class="btn primary" data-save="fleet">저장</button>
+      <button type="button" class="btn primary" data-save="fleet">확정</button>
     </div>
   </section>
 
   <!-- ===== 지사별 요청·편성 ===== -->
   <section class="panel" id="panel-branch" hidden>
     <div class="perm" id="perm-branch"></div>
-    <div class="filters">
-      <button type="button" class="chip" id="onlyActive" aria-pressed="true">요청 있는 지사만</button>
-    </div>
+    <div class="filters" id="branchCtl"></div>
     <div class="table-wrap"><table class="branch" id="branchTable"></table></div>
     <div class="savebar" id="save-branch" hidden>
       <span class="save-state" aria-live="polite"></span>
@@ -87,7 +86,7 @@ if (!window.SSAuth || !SSAuth.hasSession()) {
     </div>
   </section>
 
-  <!-- ===== 로그 기록 (관리자만) ===== -->
+  <!-- ===== 로그 기록 (log.view 권한) ===== -->
   <section class="panel" id="panel-log" hidden>
     <div class="perm" id="perm-log"></div>
     <div class="filters" id="logFilters"></div>
@@ -99,9 +98,9 @@ if (!window.SSAuth || !SSAuth.hasSession()) {
 <aside class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></aside>
 <div class="tip" id="tip" hidden role="tooltip"></div>
 <div class="toast" id="toast" hidden role="status"></div>
-<!-- 코드는 아래 순서대로 불러옵니다 (순서가 중요합니다) -->
-<script src="js/sample-data.js?v=b381444a"></script>
-<script src="js/api.js?v=216c14e0"></script>
-<script src="js/app.js?v=04c4a1bb"></script>
+<!-- 코드는 아래 순서대로 불러옵니다 (순서가 중요합니다). auth.js 는 위 <head> 에서 먼저 불러옴 -->
+<script src="js/sample-data.js?v=c0df0ac8"></script>
+<script src="js/api.js?v=3bc5f6b9"></script>
+<script src="js/app.js?v=4464f4b1"></script>
 </body>
 </html>

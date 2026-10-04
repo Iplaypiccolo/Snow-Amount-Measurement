@@ -363,3 +363,31 @@ table.eq { min-width: 1100px; }
 .theme-toggle button { border: 0; background: transparent; color: var(--ink-soft); padding: 0 12px; height: 34px; font: inherit; font-size: 13px; cursor: pointer; }
 .theme-toggle button + button { border-left: 1px solid var(--line); }
 .theme-toggle button[aria-pressed="true"] { background: var(--ink); color: var(--bg); font-weight: 700; }
+
+/* ---------- 2단계(서버 연결): 계층 행·정비중·확정 전 표시·기준일자·도착 시각 ---------- */
+.status.fix { background: color-mix(in srgb, var(--plow) 18%, transparent); color: var(--ink); }
+.matrix tr.hqrow th, .matrix tr.hqrow td { background: color-mix(in srgb, var(--ink) 5%, var(--surface)); font-weight: 700; }
+.matrix tr.brrow th { font-weight: 500; padding-left: 18px; }
+.matrix tr.brrow .ind { color: var(--ink-soft); margin-right: 6px; }
+.matrix td.empty, .eq td.empty, .branch td.empty { text-align: center; color: var(--ink-soft); padding: 22px; }
+.hq-head { margin: 18px 0 6px; font-size: 14px; color: var(--ink-soft); font-weight: 700; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+.slot.changed, .eq tr.changed td:first-child, .branch tr.changed td:first-child { box-shadow: inset 3px 0 0 var(--plow); }
+.slot.changed { border-radius: 6px; background: color-mix(in srgb, var(--plow) 10%, transparent); padding: 2px; }
+.eq th.dayh { white-space: nowrap; } .eq th.dayh .sub { display: block; font-weight: 400; font-size: 12px; color: var(--ink-soft); }
+.eq th.dayh input.ci { font-size: 12.5px; min-height: 28px; padding: 1px 4px; }
+.ctl { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--ink-soft); }
+.ctl select.ci, .ctl input.ci { min-height: 32px; }
+.addveh { display: inline-flex; gap: 4px; align-items: center; margin-left: auto; }
+.addveh .ci { min-height: 32px; }
+.arr { display: inline-flex; gap: 3px; align-items: center; white-space: nowrap; font-size: 12.5px; }
+.arr input.ci { width: 132px; min-height: 30px; font-size: 12.5px; } .arr select.ci { min-width: 0; width: 54px; min-height: 30px; font-size: 12.5px; }
+.perm .pv { display: block; color: var(--stop); margin-bottom: 2px; }
+.savebar.busy { opacity: .6; pointer-events: none; }
+#loading { padding: 60px 20px; text-align: center; color: var(--ink-soft); }
+ol.vhist { margin: 0; padding-left: 18px; max-height: 40vh; overflow: auto; font-size: 13.5px; }
+ol.vhist li { padding: 2px 0; } ol.vhist li.on { font-weight: 700; color: var(--go); }
+.filters .fgroup { display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+/* 지사별 요청·편성: 한 화면에 확정 열까지 들어오게 좁힘(좁은 화면은 가로 스크롤) */
+.branch th, .branch td { padding: 6px 6px; } .branch thead th { white-space: nowrap; }
+.branch input.num { width: 56px; } .branch input.rs { width: 140px; }
+table.branch { min-width: 1180px; }

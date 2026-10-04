@@ -30,6 +30,11 @@ SB = "https://yzwbnohzhnctdvufntig.supabase.co"
 DOMAIN = "snow-support.invalid"
 CORS = {"access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "*"}
 ADMIN_PW = "Admin#Pass-2026x!"
+# 서버 표 permissions 와 같은 목록(마이그레이션 15)
+PERMS = [("juris.request", "관할 구간 변경 요청", ["branch"]), ("juris.edit", "관할 변경 저장·요청 승인", []), ("grid.edit", "예보 격자 편입", []), ("snow.upload", "적설 자료 올리기", []),
+         ("req.edit.own", "자기 지사 요청 입력", ["branch"]), ("req.edit.hq", "자기 본부 지사 요청 입력", ["hq"]), ("req.confirm", "요청 확정·편성·기준일자", []),
+         ("equip.edit.own", "자기 기관 장비·경로 입력", ["equip"]), ("equip.edit.all", "모든 기관 장비·경로 입력", []), ("hq.supply.edit", "지역본부 지원 가능 장비 입력", ["hq"]), ("log.view", "접속·수정 기록 보기", [])]
+def default_perms(role): return [k for k, _, r in PERMS if role in r]
 TEMP_PW = "Tmp#Start-Ab12Cd34"
 
 class Mock:
@@ -45,7 +50,18 @@ class Mock:
         names = [("exchungju", "충주지사", "B019", "H04"), ("exdongseoul", "동서울지사", "B006", "H02"), ("exgurye", "구례지사", "B039", "H07"), ("exwonju", "원주지사", "B011", "H03"),
                  ("exincheon", "인천지사", "B001", "H01"), ("exsiheung", "시흥지사", "B002", "H01"), ("exgunpo", "군포지사", "B003", "H01"), ("exhwaseong", "화성지사", "B004", "H01")]
         for u, d, b, h in names: self.add(u, d, "branch", b, TEMP_PW, must_change=True)
-        self.add("equip-01", "지원장비", "equip", None, "Equip#Pass-8821xY")
+        self.add("equip-01", "지원장비", "equip", None, "Equip#Pass-8821xY", org="서울경기")
+        self.orgs = ["서울경기", "충북", "전북", "대구경북"]
+        # 장비 지원(마이그레이션 16·17): 장비, 날짜별 경로, 기준일자, 지사 요청. 저장 함수 호출은 eq_calls 에 기록
+        import datetime as _dt
+        self.today = _dt.date.today().isoformat()
+        self.vehicles = [{"id": "V001", "org": "서울경기", "type": "제설차", "plate": "11가1111", "status": "O", "sort": 10, "active": True},
+                         {"id": "V002", "org": "충북", "type": "제설기", "plate": "22나2222", "status": "O", "sort": 20, "active": True}]
+        self.routes = [{"date": self.today, "vehicle_id": "V002", "stops": ["B019"]}]
+        self.rounds = [{"id": 1, "name": self.today + " 기준", "start_date": self.today}]
+        self.round_reqs = [{"round_id": 1, "branch_id": "B019", "snow_cm": 5, "warning": False, "req_truck": 2, "req_blower": 0, "assigned_truck": 1, "assigned_blower": 0,
+                            "arrive_at": self.today + "T13:00:00+00:00", "reason": None, "confirmed": True}]
+        self.eq_calls = []
         self.branches = [{"id": b, "name": d.replace("지사", ""), "hq_id": h} for _, d, b, h in names]
         self.hqs = [{"id": "H01", "name": "수도권", "sort": 1}, {"id": "H02", "name": "서울경기", "sort": 2}, {"id": "H03", "name": "강원", "sort": 3}, {"id": "H04", "name": "충북", "sort": 4}, {"id": "H07", "name": "광주전남", "sort": 7}]
         self.users["stranger"] = {"id": "id-stranger", "username": "stranger", "password": "Stranger#Pass-123", "profile": None}
@@ -60,10 +76,14 @@ class Mock:
                "snapshot": snapshot if snapshot is not None else [{"id": i, "route": "경부선", "from": "A", "to": "B", "km": 2.0, "owner": branch_id} for i in section_ids],
                "to_branch_id": to, "reason": reason, "status": status, "resolved_by": None, "resolved_at": None, "resolution_note": note}
         self.requests.append(row); return row
-    def add(self, username, display, role, branch, pw, must_change=False, disabled=False):
+    def add(self, username, display, role, branch, pw, must_change=False, disabled=False, org=None, hq_id=None, perms=None, sort=None):
         self.n += 1
         self.users[username] = {"id": f"id-{username}", "username": username, "password": pw,
-            "profile": {"id": f"id-{username}", "username": username, "display_name": display, "role": role, "branch_id": branch, "must_change": must_change, "disabled": disabled}}
+            "profile": {"id": f"id-{username}", "username": username, "display_name": display, "role": role, "branch_id": branch, "org": org, "hq_id": hq_id,
+                        "perms": list(default_perms(role) if perms is None else perms), "sort": sort, "must_change": must_change, "disabled": disabled}}
+    def can(self, u, perm):
+        """private.has_perm 흉내: 관리자는 모든 권한, 나머지는 켜 둔 권한만(임시 비밀번호·비활성은 없음)"""
+        p = u and u["profile"]; return bool(p and not p["must_change"] and not p["disabled"] and (p["role"] == "admin" or perm in (p.get("perms") or [])))
     def by_token(self, req):
         m = re.match(r"Bearer (.+)", req.headers.get("authorization", ""))
         uid = self.tokens.get(m.group(1)) if m else None
@@ -85,7 +105,7 @@ class Mock:
             return send(200, sorted(rows, key=lambda r: r["id"])[off: off + min(lim, 1000)])        # 서버는 한 번에 최대 1000줄
         if req.method == "POST":
             self.event_calls.append((tbl, body))
-            if not self.active_admin(u): return send(403, {"code": "42501", "message": "new row violates row-level security policy"})
+            if not self.can(u, "juris.edit" if tbl == "jurisdiction_events" else "grid.edit"): return send(403, {"code": "42501", "message": "new row violates row-level security policy"})
             if not isinstance(body, list) or any(not isinstance(b, dict) or b.get("kind") not in kinds or not isinstance(b.get("payload"), dict) for b in body): return send(400, {"code": "23514", "message": "check violation"})
             for b in body:
                 rows.append({"id": len(rows) + 1 + getattr(self, "event_id_base", 0), "at": "2026-10-03T05:00:%02dZ" % (len(rows) % 60), "by_user": u["id"], "kind": b["kind"], "payload": b["payload"], "note": b.get("note")})
@@ -96,7 +116,7 @@ class Mock:
         evs, ids = (body or {}).get("p_events"), (body or {}).get("p_approve") or []
         self.event_calls.append(("save_jurisdiction", body))
         if self.events_fail and self.events_fail[0] != "get": return send(*self.events_fail[1])
-        if not self.active_admin(u): return send(403, {"code": "42501", "message": "new row violates row-level security policy"})
+        if not self.can(u, "juris.edit"): return send(403, {"code": "42501", "message": "new row violates row-level security policy"})
         if not isinstance(evs, list) or not evs or any(not isinstance(b, dict) or b.get("kind") not in ("move", "addBranch", "moveHq", "orderBranch") or not isinstance(b.get("payload"), dict) for b in evs): return send(400, {"code": "23514", "message": "check violation"})
         reqs = [r for r in self.requests if r["id"] in set(ids)]
         if len(reqs) != len(set(ids)) or any(r["status"] != "pending" for r in reqs): return send(400, {"code": "55000", "message": "request_not_pending"})
@@ -108,7 +128,7 @@ class Mock:
     def requests_api(self, route, req, u, q, body, send):
         """구간 변경 요청 표와 같은 권한 규칙을 흉내: 지사만 요청·자기 지사 것만 읽기·관리자만 승인/반려·지사는 자기 대기 요청만 취소"""
         import re as _re
-        p = u["profile"]; usable = self.usable(u); is_branch = usable and p["role"] == "branch"; is_admin = self.active_admin(u)
+        p = u["profile"]; usable = self.usable(u); is_branch = self.can(u, "juris.request") and bool(p.get("branch_id")); is_admin = self.can(u, "juris.edit")
         self.req_calls.append((req.method, req.url.split("?", 1)[-1] if "?" in req.url else "", body))
         if getattr(self, "req_fail", None) and req.method != "GET": return send(*self.req_fail)
         def visible(): return list(self.requests) if is_admin else [r for r in self.requests if is_branch and r["branch_id"] == p["branch_id"]]
@@ -172,21 +192,42 @@ class Mock:
                 if not idf.startswith("eq.") and not self.active_admin(u): rows = [r for r in rows if r["id"] == u["id"]]
                 return send(200, rows)
             if tbl in ("branches", "hqs"): return send(200, (self.branches if tbl == "branches" else self.hqs) if self.usable(u) else [])
+            if tbl == "permissions": return send(200, [{"key": k, "label": l, "description": l + " 설명", "default_roles": r} for k, l, r in PERMS] if self.usable(u) else [])
+            if tbl == "equip_orgs": return send(200, [{"name": o} for o in self.orgs] if self.usable(u) else [])
             if tbl == "jurisdiction_requests": return self.requests_api(route, req, u, q, body, send)
             if tbl in self.events: return self.events_api(tbl, req, u, q, body, send)
             if tbl == "snapshots":
                 if not self.usable(u) or self.snow_empty or q.get("key") != ["eq.snow"]: return send(200, [])
                 return route.fulfill(status=200, headers={**CORS, "content-type": "application/json"}, body=snow_snapshot_text())
-            if tbl == "snow_uploads": return send(200, [{"at": "2026-10-04T01:00:00Z", "date_from": "2025-12-01", "date_to": "2025-12-02", "stations": 2, "rows_written": 2, "ok": True, "note": "txt by admin-01"}] if self.active_admin(u) else [])
+            if tbl == "snow_uploads": return send(200, [{"at": "2026-10-04T01:00:00Z", "date_from": "2025-12-01", "date_to": "2025-12-02", "stations": 2, "rows_written": 2, "ok": True, "note": "txt by admin-01"}] if self.can(u, "snow.upload") else [])
             if tbl == "save_jurisdiction" and "/rpc/" in path: return self.save_rpc(u, body, send)
+            if tbl in ("save_fleet", "save_requests") and "/rpc/" in path:
+                self.eq_calls.append((tbl, body))
+                if tbl == "save_fleet":
+                    ok = lambda vid: self.can(u, "equip.edit.all") or (self.can(u, "equip.edit.own") and next((v for v in self.vehicles if v["id"] == vid), {}).get("org") == u["profile"].get("org"))
+                    if any(not ok(v["id"]) for v in body["p_vehicles"]) or any(not ok(r["vehicle_id"]) for r in body["p_routes"]): return send(403, {"code": "42501", "message": "route not allowed"})
+                    for r in body["p_routes"]:
+                        self.routes = [x for x in self.routes if not (x["date"] == r["date"] and x["vehicle_id"] == r["vehicle_id"])] + ([r] if r["stops"] else [])
+                    return send(200, {"vehicles": len(body["p_vehicles"]), "routes_saved": len(body["p_routes"]), "routes_deleted": 0})
+                return send(200, {"rows": len(body["p_rows"])})
+            if tbl in ("vehicles", "vehicle_routes", "support_rounds", "round_requests") and req.method == "GET":
+                if not self.usable(u): return send(200, [])
+                if tbl == "vehicles": return send(200, self.vehicles)
+                if tbl == "support_rounds": return send(200, self.rounds)
+                if tbl == "round_requests": return send(200, [r for r in self.round_reqs if "eq.%d" % r["round_id"] in q.get("round_id", [""])])
+                rows = self.routes; dates = q.get("date", [])
+                for c in dates:
+                    op, v = c.split(".", 1); rows = [r for r in rows if (r["date"] >= v if op == "gte" else r["date"] <= v)]
+                if q.get("vehicle_id"): rows = [r for r in rows if "eq." + r["vehicle_id"] == q["vehicle_id"][0]]
+                return send(200, rows)
             if tbl == "audit_log":
-                rows = self.audit if self.active_admin(u) else []
+                rows = self.audit if self.can(u, "log.view") else []
                 k = q.get("kind", [""])[0]
                 if k.startswith("eq."): rows = [r for r in rows if r["kind"] == k[3:]]
                 return send(200, rows)
             return send(404, {"message": "no table"})
         if path == "/functions/v1/import-snow":
-            if not self.active_admin(u): return send(403, {"ok": False, "error": "forbidden", "message": "관리자만 할 수 있는 작업입니다."})
+            if not self.can(u, "snow.upload"): return send(403, {"ok": False, "error": "forbidden", "message": "적설 자료 올리기 권한이 있는 계정만 할 수 있습니다."})
             self.snow_calls.append(body)
             dry = body.get("action") == "plan"
             return send(200, {"ok": True, "action": body.get("action"), "summary": {"source": "txt" if "txt" in body else "github:main", "stations": 2, "values": 3, "dates": ["20251201", "20251202"]},
@@ -206,6 +247,26 @@ class Mock:
             if a == "reset":
                 x = self.users[body["username"]]; x["password"] = "Tmp#Reset-Zx98Yw76"; x["profile"]["must_change"] = True
                 return send(200, {"ok": True, "username": x["username"], "creds": [{"username": x["username"], "temp_password": "Tmp#Reset-Zx98Yw76"}]})
+            if a == "create":
+                if any(x.get("role") == "admin" for x in body["users"]): return send(400, {"ok": False, "error": "validation", "message": "입력을 확인하세요.", "details": [{"index": 0, "username": "x", "error": "관리자 계정은 여기서 만들 수 없음"}]})
+                taken = [x["username"] for x in body["users"] if x["username"] in self.users]
+                if taken: return send(409, {"ok": False, "error": "exists", "message": "이미 있는 아이디가 있습니다.", "details": taken})
+                creds = []
+                for i, x in enumerate(body["users"]):
+                    pw = "Tmp#New-%02dAbCd%02d" % (i, i)
+                    self.add(x["username"], x["display_name"], x["role"], x.get("branch_id"), pw, must_change=True, org=x.get("org"), hq_id=x.get("hq_id"), perms=x.get("perms"), sort=x.get("sort"))
+                    creds.append({"username": x["username"], "display_name": x["display_name"], "role": x["role"], "temp_password": pw})
+                return send(201, {"ok": True, "created": len(creds), "failed": [], "creds": creds})
+            if a == "update":
+                done, failed = 0, []
+                for it in body["items"]:
+                    x = self.users.get(it["username"])
+                    if not x or not x["profile"]: failed.append({"username": it["username"], "error": "계정을 찾을 수 없음"}); continue
+                    if x["profile"]["role"] == "admin": failed.append({"username": it["username"], "error": "관리자 계정은 모든 권한이 있어 고칠 것이 없음"}); continue
+                    for k in ("display_name", "perms", "sort"):
+                        if k in it: x["profile"][k] = it[k]
+                    done += 1
+                return send(207 if failed else 200, {"ok": not failed, "updated": done, "failed": failed})
             if a in ("disable", "enable"):
                 x = self.users[body["username"]]; x["profile"]["disabled"] = (a == "disable"); return send(200, {"ok": True, "username": x["username"], "disabled": a == "disable"})
             return send(400, {"ok": False, "error": "bad_action", "message": "알 수 없는 작업"})

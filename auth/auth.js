@@ -85,7 +85,7 @@
   /* ---------- 내 정보(역할) 확인 ---------- */
   function loadMe() {
     var s = readSession(); if (!s) return Promise.resolve({ ok: false, reason: 'none' });
-    return rest('profiles?select=id,username,display_name,role,branch_id,must_change,disabled&id=eq.' + encodeURIComponent(s.user_id)).then(function (r) {
+    return rest('profiles?select=id,username,display_name,role,branch_id,org,hq_id,perms,must_change,disabled&id=eq.' + encodeURIComponent(s.user_id)).then(function (r) {
       var p = r.ok && Array.isArray(r.json) && r.json[0];
       if (!p) { if (r.status === 401) { writeSession(null); return { ok: false, reason: 'expired', message: '로그인이 만료되었습니다. 다시 로그인하세요.' }; } writeSession(null); return { ok: false, reason: 'unregistered', message: r.ok ? '이 계정은 아직 등록되어 있지 않습니다. 관리자에게 문의하세요.' : '로그인이 만료되었습니다. 다시 로그인하세요.' }; }
       if (p.disabled) { writeSession(null); return { ok: false, reason: 'disabled', message: '비활성화된 계정입니다. 관리자에게 문의하세요.' }; }
@@ -117,7 +117,9 @@
     return s ? raw('/auth/v1/logout', { method: 'POST', token: s.access_token }).catch(function () {}) : Promise.resolve();
   }
   function hasSession() { return !!readSession(); }
+  // 권한 확인: 관리자는 모든 권한, 나머지는 계정에 켜 둔 권한(perms)만. 화면 표시용이고, 실제 막는 것은 서버 규칙(RLS)이다.
+  function can(me, perm) { return !!(me && !me.disabled && !me.must_change && (me.role === 'admin' || (Array.isArray(me.perms) && me.perms.indexOf(perm) >= 0))); }
 
   root.SSAuth = { CFG: CFG, AUTO_DAYS: AUTO_DAYS, NET_MSG: NET_MSG, login: login, logout: logout, restore: loadMe, hasSession: hasSession,
-    savedUser: savedUser, rememberUser: rememberUser, raw: raw, authed: authed, rest: rest, fn: fn, session: readSession };
+    savedUser: savedUser, rememberUser: rememberUser, can: can, raw: raw, authed: authed, rest: rest, fn: fn, session: readSession };
 })(typeof window !== 'undefined' ? window : this);

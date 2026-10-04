@@ -1,5 +1,6 @@
 /* ============================================================
-   관리 콘솔 (Supabase) — 로그인 · 비밀번호 변경 · 계정 관리 · 비밀번호 일괄 설정(엑셀표) · 접속 로그
+   관리 콘솔 (Supabase) — 로그인 · 비밀번호 변경 · 계정 관리 · 산하기관 아이디 관리(비밀번호 일괄 설정·권한·새 아이디) · 적설 자료 · 접속 로그
+   - 탭은 권한대로 보입니다: 계정 관리·산하기관 아이디 관리 = 관리자, 적설 자료 = snow.upload, 접속 로그 = log.view
    - 이 화면에는 비밀 키가 없습니다. 공개 키(publishable)만 쓰며, 무엇을 할 수 있는지는 서버(DB 권한 + 계정 발급 함수)가 매번 검사합니다.
    - 화면에서 버튼을 숨기는 것은 편의 기능이고, 권한은 서버가 지킵니다.
    - 입력한 비밀번호는 입력칸에만 있고, 저장하면 지우며, 어디에도(저장소·로그·주소) 남기지 않습니다.
@@ -10,8 +11,25 @@
   var P = window.PwPolicy;
   var $ = function (id) { return document.getElementById(id); };
   var app = $('app'), who = $('who'), logoutBtn = $('logoutBtn'), modal = $('modal');
-  var S = { session: null, me: null, tab: 'users', sheet: null, users: null, hq: {}, br: {}, auditKind: '', vt: 0 };
-  var ROLE = { admin: '관리자', branch: '피지원지사', equip: '지원장비' };
+  var S = { session: null, me: null, tab: 'users', sub: 'pw', sheet: null, users: null, hq: {}, br: {}, perms: [], orgs: [], auditKind: '', vt: 0, pm: null };
+  var ROLE = { admin: '관리자', branch: '피지원지사', equip: '지원장비', hq: '지역본부', viewer: '보기 전용' };
+  var can = function (p) { return A.can(S.me, p); };
+  // 추천 산하기관 아이디(사용자 결정 2026-10-04): 지원장비 = 출발 기관별(지역 이름, 4글자면 앞 2글자 + gigyae), 지역본부 = 본부별 9개(지역 이름 전체)
+  var PRESET = [
+    { username: 'exseoulgigyae', display_name: '서울경기 지원장비', role: 'equip', org: '서울경기', sort: 10 },
+    { username: 'exchungbukgigyae', display_name: '충북 지원장비', role: 'equip', org: '충북', sort: 20 },
+    { username: 'exjeonbukgigyae', display_name: '전북 지원장비', role: 'equip', org: '전북', sort: 30 },
+    { username: 'exdaegugigyae', display_name: '대구경북 지원장비', role: 'equip', org: '대구경북', sort: 40 },
+    { username: 'exsudogwon', display_name: '수도권본부', role: 'hq', hq_id: 'H01' },
+    { username: 'exseoulgyeonggi', display_name: '서울경기본부', role: 'hq', hq_id: 'H02' },
+    { username: 'exgangwon', display_name: '강원본부', role: 'hq', hq_id: 'H03' },
+    { username: 'exchungbuk', display_name: '충북본부', role: 'hq', hq_id: 'H04' },
+    { username: 'exdaejeonchungnam', display_name: '대전충남본부', role: 'hq', hq_id: 'H05' },
+    { username: 'exjeonbuk', display_name: '전북본부', role: 'hq', hq_id: 'H06' },
+    { username: 'exgwangjujeonnam', display_name: '광주전남본부', role: 'hq', hq_id: 'H07' },
+    { username: 'exdaegugyeongbuk', display_name: '대구경북본부', role: 'hq', hq_id: 'H08' },
+    { username: 'exbusangyeongnam', display_name: '부산경남본부', role: 'hq', hq_id: 'H09' }
+  ];
 
   function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function msg(kind, text) { return '<div class="msg ' + kind + '" role="status">' + esc(text) + '</div>'; }
@@ -89,55 +107,68 @@
 
   /* ---------- 홈(탭) ---------- */
   function viewHome() {
-    var admin = S.me.role === 'admin';
-    var tabs = admin ? [['users', '계정 관리'], ['sheet', '비밀번호 일괄 설정'], ['snow', '적설 자료'], ['audit', '접속 로그'], ['me', '내 정보']] : [['me', '내 정보']];
+    var admin = S.me.role === 'admin', tabs = [];
+    if (admin) tabs.push(['users', '계정 관리'], ['sheet', '산하기관 아이디 관리']);
+    if (can('snow.upload')) tabs.push(['snow', '적설 자료']);
+    if (can('log.view')) tabs.push(['audit', '접속 로그']);
+    tabs.push(['me', '내 정보']);
     if (!tabs.some(function (t) { return t[0] === S.tab; })) S.tab = tabs[0][0];
     S.vt++;                                   // 화면을 새로 그릴 때마다 번호표를 올려서, 이전 화면의 늦은 응답을 무시함
     app.innerHTML = '<div class="tabs" role="tablist">' + tabs.map(function (t) { return '<button role="tab" type="button" data-t="' + t[0] + '" class="' + (S.tab === t[0] ? 'on' : '') + '">' + t[1] + '</button>'; }).join('') + '</div><div id="pane"></div>';
-    Array.prototype.forEach.call(app.querySelectorAll('.tabs button'), function (b) { b.onclick = function () { if (S.tab === 'sheet' && b.dataset.t !== 'sheet' && sheetDirty() && !window.confirm('저장하지 않은 비밀번호 입력이 있습니다. 탭을 옮기면 사라집니다. 계속할까요?')) return; S.tab = b.dataset.t; if (b.dataset.t !== 'sheet') S.sheet = null; viewHome(); }; });
+    Array.prototype.forEach.call(app.querySelectorAll('.tabs button'), function (b) { b.onclick = function () { if (S.tab === 'sheet' && b.dataset.t !== 'sheet' && (sheetDirty() || permDirty()) && !window.confirm('저장하지 않은 입력(비밀번호·권한)이 있습니다. 탭을 옮기면 사라집니다. 계속할까요?')) return; S.tab = b.dataset.t; if (b.dataset.t !== 'sheet') { S.sheet = null; S.pm = null; } viewHome(); }; });
     ({ users: tabUsers, sheet: tabSheet, snow: tabSnow, audit: tabAudit, me: tabMe })[S.tab]();
   }
   var pane = function () { return $('pane'); };
 
   function tabMe() {
     var m = S.me;
-    pane().innerHTML = '<div class="card"><h2>내 정보</h2><table><tr><th>아이디</th><td>' + esc(m.username) + '</td></tr><tr><th>이름</th><td>' + esc(m.display_name) + '</td></tr><tr><th>역할</th><td>' + esc(ROLE[m.role] || m.role) + (m.branch_id ? ' · ' + esc(m.branch_id) : '') + '</td></tr></table>' +
+    pane().innerHTML = '<div class="card"><h2>내 정보</h2><table><tr><th>아이디</th><td>' + esc(m.username) + '</td></tr><tr><th>이름</th><td>' + esc(m.display_name) + '</td></tr><tr><th>역할</th><td>' + esc(ROLE[m.role] || m.role) + (m.branch_id || m.org || m.hq_id ? ' · ' + esc(m.branch_id || m.org || m.hq_id) : '') + '</td></tr>' +
+      '<tr><th>권한</th><td>' + (m.role === 'admin' ? '관리자(모든 권한)' : esc((m.perms || []).join(', ') || '없음(보기만)')) + '</td></tr></table>' +
       '<p><button id="cp" type="button">비밀번호 변경</button></p>' + '<p><a href="../">← 첫 화면(강설량 측정·장비 지원)으로 가기</a></p>' + '</div>';
     $('cp').onclick = function () { viewChangePw(false); };
   }
 
   /* ---------- 공통: 계정·지사·본부 불러오기 ---------- */
   function loadDirectory() {
-    return Promise.all([rest('profiles?select=id,username,display_name,role,branch_id,disabled,must_change&order=username'), rest('branches?select=id,name,hq_id&order=id'), rest('hqs?select=id,name,sort&order=sort')]).then(function (rs) {
+    return Promise.all([rest('profiles?select=id,username,display_name,role,branch_id,org,hq_id,perms,sort,disabled,must_change&order=username'), rest('branches?select=id,name,hq_id&order=id'), rest('hqs?select=id,name,sort&order=sort'),
+      rest('permissions?select=key,label,description,default_roles&order=sort'), rest('equip_orgs?select=name')]).then(function (rs) {
       if (!rs[0].ok) throw new Error('profiles');
-      S.users = rs[0].json || []; S.br = {}; S.hq = {};
+      S.users = rs[0].json || []; S.br = {}; S.hq = {}; S.perms = rs[3].json || [];
+      var ORG_ORDER = ['서울경기', '충북', '전북', '대구경북'];
+      S.orgs = (rs[4].json || []).map(function (o) { return o.name; }).sort(function (a, b) { var x = ORG_ORDER.indexOf(a), y = ORG_ORDER.indexOf(b); return (x < 0 ? 99 : x) - (y < 0 ? 99 : y) || (a < b ? -1 : 1); });
       (rs[1].json || []).forEach(function (b) { S.br[b.id] = b; }); (rs[2].json || []).forEach(function (h) { S.hq[h.id] = h; });
     });
   }
-  function hqName(u) { var b = S.br[u.branch_id]; return b && S.hq[b.hq_id] ? S.hq[b.hq_id].name : ''; }
+  function hqName(u) {
+    if (u.role === 'hq') return S.hq[u.hq_id] ? S.hq[u.hq_id].name : '';
+    if (u.role === 'equip') return u.org || '';
+    var b = S.br[u.branch_id]; return b && S.hq[b.hq_id] ? S.hq[b.hq_id].name : '';
+  }
   // 강설량 측정 화면과 같은 계층·순서: 본부(hqs.sort 순) → 그 안에서 지사 번호(B001, B002 … 가 곧 data/hierarchy.json 의 지사 순서) → 아이디.
-  // 지사가 아닌 계정(지원장비)은 맨 아래 "지원장비·기타" 묶음.
+  // 지역본부 계정은 그 본부 묶음의 맨 앞, 지원장비는 "지원장비(출발 기관)" 묶음, 보기 전용 등은 맨 아래 "기타" 묶음. 묶음 안 순서는 계정의 sort(○○ 다음) → 아이디.
+  function srt(u) { return String(u.sort == null ? 99999 : u.sort).padStart(6, '0'); }
   function hierInfo(u) {
-    var b = S.br[u.branch_id], h = b && S.hq[b.hq_id];
-    if (h) return { g: h.id, label: h.name, o1: h.sort, o2: b.id };
-    return { g: '_other', label: '지원장비·기타', o1: 9999, o2: '' };
+    var b = S.br[u.branch_id], h = u.role === 'hq' ? S.hq[u.hq_id] : b && S.hq[b.hq_id];
+    if (h) return { g: h.id, label: h.name, o1: h.sort, o2: u.role === 'hq' ? ' ' + srt(u) : b.id };
+    if (u.role === 'equip') return { g: '_equip', label: '지원장비(출발 기관)', o1: 9000, o2: srt(u) };
+    return { g: '_other', label: '기타(보기 전용 등)', o1: 9999, o2: srt(u) };
   }
   function cmpHier(a, b) {
     var x = hierInfo(a), y = hierInfo(b);
     return (x.o1 - y.o1) || (x.o2 < y.o2 ? -1 : x.o2 > y.o2 ? 1 : 0) || (a.username < b.username ? -1 : a.username > b.username ? 1 : 0);
   }
-  var ROLE_ORDER = { admin: 0, equip: 1, branch: 2 };
+  var ROLE_ORDER = { admin: 0, hq: 1, equip: 2, branch: 3, viewer: 4 };
 
   /* ---------- 계정 관리 ---------- */
   function tabUsers() {
     var vt = S.vt;
-    pane().innerHTML = '<div class="card"><h2>계정 관리</h2><div id="m"></div><div class="row"><input id="q" placeholder="아이디·이름·본부 검색" style="min-width:240px"><span class="hint" id="cnt"></span></div><div class="tw" id="list">불러오는 중…</div></div>';
+    pane().innerHTML = '<div class="card"><h2>계정 관리</h2><p class="hint">임시 비밀번호 발급·비활성화. 새 아이디 만들기·권한·순서·비밀번호 일괄 설정은 <b>산하기관 아이디 관리</b> 탭에 있습니다. 관리자 계정은 새로 만들지 않습니다.</p><div id="m"></div><div class="row"><input id="q" placeholder="아이디·이름·소속 검색" style="min-width:240px"><span class="hint" id="cnt"></span></div><div class="tw" id="list">불러오는 중…</div></div>';
     loadDirectory().then(function () { if (vt !== S.vt) return; drawUsers(); $('q').oninput = drawUsers; }).catch(function () { if (vt === S.vt && $('list')) $('list').innerHTML = msg('err', '계정 목록을 불러오지 못했습니다.'); });
   }
   function drawUsers() {
     var q = val('q').trim().toLowerCase(), rows = S.users.slice().sort(function (a, b) { return (ROLE_ORDER[a.role] - ROLE_ORDER[b.role]) || cmpHier(a, b); }).filter(function (u) { return !q || (u.username + ' ' + u.display_name + ' ' + hqName(u)).toLowerCase().indexOf(q) >= 0; });
     $('cnt').textContent = rows.length + ' / ' + S.users.length + '개';
-    $('list').innerHTML = '<table><thead><tr><th>아이디</th><th>이름</th><th>본부</th><th>역할</th><th>상태</th><th></th></tr></thead><tbody>' + rows.map(function (u) {
+    $('list').innerHTML = '<table><thead><tr><th>아이디</th><th>이름</th><th>소속</th><th>역할</th><th>상태</th><th></th></tr></thead><tbody>' + rows.map(function (u) {
       var st = u.disabled ? '<span class="tag bad">비활성</span>' : u.must_change ? '<span class="tag warn">비밀번호 변경 대기</span>' : '<span class="tag ok">사용 중</span>', me = u.id === S.me.id;
       return '<tr><td>' + esc(u.username) + '</td><td>' + esc(u.display_name) + '</td><td>' + esc(hqName(u)) + '</td><td>' + esc(ROLE[u.role]) + '</td><td>' + st + '</td><td>' +
         '<button type="button" data-a="reset" data-u="' + esc(u.username) + '"' + (me ? ' disabled title="본인은 내 정보에서 바꾸세요"' : '') + '>임시 비밀번호 발급</button> ' +
@@ -165,16 +196,27 @@
   /* ---------- 비밀번호 일괄 설정 (엑셀표) ---------- */
   function sheetDirty() { return !!(S.sheet && S.sheet.rows.some(function (r) { return r.pw; })); }
   function tabSheet() {
+    var subs = [['pw', '비밀번호 일괄 설정'], ['perm', '권한·순서'], ['new', '새 아이디 만들기']];
+    pane().innerHTML = '<div class="subtabs" role="tablist">' + subs.map(function (t) { return '<button role="tab" type="button" data-s="' + t[0] + '" class="' + (S.sub === t[0] ? 'on' : '') + '">' + t[1] + '</button>'; }).join('') + '</div><div id="sub"></div>';
+    Array.prototype.forEach.call(pane().querySelectorAll('.subtabs button'), function (b) { b.onclick = function () {
+      if (b.dataset.s === S.sub) return;
+      if ((sheetDirty() || permDirty()) && !window.confirm('저장하지 않은 입력(비밀번호·권한)이 있습니다. 옮기면 사라집니다. 계속할까요?')) return;
+      S.sub = b.dataset.s; S.sheet = null; S.pm = null; S.vt++; tabSheet();
+    }; });
+    ({ pw: subPasswords, perm: subPerms, 'new': subNew })[S.sub]();
+  }
+  var sub = function () { return $('sub'); };
+  function subPasswords() {
     var vt = S.vt;
-    pane().innerHTML = '<div class="card"><h2>비밀번호 일괄 설정</h2>' +
-      '<p class="hint">지사·지원장비 계정의 비밀번호를 한 번에 정합니다. <b>저장한 비밀번호는 담당자가 그대로 계속 쓸 수 있습니다</b>(처음 로그인할 때 바꾸라고 요구하지 않음. 담당자가 원하면 \'내 정보\'에서 언제든 바꿀 수 있고, 관리자가 다시 정하면 그 비밀번호로 돌아갑니다). 표는 <b>강설량 측정 화면과 같은 본부·지사 순서</b>입니다(엑셀 목록을 같은 순서로 만들어 붙여넣으세요). <b>엑셀에서 비밀번호 열(또는 "아이디 + 비밀번호" 두 열)을 복사해 아무 입력칸에 붙여넣으세요.</b> 한 열만 붙여넣으면 눌러 둔 칸부터 아래로 채워지고, 두 열이면 아이디로 찾아 채웁니다. 관리자 계정은 이 표에 나오지 않습니다.</p>' +
+    sub().innerHTML = '<div class="card"><h2>비밀번호 일괄 설정</h2>' +
+      '<p class="hint">산하기관(지사·지역본부·지원장비 등) 계정의 비밀번호를 한 번에 정합니다. <b>저장한 비밀번호는 담당자가 그대로 계속 쓸 수 있습니다</b>(처음 로그인할 때 바꾸라고 요구하지 않음. 담당자가 원하면 \'내 정보\'에서 언제든 바꿀 수 있고, 관리자가 다시 정하면 그 비밀번호로 돌아갑니다). 표는 <b>강설량 측정 화면과 같은 본부·지사 순서</b>입니다(엑셀 목록을 같은 순서로 만들어 붙여넣으세요). <b>엑셀에서 비밀번호 열(또는 "아이디 + 비밀번호" 두 열)을 복사해 아무 입력칸에 붙여넣으세요.</b> 한 열만 붙여넣으면 눌러 둔 칸부터 아래로 채워지고, 두 열이면 아이디로 찾아 채웁니다. 관리자 계정은 이 표에 나오지 않습니다.</p>' +
       '<div id="m"></div><div class="row"><label class="inline"><input type="checkbox" id="rc"> 저장 후 처음 로그인할 때 본인이 비밀번호를 바꾸게 하기</label>' +
       '<label class="inline"><input type="checkbox" id="mk" checked> 입력한 비밀번호 가리기</label><input id="q" placeholder="본부·이름·아이디로 거르기" style="min-width:220px"></div>' +
       '<div class="row"><button type="button" id="rnd">빈 칸을 무작위 비밀번호로 채우기</button><button type="button" id="clr">입력 모두 지우기</button><button type="button" id="csv">입력한 비밀번호 CSV로 받기</button><span class="sp"></span><span id="sum" class="hint"></span><button type="button" class="primary" id="save" disabled>저장</button></div>' +
       '<div class="tw sheet" id="grid">불러오는 중…</div></div>';
     loadDirectory().then(function () {
       if (vt !== S.vt) return;
-      var rows = S.users.filter(function (u) { return u.role !== 'admin'; }).sort(cmpHier).map(function (u) { var h = hierInfo(u); return { id: u.id, username: u.username, name: u.display_name, hq: hqName(u), g: h.g, gl: h.label, pw: '', state: '', note: '' }; });
+      var rows = S.users.filter(function (u) { return u.role !== 'admin'; }).sort(cmpHier).map(function (u) { var h = hierInfo(u); return { id: u.id, username: u.username, name: u.display_name, hq: hqName(u), g: h.g, gl: h.label, kind: u.role, pw: '', state: '', note: '' }; });
       S.sheet = { rows: rows, collapsed: {} }; drawSheet(); bindSheet();
     }).catch(function () { if (vt === S.vt && $('grid')) $('grid').innerHTML = msg('err', '계정 목록을 불러오지 못했습니다.'); });
   }
@@ -196,13 +238,13 @@
       if (r.g !== last) {
         last = r.g;
         var grp = vis.filter(function (x) { return x.g === r.g; }), filled = grp.filter(function (x) { return x.pw; }).length, shut = !!S.sheet.collapsed[r.g];
-        html += '<tr class="grp" data-g="' + esc(r.g) + '"><td colspan="6"><button type="button" class="gtoggle" data-g="' + esc(r.g) + '" aria-expanded="' + (!shut) + '" title="접기·펼치기">' + (shut ? '▸' : '▾') + '</button> <b>' + esc(r.gl) + '</b> <span class="hint">' + (r.g === '_other' ? '계정' : '지사') + ' ' + grp.length + '개 · 입력 <span class="gcnt">' + filled + '</span></span></td></tr>';
+        html += '<tr class="grp" data-g="' + esc(r.g) + '"><td colspan="6"><button type="button" class="gtoggle" data-g="' + esc(r.g) + '" aria-expanded="' + (!shut) + '" title="접기·펼치기">' + (shut ? '▸' : '▾') + '</button> <b>' + esc(r.gl) + '</b> <span class="hint">계정 ' + grp.length + '개 · 입력 <span class="gcnt">' + filled + '</span></span></td></tr>';
       }
       if (S.sheet.collapsed[r.g]) return;                 // 접어도 입력한 값과 붙여넣기 순서에는 영향이 없습니다(보이는 것만 숨김)
       var v = rowView(r, dups);
       html += '<tr class="' + v.cls + '" data-u="' + esc(r.username) + '" data-g="' + esc(r.g) + '"><td>' + n + '</td><td>' + esc(r.hq) + '</td><td>' + esc(r.name) + '</td><td class="mono">' + esc(r.username) + '</td><td class="cell"><input class="pw" type="' + type + '" autocomplete="new-password" spellcheck="false" data-u="' + esc(r.username) + '" value="' + esc(r.pw) + '"></td><td class="cell">' + v.html + '</td></tr>';
     });
-    $('grid').innerHTML = '<table><thead><tr><th>#</th><th>본부</th><th>이름</th><th>아이디</th><th>새 비밀번호</th><th>검사</th></tr></thead><tbody>' + html + '</tbody></table>';
+    $('grid').innerHTML = '<table><thead><tr><th>#</th><th>소속</th><th>이름</th><th>아이디</th><th>새 비밀번호</th><th>검사</th></tr></thead><tbody>' + html + '</tbody></table>';
     updateSummary();
   }
   function updateSummary() {
@@ -269,6 +311,184 @@
     }).catch(function () { $('m').innerHTML = msg('err', netErr()); updateSummary(); });
   }
 
+  /* ---------- 산하기관 아이디 관리 > 권한·순서 ----------
+     계정마다 켜고 끄는 권한(서버 표 permissions 목록 그대로). 관리자 계정은 모든 권한이라 표에 나오지 않습니다.
+     묶음 줄의 칸을 누르면 그 묶음 계정 모두를 한꺼번에 켜거나 끕니다. 지사가 아닌 계정은 "위치(○○ 다음)"로 목록 순서를 정합니다. */
+  function permDirty() { return !!(S.pm && S.pm.rows.some(function (r) { return r.dirty; })); }
+  function samePerms(a, b) { return a.length === b.length && a.every(function (x) { return b.indexOf(x) >= 0; }); }
+  function subPerms() {
+    var vt = S.vt;
+    sub().innerHTML = '<div class="card"><h2>권한·순서</h2><p class="hint">칸에 마우스를 올리면 권한 설명이 나옵니다. <b>묶음 줄의 칸</b>을 누르면 그 묶음 전체를 켜고 끕니다. 바꾼 줄은 노란색이며 <b>[저장]</b>해야 반영됩니다. 실제로 막고 허용하는 것은 서버 규칙이 이 권한으로 검사합니다.</p>' +
+      '<div id="m"></div><div class="row"><input id="q" placeholder="소속·이름·아이디로 거르기" style="min-width:220px"><span class="sp"></span><span id="psum" class="hint"></span><button type="button" id="prev">되돌리기</button><button type="button" class="primary" id="psave" disabled>저장</button></div><div class="tw sheet" id="pgrid">불러오는 중…</div></div>';
+    loadDirectory().then(function () {
+      if (vt !== S.vt) return;
+      S.pm = { rows: S.users.filter(function (u) { return u.role !== 'admin'; }).sort(cmpHier).map(function (u) {
+        var h = hierInfo(u); return { u: u, g: h.g, gl: h.label, perms: (u.perms || []).slice(), sort: u.sort, dirty: false };
+      }) };
+      drawPerms();
+      $('q').oninput = drawPerms;
+      $('prev').onclick = function () { if (permDirty() && !window.confirm('바꾼 권한·순서를 모두 되돌릴까요?')) return; S.pm.rows.forEach(function (r) { r.perms = (r.u.perms || []).slice(); r.sort = r.u.sort; r.dirty = false; }); $('m').innerHTML = ''; resortPerms(); drawPerms(); };
+      $('psave').onclick = savePerms;
+      $('pgrid').addEventListener('change', onPermChange);
+      $('pgrid').addEventListener('click', onPermClick);
+    }).catch(function () { if (vt === S.vt && $('pgrid')) $('pgrid').innerHTML = msg('err', '계정 목록을 불러오지 못했습니다.'); });
+  }
+  function markDirty(r) { r.dirty = !samePerms(r.perms, r.u.perms || []) || (r.sort == null ? null : r.sort) !== (r.u.sort == null ? null : r.u.sort); }
+  function orderedGroup(g) { return S.pm.rows.filter(function (r) { return r.g === g && r.u.role !== 'branch'; }).sort(function (a, b) { return (a.sort == null ? 99999 : a.sort) - (b.sort == null ? 99999 : b.sort) || (a.u.username < b.u.username ? -1 : 1); }); }
+  function drawPerms() {
+    var q = val('q').trim().toLowerCase(), cols = S.perms, html = '', last = null;
+    var vis = S.pm.rows.filter(function (r) { return !q || (hqName(r.u) + ' ' + r.u.display_name + ' ' + r.u.username).toLowerCase().indexOf(q) >= 0; });
+    var head = '<tr><th>소속</th><th>이름</th><th>아이디</th><th>역할</th>' + cols.map(function (p) { return '<th class="pc" title="' + esc(p.description) + '">' + esc(p.label) + '</th>'; }).join('') + '<th>위치(순서)</th></tr>';
+    vis.forEach(function (r) {
+      if (r.g !== last) {
+        last = r.g; var grp = vis.filter(function (x) { return x.g === r.g; });
+        html += '<tr class="grp"><td colspan="4"><b>' + esc(r.gl) + '</b> <span class="hint">' + grp.length + '개</span></td>' + cols.map(function (p) {
+          var on = grp.filter(function (x) { return x.perms.indexOf(p.key) >= 0; }).length;
+          return '<td class="pc"><button type="button" class="gall" data-g="' + esc(r.g) + '" data-p="' + esc(p.key) + '" title="' + esc(r.gl) + ' 전체 ' + esc(p.label) + ' ' + (on === grp.length ? '끄기' : '켜기') + '">' + on + '/' + grp.length + '</button></td>';
+        }).join('') + '<td></td></tr>';
+      }
+      var pos = '';
+      if (r.u.role !== 'branch') {
+        var og = orderedGroup(r.g), i = og.indexOf(r);
+        pos = '<select class="pos" data-u="' + esc(r.u.username) + '"><option value=""' + (i === 0 ? ' selected' : '') + '>맨 앞</option>' + og.filter(function (x) { return x !== r; }).map(function (x) {
+          return '<option value="' + esc(x.u.username) + '"' + (og[i - 1] === x ? ' selected' : '') + '>' + esc(x.u.display_name) + ' 다음</option>';
+        }).join('') + '</select>';
+      } else pos = '<span class="hint">지사 순서</span>';
+      html += '<tr class="' + (r.dirty ? 'dirty' : '') + '"><td>' + esc(hqName(r.u)) + '</td><td>' + esc(r.u.display_name) + '</td><td class="mono">' + esc(r.u.username) + '</td><td>' + esc(ROLE[r.u.role] || r.u.role) + '</td>' +
+        cols.map(function (p) { return '<td class="pc"><input type="checkbox" class="pchk" data-u="' + esc(r.u.username) + '" data-p="' + esc(p.key) + '" title="' + esc(p.label) + '"' + (r.perms.indexOf(p.key) >= 0 ? ' checked' : '') + '></td>'; }).join('') +
+        '<td>' + pos + '</td></tr>';
+    });
+    $('pgrid').innerHTML = '<table class="perm"><thead>' + head + '</thead><tbody>' + (html || '<tr><td colspan="' + (cols.length + 5) + '" class="hint">계정이 없습니다.</td></tr>') + '</tbody></table>';
+    var n = S.pm.rows.filter(function (r) { return r.dirty; }).length;
+    $('psum').textContent = n ? '바꾼 계정 ' + n + '개' : ''; $('psave').disabled = !n; $('psave').textContent = n ? '저장 (' + n + '개)' : '저장';
+  }
+  function resortPerms() { var cu = function (r) { return Object.assign({}, r.u, { sort: r.sort }); }; S.pm.rows.sort(function (a, b) { return cmpHier(cu(a), cu(b)); }); }   // 바꾼 순서를 바로 보여 줌
+  function rowOf(username) { return S.pm.rows.filter(function (r) { return r.u.username === username; })[0]; }
+  function onPermChange(e) {
+    var t = e.target;
+    if (t.classList.contains('pchk')) {
+      var r = rowOf(t.dataset.u), k = t.dataset.p;
+      r.perms = t.checked ? r.perms.concat(r.perms.indexOf(k) >= 0 ? [] : [k]) : r.perms.filter(function (x) { return x !== k; });
+      markDirty(r); drawPerms();
+    } else if (t.classList.contains('pos')) {
+      var me = rowOf(t.dataset.u), og = orderedGroup(me.g).filter(function (x) { return x !== me; }), at = t.value ? og.indexOf(rowOf(t.value)) + 1 : 0;
+      og.splice(at, 0, me);
+      og.forEach(function (x, i) { x.sort = (i + 1) * 10; markDirty(x); });          // 묶음 안 순서를 10, 20, 30 … 으로 다시 매김
+      resortPerms(); drawPerms();
+    }
+  }
+  function onPermClick(e) {
+    var b = e.target.closest && e.target.closest('.gall'); if (!b) return;
+    var q = val('q').trim().toLowerCase(), k = b.dataset.p;
+    var grp = S.pm.rows.filter(function (r) { return r.g === b.dataset.g && (!q || (hqName(r.u) + ' ' + r.u.display_name + ' ' + r.u.username).toLowerCase().indexOf(q) >= 0); });
+    var allOn = grp.every(function (r) { return r.perms.indexOf(k) >= 0; });
+    grp.forEach(function (r) { r.perms = allOn ? r.perms.filter(function (x) { return x !== k; }) : r.perms.concat(r.perms.indexOf(k) >= 0 ? [] : [k]); markDirty(r); });
+    drawPerms();
+  }
+  function savePerms() {
+    var items = S.pm.rows.filter(function (r) { return r.dirty; }).map(function (r) {
+      var it = { username: r.u.username };
+      if (!samePerms(r.perms, r.u.perms || [])) it.perms = S.perms.map(function (p) { return p.key; }).filter(function (k) { return r.perms.indexOf(k) >= 0; });
+      if ((r.sort == null ? null : r.sort) !== (r.u.sort == null ? null : r.u.sort)) it.sort = r.sort;
+      return it;
+    });
+    if (!items.length || !window.confirm(items.length + '개 계정의 권한·순서를 저장할까요?\n바뀐 권한은 그 사람이 다음에 화면을 새로 열 때부터 적용되고, 서버 규칙에는 바로 적용됩니다.')) return;
+    $('psave').disabled = true; $('m').innerHTML = msg('warn', '저장하는 중…');
+    fn({ action: 'update', items: items }).then(function (r) {
+      var j = r.json || {}; if (!$('pgrid')) return;
+      if (!r.ok && r.status !== 207) { $('m').innerHTML = msg('err', j.message + (j.details ? '\n' + j.details.map(function (d) { return d.username + ': ' + d.error; }).join('\n') : '') || '저장하지 못했습니다.'); drawPerms(); return; }
+      var failed = (j.failed || []).map(function (f) { return f.username + ': ' + f.error; });
+      $('m').innerHTML = msg(failed.length ? 'warn' : 'ok', (j.updated || 0) + '개 계정을 저장했습니다.' + (failed.length ? '\n실패: ' + failed.join(', ') : ''));
+      var vt = S.vt; return loadDirectory().then(function () { if (vt !== S.vt) return; S.pm.rows.forEach(function (r) { var u = S.users.filter(function (x) { return x.id === r.u.id; })[0]; if (u) { r.u = u; if (!failed.length || !failed.some(function (f) { return f.indexOf(u.username + ':') === 0; })) { r.perms = (u.perms || []).slice(); r.sort = u.sort; } } markDirty(r); }); resortPerms(); drawPerms(); });
+    }).catch(function () { $('m').innerHTML = msg('err', netErr()); drawPerms(); });
+  }
+
+  /* ---------- 산하기관 아이디 관리 > 새 아이디 만들기 ----------
+     관리자 계정은 만들지 않습니다. 비밀번호는 서버가 무작위 임시 비밀번호로 만들고 지금 한 번만 보여 줍니다(이후 "비밀번호 일괄 설정"에서 원하는 값으로 정함). */
+  function defaultsFor(role) { return S.perms.filter(function (p) { return (p.default_roles || []).indexOf(role) >= 0; }).map(function (p) { return p.key; }); }
+  function subNew() {
+    var vt = S.vt;
+    sub().innerHTML = '<div class="card"><h2>추천 산하기관 아이디</h2><p class="hint">지원장비 4개(출발 기관별)와 지역본부 9개(본부별)입니다. 아직 없는 아이디만 만들고, 임시 비밀번호는 무작위로 정해 지금 한 번만 보여 줍니다(나중에 <b>비밀번호 일괄 설정</b>에서 원하는 비밀번호로 바꾸세요). 권한은 역할 기본값이며 <b>권한·순서</b>에서 바꿀 수 있습니다.</p><div id="pm"></div><div class="tw" id="preset">불러오는 중…</div><p><button type="button" class="primary" id="mkpreset" disabled>없는 아이디 만들기</button></p></div>' +
+      '<div class="card"><h2>새 아이디 하나 만들기</h2><div id="m"></div>' +
+      '<div class="form2"><label>역할<select id="nrole"><option value="equip">지원장비(출발 기관)</option><option value="hq">지역본부</option><option value="viewer">보기 전용</option><option value="branch">피지원지사</option></select></label>' +
+      '<label>소속<select id="nwhere"></select></label><label>아이디<input id="nuser" autocapitalize="none" spellcheck="false" placeholder="영문 소문자·숫자 (예: exseoulgigyae)"></label><label>이름<input id="nname" placeholder="예: 서울경기 지원장비"></label>' +
+      '<label>위치(목록 순서)<select id="npos"></select></label></div><div id="nperms" class="permpick"></div><p><button type="button" class="primary" id="nmake">만들기</button></p></div>';
+    loadDirectory().then(function () {
+      if (vt !== S.vt) return;
+      drawPreset(); fillNewForm();
+      $('nrole').onchange = fillNewForm; $('nwhere').onchange = fillPos;
+      $('nmake').onclick = makeOne; $('mkpreset').onclick = makePreset;
+    }).catch(function () { if (vt === S.vt && $('preset')) $('preset').innerHTML = msg('err', '계정 목록을 불러오지 못했습니다.'); });
+  }
+  function presetWhere(p) { return p.role === 'equip' ? p.org : (S.hq[p.hq_id] ? S.hq[p.hq_id].name : p.hq_id); }
+  function drawPreset() {
+    var have = {}; S.users.forEach(function (u) { have[u.username] = u; });
+    var missing = PRESET.filter(function (p) { return !have[p.username]; });
+    $('preset').innerHTML = '<table><thead><tr><th>역할</th><th>소속</th><th>아이디</th><th>이름</th><th>기본 권한</th><th>상태</th></tr></thead><tbody>' + PRESET.map(function (p) {
+      return '<tr><td>' + esc(ROLE[p.role]) + '</td><td>' + esc(presetWhere(p)) + '</td><td class="mono">' + esc(p.username) + '</td><td>' + esc(p.display_name) + '</td><td class="hint">' + esc(defaultsFor(p.role).join(', ')) + '</td><td>' + (have[p.username] ? '<span class="tag ok">있음</span>' : '<span class="tag warn">없음</span>') + '</td></tr>';
+    }).join('') + '</tbody></table>';
+    $('mkpreset').disabled = !missing.length; $('mkpreset').textContent = missing.length ? '없는 아이디 ' + missing.length + '개 만들기' : '모두 만들어져 있음';
+  }
+  function makePreset() {
+    var have = {}; S.users.forEach(function (u) { have[u.username] = 1; });
+    var users = PRESET.filter(function (p) { return !have[p.username]; }).map(function (p) { var o = {}; Object.keys(p).forEach(function (k) { o[k] = p[k]; }); return o; });
+    if (!users.length || !window.confirm(users.length + '개 아이디를 만들까요?\n' + users.map(function (u) { return u.username; }).join(', ') + '\n임시 비밀번호는 무작위로 정해지고 지금 한 번만 보입니다.')) return;
+    createUsers(users, 'pm', drawPreset);
+  }
+  function fillNewForm() {
+    var role = val('nrole'), opts = role === 'equip' ? S.orgs.map(function (o) { return [o, o]; })
+      : role === 'hq' ? Object.keys(S.hq).map(function (k) { return S.hq[k]; }).sort(function (a, b) { return a.sort - b.sort; }).map(function (h) { return [h.id, h.name]; })
+      : role === 'branch' ? Object.keys(S.br).sort().map(function (k) { var b = S.br[k]; return [b.id, (S.hq[b.hq_id] ? S.hq[b.hq_id].name + ' · ' : '') + b.name + ' (' + b.id + ')']; }) : [];
+    $('nwhere').innerHTML = opts.length ? opts.map(function (o) { return '<option value="' + esc(o[0]) + '">' + esc(o[1]) + '</option>'; }).join('') : '<option value="">(소속 없음)</option>';
+    $('nwhere').disabled = !opts.length;
+    var d = defaultsFor(role);
+    $('nperms').innerHTML = '<div class="hint">권한 (역할 기본값이 켜져 있음)</div>' + S.perms.map(function (p) { return '<label class="inline" title="' + esc(p.description) + '"><input type="checkbox" class="npc" value="' + esc(p.key) + '"' + (d.indexOf(p.key) >= 0 ? ' checked' : '') + '> ' + esc(p.label) + '</label>'; }).join('');
+    fillPos();
+  }
+  function groupOfNew() { var role = val('nrole'), w = val('nwhere'); return role === 'equip' ? '_equip' : role === 'hq' ? w : role === 'branch' ? null : '_other'; }
+  function fillPos() {
+    var g = groupOfNew(), list = g ? S.users.filter(function (u) { return u.role !== 'admin' && u.role !== 'branch' && hierInfo(u).g === g; }).sort(cmpHier) : [];
+    $('npos').innerHTML = g ? '<option value="">맨 앞</option>' + list.map(function (u, i) { return '<option value="' + esc(u.username) + '"' + (i === list.length - 1 ? ' selected' : '') + '>' + esc(u.display_name) + ' 다음</option>'; }).join('') : '<option value="">지사 순서(자동)</option>';
+    $('npos').disabled = !g;
+  }
+  function makeOne() {
+    var role = val('nrole'), w = val('nwhere'), u = { username: val('nuser').trim().toLowerCase(), display_name: val('nname').trim(), role: role,
+      perms: Array.prototype.filter.call(document.querySelectorAll('.npc'), function (c) { return c.checked; }).map(function (c) { return c.value; }) };
+    if (role === 'equip') u.org = w; if (role === 'hq') u.hq_id = w; if (role === 'branch') u.branch_id = w;
+    if (!/^[a-z0-9._-]{3,32}$/.test(u.username)) { $('m').innerHTML = msg('err', '아이디는 영문 소문자·숫자·. _ - 로 3~32자입니다.'); return; }
+    if (!u.display_name) { $('m').innerHTML = msg('err', '이름을 입력하세요.'); return; }
+    var g = groupOfNew(), reorder = [];
+    if (g) {                                               // "○○ 다음" → 묶음 순서를 10, 20 … 으로 다시 매기고 새 계정을 그 자리에
+      var list = S.users.filter(function (x) { return x.role !== 'admin' && x.role !== 'branch' && hierInfo(x).g === g; }).sort(cmpHier), after = val('npos');
+      var at = after ? list.map(function (x) { return x.username; }).indexOf(after) + 1 : 0, seq = list.slice(); seq.splice(at, 0, { username: u.username, isNew: true });
+      seq.forEach(function (x, i) { if (x.isNew) u.sort = (i + 1) * 10; else if (x.sort !== (i + 1) * 10) reorder.push({ username: x.username, sort: (i + 1) * 10 }); });
+    }
+    if (!window.confirm(u.username + ' (' + ROLE[role] + ') 아이디를 만들까요?\n임시 비밀번호는 무작위로 정해지고 지금 한 번만 보입니다.')) return;
+    createUsers([u], 'm', function () { $('nuser').value = ''; $('nname').value = ''; fillPos(); }, reorder);
+  }
+  function createUsers(users, box, after, reorder) {
+    $(box).innerHTML = msg('warn', '만드는 중…');
+    fn({ action: 'create', users: users }).then(function (r) {
+      var j = r.json || {};
+      if (r.status === 400 && j.details) { $(box).innerHTML = msg('err', '입력을 확인하세요.\n' + j.details.map(function (d) { return (d.username || '') + ': ' + d.error; }).join('\n')); return; }
+      if (r.status === 409) { $(box).innerHTML = msg('err', '이미 있는 아이디입니다: ' + (j.details || []).join(', ')); return; }
+      if (!r.ok && r.status !== 207) { $(box).innerHTML = msg('err', j.message || '만들지 못했습니다.'); return; }
+      $(box).innerHTML = msg((j.failed || []).length ? 'warn' : 'ok', (j.created || 0) + '개 아이디를 만들었습니다.' + ((j.failed || []).length ? '\n실패: ' + j.failed.map(function (f) { return f.username + '(' + f.error + ')'; }).join(', ') : ''));
+      if (j.creds && j.creds.length) showTempList(j.creds);
+      var next = reorder && reorder.length ? fn({ action: 'update', items: reorder }) : Promise.resolve();
+      var vt = S.vt; return next.then(function () { return loadDirectory(); }).then(function () { if (vt === S.vt && after) after(); });
+    }).catch(function () { $(box).innerHTML = msg('err', netErr()); });
+  }
+  function showTempList(creds) {
+    modal.hidden = false;
+    var csv = '\uFEFF' + [['아이디', '이름', '임시 비밀번호']].concat(creds.map(function (c) { return [c.username, c.display_name, c.temp_password]; })).map(function (l) { return l.join(','); }).join('\r\n') + '\r\n';
+    modal.innerHTML = '<div class="dialog"><h3>임시 비밀번호 — ' + creds.length + '개</h3><p>이 비밀번호는 <b>지금 한 번만</b> 보입니다. 처음 로그인하면 새 비밀번호를 정하게 됩니다(또는 <b>비밀번호 일괄 설정</b>에서 관리자가 정할 수 있습니다).</p>' +
+      '<div class="tw"><table><thead><tr><th>아이디</th><th>이름</th><th>임시 비밀번호</th></tr></thead><tbody>' + creds.map(function (c) { return '<tr><td class="mono">' + esc(c.username) + '</td><td>' + esc(c.display_name) + '</td><td class="temp">' + esc(c.temp_password) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+      '<div class="row"><button type="button" id="dl">CSV로 받기</button><button type="button" class="primary" id="cl">닫기</button></div></div>';
+    $('dl').onclick = function () { var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = 'new-accounts.csv'; document.body.appendChild(a); a.click(); a.remove(); };
+    $('cl').onclick = function () { modal.hidden = true; modal.innerHTML = ''; };
+  }
+
   /* ---------- 접속 로그 ---------- */
   /* ---------- 적설 자료 (관리자 전용): 기상청 메모장 파일 → 서버(snow_daily) → 화면용 요약본 ----------
      서버 함수 import-snow 가 관리자 로그인을 다시 확인하고, 검사(plan) → 저장(load) 순서로 넣습니다. 결측(-99.9)·시즌 밖 날짜는 서버가 거릅니다. */
@@ -327,7 +547,7 @@
 
   function tabAudit() {
     var vt = S.vt;
-    pane().innerHTML = '<div class="card"><h2>접속·수정 로그</h2><div class="row"><label class="inline">구분 <select id="k"><option value="">전체</option><option>계정생성</option><option>비밀번호설정</option><option>비밀번호초기화</option><option>계정비활성화</option><option>계정활성화</option><option>수정</option><option>추가</option><option>삭제</option></select></label><button type="button" id="go">조회</button></div>' +
+    pane().innerHTML = '<div class="card"><h2>접속·수정 로그</h2><div class="row"><label class="inline">구분 <select id="k"><option value="">전체</option><option>계정생성</option><option>비밀번호설정</option><option>비밀번호초기화</option><option>계정비활성화</option><option>계정활성화</option><option>계정수정</option><option>수정</option><option>추가</option><option>삭제</option></select></label><button type="button" id="go">조회</button></div>' +
       '<p class="hint">기록은 서버가 남기며 이 화면에서 고치거나 지울 수 없습니다. 비밀번호는 기록되지 않습니다.</p><div class="tw" id="rows">불러오는 중…</div></div>';
     $('k').value = S.auditKind;
     var load = function () {
@@ -343,7 +563,7 @@
     $('go').onclick = load; load();
   }
 
-  window.addEventListener('beforeunload', function (e) { if (sheetDirty()) { e.preventDefault(); e.returnValue = ''; } });
+  window.addEventListener('beforeunload', function (e) { if (sheetDirty() || permDirty()) { e.preventDefault(); e.returnValue = ''; } });
   logoutBtn.onclick = logout;
   window.AdminApp = { _state: function () { return S; } };
   start();

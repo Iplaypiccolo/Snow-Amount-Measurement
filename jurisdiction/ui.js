@@ -86,7 +86,7 @@
         '<div class="jr-legend"><span>이중 테두리 = 선택한 구간</span><span>점선 = 변경 대기</span><span><b style="color:#3f3f3f">진한 회색 = 미지정</b></span> <label><input type="checkbox" id="jr-none" checked> 미지정 고속도로</label> <label><input type="checkbox" id="jr-roads" checked> 배경 도로</label></div>' +
       '</div></div>' +
       '<div id="jr-modal" class="jr-modal" style="display:none"></div>';
-    $('jr-role').textContent = S.admin ? '관리자' : S.canRequest ? '변경 요청 가능' : '보기 전용';
+    $('jr-role').textContent = S.admin ? '관할 편집' : S.canRequest ? '변경 요청 가능' : '보기 전용';
     $('jr-note').innerHTML = S.admin ? '구간을 눌러 선택하고(Shift+클릭: 범위) 다른 지사로 <b>이동 대기에 추가</b>하세요. 여러 건을 모아 오른쪽 위 <b>[저장]</b>을 누르면 한꺼번에 적용됩니다. 지사가 올린 <b>변경 요청</b>은 아래 목록에 나타납니다.'
       : S.canRequest ? '구간을 눌러 선택한 뒤 <b>[구간 변경 요청]</b>을 누르면 관리자에게 다른 기관으로 옮겨 달라고 요청할 수 있습니다. 관할 변경은 관리자만 할 수 있습니다.'
       : '지도에서 구간을 누르면 테두리와 함께 소속 정보가 보입니다. 관할 변경은 관리자만 할 수 있습니다.';
@@ -698,7 +698,8 @@
     if (!J() || !J().doc) { root.innerHTML = '<div class="jr-empty" style="padding:30px">관할 구간 데이터(data/sections.json)를 불러오지 못했습니다.</div>'; return; }
     S.secMap = {}; J().doc.sections.forEach(function (s) { S.secMap[s.id] = s; });
     var me = window.SS_ME || null;            // 로그인한 사람 (첫 화면 로그인 잠금이 채움). 없으면 보기 전용
-    S.admin = !!(me && me.role === 'admin'); S.canRequest = !!(me && me.role === 'branch');
+    var can = function (p) { return !!(window.SS_CAN && window.SS_CAN(p)); };
+    S.admin = can('juris.edit'); S.canRequest = !S.admin && can('juris.request') && !!(me && me.branch_id);   // 권한(관리자는 모두)으로 판단
     buildShell(); bind(); $('view-jurisdiction').classList.toggle('jr-is-admin', S.admin);
     S.view = C.summarize(J().doc, events());
     var myBr = me && me.role === 'branch' && me.branch_id && S.view.state.branches[me.branch_id];

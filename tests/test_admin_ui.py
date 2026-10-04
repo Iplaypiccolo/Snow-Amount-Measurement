@@ -63,7 +63,7 @@ def t_login_session_logout(b, m):
     login(p, "admin-01", "wrong-password-xx"); check("올바르지 않습니다" in p.locator(".msg.err").inner_text(), "로그인 실패 문구")
     check(p.evaluate("sessionStorage.getItem('ss_session')") is None, "실패했는데 세션이 저장됨")
     login(p, "admin-01", ADMIN_PW); p.wait_for_selector(".tabs")
-    check(p.locator(".tabs button").all_inner_texts() == ["계정 관리", "비밀번호 일괄 설정", "적설 자료", "접속 로그", "내 정보"], p.locator(".tabs button").all_inner_texts())
+    check(p.locator(".tabs button").all_inner_texts() == ["계정 관리", "산하기관 아이디 관리", "적설 자료", "접속 로그", "내 정보"], p.locator(".tabs button").all_inner_texts())
     check("관리자1" in p.locator("#who").inner_text(), "상단 이름")
     ss = p.evaluate("sessionStorage.getItem('ss_session')"); check(ss and ADMIN_PW not in ss and "password" not in ss.lower(), "세션에 비밀번호가 저장됨")
     check(p.evaluate("localStorage.length") == 0, "localStorage 사용 금지")
@@ -176,7 +176,7 @@ def t_sheet_random_csv_filter(b, m):
 def t_sheet_unsaved_guard_and_clear(b, m):
     dl = []; p = admin_sheet(b, m, dl); u = p.locator("input.pw").first.get_attribute("data-u")
     p.fill(f"input.pw[data-u='{u}']", GOOD(1)); p.click('.tabs button[data-t=audit]'); p.wait_for_selector("#k")
-    check(any("저장하지 않은 비밀번호" in d for d in dl), "탭을 옮길 때 경고")
+    check(any("저장하지 않은 입력" in d for d in dl), "탭을 옮길 때 경고")
     p.click('.tabs button[data-t=sheet]'); p.wait_for_selector("input.pw"); check(all(x == "" for x in vals(p).values()), "탭을 옮기면 입력이 사라져야 함")
     p.fill(f"input.pw[data-u='{u}']", GOOD(1)); p.click("#clr"); check(all(x == "" for x in vals(p).values()), "모두 지우기")
 
@@ -239,7 +239,7 @@ def t_fast_tab_switching_no_errors(b, m):
     for t in ("users", "sheet", "audit", "users", "sheet"): p.click(f'.tabs button[data-t={t}]')
     p.wait_for_selector("input.pw", timeout=15000); p.wait_for_timeout(1800)
     check(len(errors) == n0, f"탭을 빨리 바꿀 때 페이지 오류: {errors[n0:]}")
-    check(p.locator('.tabs button.on').inner_text() == "비밀번호 일괄 설정" and p.locator("input.pw").count() == 10 and p.locator("#list").count() == 0, "마지막으로 누른 탭의 내용만 보여야 함")
+    check(p.locator('.tabs button.on').inner_text() == "산하기관 아이디 관리" and p.locator("input.pw").count() == 10 and p.locator("#list").count() == 0, "마지막으로 누른 탭의 내용만 보여야 함")
     u = p.locator("input.pw").first.get_attribute("data-u"); p.fill(f"input.pw[data-u='{u}']", GOOD(1)); p.click("#save"); p.click('.tabs button[data-t=audit]')   # 저장 중에 화면을 옮겨도 오류 없음
     p.wait_for_timeout(1500); check(len(errors) == n0, f"저장 중 탭 이동 오류: {errors[n0:]}")
 
@@ -248,11 +248,11 @@ HIER = ["exdisabled", "exincheon", "exsiheung", "exgunpo", "exhwaseong", "exdong
 def t_sheet_hierarchy_order(b, m):
     p = admin_sheet(b, m)
     heads = [h.strip() for h in p.locator("tr.grp b").all_inner_texts()]
-    check(heads == ["수수도권".replace("수수", "수"), "서울경기", "강원", "충북", "광주전남", "지원장비·기타"], heads)
+    check(heads == ["수수도권".replace("수수", "수"), "서울경기", "강원", "충북", "광주전남", "지원장비(출발 기관)"], heads)
     check([i.get_attribute("data-u") for i in p.locator("input.pw").all()] == HIER, [i.get_attribute("data-u") for i in p.locator("input.pw").all()])
     check(p.locator("tbody tr[data-u] td:first-child").all_inner_texts() == [str(i) for i in range(1, 11)], "번호는 본부를 넘어 1부터 이어져야 함")
     g = lambda code: p.locator(f"tr.grp[data-g={code}]")
-    check("지사 5개" in g("H01").inner_text() and "지사 1개" in g("H04").inner_text() and "계정 1개" in g("_other").inner_text(), g("H01").inner_text())
+    check("계정 5개" in g("H01").inner_text() and "계정 1개" in g("H04").inner_text() and "계정 1개" in g("_equip").inner_text(), g("H01").inner_text())
     # 접기: 보이는 줄만 숨고 입력값·순서는 그대로
     p.fill("input.pw[data-u='exincheon']", GOOD(1)); check("입력 1" in g("H01").inner_text(), "본부 머리줄의 입력 개수가 갱신되어야 함")
     p.click("tr.grp[data-g=H01] .gtoggle"); check(p.locator("input.pw").count() == 5 and p.locator("tr.grp").count() == 6, "접으면 지사 줄만 숨김")
@@ -290,8 +290,84 @@ def t_token_refresh(b, m):
     p.evaluate("(() => { const s = JSON.parse(sessionStorage.getItem('ss_session')); s.expires_at = Date.now() + 1000; s.refresh_token = 'bad'; sessionStorage.setItem('ss_session', JSON.stringify(s)); })()")
     p.reload(); p.wait_for_selector("#u"); check("만료" in p.locator(".msg.warn").inner_text(), "갱신 실패 시 다시 로그인 안내")
 
+
+def org_sub(b, m, sub, dialogs=None):
+    p = new_page(b, m, dialogs); login(p, "admin-01", ADMIN_PW); p.wait_for_selector(".tabs")
+    p.click('.tabs button[data-t=sheet]'); p.wait_for_selector("input.pw"); p.click(f'.subtabs button[data-s={sub}]'); return p
+
+def t_perm_tab(b, m):
+    """권한·순서: 체크칸·묶음 전체 켜기·위치(○○ 다음) → 바꾼 계정만 update 로 보냄, 관리자는 표에 없음"""
+    dl = []; p = org_sub(b, m, "perm", dl); p.wait_for_selector("table.perm")
+    check(p.locator("table.perm th.pc").count() == 11, "권한 11개 열")
+    users = [x.get_attribute("data-u") for x in p.locator("input.pchk[data-p='juris.edit']").all()]
+    check("admin-01" not in users and "exchungju" in users and "equip-01" in users, users)
+    check(p.locator("input.pchk[data-u=exchungju][data-p='juris.request']").is_checked() and not p.locator("input.pchk[data-u=exchungju][data-p='grid.edit']").is_checked(), "지사 기본 권한 표시")
+    check(p.locator("#psave").is_disabled(), "바꾼 것이 없으면 저장 못 함")
+    p.check("input.pchk[data-u=exchungju][data-p='grid.edit']"); check(p.locator("tr.dirty").count() == 1 and "1개" in p.locator("#psave").inner_text(), "바꾼 줄 표시")
+    p.click("button.gall[data-g=H01][data-p='snow.upload']")              # 수도권 묶음(지사 5개) 모두 켜기
+    check(all(p.locator(f"input.pchk[data-u={u}][data-p='snow.upload']").is_checked() for u in ("exincheon", "exsiheung", "exgunpo", "exhwaseong", "exdisabled")), "묶음 전체 켜기")
+    p.click("button.gall[data-g=H01][data-p='snow.upload']"); check(not p.locator("input.pchk[data-u=exincheon][data-p='snow.upload']").is_checked(), "다시 누르면 끄기")
+    p.click("button.gall[data-g=H01][data-p='snow.upload']")
+    p.uncheck("input.pchk[data-u=equip-01][data-p='equip.edit.own']")
+    n0 = len(m.fn_calls); p.click("#psave"); p.wait_for_selector(".msg.ok")
+    call = m.fn_calls[n0]; check(call["action"] == "update", call)
+    items = {i["username"]: i for i in call["items"]}
+    check(set(items) == {"exchungju", "exincheon", "exsiheung", "exgunpo", "exhwaseong", "exdisabled", "equip-01"}, sorted(items))
+    check(items["exchungju"]["perms"] == ["juris.request", "grid.edit", "req.edit.own"] and "sort" not in items["exchungju"], items["exchungju"])
+    check(items["equip-01"]["perms"] == [], items["equip-01"])
+    check(m.users["exincheon"]["profile"]["perms"] == ["juris.request", "snow.upload", "req.edit.own"], m.users["exincheon"]["profile"]["perms"])
+    check(p.locator("tr.dirty").count() == 0 and p.locator("#psave").is_disabled(), "저장하면 표시가 사라짐")
+    # 위치: 지원장비 묶음에 하나 더 넣고 순서 바꾸기
+    m.add("exchungbukgigyae", "충북 지원장비", "equip", None, "x", org="충북", sort=20); m.users["equip-01"]["profile"]["sort"] = 10
+    p.reload(); p.wait_for_selector(".tabs"); p.click('.tabs button[data-t=sheet]'); p.click('.subtabs button[data-s=perm]'); p.wait_for_selector("table.perm")
+    order = lambda: [x.get_attribute("data-u") for x in p.locator("select.pos").all()]
+    check(order() == ["equip-01", "exchungbukgigyae"], order())
+    p.select_option("select.pos[data-u=equip-01]", "exchungbukgigyae")
+    n0 = len(m.fn_calls); p.click("#psave"); p.wait_for_selector(".msg.ok")
+    items = {i["username"]: i for i in m.fn_calls[n0]["items"]}
+    check(items == {"exchungbukgigyae": {"username": "exchungbukgigyae", "sort": 10}, "equip-01": {"username": "equip-01", "sort": 20}}, items)
+    p.wait_for_timeout(300); check(order() == ["exchungbukgigyae", "equip-01"], order())
+
+def t_new_accounts(b, m):
+    """새 아이디: 추천 13개는 없는 것만 만들고 임시 비밀번호를 한 번 보여 줌, 관리자 역할은 고를 수 없음, 하나 만들기는 위치·권한 포함"""
+    dl = []; p = org_sub(b, m, "new", dl); p.wait_for_selector("#preset table")
+    check(p.locator("#preset tbody tr").count() == 13 and p.locator("#preset .tag.warn").count() == 13, "추천 13개, 모두 없음")
+    check("admin" not in p.locator("#nrole option").evaluate_all("os => os.map(o => o.value)"), "관리자 역할 없음")
+    m.add("exgangwon", "강원본부", "hq", None, "x", hq_id="H03")                      # 하나는 이미 있는 상황
+    p.reload(); p.wait_for_selector(".tabs"); p.click('.tabs button[data-t=sheet]'); p.click('.subtabs button[data-s=new]'); p.wait_for_selector("#preset table")
+    check("12개" in p.locator("#mkpreset").inner_text(), p.locator("#mkpreset").inner_text())
+    n0 = len(m.fn_calls); p.click("#mkpreset"); p.wait_for_selector(".dialog td.temp")
+    call = m.fn_calls[n0]; users = {u["username"]: u for u in call["users"]}
+    check(call["action"] == "create" and len(users) == 12 and "exgangwon" not in users, sorted(users))
+    check(users["exseoulgigyae"] == {"username": "exseoulgigyae", "display_name": "서울경기 지원장비", "role": "equip", "org": "서울경기", "sort": 10}, users["exseoulgigyae"])
+    check(users["exdaegugyeongbuk"]["hq_id"] == "H08" and users["exdaegugyeongbuk"]["role"] == "hq", users["exdaegugyeongbuk"])
+    check(p.locator(".dialog td.temp").count() == 12 and any("12개 아이디" in d for d in dl), "임시 비밀번호 12개 표시")
+    p.click("#cl"); p.wait_for_timeout(300); check(p.locator("#preset .tag.ok").count() == 13 and p.locator("#mkpreset").is_disabled(), "모두 만들어짐")
+    # 하나 만들기
+    p.select_option("#nrole", "viewer"); check(p.locator("#nwhere").is_disabled() and p.locator(".npc:checked").count() == 0, "보기 전용은 소속·기본 권한 없음")
+    p.select_option("#nrole", "equip"); check(p.locator(".npc:checked").evaluate_all("cs => cs.map(c => c.value)") == ["equip.edit.own"], "지원장비 기본 권한")
+    check(p.locator("#nwhere option").all_inner_texts() == ["서울경기", "충북", "전북", "대구경북"], p.locator("#nwhere option").all_inner_texts())
+    p.select_option("#nwhere", "전북"); p.fill("#nuser", "exjeonbuk2"); p.fill("#nname", "전북 지원장비2"); p.select_option("#npos", "exjeonbukgigyae")
+    p.check(".npc[value='log.view']")
+    n0 = len(m.fn_calls); p.click("#nmake"); p.wait_for_selector(".dialog td.temp"); p.click("#cl")
+    u = m.fn_calls[n0]["users"][0]
+    check(u["org"] == "전북" and u["perms"] == ["equip.edit.own", "log.view"] and u["role"] == "equip", u)
+    p.wait_for_timeout(400)
+    eq = sorted([x["profile"] for x in m.users.values() if x["profile"] and x["profile"]["role"] == "equip"], key=lambda q: (q["sort"] is None, q["sort"] or 0))
+    names = [q["username"] for q in eq]; check(names.index("exjeonbuk2") == names.index("exjeonbukgigyae") + 1, names)
+    p.fill("#nuser", "Bad Id"); p.fill("#nname", "x"); p.click("#nmake"); check("영문 소문자" in p.locator("#m").inner_text(), "아이디 형식 검사")
+
+def t_tabs_by_permission(b, m):
+    """관리자가 아니어도 권한이 있으면 그 탭만 보임(적설 자료 = snow.upload, 접속 로그 = log.view)"""
+    m.users["exchungju"]["profile"].update(must_change=False, perms=["juris.request", "req.edit.own", "snow.upload", "log.view"])
+    p = new_page(b, m); login(p, "exchungju", TEMP_PW); p.wait_for_selector(".tabs")
+    check(p.locator(".tabs button").all_inner_texts() == ["적설 자료", "접속 로그", "내 정보"], p.locator(".tabs button").all_inner_texts())
+    p.wait_for_selector("#sup table"); check("txt by admin-01" in p.locator("#sup").inner_text(), "올린 기록도 보임")
+    p.click('.tabs button[data-t=audit]'); p.wait_for_selector("#rows table"); check(p.locator("#rows tbody tr").count() == 3, "접속 로그 보임")
+    p.click('.tabs button[data-t=me]'); check("snow.upload" in p.locator("#pane").inner_text(), "내 권한 표시")
+
 TESTS = [t_login_session_logout, t_unregistered_and_disabled, t_forced_change, t_checklist_live, t_sheet_rows_and_paste, t_sheet_validation_display, t_sheet_save_payload,
-         t_sheet_partial_and_validation_errors, t_sheet_random_csv_filter, t_sheet_unsaved_guard_and_clear, t_users_tab, t_snow_upload_tab, t_audit_tab, t_non_admin_cannot_use_admin_apis, t_xss_and_csp, t_token_refresh, t_fast_tab_switching_no_errors, t_sheet_hierarchy_order, t_users_tab_order, t_set_then_branch_logs_in_directly]
+         t_sheet_partial_and_validation_errors, t_sheet_random_csv_filter, t_sheet_unsaved_guard_and_clear, t_users_tab, t_snow_upload_tab, t_audit_tab, t_non_admin_cannot_use_admin_apis, t_xss_and_csp, t_token_refresh, t_fast_tab_switching_no_errors, t_sheet_hierarchy_order, t_users_tab_order, t_set_then_branch_logs_in_directly, t_perm_tab, t_new_accounts, t_tabs_by_permission]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch(); b.new_context()

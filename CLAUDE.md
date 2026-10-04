@@ -6,7 +6,7 @@
 고속도로 제설 업무용 웹 시스템. 화면은 **GitHub Pages**(정적 파일), 서버는 **Supabase**(서울, 무료 플랜).
 - 저장소: `Iplaypiccolo/Snow-Amount-Measurement` (공개) · 사이트: `https://iplaypiccolo.github.io/Snow-Amount-Measurement/`
 - Supabase 프로젝트: `snow-support` (ref `yzwbnohzhnctdvufntig`). **다른 프로젝트 `Snowpath`(도쿄)는 건드리지 않는다.**
-- 화면 4개: 강설량 측정 / 기관별 관할 고속도로 / 예보 격자 편입(관리자만) / 장비 지원. 관리 콘솔 `/admin/`.
+- 화면 4개: 강설량 측정 / 기관별 관할 고속도로 / 예보 격자 편입(grid.edit 권한) / 장비 지원. 관리 콘솔 `/admin/`.
 
 ## 사용자와 역할 분담 (중요)
 - 사용자는 **비전공자**입니다. 한국어로, 새 용어는 풀어서 설명하세요. 확인하지 못한 것을 "확인했다"고 쓰지 마세요(확인한 것/못 한 것을 구분).
@@ -28,10 +28,10 @@ python tools/run_all_tests.py            # 전체 시험 (약 5분, 병렬). --f
 | `auth/` | `auth.js` 로그인·토큰 보관, `events.js` 변경 이력 읽기/저장(+`saveJurisdiction` 저장·승인 한 번에), `gate.js` 로그인 잠금 화면, `snow.js` 적설 요약본 읽기 |
 | `jurisdiction/` | 관할 탭: `core.js`(계산, 화면 없음), `ui.js`, `requests.js`(지사의 구간 변경 요청) |
 | `grid/` | 예보 격자 편입 탭 (`core.js` 계산, `ui.js`) |
-| `admin/` | 관리 콘솔: 계정, **비밀번호 일괄 설정(엑셀표)**, **적설 자료(메모장 txt → 서버)**, 접속 로그 |
-| `equipment/` | 장비 지원 화면(iframe). **아직 샘플 자료이며 서버로 옮기지 않음** |
+| `admin/` | 관리 콘솔: 계정 관리, **산하기관 아이디 관리**(비밀번호 일괄 설정·권한·순서·새 아이디/추천 13개), **적설 자료(메모장 txt → 서버)**, 접속 로그. 탭은 권한대로 |
+| `equipment/` | 장비 지원 화면(iframe). **서버 저장**(장비·날짜별 경로·기준일자·지사 요청). `?sample=1` = 샘플 시연. 규칙 `docs/equipment-rules.md` |
 | `data/*.json` | 기본(baseline) 자료. 구간 1,011 · 관측소 260 · 격자 1,070쌍. `*_changes.json` 은 서버 장애 때의 비상용(비어 있음). **적설 파일(`snow_data.json`)은 서버로 옮긴 뒤 지움** — 적설은 서버 `snow_daily`→`snapshots`, 시험은 `tests/fixtures/snow_sample.json` |
-| `supabase/migrations/` | DB 변경 SQL(01~14). `functions/` Edge Function 3개(`account-admin`, `import-reference`, `import-snow`). `tests/*.sql` 권한 시험(`save_check_test.sql` 포함) |
+| `supabase/migrations/` | DB 변경 SQL(01~18; 15 세부 권한, 16·17·18 장비 서버). `functions/` Edge Function 3개(`account-admin`, `import-reference`, `import-snow`). `tests/*.sql` 권한 시험(`rls_test.sql`·`equipment_save_test.sql` 등) |
 | `tests/` | 자동 시험. `_sb_mock.py` 는 **가짜 Supabase 서버**(실제 서버에 접속하지 않고 화면을 시험) |
 | `tools/` | 자료 만들기·검증 도구. GIS 원본(`highway_links.gpkg` 등)은 저장소에 없음. `check_gaps_against_source.py` = 끊긴 구간을 원본과 대조 |
 | `.github/workflows/` | `supabase-keepalive.yml` 월·목 서버 깨우기(비밀값 없음, `keepalive()` 함수) — `docs/server-keepalive.md`. 이 폴더를 올리려면 토큰에 workflow 권한 필요 |
@@ -54,7 +54,7 @@ python tools/run_all_tests.py            # 전체 시험 (약 5분, 병렬). --f
 - 운영 DB 에 시험용 자료를 남기지 않는다. 시험 SQL 은 마지막에 일부러 오류를 내어 되돌리는 방식이다.
 
 ## 서버 요약 (자세한 것은 `docs/supabase-design.md`)
-- 로그인: 아이디 → `<아이디>@snow-support.invalid` 가짜 이메일. 계정: `admin-01`, `admin-02`, 지사 59개 `ex<지사 로마자>`. 역할 `admin`/`branch`/`equip`. 가입은 막혀 있고 계정은 관리자만 만든다.
+- 로그인: 아이디 → `<아이디>@snow-support.invalid` 가짜 이메일. 계정: `admin-01`, `admin-02`, 지사 59개 `ex<지사 로마자>`. 역할 `admin`/`branch`/`equip`/`hq`/`viewer` + 계정별 세부 권한 `perms`(표 `permissions`, 서버는 `private.has_perm`). 관리자는 모든 권한. 가입은 막혀 있고 계정은 관리자만 만든다. **관리자 계정은 새로 만들지 않는다**(사용자 결정).
 - 관할·격자 **변경은 이력(이벤트)으로 쌓고**, 화면이 기본 자료 위에 다시 적용해 계산한다(`JurisCore.reapply`). 기본 자료 읽기는 아직 파일(DB 사본과 동일)이며 DB 읽기로 옮기는 것이 다음 단계.
 - 지사의 구간 변경 요청: 표 `jurisdiction_requests`(지사 요청 → 관리자 알림 → 이동 준비 → 저장 시 승인). 요청과 연결된 저장은 DB 함수 `save_jurisdiction` 이 **저장+승인을 한 번에**(하나라도 안 되면 전부 취소).
 - 관할 이력 값은 DB 트리거가 검사(신설 기관 번호 `B000` 형식, 이름 1~20자·`< > " ' & \``금지, 실제 본부 이름).

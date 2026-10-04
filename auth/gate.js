@@ -8,7 +8,7 @@
 (function (root) {
   'use strict';
   var A = root.SSAuth, doc = root.document, el, me = null, adminUrl = 'admin/';
-  var ROLE = { admin: '관리자', branch: '피지원지사', equip: '지원장비' };
+  var ROLE = { admin: '관리자', branch: '피지원지사', equip: '지원장비', hq: '지역본부', viewer: '보기 전용' };
   function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function $(id) { return doc.getElementById(id); }
 
@@ -54,6 +54,7 @@
   var onReady = null, started = false;
   function pass(profile) {
     me = profile; root.SS_ME = profile;
+    root.SS_CAN = function (perm) { return A.can(me, perm); };
     if (profile.must_change) return mustChangeView();
     el.hidden = true; el.innerHTML = ''; doc.body.classList.add('authed');
     var box = $('ssUser');

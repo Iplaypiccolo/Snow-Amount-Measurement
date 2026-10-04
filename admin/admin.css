@@ -25,3 +25,10 @@ table{border-collapse:collapse;width:100%;font-size:13px} th,td{border-bottom:1p
 
 #homeLink{color:#cfe3d8;font-size:12.5px;text-decoration:none;border:1px solid #3a6a55;border-radius:6px;padding:3px 10px;margin-left:6px} #homeLink:hover{background:#14563c}
 .sheet tr.grp td{background:#e8efe9;border-top:2px solid #b9cdbf;padding:5px 8px} .sheet tr.grp b{font-size:13.5px;color:#0b3d29} .gtoggle{border:none;background:none;padding:0 6px 0 0;font-size:14px;cursor:pointer;color:#0b3d29}
+/* 산하기관 아이디 관리: 작은 탭·권한 표·새 아이디 양식 */
+.subtabs{display:flex;gap:6px;margin:-4px 0 12px;flex-wrap:wrap} .subtabs button{border-radius:999px;padding:5px 14px;font-size:13px} .subtabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+table.perm th.pc{font-size:11px;line-height:1.25;max-width:76px;white-space:normal;text-align:center;cursor:help} table.perm td.pc{text-align:center}
+table.perm tr.dirty td{background:#fff6d6} table.perm .gall{font-size:11px;padding:1px 6px;min-width:44px}
+.form2{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px 14px}
+.permpick{display:flex;flex-wrap:wrap;gap:4px 14px;margin:10px 0} .permpick .hint{width:100%}
+.dialog .tw{max-height:50vh;overflow:auto} .dialog td.temp{font-family:ui-monospace,Consolas,monospace;font-size:14px;letter-spacing:.5px}

@@ -4,7 +4,7 @@
   var META_DATE_TEXT = "수동 업로드";
   // 로그인하기 전에는 자료(data/*.json)도 화면도 불러오지 않습니다. 로그인에 성공하면 아래 bootApp 이 실행됩니다.
   function bootApp(){
-  var isAdmin = !!(window.SS_ME && window.SS_ME.role === 'admin');      // 로그인한 사람의 역할 (로그인 잠금이 채움)
+  var canGrid = !!(window.SS_CAN && window.SS_CAN('grid.edit'));      // 예보 격자 편입 권한(관리자는 항상) — 로그인 잠금이 채움
   // cache:'no-cache' = 매번 서버에 '바뀌었나?'만 묻고, 그대로면 브라우저에 있던 파일을 씀(최신 반영은 그대로, 받는 양은 줄어듦)
   Promise.all([
     fetch('data/roads.json', {cache: 'no-cache'}).then(function(r){return r.json();}),
@@ -16,9 +16,9 @@
     // 변경 이력: 서버(Supabase)에서 읽습니다. 못 읽으면 예전 파일로 대신하고 화면에 알립니다.
     SSEvents.load('jurisdiction'),
     // 예보 격자 편입(기본 편입 + 저장된 변경): 없어도 기존 화면은 그대로 동작
-    // 관리자만 불러옴: 예보 격자 편입 탭은 관리자 아이디에서만 보입니다
-    isAdmin ? fetch('data/grid_assign.json', {cache: 'no-cache'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}) : Promise.resolve(null),
-    isAdmin ? SSEvents.load('grid') : Promise.resolve({events: [], source: 'skip'})
+    // 격자 권한이 있을 때만 불러옴: 예보 격자 편입 탭은 grid.edit 권한 계정에서만 보입니다
+    canGrid ? fetch('data/grid_assign.json', {cache: 'no-cache'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}) : Promise.resolve(null),
+    canGrid ? SSEvents.load('grid') : Promise.resolve({events: [], source: 'skip'})
   ]).then(function(results){
     window.ROADS_DATA = results[0];
     window.HIERARCHY = results[1];
@@ -49,18 +49,19 @@
     s.src = 'app.js?v=' + Date.now();
     s.onload = function(){
       initApp(); if(window.JurisdictionUI){ JurisdictionUI.init(); }
-      if (isAdmin) {
-        var sal = document.getElementById('snowAdminLink'); if (sal) sal.hidden = false;                   // 적설 자료 올리기: 관리자에게만 링크를 보여 줌(올리기는 서버가 관리자인지 다시 검사)
-        document.getElementById('tabGridBtn').style.display = '';                       // 예보 격자 편입: 관리자에게만 탭을 보여 줌
-        if(window.GridUI){ GridUI.init(); }
-        // 지사가 올린 구간 변경 요청이 있으면 알림창·탭 표시
-        if(window.JurisRequests){ JurisRequests.startAdminWatch({
+      var can = function(p){ return !!(window.SS_CAN && window.SS_CAN(p)); };
+      if (can('snow.upload')) { var sal = document.getElementById('snowAdminLink'); if (sal) sal.hidden = false; }   // 적설 자료 올리기: 권한 있는 계정에만 링크(올리기는 서버가 다시 검사)
+      // 지사가 올린 구간 변경 요청이 있으면 알림창·탭 표시 (요청을 승인할 수 있는 juris.edit 권한)
+      if (can('juris.edit') && window.JurisRequests){ JurisRequests.startAdminWatch({
           nameOf: function(id){ var b = (window.JURIS.doc.branches || []).filter(function(x){ return x.id === id; })[0]; return b ? b.name + ' 지사' : id; },
           onOpen: function(){ var t = document.querySelector('.tab-btn[data-tab=jurisdiction]'); if (t) t.click(); setTimeout(function(){ if (window.JurisdictionUI) JurisdictionUI.openRequests(); }, 350); },
           onList: function(){ if (window.JurisdictionUI && window.JurisdictionUI._state().inited) JurisdictionUI.refreshRequests(); }
         }); }
+      if (canGrid) {
+        document.getElementById('tabGridBtn').style.display = '';                       // 예보 격자 편입: grid.edit 권한 계정에만 탭을 보여 줌
+        if(window.GridUI){ GridUI.init(); }
       } else {
-        var gv = document.getElementById('view-grid'); if (gv && gv.parentNode) gv.parentNode.removeChild(gv);          // 관리자가 아니면 화면 자체를 없앰
+        var gv = document.getElementById('view-grid'); if (gv && gv.parentNode) gv.parentNode.removeChild(gv);          // 권한이 없으면 화면 자체를 없앰
         var gb = document.getElementById('tabGridBtn'); if (gb && gb.parentNode) gb.parentNode.removeChild(gb);
       }
     };

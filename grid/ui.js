@@ -40,7 +40,7 @@
     $('view-grid').innerHTML =
       '<div class="jr-wrap">' +
       '<div class="jr-side">' +
-        '<div class="jr-head"><b>예보 격자 편입</b><span class="jr-role">관리자 전용</span></div>' +
+        '<div class="jr-head"><b>예보 격자 편입</b><span class="jr-role">격자 편입 권한</span></div>' +
         '<div class="jr-note">기상청 예보는 5km 격자 단위입니다. 칸을 눌러 기관에 편입하세요. 한 칸을 <b>여러 기관이 함께</b> 가질 수 있고, 예보 호출은 편입된 칸을 <b>한 번씩만</b> 합니다. 여러 건을 모아 오른쪽 위 <b>[저장]</b>을 누르면 한꺼번에 적용됩니다.</div>' +
         '<div id="gr-summary" class="gr-summary"></div>' +
         '<div class="jr-tools"><input id="gr-search" placeholder="기관 검색 (예: 춘천)"></div>' +
@@ -364,7 +364,7 @@
   function init() {
     var root = $('view-grid'); if (!root) return;
     if (!window.JURIS || !window.JURIS.doc || !GR() || !GR().baseline) { root.innerHTML = '<div class="jr-empty" style="padding:30px">격자 데이터(data/grid_assign.json)를 불러오지 못했습니다.</div>'; return; }
-    S.admin = !!(window.SS_ME && window.SS_ME.role === 'admin');        // 이 탭은 관리자에게만 보이며, 화면이 열려 있으면 바로 편집 가능
+    S.admin = !!(window.SS_CAN && window.SS_CAN('grid.edit'));        // 이 탭은 grid.edit 권한(관리자 포함)에게만 보이며, 화면이 열려 있으면 바로 편집 가능
     buildShell(); bind(); recompute(); $('view-grid').classList.toggle('jr-is-admin', S.admin); S.inited = true;
   }
   function show() { if (!S.inited) return; ensureMap(); afterChange(); }
