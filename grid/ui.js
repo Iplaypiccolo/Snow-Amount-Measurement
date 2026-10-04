@@ -177,7 +177,7 @@
       var ids = st.order.filter(function (id) { return st.branches[id].hq === hq && S.ids.has(id) && (!q || st.branches[id].name.indexOf(q) >= 0); });
       if (!ids.length) return '';
       var total = ids.reduce(function (a, id) { return a + (per[id] || 0); }, 0);
-      return '<div class="jr-hq"><div class="jr-hqname">' + esc(hq) + ' <span>' + total + '칸</span></div>' + ids.map(function (id) {
+      return '<div class="jr-hq"><div class="jr-hqname jr-hqpick' + (S.hqView === hq ? ' on' : '') + '" data-hqpick="' + esc(hq) + '" title="누르면 이 본부만 보고 지사마다 다른 색으로 나눕니다(다시 누르면 전체)">' + esc(hq) + ' <span>' + total + '칸</span>' + ' <b class="jr-hqpick-hint">' + (S.hqView === hq ? '전체 보기' : '이 본부만 보기') + '</b>' + '</div>' + ids.map(function (id) {
         var on = S.focus === id;
         return '<div class="jr-br' + (on ? ' on' : '') + '" data-id="' + id + '"><i style="background:' + colorOf(id) + '"></i><span class="n">' + esc(st.branches[id].name) + (st.branches[id].added ? ' <em>신설</em>' : '') +
           '</span><span class="k">' + (per[id] || 0) + '칸</span></div>' + (on && S.admin ? '<div class="jr-detail"><button class="jr-btn" data-act="selbranch">이 기관 격자 전체 선택</button></div>' : '');
@@ -337,6 +337,7 @@
     $('view-grid').addEventListener('input', function (e) { if (e.target.id === 'gr-reason') S.reason = e.target.value; else if (e.target.id === 'gr-target') { var n = parseInt(e.target.value, 10); if (n >= 1 && n <= 99) { S.target = n; renderPerBranch(); } } });
     $('view-grid').addEventListener('click', function (e) {
       var t = e.target, tab = t.closest && t.closest('[data-hqtab]'); if (tab) { setHqView(tab.dataset.hqtab); return; }
+      var pick = t.closest && t.closest('[data-hqpick]'); if (pick) { setHqView(S.hqView === pick.dataset.hqpick ? 'ALL' : pick.dataset.hqpick); return; }   // 목록의 본부 이름 줄
       var br = t.closest && (t.closest('.jr-br') || t.closest('.gr-per-row')); if (br) { focusBranch(br.dataset.id); return; }
       var x = t.closest && t.closest('.jr-x'); if (x) { S.pending.splice(parseInt(x.dataset.ev, 10), 1); afterChange(); return; }
       var act = t.closest && t.closest('[data-act]'); act = act && act.dataset.act; if (!act) return;

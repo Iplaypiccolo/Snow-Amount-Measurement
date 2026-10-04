@@ -119,3 +119,10 @@
 .jr-hqtab:hover{border-color:#888}
 .jr-hqtab.on{background:#16202B;border-color:#16202B;color:#fff}
 @media (max-width:1100px){.jr-hqtabs{max-width:calc(100% - 70px);top:auto;bottom:52px}}
+/* 목록의 본부 이름 줄: 누르면 그 본부만 보기(지사마다 다른 색), 다시 누르면 전체 */
+.jr-hqpick{cursor:pointer;display:flex;align-items:center;gap:6px}
+.jr-hqpick:hover{background:#e6e2d4}
+.jr-hqpick .jr-hqpick-hint{margin-left:auto;font-size:11px;font-weight:500;color:#5b6b60;border:1px solid #c9c4b2;border-radius:10px;padding:1px 8px;background:#fff}
+.jr-hqpick.on{background:#16202B;color:#fff}
+.jr-hqpick.on span{color:#c8d1d9}
+.jr-hqpick.on .jr-hqpick-hint{background:#F2A900;border-color:#F2A900;color:#16202B}

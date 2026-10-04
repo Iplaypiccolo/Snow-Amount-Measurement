@@ -278,7 +278,7 @@
       var ids = st.order.filter(function (id) { return st.branches[id].hq === hq && (!q || st.branches[id].name.indexOf(q) >= 0); });
       if (!ids.length && !(hq === C.PRIVATE_HQ && !q)) return '';
       var total = round1(ids.reduce(function (a, id) { return a + (km[id] || 0); }, 0));
-      return '<div class="jr-hq"><div class="jr-hqname">' + esc(hq) + ' <span>' + total + 'km</span>' + (hq === C.PRIVATE_HQ ? ' <em class="jr-priv">관측소·적설 계산 안 함</em>' : '') + '</div>' + ids.map(function (id) {
+      return '<div class="jr-hq"><div class="jr-hqname jr-hqpick' + (S.hqView === hq ? ' on' : '') + '" data-hqpick="' + esc(hq) + '" title="누르면 이 본부만 보고 지사마다 다른 색으로 나눕니다(다시 누르면 전체)">' + esc(hq) + ' <span>' + total + 'km</span>' + ' <b class="jr-hqpick-hint">' + (S.hqView === hq ? '전체 보기' : '이 본부만 보기') + '</b>' + (hq === C.PRIVATE_HQ ? ' <em class="jr-priv">관측소·적설 계산 안 함</em>' : '') + '</div>' + ids.map(function (id) {
         var b = st.branches[id], on = S.focus === id;
         var row = '<div class="jr-br' + (on ? ' on' : '') + '" data-id="' + id + '"><i style="background:' + colorOf(id) + '"></i>' +
           '<span class="n">' + esc(b.name) + (b.added ? ' <em>신설</em>' : '') + '</span><span class="k">' + round1(km[id] || 0) + 'km · ' + (cnt[id] || 0) + '구간</span></div>';
@@ -535,6 +535,7 @@
       var ra = t.closest && t.closest('[data-ra]');                  // 변경 요청 카드의 버튼
       if (ra) { var rq = findReq(ra.dataset.rid); if (rq) { var a = ra.dataset.ra; if (a === 'view') viewRequest(rq); else if (a === 'prep' && S.admin) prepareMove(rq); else if (a === 'reject' && S.admin) rejectRequest(rq); else if (a === 'cancel') cancelRequest(rq); } return; }
       var tab = t.closest && t.closest('[data-hqtab]'); if (tab) { setHqView(tab.dataset.hqtab); return; }
+      var pick = t.closest && t.closest('[data-hqpick]'); if (pick) { setHqView(S.hqView === pick.dataset.hqpick ? 'ALL' : pick.dataset.hqpick); return; }   // 목록의 본부 이름 줄
       var br = t.closest && t.closest('.jr-br'); if (br) { focusBranch(br.dataset.id); return; }
       var sec = t.closest && t.closest('.jr-sec');
       if (sec && t.tagName === 'INPUT') { if (t.checked) S.selected[sec.dataset.sid] = true; else delete S.selected[sec.dataset.sid]; afterChange(false); return; }

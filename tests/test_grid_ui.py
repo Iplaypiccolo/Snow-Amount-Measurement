@@ -261,6 +261,10 @@ def t_hq_tabs_and_per_branch_view(b):
         if (st.map.hasLayer(rc)) { if (inHq) out.mine++; else out.other++; } }); return out; })()""")
     check(r["mine"] > 0 and r["other"] == 0, f"강원 칸만 보임 {r}")
     check(p.locator("#gr-per .gr-per-row").count() == 6, "목록도 강원 지사만")
+    p.click("#gr-tree [data-hqpick='강원']"); p.wait_for_timeout(300)
+    check(p.evaluate("GridUI._state().hqView") == "ALL", "목록의 본부 줄을 다시 누르면 전체")
+    p.click("#gr-tree [data-hqpick='충북']"); p.wait_for_timeout(300)
+    check(p.evaluate("GridUI._state().hqView") == "충북" and p.locator("#gr-hqtabs .jr-hqtab.on").inner_text() == "충북", "목록의 본부 줄로 선택")
 
 TESTS = [t_hq_tabs_and_per_branch_view, t_tab_loads, t_popup_info_for_unselected_cell, t_remove_needs_no_branch_choice, t_remove_shared_cells_asks_which_branch, t_remove_button_state, t_add_remove_and_save, t_grid_save_failure_and_reload, t_grid_history_failure_blocks_save, t_share_between_branches, t_box_select, t_budget_levels, t_focus_branch,
          t_colors_match_other_tab, t_new_branch_from_jurisdiction_appears]

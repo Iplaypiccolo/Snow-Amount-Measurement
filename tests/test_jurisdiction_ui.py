@@ -341,6 +341,18 @@ def t_hq_tabs_admin_all_then_hq_only(b):
     p.click("#jr-hqtabs [data-hqtab='ALL']"); p.wait_for_timeout(300)
     check(J(p, "Object.values(JurisdictionUI._state().polys).every(pl => JurisdictionUI._state().map.hasLayer(pl))"), "전체로 돌아가면 모두 보임")
 
+def t_hq_heading_in_list_selects_hq(b):
+    """왼쪽 목록의 본부 이름 줄을 누르면 그 본부가 선택되고(지도 탭과 같음) 지사마다 다른 색, 다시 누르면 전체"""
+    p = open_tab(b)
+    p.click("#jr-tree [data-hqpick='충북']"); p.wait_for_timeout(400)
+    check(J(p, "JurisdictionUI._state().hqView") == "충북" and p.locator("#jr-hqtabs .jr-hqtab.on").inner_text() == "충북", "목록의 본부 줄로 선택 → 지도 탭도 충북")
+    cols = J(p, """(() => { const st = JurisdictionUI._state(), s = st.view.state, c = {};
+      Object.entries(st.polys).forEach(([id, pl]) => { const o = s.owner[id]; if (o && st.map.hasLayer(pl)) c[o] = pl.options.color; }); return c; })()""")
+    check(len(cols) >= 6 and len(set(cols.values())) == len(cols), f"충북 지사마다 다른 색: {cols}")
+    check("전체 보기" in p.locator("#jr-tree [data-hqpick='충북']").inner_text(), "선택된 본부 줄에는 '전체 보기'")
+    p.click("#jr-tree [data-hqpick='충북']"); p.wait_for_timeout(400)
+    check(J(p, "JurisdictionUI._state().hqView") == "ALL", "다시 누르면 전체")
+
 def t_hq_tabs_branch_starts_with_own_hq(b):
     """지사 계정은 자기 본부 탭으로 시작(그 본부 지사 구간 + 미지정만 보임)"""
     m = SBM.Mock(); m.users["exchungju"]["profile"]["must_change"] = False
@@ -583,7 +595,7 @@ def t_private_hq(b):
     check(p.locator("#statBranch").inner_text() == "59", "민자 기관이 강설량 화면 통계에 들어가면 안 됨")
     check(J(p, "HIERARCHY.hq.some(h => h.name === '민자')") is False, "HIERARCHY 에 민자 본부가 생기면 안 됨")
 
-TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload, t_new_branch_id_survives_save, t_legacy_new_branch_without_id_still_works, t_html_in_branch_name_is_text, t_new_branch_position_and_reorder, t_hq_tabs_admin_all_then_hq_only, t_hq_tabs_branch_starts_with_own_hq, t_csp_blocks_injected_script, t_snow_from_server_not_public_file, t_snow_server_empty_shows_no_data,
+TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload, t_new_branch_id_survives_save, t_legacy_new_branch_without_id_still_works, t_html_in_branch_name_is_text, t_new_branch_position_and_reorder, t_hq_tabs_admin_all_then_hq_only, t_hq_tabs_branch_starts_with_own_hq, t_hq_heading_in_list_selects_hq, t_csp_blocks_injected_script, t_snow_from_server_not_public_file, t_snow_server_empty_shows_no_data,
          t_save_failure_keeps_pending_and_offers_file, t_history_load_failure_falls_back_and_blocks_save, t_history_paging_and_backup_export,
          t_border_on_click_view_mode, t_border_contrast_all_colors, t_admin_click_has_border, t_pick_destination_on_map, t_no_admin_checkbox_and_no_popup_move_button,
          t_save_bar_always_visible, t_unassigned_visible_and_clickable, t_assign_unassigned_to_branch, t_select_all_unassigned_row,
