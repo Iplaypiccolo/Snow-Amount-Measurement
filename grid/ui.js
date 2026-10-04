@@ -17,7 +17,10 @@
   function base() { return GR().committed; }
   function events() { return base().concat(S.pending); }
   function branchName(id) { var b = S.state.branches[id]; return b ? b.name : id; }
-  function colorOf(id) { return JC.colorOf(S.state, id, S.hqView); }           // 전체 = 본부 색, 본부 = 그 본부 지사마다 다른 색(관할 탭과 같음)
+  function colorOf(id) {          // 전체 = 본부 색, 본부 = 그 본부 지사마다 다른 색, 지사 선택 = 그 지사만 노랑·나머지 회색(관측소 지도와 같음)
+    if (S.focus && S.state.branches[S.focus]) return id === S.focus ? '#FFE400' : '#b4b0a1';
+    return JC.colorOf(S.state, id, S.hqView);
+  }           // 전체 = 본부 색, 본부 = 그 본부 지사마다 다른 색(관할 탭과 같음)
   function inView(id) { return S.hqView === 'ALL' || (S.state.branches[id] && S.state.branches[id].hq === S.hqView); }
 
   /* ---------- 상태 다시 계산 ---------- */
@@ -45,7 +48,6 @@
         '<div id="gr-pending" class="jr-pending"></div>' +
       '</div>' +
       '<div class="jr-mapbox"><div id="gmap"></div>' +
-        '<div id="gr-hqtabs" class="jr-hqtabs" role="tablist" aria-label="본부 선택"></div>' +
         '<div id="gr-savebar" class="jr-savebar" style="display:none"></div>' +
         '<div id="gr-tools" class="gr-tools" style="display:none"><button class="jr-btn" id="gr-box">▭ 영역 선택(드래그)</button><span class="hint">Shift+드래그도 됩니다</span></div>' +
         '<div id="gr-selbar" class="jr-selbar" style="display:none"></div>' +
@@ -171,20 +173,25 @@
   }
 
   /* ---------- 기관 목록 ---------- */
+  // 목록: 관측소 지도와 같은 방식 — 본부 줄만 보이고 누른 본부 하나만 펼쳐짐. 검색하면 맞는 기관이 있는 본부를 펼침
   function renderTree() {
     var q = S.search.trim(), per = S.sum.perBranch, st = S.state;
-    var html = st.hqs.filter(function (h) { return !JC.isPrivate(h) && (S.hqView === 'ALL' || h === S.hqView); }).map(function (hq) {
-      var ids = st.order.filter(function (id) { return st.branches[id].hq === hq && S.ids.has(id) && (!q || st.branches[id].name.indexOf(q) >= 0); });
-      if (!ids.length) return '';
-      var total = ids.reduce(function (a, id) { return a + (per[id] || 0); }, 0);
-      return '<div class="jr-hq"><div class="jr-hqname jr-hqpick' + (S.hqView === hq ? ' on' : '') + '" data-hqpick="' + esc(hq) + '" title="누르면 이 본부만 보고 지사마다 다른 색으로 나눕니다(다시 누르면 전체)">' + esc(hq) + ' <span>' + total + '칸</span>' + ' <b class="jr-hqpick-hint">' + (S.hqView === hq ? '전체 보기' : '이 본부만 보기') + '</b>' + '</div>' + ids.map(function (id) {
-        var on = S.focus === id;
-        return '<div class="jr-br' + (on ? ' on' : '') + '" data-id="' + id + '"><i style="background:' + colorOf(id) + '"></i><span class="n">' + esc(st.branches[id].name) + (st.branches[id].added ? ' <em>신설</em>' : '') +
-          '</span><span class="k">' + (per[id] || 0) + '칸</span></div>' + (on && S.admin ? '<div class="jr-detail"><button class="jr-btn" data-act="selbranch">이 기관 격자 전체 선택</button></div>' : '');
-      }).join('') + '</div>';
+    var html = st.hqs.filter(function (h) { return !JC.isPrivate(h); }).map(function (hq) {
+      var all = st.order.filter(function (id) { return st.branches[id].hq === hq && S.ids.has(id); });
+      var ids = all.filter(function (id) { return !q || st.branches[id].name.indexOf(q) >= 0; });
+      if (!all.length || (q && !ids.length)) return '';
+      var open = q ? true : S.hqView === hq, total = all.reduce(function (a, id) { return a + (per[id] || 0); }, 0);
+      return '<div class="jr-hq' + (open ? ' open' : '') + '"><div class="jr-hqname jr-hqpick' + (S.hqView === hq ? ' on' : '') + '" data-hqpick="' + esc(hq) + '" title="누르면 이 본부만 펼쳐 지사마다 다른 색으로 봅니다(다시 누르면 접고 전체)">' +
+        '<span class="chev">▶</span><span class="hn">' + esc(hq) + ' 본부</span><span class="jr-cnt">' + all.length + '</span><span class="jr-km">' + total + '칸</span></div>' +
+        (open ? ids.map(function (id) {
+          var on = S.focus === id;
+          return '<div class="jr-br' + (on ? ' on' : '') + '" data-id="' + id + '"><span class="chev">▶</span><i style="background:' + colorOf(id) + '"></i><span class="n">' + esc(st.branches[id].name) + (st.branches[id].added ? ' <em>신설</em>' : '') +
+            '</span><span class="k">' + (per[id] || 0) + '칸</span></div>' + (on && S.admin ? '<div class="jr-detail"><button class="jr-btn" data-act="selbranch">이 기관 격자 전체 선택</button></div>' : '');
+        }).join('') : '') + '</div>';
     }).join('');
     $('gr-tree').innerHTML = html || '<div class="jr-empty">검색 결과가 없습니다.</div>';
   }
+
 
   /* ---------- 선택 바 ---------- */
   function renderSelBar() {
@@ -309,19 +316,17 @@
     commitRemove(per, chosen.filter(function (b) { return per[b]; }));
   }
 
-  function renderHqTabs() {
-    var box = $('gr-hqtabs'); if (!box) return;
-    var tabs = [['ALL', '전체']].concat(S.state.hqs.filter(function (h) { return !JC.isPrivate(h); }).map(function (h) { return [h, h]; }));
-    box.innerHTML = tabs.map(function (t) { return '<button type="button" role="tab" class="jr-hqtab' + (S.hqView === t[0] ? ' on' : '') + '" aria-selected="' + (S.hqView === t[0]) + '" data-hqtab="' + esc(t[0]) + '">' + esc(t[1]) + '</button>'; }).join('');
-  }
+
   function setHqView(v) {
     S.hqView = v; if (S.focus && !inView(S.focus)) S.focus = null; afterChange();
     var pts = []; if (v !== 'ALL') S.res.assign.forEach(function (set, k) { if (Array.from(set).some(inView)) pts.push(G.cellCenter.apply(null, G.unkey(k))); });
     if (pts.length) S.map.fitBounds(L.latLngBounds(pts), { padding: [40, 40], maxZoom: 10 }); else if (v === 'ALL') S.map.setView([36.4, 127.9], 7);
   }
-  function afterChange() { recompute(); renderHqTabs(); restyle(); renderSummary(); renderTree(); renderPending(); renderSelBar(); renderSaveBar(); }
+  function afterChange() { recompute(); restyle(); renderSummary(); renderTree(); renderPending(); renderSelBar(); renderSaveBar(); }
   function focusBranch(id) {
-    S.focus = S.focus === id ? null : id; afterChange();
+    S.focus = S.focus === id ? null : id;
+    if (S.focus && S.state.branches[S.focus] && S.hqView !== S.state.branches[S.focus].hq) S.hqView = S.state.branches[S.focus].hq;   // 지사를 고르면 그 본부를 펼침
+    afterChange();
     if (S.focus) {
       var pts = []; S.res.assign.forEach(function (set, k) { if (set.has(S.focus)) pts.push(G.cellCenter.apply(null, G.unkey(k))); });
       if (pts.length) S.map.fitBounds(L.latLngBounds(pts), { padding: [60, 60], maxZoom: 11 });
@@ -336,8 +341,8 @@
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && S.box) setBox(false); });
     $('view-grid').addEventListener('input', function (e) { if (e.target.id === 'gr-reason') S.reason = e.target.value; else if (e.target.id === 'gr-target') { var n = parseInt(e.target.value, 10); if (n >= 1 && n <= 99) { S.target = n; renderPerBranch(); } } });
     $('view-grid').addEventListener('click', function (e) {
-      var t = e.target, tab = t.closest && t.closest('[data-hqtab]'); if (tab) { setHqView(tab.dataset.hqtab); return; }
-      var pick = t.closest && t.closest('[data-hqpick]'); if (pick) { setHqView(S.hqView === pick.dataset.hqpick ? 'ALL' : pick.dataset.hqpick); return; }   // 목록의 본부 이름 줄
+      var t = e.target;
+      var pick = t.closest && t.closest('[data-hqpick]'); if (pick) { var same = S.hqView === pick.dataset.hqpick; S.focus = null; setHqView(same ? 'ALL' : pick.dataset.hqpick); return; }   // 본부 줄: 펼치기/접기
       var br = t.closest && (t.closest('.jr-br') || t.closest('.gr-per-row')); if (br) { focusBranch(br.dataset.id); return; }
       var x = t.closest && t.closest('.jr-x'); if (x) { S.pending.splice(parseInt(x.dataset.ev, 10), 1); afterChange(); return; }
       var act = t.closest && t.closest('[data-act]'); act = act && act.dataset.act; if (!act) return;

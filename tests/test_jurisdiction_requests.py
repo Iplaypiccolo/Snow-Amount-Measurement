@@ -190,6 +190,7 @@ def t_unassigned_highly_visible(b):
     w2 = J(p, f"JurisdictionUI._state().polys['{ids[0]}'].options.weight"); h2 = J(p, "Object.values(JurisdictionUI._state().haloPolys)[0].options.weight")
     check(w2 > w_un and h2 > w2 + 3, f"확대하면 같이 굵어짐 {w_un}→{w2}, 테두리 {h2}")
     # 다른 지사를 강조하면 미지정은 흐려지고 테두리도 함께 흐려짐
+    if p.locator("#jr-tree .jr-hq.open > [data-hqpick='강원']").count() == 0: p.click("#jr-tree [data-hqpick='강원']"); p.wait_for_timeout(300)
     p.click(".jr-br:has-text('춘천')"); p.wait_for_timeout(500)
     ol, oh = J(p, f"JurisdictionUI._state().polys['{ids[0]}'].options.opacity"), J(p, "Object.values(JurisdictionUI._state().haloPolys)[0].options.opacity")
     check(ol < 0.3 and oh < 0.2, f"강조 중에는 함께 흐려짐 {ol}/{oh}")

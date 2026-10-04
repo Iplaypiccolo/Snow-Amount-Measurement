@@ -113,16 +113,15 @@
 .jr-note,.jr-req-b{word-break:keep-all}.jr-head{gap:8px}.jr-head b{min-width:0}
 
 .jr-selbar{width:max-content}      /* 가운데 기준으로 놓은 바가 절반 폭에서 줄바꿈되지 않고, 들어갈 만큼은 한 줄에 */
-/* 본부 탭(지도 왼쪽 위, 확대 버튼 옆): 전체 = 본부마다 색, 본부 = 그 본부 지사마다 다른 색 */
-.jr-hqtabs{position:absolute;top:10px;left:52px;z-index:510;display:flex;flex-wrap:wrap;gap:4px;max-width:calc(100% - 500px);min-width:260px}
-.jr-hqtab{font:inherit;font-size:12.5px;padding:4px 9px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.95);color:#2a2a2a;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.18);white-space:nowrap}
-.jr-hqtab:hover{border-color:#888}
-.jr-hqtab.on{background:#16202B;border-color:#16202B;color:#fff}
-@media (max-width:1100px){.jr-hqtabs{max-width:calc(100% - 70px);top:auto;bottom:52px}}
-/* 목록의 본부 이름 줄: 누르면 그 본부만 보기(지사마다 다른 색), 다시 누르면 전체 */
-.jr-hqpick{cursor:pointer;display:flex;align-items:center;gap:6px}
-.jr-hqpick:hover{background:#e6e2d4}
-.jr-hqpick .jr-hqpick-hint{margin-left:auto;font-size:11px;font-weight:500;color:#5b6b60;border:1px solid #c9c4b2;border-radius:10px;padding:1px 8px;background:#fff}
-.jr-hqpick.on{background:#16202B;color:#fff}
-.jr-hqpick.on span{color:#c8d1d9}
-.jr-hqpick.on .jr-hqpick-hint{background:#F2A900;border-color:#F2A900;color:#16202B}
+/* 목록: 관측소 지도와 같은 모양 — 본부 줄(▶ 접기/펼치기, 지사 수 배지), 지사 줄(색 칸), 선택한 지사는 노란 띠 */
+.jr-hqpick{cursor:pointer;display:flex;align-items:center;gap:8px;position:static;padding:10px 12px;font-size:13.5px;background:#f6f4ec;border-top:1px solid var(--line);border-bottom:1px solid var(--line);color:var(--ink)}
+.jr-hqpick:hover{background:#eee9d9}
+.jr-hqpick .hn{flex:1}
+.jr-hqpick .jr-cnt{font-family:var(--mono);font-size:11px;background:var(--hwy-green);color:#fff;border-radius:10px;padding:1px 8px;font-weight:700}
+.jr-hqpick .jr-km{font-family:var(--mono);font-size:11px;color:var(--muted);font-weight:400;min-width:62px;text-align:right}
+.jr-hqpick.on{background:#e7efe9}
+.jr-hq .chev{font-size:10px;width:10px;color:var(--muted);transition:transform .15s ease;display:inline-block}
+.jr-hq.open > .jr-hqpick .chev{transform:rotate(90deg)}
+.jr-br .chev{margin-left:10px}
+.jr-br.on .chev{transform:rotate(90deg)}
+.jr-br.on{background:#FFF3A3;box-shadow:inset 3px 0 0 #FFE400}

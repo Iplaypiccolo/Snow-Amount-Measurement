@@ -46,7 +46,8 @@ def t_tab_loads(b):
     check(p.locator("#gr-admin").count() == 0 and "관리자 모드" not in p.locator("#view-grid").inner_text(), "관리자 모드 체크박스가 없어야 함")
     check(p.locator("#gr-tools").is_visible() and p.locator("#gr-savebar").is_visible(), "관리자에게는 편집 도구가 바로 보여야 함")
     box = p.locator("#gmap").bounding_box(); check(box and box["width"] > 500 and box["height"] > 400, f"지도 크기 {box}")
-    check(p.locator("#gr-tree .jr-br").count() >= 59, "기관 목록")
+    check(p.locator("#gr-tree [data-hqpick]").count() == 9 and p.locator("#gr-tree .jr-br").count() == 0, "처음엔 본부 줄만(관측소 지도처럼)")
+    p.click("#gr-tree [data-hqpick='부산경남']"); p.wait_for_timeout(300); check(p.locator("#gr-tree .jr-br").count() == 10, "부산경남을 펼치면 10곳")
     check(p.locator("#gr-tree .jr-hqname:has-text('민자')").count() == 0, "민자는 예보 대상이 아니라 목록에 없어야 함")
     p.click(".tab-btn[data-tab=jurisdiction]"); p.wait_for_timeout(500)      # 다른 탭과 함께 동작
     check(p.locator("#view-jurisdiction").is_visible() and p.locator("#view-grid").is_hidden(), "탭 전환")
@@ -219,6 +220,8 @@ def t_budget_levels(b):
 
 def t_focus_branch(b):
     p = open_grid(b); br = first_branch(p)
+    hq = p.evaluate(f"GridUI._state().state.branches['{br}'].hq")
+    if p.locator(f"#gr-tree .jr-hq.open > [data-hqpick='{hq}']").count() == 0: p.click(f"#gr-tree [data-hqpick='{hq}']"); p.wait_for_timeout(300)
     p.click(f'#gr-tree .jr-br[data-id="{br}"]'); p.wait_for_timeout(500)
     check(J(p, f"{S}.focus") == br, "기관 선택")
     mine = J(p, f"[...{S}.res.assign].filter(([k, s]) => s.has('{br}')).map(([k]) => k)[0]")
@@ -241,30 +244,30 @@ def t_new_branch_from_jurisdiction_appears(b):
     m.events["jurisdiction_events"].append({"id": 1, "at": "2026-10-03T01:00:00Z", "by_user": None, "kind": "addBranch", "payload": {"id": "B900", "hq": "강원", "name": "신설시험"}, "note": None})
     p.on("pageerror", lambda e: errors.append(str(e))); p.route("**/*", T.route); SBM.install(p, m, "admin-01"); p.goto(T.URL)
     p.wait_for_function("window.GridUI && GridUI._state().inited", timeout=60000); p.click(".tab-btn[data-tab=grid]"); p.wait_for_timeout(700)
+    p.click("#gr-tree [data-hqpick='강원']"); p.wait_for_timeout(300)            # 관측소 지도처럼 본부를 펼쳐야 지사가 보임
     check(p.locator("#gr-tree .jr-br:has-text('신설시험')").count() == 1, "관할 탭에서 만든 신설 기관이 격자 탭에도 보여야 함")
     check(p.locator("#gr-tree .jr-br:has-text('신설시험') em").count() == 1, "신설 표시")
 
 
 def t_hq_tabs_and_per_branch_view(b):
-    """격자 탭: '전체'로 시작, 본부를 고르면 다른 본부에만 편입된 칸은 숨김. 지사별 칸 수(많은 순)와 목표를 넘는 지사 표시"""
+    """격자 탭도 관측소 지도처럼: 본부 줄을 누르면 그 본부만 펼치고 다른 본부에만 편입된 칸은 숨김, 지사를 누르면 그 지사 칸만 노랑. 전체에서 지사별 칸 수(많은 순)·목표"""
     p = open_grid(b)
-    check(p.locator("#gr-hqtabs .jr-hqtab.on").inner_text() == "전체" and "민자" not in p.locator("#gr-hqtabs").inner_text(), "전체로 시작, 민자 탭 없음(예보 대상 아님)")
+    check(p.locator("#gr-hqtabs").count() == 0 and p.locator("#gr-tree [data-hqpick='민자']").count() == 0, "지도 위 칩 없음, 민자 없음(예보 대상 아님)")
     p.click("#gr-per-wrap summary"); p.wait_for_timeout(200)
-    rows = p.locator("#gr-per .gr-per-row .k").all_inner_texts(); nums = [int(x) for x in rows]
+    nums = [int(x) for x in p.locator("#gr-per .gr-per-row .k").all_inner_texts()]
     check(len(nums) >= 59 and nums == sorted(nums, reverse=True), f"지사 {len(nums)}곳 많은 순")
     p.fill("#gr-target", "3"); p.wait_for_timeout(200)
-    over = p.locator("#gr-per .gr-per-row.over").count()
-    check(over == sum(1 for n in nums if n > 3) and "목표(3칸) 넘는 지사" in p.locator("#gr-per").inner_text(), f"목표 넘는 지사 {over}")
-    p.click("#gr-hqtabs [data-hqtab='강원']"); p.wait_for_timeout(400)
+    check(p.locator("#gr-per .gr-per-row.over").count() == sum(1 for n in nums if n > 3), "목표 넘는 지사 표시")
+    p.click("#gr-tree [data-hqpick='강원']"); p.wait_for_timeout(400)
     r = p.evaluate("""(() => { const st = GridUI._state(), out = { other: 0, mine: 0 };
       Object.entries(st.rects).forEach(([k, rc]) => { const set = st.res.assign.get(k); if (!set || !set.size) return; const inHq = [...set].some(id => st.state.branches[id].hq === '강원');
         if (st.map.hasLayer(rc)) { if (inHq) out.mine++; else out.other++; } }); return out; })()""")
-    check(r["mine"] > 0 and r["other"] == 0, f"강원 칸만 보임 {r}")
-    check(p.locator("#gr-per .gr-per-row").count() == 6, "목록도 강원 지사만")
+    check(r["mine"] > 0 and r["other"] == 0 and p.locator("#gr-per .gr-per-row").count() == 6, f"강원 칸·강원 지사만 {r}")
+    first = p.locator("#gr-tree .jr-br").first.get_attribute("data-id"); p.locator("#gr-tree .jr-br").first.click(); p.wait_for_timeout(300)
+    col = p.evaluate(f"(() => {{ const st = GridUI._state(); const k = [...st.res.assign.entries()].find(([k, s]) => s.size === 1 && s.has('{first}'))[0]; return st.rects[k].options.fillColor; }})()")
+    check(col == "#FFE400", f"지사를 누르면 그 지사 칸은 노랑: {col}")
     p.click("#gr-tree [data-hqpick='강원']"); p.wait_for_timeout(300)
-    check(p.evaluate("GridUI._state().hqView") == "ALL", "목록의 본부 줄을 다시 누르면 전체")
-    p.click("#gr-tree [data-hqpick='충북']"); p.wait_for_timeout(300)
-    check(p.evaluate("GridUI._state().hqView") == "충북" and p.locator("#gr-hqtabs .jr-hqtab.on").inner_text() == "충북", "목록의 본부 줄로 선택")
+    check(p.evaluate("GridUI._state().hqView") == "ALL" and p.evaluate("GridUI._state().focus") is None, "다시 누르면 접히고 전체")
 
 TESTS = [t_hq_tabs_and_per_branch_view, t_tab_loads, t_popup_info_for_unselected_cell, t_remove_needs_no_branch_choice, t_remove_shared_cells_asks_which_branch, t_remove_button_state, t_add_remove_and_save, t_grid_save_failure_and_reload, t_grid_history_failure_blocks_save, t_share_between_branches, t_box_select, t_budget_levels, t_focus_branch,
          t_colors_match_other_tab, t_new_branch_from_jurisdiction_appears]

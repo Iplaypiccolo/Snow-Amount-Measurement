@@ -68,6 +68,8 @@ def saved(p, n, timeout=10000):          # 저장 성공 안내는 "N건 저장�
     p.wait_for_function("(() => { const t = document.getElementById('jr-toast'); return !!t && t.style.display !== 'none' && /저장되었습니다/.test(t.textContent); })()", timeout=timeout)
     check(p.locator("#jr-toast").inner_text() == f"{n}건 저장되었습니다.", p.locator("#jr-toast").inner_text())
     check(p.locator("#jr-modal").is_hidden(), "저장 성공 시 설명 창이 뜨면 안 됨(한 줄 안내만)")
+def open_hq(p, hq, tree="#jr-tree"):        # 관측소 지도처럼 본부 줄을 눌러 펼침(이미 펼쳐져 있으면 그대로)
+    if p.locator(f"{tree} .jr-hq.open > [data-hqpick='{hq}']").count() == 0: p.click(f"{tree} [data-hqpick='{hq}']"); p.wait_for_timeout(300)
 def admin(p): p.wait_for_timeout(100)      # 관리자 모드 체크박스는 없어짐: 관리자 아이디로 로그인하면 바로 편집 가능
 def sections_of(p, hq, name):
     return J(p, f"(()=>{{const d=JURIS.doc;const b=d.branches.find(b=>b.hq==='{hq}'&&b.name==='{name}');return d.sections.filter(s=>s.owner===b.id).map(s=>s.id)}})()")
@@ -78,9 +80,9 @@ def click_sec(p, sid, shift=False):
 def t_tab_loads(b):
     p = open_tab(b, user="equip-01")
     check(J(p, "Object.keys(JurisdictionUI._state().polys).length") == J(p, "JURIS.doc.sections.length") > 600, "구간 선이 그려지지 않음")
-    check(p.locator(".jr-br").count() == 60, f"지사 59 + 미지정 1 = 60, 실제 {p.locator('.jr-br').count()}")
-    check(p.locator('.jr-br[data-id="NONE"]').count() == 1, "미지정 행")
-    check(p.locator(".jr-hqname").count() == 11, "본부 9개 + 민자 1개 + 미지정 1개")
+    check(p.locator(".jr-br").count() == 1 and p.locator('.jr-br[data-id="NONE"]').count() == 1, "처음엔 본부 줄만(관측소 지도처럼 접힘) + 미지정 행")
+    check(p.locator("#jr-tree [data-hqpick]").count() == 10 and p.locator(".jr-hqname").count() == 11, "본부 9개 + 민자 1개 + 미지정 1개")
+    open_hq(p, "강원"); check(p.locator(".jr-br").count() == 1 + 6, "강원을 펼치면 강원 지사 6곳")
     check(p.locator("#jr-add").is_hidden(), "보기 모드에서 신설 버튼이 보임")
     check(p.locator("#jr-selbar").is_hidden(), "보기 모드에서 이동 바가 보임")
     # 기존 화면 영향 없음
@@ -145,7 +147,7 @@ def t_add_branch_and_move(b):
 
 def t_move_branch_hq(b):
     p = open_tab(b); admin(p)
-    p.click(".jr-br:has-text('엄정')"); p.wait_for_timeout(200)
+    open_hq(p, "충북"); p.click(".jr-br:has-text('엄정')"); p.wait_for_timeout(200)
     p.select_option("#jr-hq", "강원"); p.wait_for_timeout(250)
     check("엄정" in p.locator(".jr-ev").first.inner_text() and "강원" in p.locator(".jr-ev").first.inner_text(), "본부 이동 표시")
     check(p.locator(".jr-hqname:has-text('강원') ~ .jr-br:has-text('엄정')").count() == 1, "강원 아래로 옮겨지지 않음")
@@ -319,45 +321,45 @@ def t_new_branch_position_and_reorder(b):
     check(labels[0] == "함평" and labels[labels.index("광주") + 1] == "위치시험", labels)
 
 def t_hq_tabs_admin_all_then_hq_only(b):
-    """관리자는 '전체'로 시작(본부마다 색 하나). 본부 탭을 고르면 그 본부 지사 구간과 미지정 구간만 보이고(다른 본부 선은 숨김), 그 본부 지사들은 모두 다른 색"""
+    """관측소 지도처럼: 처음엔 본부 줄만(전체 = 본부마다 색 하나). 본부 줄을 누르면 그 본부만 펼쳐지고 지도엔 그 본부 + 미지정만, 지사마다 다른 색. 다시 누르면 접히고 전체"""
     p = open_tab(b)
-    tabs = p.locator("#jr-hqtabs .jr-hqtab").all_inner_texts()
-    check(tabs[0] == "전체" and "강원" in tabs and "민자" in tabs and p.locator("#jr-hqtabs .jr-hqtab.on").inner_text() == "전체", tabs)
     allv = J(p, """(() => { const st = JurisdictionUI._state(), s = st.view.state, by = {};
       Object.entries(st.polys).forEach(([id, pl]) => { const o = s.owner[id]; if (o) { const h = s.branches[o].hq; (by[h] = by[h] || new Set()).add(pl.options.color); } });
       return Object.values(by).map(x => x.size); })()""")
     check(all(n == 1 for n in allv), f"전체 보기는 본부마다 색 하나: {allv}")
-    p.click("#jr-hqtabs [data-hqtab='강원']"); p.wait_for_timeout(400)
+    check(p.locator("#jr-hqtabs").count() == 0, "지도 위 본부 칩은 없음(목록에서 고름)")
+    open_hq(p, "강원")
     r = J(p, """(() => { const st = JurisdictionUI._state(), s = st.view.state, out = { shown: {}, hidden: 0, colors: {} };
       Object.entries(st.polys).forEach(([id, pl]) => { const o = s.owner[id], h = o ? s.branches[o].hq : 'NONE';
         if (st.map.hasLayer(pl)) { out.shown[h] = (out.shown[h] || 0) + 1; if (o) out.colors[o] = pl.options.color; } else out.hidden++; });
       return out; })()""")
     check(set(r["shown"]) == {"강원", "NONE"} and r["hidden"] > 300, f"강원·미지정만 보임: {r['shown']} 숨김 {r['hidden']}")
     check(len(set(r["colors"].values())) == len(r["colors"]) >= 6, f"강원 지사마다 다른 색: {r['colors']}")
-    names = [x.strip() for x in p.locator("#jr-tree .jr-hqname").all_inner_texts()]
-    check(len(names) == 2 and names[0].startswith("미지정") and names[1].startswith("강원"), names)
+    check(p.locator("#jr-tree .jr-hq.open [data-hqpick]").all_inner_texts()[0].startswith("▶강원 본부") or "강원 본부" in p.locator("#jr-tree .jr-hq.open [data-hqpick]").inner_text(), "강원만 펼쳐짐")
+    check(p.locator("#jr-tree .jr-hq.open [data-hqpick]").count() == 1, "펼친 본부는 하나")
     hit = J(p, "(() => { const sec = JURIS.doc.sections.find(s => s.owner === 'B001'); const c = sec.coords[Math.floor(sec.coords.length/2)]; const r = JurisdictionUI._near(L.latLng(c[1], c[0]), 14); return !!r && JurisdictionUI._state().view.state.owner[r.id] === 'B001'; })()")
     check(hit is False, "숨긴 다른 본부(인천) 선은 눌리지 않음")
-    p.click("#jr-hqtabs [data-hqtab='ALL']"); p.wait_for_timeout(300)
-    check(J(p, "Object.values(JurisdictionUI._state().polys).every(pl => JurisdictionUI._state().map.hasLayer(pl))"), "전체로 돌아가면 모두 보임")
+    p.click("#jr-tree [data-hqpick='강원']"); p.wait_for_timeout(300)
+    check(J(p, "JurisdictionUI._state().hqView") == "ALL" and J(p, "Object.values(JurisdictionUI._state().polys).every(pl => JurisdictionUI._state().map.hasLayer(pl))"), "다시 누르면 접히고 전체")
 
-def t_hq_heading_in_list_selects_hq(b):
-    """왼쪽 목록의 본부 이름 줄을 누르면 그 본부가 선택되고(지도 탭과 같음) 지사마다 다른 색, 다시 누르면 전체"""
-    p = open_tab(b)
-    p.click("#jr-tree [data-hqpick='충북']"); p.wait_for_timeout(400)
-    check(J(p, "JurisdictionUI._state().hqView") == "충북" and p.locator("#jr-hqtabs .jr-hqtab.on").inner_text() == "충북", "목록의 본부 줄로 선택 → 지도 탭도 충북")
-    cols = J(p, """(() => { const st = JurisdictionUI._state(), s = st.view.state, c = {};
-      Object.entries(st.polys).forEach(([id, pl]) => { const o = s.owner[id]; if (o && st.map.hasLayer(pl)) c[o] = pl.options.color; }); return c; })()""")
-    check(len(cols) >= 6 and len(set(cols.values())) == len(cols), f"충북 지사마다 다른 색: {cols}")
-    check("전체 보기" in p.locator("#jr-tree [data-hqpick='충북']").inner_text(), "선택된 본부 줄에는 '전체 보기'")
-    p.click("#jr-tree [data-hqpick='충북']"); p.wait_for_timeout(400)
-    check(J(p, "JurisdictionUI._state().hqView") == "ALL", "다시 누르면 전체")
+def t_branch_click_yellow_others_gray(b):
+    """관측소 지도처럼: 지사를 누르면 그 지사만 노란색(#FFE400), 같은 본부 나머지 지사는 회색(목록 색 칸도). 다시 누르면 본부 색 구분으로"""
+    p = open_tab(b); open_hq(p, "강원")
+    cc = bid(p, "강원", "춘천"); p.click(f".jr-br[data-id={cc}]"); p.wait_for_timeout(300)
+    r = J(p, f"""(() => {{ const st = JurisdictionUI._state(), s = st.view.state, c = {{}};
+      Object.entries(st.polys).forEach(([id, pl]) => {{ const o = s.owner[id]; if (o && st.map.hasLayer(pl)) c[o] = pl.options.color; }}); return c; }})()""")
+    check(r[cc] == "#FFE400" and all(v == "#b4b0a1" for k, v in r.items() if k != cc), f"춘천만 노랑·나머지 회색: {r}")
+    sw = J(p, f"[...document.querySelectorAll('#jr-tree .jr-br:not([data-id=NONE]) i')].map(i => [i.parentNode.dataset.id, getComputedStyle(i).backgroundColor])")
+    check(dict(sw)[cc] == "rgb(255, 228, 0)" and all(v == "rgb(180, 176, 161)" for k, v in sw if k != cc), f"목록 색 칸: {sw}")
+    p.click(f".jr-br[data-id={cc}]"); p.wait_for_timeout(300)
+    cols = J(p, "(() => { const st = JurisdictionUI._state(), s = st.view.state, c = new Set(); Object.entries(st.polys).forEach(([id, pl]) => { const o = s.owner[id]; if (o && st.map.hasLayer(pl)) c.add(pl.options.color); }); return c.size; })()")
+    check(cols >= 6, "다시 누르면 지사마다 다른 색으로 돌아감")
 
 def t_hq_tabs_branch_starts_with_own_hq(b):
-    """지사 계정은 자기 본부 탭으로 시작(그 본부 지사 구간 + 미지정만 보임)"""
+    """지사 계정은 자기 본부가 펼쳐진 채로 시작(그 본부 지사 구간 + 미지정만 보임)"""
     m = SBM.Mock(); m.users["exchungju"]["profile"]["must_change"] = False
     p = open_tab(b, user="exchungju", mock=m); p.wait_for_timeout(500)
-    check(p.locator("#jr-hqtabs .jr-hqtab.on").inner_text() == "충북", p.locator("#jr-hqtabs .jr-hqtab.on").inner_text())
+    check("충북" in p.locator("#jr-tree .jr-hq.open [data-hqpick]").inner_text(), "충북이 펼쳐져 있음")
     shown = J(p, """(() => { const st = JurisdictionUI._state(), s = st.view.state, h = new Set();
       Object.entries(st.polys).forEach(([id, pl]) => { if (st.map.hasLayer(pl)) { const o = s.owner[id]; h.add(o ? s.branches[o].hq : 'NONE'); } }); return [...h].sort(); })()""")
     check(shown == ["NONE", "충북"], shown)
@@ -554,7 +556,7 @@ def t_nearest_prefers_closest(b):
 
 def t_row_click_selects_and_shows(b):
     p = open_tab(b); admin(p)
-    p.click(".jr-br:has-text('춘천')"); p.wait_for_timeout(300)
+    open_hq(p, "강원"); p.click(".jr-br:has-text('춘천')"); p.wait_for_timeout(300)
     rows = p.locator(".jr-sec"); check(rows.count() >= 5, "구간 행")
     sid = rows.nth(1).get_attribute("data-sid")
     rows.nth(1).locator("span").first.click(); p.wait_for_timeout(300)          # 노선명을 누름
@@ -569,7 +571,7 @@ def t_row_click_selects_and_shows(b):
 
 def t_row_click_view_mode(b):
     p = open_tab(b, user="equip-01")
-    p.click(".jr-br:has-text('춘천')"); p.wait_for_timeout(300)
+    open_hq(p, "강원"); p.click(".jr-br:has-text('춘천')"); p.wait_for_timeout(300)
     sid = p.locator(".jr-sec").nth(2).get_attribute("data-sid")
     p.locator(".jr-sec").nth(2).locator("span").first.click(); p.wait_for_timeout(400)
     check(J(p, "JurisdictionUI._state().clicked") == sid, "보기 모드: 클릭한 구간 표시")
@@ -586,7 +588,9 @@ def t_private_hq(b):
     un = un_ids(p)[:2]
     for u in un: click_sec(p, u)
     p.select_option("#jr-dest", pid); p.click("#jr-move"); p.wait_for_timeout(300)
-    col = J(p, f"JurisdictionUI._state().polys['{un[0]}'].options.color"); check(col.startswith("hsl(278"), f"민자 색은 보라 계열 {col}")
+    check(J(p, f"JurisdictionUI._state().polys['{un[0]}'].options.color") == "#FFE400", "막 만든 민자 기관이 선택된 동안은 노랑(관측소 지도와 같음)")
+    J(p, "(()=>{const s=JurisdictionUI._state(); s.focus=null; JurisdictionUI.setHqView('ALL', false); return 1})()"); p.wait_for_timeout(200)
+    col = J(p, f"JurisdictionUI._state().polys['{un[0]}'].options.color"); check(col.startswith("hsl(278"), f"전체 보기에서 민자 색은 보라 계열 {col}")
     p.click("#jr-top-preview"); p.wait_for_timeout(300)
     txt = p.locator(".jr-table").inner_text(); check("계산 안 함" in txt, txt)
     p.click("#jr-close")
@@ -595,7 +599,7 @@ def t_private_hq(b):
     check(p.locator("#statBranch").inner_text() == "59", "민자 기관이 강설량 화면 통계에 들어가면 안 됨")
     check(J(p, "HIERARCHY.hq.some(h => h.name === '민자')") is False, "HIERARCHY 에 민자 본부가 생기면 안 됨")
 
-TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload, t_new_branch_id_survives_save, t_legacy_new_branch_without_id_still_works, t_html_in_branch_name_is_text, t_new_branch_position_and_reorder, t_hq_tabs_admin_all_then_hq_only, t_hq_tabs_branch_starts_with_own_hq, t_hq_heading_in_list_selects_hq, t_csp_blocks_injected_script, t_snow_from_server_not_public_file, t_snow_server_empty_shows_no_data,
+TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload, t_new_branch_id_survives_save, t_legacy_new_branch_without_id_still_works, t_html_in_branch_name_is_text, t_new_branch_position_and_reorder, t_hq_tabs_admin_all_then_hq_only, t_branch_click_yellow_others_gray, t_hq_tabs_branch_starts_with_own_hq, t_csp_blocks_injected_script, t_snow_from_server_not_public_file, t_snow_server_empty_shows_no_data,
          t_save_failure_keeps_pending_and_offers_file, t_history_load_failure_falls_back_and_blocks_save, t_history_paging_and_backup_export,
          t_border_on_click_view_mode, t_border_contrast_all_colors, t_admin_click_has_border, t_pick_destination_on_map, t_no_admin_checkbox_and_no_popup_move_button,
          t_save_bar_always_visible, t_unassigned_visible_and_clickable, t_assign_unassigned_to_branch, t_select_all_unassigned_row,
