@@ -55,8 +55,8 @@ class Mock:
         # 장비 지원(마이그레이션 16·17): 장비, 날짜별 경로, 기준일자, 지사 요청. 저장 함수 호출은 eq_calls 에 기록
         import datetime as _dt
         self.today = _dt.date.today().isoformat()
-        self.vehicles = [{"id": "V001", "org": "서울경기", "type": "제설차", "plate": "서울경기-901", "status": "O", "sort": 10, "active": True},
-                         {"id": "V002", "org": "충북", "type": "제설기", "plate": "충북-901", "status": "O", "sort": 20, "active": True}]
+        self.vehicles = [{"id": "V001", "org": "서울경기", "type": "제설차", "plate": "서울경기901", "status": "O", "sort": 10, "active": True},
+                         {"id": "V002", "org": "충북", "type": "제설기", "plate": "충북901", "status": "O", "sort": 20, "active": True}]
         self.routes = [{"date": self.today, "vehicle_id": "V002", "stops": ["B019"]}]
         self.rounds = [{"id": 1, "name": self.today + " 기준", "start_date": self.today}]
         self.round_reqs = [{"round_id": 1, "branch_id": "B019", "snow_cm": 5, "warning": False, "req_truck": 2, "req_blower": 0, "assigned_truck": 1, "assigned_blower": 0,

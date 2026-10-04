@@ -1,5 +1,5 @@
 -- ============================================================
--- 장비 지원 저장 함수(save_fleet·save_requests, 마이그레이션 17·19) 시험 — 경로는 관리자(equip.edit.all)만 — SQL Editor 에 통째로 붙여넣고 실행
+-- 장비 지원 저장 함수(save_fleet·save_requests, 마이그레이션 17·19·20) 시험 — 경로는 관리자(equip.edit.all)만 — SQL Editor 에 통째로 붙여넣고 실행
 -- 마지막에 일부러 오류를 내서 시험 자료를 전부 되돌립니다. "전체 N, 실패 0" 이어야 합니다.
 -- ============================================================
 create temp table _t (n serial, name text, got text, want text, ok boolean);
@@ -24,10 +24,10 @@ begin
     (b,'sf-br','지사','branch','B001',null,null,'{juris.request,req.edit.own}',false),(h,'sf-hq','본부','hq',null,null,'H01','{req.edit.hq}',false);
   insert into public.vehicles (id,org,type,plate) values ('V9001','서울경기','제설차','11가1111'),('V9002','충북','제설기','22나2222');
   insert into public.support_rounds (name,start_date) values ('t','2099-12-01') returning id into rid;
-  perform pg_temp.chk('장비: 자기 장비 상태·도공번호 확정','authenticated',e,'select public.save_fleet(''[{"id":"V9001","status":"O","plate":"서울경기-901"}]'', ''[]'')','ok:1');
+  perform pg_temp.chk('장비: 자기 장비 상태·도공번호 확정','authenticated',e,'select public.save_fleet(''[{"id":"V9001","status":"O","plate":"서울경기901"}]'', ''[]'')','ok:1');
   perform pg_temp.chk('장비: 자기 장비라도 경로는 거절(관리자만)','authenticated',e,'select public.save_fleet(''[]'', ''[{"date":"2099-12-02","vehicle_id":"V9001","stops":["B001"]}]'')','err:42501');
   perform pg_temp.chk('관리자: 경로 두 날짜 한 번에 확정','authenticated',a,'select public.save_fleet(''[]'', ''[{"date":"2099-12-02","vehicle_id":"V9001","stops":["B001","B002"]},{"date":"2099-12-03","vehicle_id":"V9001","stops":["B003"]}]'')','ok:1');
-  perform pg_temp.yes('경로 2줄·상태 O·도공번호', (select count(*) = 2 from public.vehicle_routes where vehicle_id='V9001') and (select status = 'O' and plate = '서울경기-901' from public.vehicles where id='V9001'));
+  perform pg_temp.yes('경로 2줄·상태 O·도공번호', (select count(*) = 2 from public.vehicle_routes where vehicle_id='V9001') and (select status = 'O' and plate = '서울경기901' from public.vehicles where id='V9001'));
   select count(*) into c from public.audit_log where tab = 'vehicle_routes';
   perform pg_temp.chk('같은 경로 다시 확정','authenticated',a,'select public.save_fleet(''[]'', ''[{"date":"2099-12-02","vehicle_id":"V9001","stops":["B001","B002"]}]'')','ok:1');
   perform pg_temp.yes('같은 경로는 기록이 늘지 않음', (select count(*) from public.audit_log where tab = 'vehicle_routes') = c);
@@ -53,6 +53,11 @@ begin
   perform pg_temp.yes('확정됨', (select count(*) = 2 from public.round_requests where round_id=rid and confirmed));
   perform pg_temp.chk('지사: 확정 뒤 요청 대수만 수정','authenticated',b,format('select public.save_requests(%s, ''[{"branch_id":"B001","req_truck":4,"reason":""}]'')',rid),'ok:1');
   perform pg_temp.yes('확정 유지·사유 비움', (select confirmed and assigned_truck = 2 and req_truck = 4 and reason is null from public.round_requests where round_id=rid and branch_id='B001'));
+  perform pg_temp.chk('경로: 수정본·도착 예상 시각','authenticated',a,'select public.save_fleet(''[]'', ''[{"date":"2099-12-07","vehicle_id":"V9001","stops":["B001","B002"],"revised":true,"times":["22:00",null]}]'')','ok:1');
+  perform pg_temp.yes('수정본·시각 저장', (select revised and times = array['22:00',null]::text[] from public.vehicle_routes where vehicle_id='V9001' and date='2099-12-07'));
+  perform pg_temp.chk('시각 개수가 지사 수와 다르면 거절','authenticated',a,'select public.save_fleet(''[]'', ''[{"date":"2099-12-08","vehicle_id":"V9001","stops":["B001"],"times":["22:00","06:00"]}]'')','err:23514');
+  perform pg_temp.chk('10분 단위가 아니면 거절','authenticated',a,'select public.save_fleet(''[]'', ''[{"date":"2099-12-08","vehicle_id":"V9001","stops":["B001"],"times":["22:05"]}]'')','err:23514');
+  perform pg_temp.chk('도공번호: 다른 기관 이름이면 거절','authenticated',a,'select public.save_fleet(''[{"id":"V9002","plate":"서울경기902"}]'', ''[]'')','err:23514');
   perform pg_temp.chk('없는 기준일자','authenticated',a,'select public.save_requests(-1, ''[{"branch_id":"B001"}]'')','err:23503');
   perform pg_temp.chk('장비 계정: 요청 저장 거절','authenticated',e,format('select public.save_requests(%s, ''[{"branch_id":"B003","req_truck":1}]'')',rid),'err:42501');
   select count(*), count(*) filter (where not ok) into total, fails from _t;

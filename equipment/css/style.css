@@ -409,3 +409,15 @@ table.branch { min-width: 1020px; width: 100%; }
 #panel-branch .table-wrap.tall { max-height: calc(100vh - 230px); }
 .branch td.cf { white-space: nowrap; }
 .branch td.cf .btn { min-height: 28px; }
+/* 도공번호(기관 이름 + 숫자), 경로 칸의 도착 예상 시각·최초 지원/수정본 */
+.pnum { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+.pnum .pfx { font-weight: 700; font-size: 13px; }
+.pnum input.ci { width: 64px; }
+.muted.sm { font-size: 11px; }
+.eq .slot select.ci.tm { width: 74px; }
+.slot .kind { display: flex; gap: 8px; font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
+.slot .kind label { display: inline-flex; gap: 3px; align-items: center; cursor: pointer; white-space: nowrap; }
+.slot .sl-x small { color: var(--ink-soft); }
+.tag.eta { background: var(--go-bg); color: var(--go); font-weight: 600; }
+.tag.rev { background: color-mix(in srgb, var(--plow) 22%, transparent); color: var(--ink); }
+.slot { min-width: 210px; }

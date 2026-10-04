@@ -29,10 +29,10 @@ const Api = (() => {
         }).catch(NET);
     },
     routes(from, to) {
-      return SSAuth.rest(`vehicle_routes?select=date,vehicle_id,stops&date=gte.${from}&date=lte.${to}&order=date`).then(r => r.ok ? { ok: true, rows: r.json } : fail(r, "경로를 불러오지 못했습니다.")).catch(NET);
+      return SSAuth.rest(`vehicle_routes?select=date,vehicle_id,stops,revised,times&date=gte.${from}&date=lte.${to}&order=date`).then(r => r.ok ? { ok: true, rows: r.json } : fail(r, "경로를 불러오지 못했습니다.")).catch(NET);
     },
     vehicleHistory(vid) {
-      return SSAuth.rest(`vehicle_routes?select=date,vehicle_id,stops&vehicle_id=eq.${encodeURIComponent(vid)}&order=date.desc&limit=400`).then(r => r.ok ? { ok: true, rows: r.json } : fail(r)).catch(NET);
+      return SSAuth.rest(`vehicle_routes?select=date,vehicle_id,stops,revised,times&vehicle_id=eq.${encodeURIComponent(vid)}&order=date.desc&limit=400`).then(r => r.ok ? { ok: true, rows: r.json } : fail(r)).catch(NET);
     },
     requests(round) {
       return SSAuth.rest(`round_requests?select=round_id,branch_id,snow_cm,warning,req_truck,req_blower,assigned_truck,assigned_blower,arrive_at,reason,confirmed&round_id=eq.${+round}`)
@@ -92,9 +92,12 @@ const Api = (() => {
         vehicles.forEach(p => { const v = db.vehicles.find(x => x.id === p.id), from = {}, to = {}; Object.keys(p).filter(k => k !== "id" && v[k] !== p[k]).forEach(k => { from[k] = v[k]; to[k] = p[k]; v[k] = p[k]; }); if (Object.keys(to).length) log("수정", "vehicles", "vehicles:" + v.id, from, to); });
         routes.forEach(r => {
           const i = db.routes.findIndex(x => x.date === r.date && x.vehicle_id === r.vehicle_id), t = `vehicle_routes:${r.date},${r.vehicle_id}`;
+          const nr = { date: r.date, vehicle_id: r.vehicle_id, stops: r.stops.slice(), revised: !!r.revised, times: r.times ? r.times.slice() : null };
           if (!r.stops.length) { if (i >= 0) { log("삭제", "vehicle_routes", t, clone(db.routes[i]), null); db.routes.splice(i, 1); } }
-          else if (i < 0) { db.routes.push(clone(r)); log("추가", "vehicle_routes", t, null, clone(r)); }
-          else if (JSON.stringify(db.routes[i].stops) !== JSON.stringify(r.stops)) { log("수정", "vehicle_routes", t, { stops: db.routes[i].stops }, { stops: r.stops.slice() }); db.routes[i].stops = r.stops.slice(); }
+          else if (i < 0) { db.routes.push(nr); log("추가", "vehicle_routes", t, null, clone(nr)); }
+          else { const o = db.routes[i], from = {}, to = {};
+            ["stops", "revised", "times"].forEach(f => { if (JSON.stringify(o[f] ?? null) !== JSON.stringify(nr[f] ?? null)) { from[f] = o[f] ?? null; to[f] = nr[f]; } });
+            if (Object.keys(to).length) { log("수정", "vehicle_routes", t, from, to); db.routes[i] = nr; } }
         });
         return done({ ok: true });
       },

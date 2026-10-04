@@ -124,7 +124,7 @@ def t_multi_stop_add_and_delete(p):
     p.select_option(rsel("V002", d1, 0), "__del"); p.wait_for_timeout(200)
     check(route(p, "V002", d1) == ["양양"], "지우기")
     p.select_option(rsel("V002", d1, 0), "__del"); p.wait_for_timeout(200)
-    check(route(p, "V002", d1) == [] and ev(p, f"S.draft.get('{d1}|V002').length") == 0, "모두 지우면 빈 경로(확정하면 그 날짜 줄 삭제)")
+    check(route(p, "V002", d1) == [] and ev(p, f"S.draft.get('{d1}|V002').stops.length") == 0, "모두 지우면 빈 경로(확정하면 그 날짜 줄 삭제)")
     confirm_fleet(p); check(ev(p, f"S.routes.has('{d1}|V002')") is False, "확정 후 서버에서도 삭제")
 
 def t_status_maintenance(p):
@@ -154,10 +154,10 @@ def t_permissions_equip_own(p):
     check(p.locator("select[data-rv]").count() == 0, "경로 칸은 보기만")
     check(p.locator("[data-vdel]").count() == 0 and p.locator("#day1In").count() == 0 and p.locator("#fleetReset").count() == 0, "삭제·지원일 1·초기화 없음")
     check(p.locator("#nvOrg option").all_inner_texts() == ["충북"], "장비 추가는 자기 기관만")
-    p.fill("#nvPlate", "충북-950"); p.click("#vehAdd"); p.wait_for_timeout(250); check("추가했습니다" in toast(p), toast(p))
+    p.fill("#nvPlate", "950"); p.click("#vehAdd"); p.wait_for_timeout(250); check("추가했습니다" in toast(p), toast(p))
     p.select_option("[data-vs=V013]", "M"); p.wait_for_timeout(150); confirm_fleet(p); check("확정했습니다" in toast(p) and ev(p, "vehById('V013').status") == "M", toast(p))
     check(route(p, "V014", day(p, 0)) == ["양양"], "지원장비가 지원 여부를 바꿔도 경로는 그대로(경로는 관리자)")
-    ev(p, f"S.draft.set(rk('{day(p, 3)}', 'V014'), ['{bid(p, '양양')}']), updateSavebars()"); confirm_fleet(p)   # 화면을 우회해 경로를 보내도 서버가 막음
+    ev(p, f"S.draft.set(rk('{day(p, 3)}', 'V014'), {{ stops: ['{bid(p, '양양')}'], revised: false, times: [null] }}), updateSavebars()"); confirm_fleet(p)   # 화면을 우회해 경로를 보내도 서버가 막음
     check("권한이 없습니다" in toast(p), toast(p))
     as_user(p, "br1"); tab(p, "fleet")
     check(p.locator("#eqTable select, #eqTable input, #vehAdd, #fleetReset").count() == 0 and not p.locator("#save-fleet").is_visible(), "지사는 기관별 장비에서 아무것도 못 고침")
@@ -218,21 +218,24 @@ def t_log_tab(p):
     p.click("[data-lk='추가']"); p.wait_for_timeout(100); check(p.locator("#logTable tbody tr").count() == 1, "구분 거르기")
     p.click("[data-lk='전체']"); tab(p, "fleet"); p.select_option(rsel("V002", day(p, 3)), bid(p, "엄정")); confirm_fleet(p)
     tab(p, "log"); first = p.locator("#logTable tbody tr").first.inner_text()
-    check("경로" in first and "서울경기-902" in first and "엄정" in first, first)
+    check("경로" in first and "서울경기902" in first and "엄정" in first, first)
 
 def t_plate_edit(p):
     tab(p, "fleet"); i = "[data-vp=V004]"
     check(p.locator("#eqTable thead th").first.inner_text() == "도공번호", "제목은 도공번호")
-    p.fill(i, "12가3456"); p.press(i, "Tab"); p.wait_for_timeout(200); check("형식" in toast(p) and "서울경기-901" in toast(p) and p.locator(i).input_value() == "서울경기-904", "형식 검사(예시 = 서울경기-901)")
-    p.fill(i, "서울경기-901"); p.press(i, "Tab"); p.wait_for_timeout(200); check("이미 있습니다" in toast(p), "중복 검사")
-    p.fill(i, "서울경기-999"); p.press(i, "Tab"); p.wait_for_timeout(200); confirm_fleet(p)
-    check(ev(p, "vehById('V004').plate") == "서울경기-999", "도공번호 확정")
+    check(p.locator(i).input_value() == "904" and p.locator("tr[data-vrow=V004] .pfx").inner_text() == "서울경기", "본부(기관) 이름은 자동, 숫자만 입력")
+    p.fill(i, "abc"); p.press(i, "Tab"); p.wait_for_timeout(200); check("숫자만" in toast(p) and p.locator(i).input_value() == "904", "숫자만 받음")
+    p.fill(i, "901"); p.press(i, "Tab"); p.wait_for_timeout(200); check("이미 있습니다" in toast(p), "중복 검사(서울경기901)")
+    p.fill(i, "999"); p.press(i, "Tab"); p.wait_for_timeout(200); confirm_fleet(p)
+    check(ev(p, "vehById('V004').plate") == "서울경기999", "도공번호 확정 = 서울경기999")
+    tab(p, "move"); go_date(p, day(p, 0)); check("서울경기901" in p.locator("#destList").inner_text(), "이동 현황에는 서울경기901 처럼 표시")
 
 def t_vehicle_add_delete(p):
-    tab(p, "fleet"); p.select_option("#nvOrg", "전북"); check(p.locator("#nvPlate").get_attribute("placeholder") == "전북-901", "예시가 기관에 맞게")
-    p.select_option("#nvType", "제설기"); p.fill("#nvPlate", "전북-998"); p.click("#vehAdd"); p.wait_for_timeout(250)
-    vid = ev(p, "(S.vehicles.find(v => v.plate === '전북-998') || {}).id"); check("추가했습니다" in toast(p) and vid == "V044", f"장비 추가: {vid}")
-    check(p.locator(f"[data-vp={vid}]").input_value() == "전북-998" and p.locator(f"[data-vs={vid}]").input_value() == "", "새 장비 줄(지원 여부 미정)")
+    tab(p, "fleet"); p.select_option("#nvOrg", "전북"); check(p.locator("#nvPfx").inner_text() == "전북" and p.locator("#nvPlate").get_attribute("placeholder") == "901", "장비 추가는 번호만(기관 이름은 자동)")
+    p.select_option("#nvType", "제설기"); p.fill("#nvPlate", "전북-1"); p.click("#vehAdd"); p.wait_for_timeout(200); check("숫자만" in toast(p), "숫자만")
+    p.fill("#nvPlate", "998"); p.click("#vehAdd"); p.wait_for_timeout(250)
+    vid = ev(p, "(S.vehicles.find(v => v.plate === '전북998') || {}).id"); check("추가했습니다" in toast(p) and vid == "V044", f"장비 추가: {vid}")
+    check(p.locator(f"[data-vp={vid}]").input_value() == "998" and p.locator(f"[data-vs={vid}]").input_value() == "", "새 장비 줄(지원 여부 미정)")
     p.click(f"[data-vdel={vid}]"); p.wait_for_timeout(250); check(p.locator(f"[data-vp={vid}]").count() == 0, "장비 삭제")
 
 def t_fleet_header_stays_on_top(p):
@@ -316,11 +319,45 @@ def t_ui_version_reload_once(p):
     check("_v=" in p.url and p.locator("#eqTable tbody tr").count() > 0, f"한 번 새로 받아 정상 표시: {p.url}")
     p.unroute_all(behavior="ignoreErrors")
 
+def t_route_kind_and_eta(p):
+    """경로 칸: 최초 지원(확정된 지사만) / 수정본(모든 지사) 체크, 지사 옆 도착 예상 시각 → 이동 현황 장비 줄·장비 상세에 '도착 예상'"""
+    tab(p, "fleet"); d3 = day(p, 3)
+    k0, k1 = f"[data-fk='k0:{d3}:V002']", f"[data-fk='k1:{d3}:V002']"
+    check(p.locator(k0).is_checked() and not p.locator(k1).is_checked(), "처음은 최초 지원")
+    enabled = lambda: [o for o in p.locator(rsel("V002", d3) + " option:not([disabled])").all_inner_texts() if o not in ("지사 선택", "지우기")]
+    check(enabled() == ["대관령", "양양", "엄정"], enabled())
+    p.check(k1); p.wait_for_timeout(150)
+    check(p.locator(k1).is_checked() and not p.locator(k0).is_checked() and len(enabled()) == ev(p, "S.branches.length"), "수정본이면 모든 지사")
+    p.select_option(rsel("V002", d3), bid(p, "인천")); p.wait_for_timeout(150)
+    p.select_option(f"select[data-fk='t:{d3}:V002:0']", "07:30"); p.wait_for_timeout(150)
+    tms = p.locator(f"select[data-fk='t:{d3}:V002:0'] option").all_inner_texts(); check(tms[0] == "시각" and tms[1] == "00:00" and tms[-1] == "23:50" and len(tms) == 145, "시각 00:00~23:50, 10분 단위")
+    check(ev(p, f"JSON.stringify(recOf('{d3}', 'V002'))") == '{"stops":["%s"],"revised":true,"times":["07:30"]}' % bid(p, "인천"), ev(p, f"JSON.stringify(recOf('{d3}', 'V002'))"))
+    confirm_fleet(p); check("확정했습니다" in toast(p), toast(p))
+    p.uncheck(k1); p.wait_for_timeout(150)                         # 최초 지원으로 되돌리면 확정 안 된 인천은 '(미확정)'으로 남음
+    check("인천 (미확정)" in p.locator(rsel("V002", d3)).inner_text() and p.locator(k0).is_checked(), "최초 지원으로 바꾸면 미확정 표시")
+    p.click("#save-fleet [data-revert]"); p.wait_for_timeout(150)
+    tab(p, "move"); go_date(p, d3)
+    row = p.locator(".vrow[data-vid=V002]").first.inner_text(); check("도착 예상 07:30" in row and "수정본" in row, row)
+    p.click(".vrow[data-vid=V002]"); p.wait_for_selector("ol.vhist li")
+    sh = p.locator("#sheet").inner_text(); check("도착 예상" in sh and "07:30" in sh and "도착 요청" not in sh, sh)
+    check("인천 07:30" in p.locator("ol.vhist").inner_text(), "날짜별 기록에도 시각")
+    p.click("#sheetClose")
+
+def t_bulk_confirm_and_no_holdings(p):
+    tab(p, "branch")
+    heads = p.locator("#branchTable thead").inner_text(); check("보유" not in heads and "최종" not in heads and "일괄 확정" in heads, heads)
+    ch = bid(p, "춘천"); check(p.locator(f"[data-confirm={ch}]").count() == 1, "춘천 확정 전")
+    p.click("#confirmAll"); p.wait_for_timeout(300)
+    check("1개 지사를 확정했습니다" in toast(p) and ev(p, f"S.reqs['{ch}'].confirmed") is True, toast(p))
+    p.click("#confirmAll"); p.wait_for_timeout(200); check("확정할 지사가 없습니다" in toast(p), toast(p))
+    as_user(p, "br1"); tab(p, "branch"); check(p.locator("#confirmAll").count() == 0, "지사는 일괄 확정 없음")
+
 TESTS = [t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
-         t_typing_then_clicking_next_input_keeps_both, t_round_delete, t_pending_branches_shown_grey, t_ui_version_reload_once]
+         t_typing_then_clicking_next_input_keeps_both, t_round_delete, t_pending_branches_shown_grey, t_ui_version_reload_once,
+         t_route_kind_and_eta, t_bulk_confirm_and_no_holdings]
 
 # ---------------------------------------------------------------- 서버 모드(가짜 Supabase, tests/_sb_mock.py) — 실제 로그인 권한·저장 함수 호출
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -338,8 +375,8 @@ def t_server_equip_confirm(b):
     check(p.locator("#userSel").input_value() == "__me" and "내 아이디" in p.locator("#userSel option").first.inner_text(), "내 아이디로 시작")
     tab(p, "fleet"); check(p.locator("[data-vs=V001]").count() == 1 and p.locator("[data-vs=V002]").count() == 0 and p.locator("select[data-rv]").count() == 0, "자기 기관 도공번호·지원 여부만(경로는 관리자)")
     d0 = m.today
-    p.select_option("[data-vs=V001]", "M"); p.fill("[data-vp=V001]", "서울경기-911"); p.press("[data-vp=V001]", "Tab"); p.wait_for_timeout(150); confirm_fleet(p)
-    check(m.eq_calls[-1] == ("save_fleet", {"p_vehicles": [{"id": "V001", "status": "M", "plate": "서울경기-911"}], "p_routes": []}), m.eq_calls)
+    p.select_option("[data-vs=V001]", "M"); p.fill("[data-vp=V001]", "911"); p.press("[data-vp=V001]", "Tab"); p.wait_for_timeout(150); confirm_fleet(p)
+    check(m.eq_calls[-1] == ("save_fleet", {"p_vehicles": [{"id": "V001", "status": "M", "plate": "서울경기911"}], "p_routes": []}), m.eq_calls)
     check("확정했습니다" in toast(p), toast(p))
     as_user(p, "admin1"); tab(p, "fleet")
     check("미리보기" in p.locator("#perm-fleet").inner_text(), "미리보기 안내")
