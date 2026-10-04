@@ -13,6 +13,10 @@
       fromKind: function (k) { return k === 'cellAdd' ? 'add' : k === 'cellRemove' ? 'remove' : k; } }
   };
   var PAGE = 1000;          // 서버가 한 번에 돌려주는 최대 줄 수(그 이상은 나눠서 읽음)
+  // 예전 버그로 번호 없이 저장된 신설 기관(서버 줄 10 = 영암, 11 = 민자)의 정식 번호. 서버 기관 목록(branches)에도 이 번호로 등록됨(마이그레이션 14).
+  // 지울 수 없는 이력은 그대로 두고, 읽을 때 이력 안의 '10'·'11' 을 정식 번호로 바꿔 읽는다. 지우지 말 것.
+  var LEGACY_BRANCH = { '10': 'B060', '11': 'B061' };
+  function mapId(x) { return (x != null && LEGACY_BRANCH.hasOwnProperty(String(x))) ? LEGACY_BRANCH[String(x)] : x; }
 
   function toRow(domain, ev, defaultNote) {
     // 주의: 신설 기관(addBranch)은 자기 번호를 id 로 가지므로 id 를 빼면 안 됩니다. 서버 줄 번호는 따로 seq 에 담습니다.
@@ -22,8 +26,10 @@
   function fromRow(domain, row) {
     var ev = {}; var p = row.payload || {}; Object.keys(p).forEach(function (k) { ev[k] = p[k]; });
     ev.t = DOM[domain].fromKind(row.kind); ev.at = row.at; ev.seq = row.id; if (row.note) ev.note = row.note;
-    // 예전 버그로 번호 없이 저장된 신설 기관(addBranch)은 그때 화면에서 쓰던 번호(서버 줄 번호)를 그대로 기관 번호로 씁니다 — 이미 저장된 이동 이력이 그 번호를 가리키기 때문
+    // 예전 버그로 번호 없이 저장된 신설 기관(addBranch)은 그때 쓰던 번호(서버 줄 번호)를 정식 번호로 바꿔 씁니다(LEGACY_BRANCH). 목록에 없는 줄 번호는 그대로.
     if (ev.t === 'addBranch' && (ev.id == null || ev.id === '')) ev.id = String(row.id);
+    ['id', 'to', 'branch', 'after'].forEach(function (k) { if (k in ev) ev[k] = mapId(ev[k]); });
+    if (Array.isArray(ev.from)) ev.from = ev.from.map(mapId); else if ('from' in ev) ev.from = mapId(ev.from);
     return ev;
   }
   function fromFile(domain) {
@@ -73,5 +79,5 @@
   function download(name, text) {
     var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = name; document.body.appendChild(a); a.click(); a.remove();
   }
-  root.SSEvents = { load: load, append: append, saveJurisdiction: saveJurisdiction, toRow: toRow, fromRow: fromRow, exportJson: exportJson, download: download, PAGE: PAGE };
+  root.SSEvents = { load: load, append: append, saveJurisdiction: saveJurisdiction, LEGACY_BRANCH: LEGACY_BRANCH, toRow: toRow, fromRow: fromRow, exportJson: exportJson, download: download, PAGE: PAGE };
 })(window);

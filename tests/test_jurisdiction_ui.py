@@ -230,16 +230,17 @@ def t_new_branch_id_survives_save(b):
     data = json.load(open(dl.value.path(), encoding="utf-8")); ex = next(e for e in data["events"] if e["t"] == "addBranch"); check(ex.get("id") == nid and "seq" not in ex, f"백업 파일의 신설 기관: {ex}")
 
 def t_legacy_new_branch_without_id_still_works(b):
-    """예전 버그로 번호 없이 저장된 신설 기관(서버 줄 번호가 곧 기관 번호로 쓰이던 것)도 계속 읽힌다"""
+    """예전 버그로 번호 없이 저장된 신설 기관(서버 줄 10 = 영암, 11 = 민자)은 정식 번호 B060·B061 로 읽히고, 그 번호를 가리키던 이동도 그대로 적용된다"""
     m = SBM.Mock(); un = [s["id"] for s in json.load(open(ROOT / "data/sections.json", encoding="utf-8"))["sections"] if s["owner"] is None][:3]
     m.events["jurisdiction_events"] += [{"id": 10, "at": "2026-10-03T10:09:15Z", "by_user": None, "kind": "addBranch", "payload": {"hq": "광주전남", "name": "영암"}, "note": None},
         {"id": 11, "at": "2026-10-03T10:44:44Z", "by_user": None, "kind": "addBranch", "payload": {"hq": "민자", "name": "민자"}, "note": None},
         {"id": 12, "at": "2026-10-03T10:45:32Z", "by_user": None, "kind": "move", "payload": {"sections": un, "to": "11", "from": [None], "km": 3}, "note": None}]
     p = open_tab(b, mock=m)
-    check(J(p, "JURIS.committed.filter(e => e.t === 'addBranch').map(e => e.id)") == ["10", "11"], "번호 없는 신설 기관은 서버 줄 번호를 기관 번호로 씀")
-    check(all(J(p, f"JurisdictionUI._state().view.state.owner['{u}']") == "11" for u in un) and J(p, "JurisdictionUI._state().view.state.branches['11'].name") == "민자", "이미 저장된 이동 이력이 그대로 적용됨")
+    check(J(p, "JURIS.committed.filter(e => e.t === 'addBranch').map(e => e.id)") == ["B060", "B061"], "예전 번호 10·11 → 정식 번호 B060·B061")
+    check(all(J(p, f"JurisdictionUI._state().view.state.owner['{u}']") == "B061" for u in un) and J(p, "JurisdictionUI._state().view.state.branches['B061'].name") == "민자", "'11' 을 가리키던 이동 이력도 B061 로 적용됨")
+    check(J(p, "!!JurisdictionUI._state().view.state.branches['10'] || !!JurisdictionUI._state().view.state.branches['11']") is False, "예전 번호로 된 기관은 남지 않음")
     p.click("#jr-add"); p.fill("#jr-newname", "또신설"); p.click("#jr-newok"); p.wait_for_timeout(300)
-    nid = J(p, "JurisdictionUI._state().pending[0].id"); check(nid == "B060", f"예전 번호('10','11')가 있어도 다음 기관 번호는 B060 이어야 함: {nid}")
+    nid = J(p, "JurisdictionUI._state().pending[0].id"); check(nid == "B062", f"B060·B061 다음 번호는 B062: {nid}")
 
 def t_html_in_branch_name_is_text(b):
     """기관 이름에 HTML(<img onerror=…>)이 들어 있어도 모든 화면(강설량 표·관측소 트리·관할 이력)에서 글자로만 보이고 실행되지 않는다"""
@@ -294,6 +295,28 @@ def t_snow_server_empty_shows_no_data(b):
     p.click(".tab-btn[data-tab=snowtable]"); p.wait_for_timeout(300)
     check("자료 없음" in p.locator("#snowTableWrap").inner_text() and J(p, "Object.keys(SNOW_DATA.seasons).length") == 0, p.locator("#snowTableWrap").inner_text()[:100])
     check(not any("snow_data.json" in u for u in reqs), "예전 파일을 받지 않음")
+
+def t_new_branch_position_and_reorder(b):
+    """신설 기관을 '○○ 다음'에 만들고, 기존 기관 순서도 바꿀 수 있다. 저장 내용에 after 가 들어가고, 강설량 표의 줄 순서가 그대로 따른다(번호는 그대로)"""
+    m = SBM.Mock(); p = open_tab(b, mock=m); admin(p)
+    gj = bid(p, "광주전남", "광주"); hp = bid(p, "광주전남", "함평")
+    p.click("#jr-add"); p.fill("#jr-newname", "위치시험"); p.select_option("#jr-newhq", "광주전남"); p.wait_for_timeout(150)
+    check(p.locator("#jr-newpos option").count() >= 3, "본부를 고르면 그 본부 기관 목록이 위치 칸에 나옴")
+    p.select_option("#jr-newpos", gj); p.click("#jr-newok"); p.wait_for_timeout(300)
+    ev = J(p, "JurisdictionUI._state().pending[0]"); check(ev["t"] == "addBranch" and ev["after"] == gj and ev["id"] == "B060", ev)
+    order = J(p, "(()=>{const st=JurisdictionUI._state().view.state;return st.order.filter(i=>st.branches[i].hq==='광주전남').map(i=>st.branches[i].name)})()")
+    check(order[order.index("광주") + 1] == "위치시험", order)
+    # 기존 기관(함평)을 맨 앞으로
+    p.click(f".jr-br[data-id={hp}]"); p.wait_for_selector("#jr-order")
+    p.select_option("#jr-order", ""); p.wait_for_timeout(300)
+    ev2 = J(p, "JurisdictionUI._state().pending.slice(-1)[0]"); check(ev2["t"] == "orderBranch" and ev2["branch"] == hp and ev2["after"] == "", ev2)
+    clear_toast(p); p.click("#jr-top-save"); saved(p, 2)
+    rows = m.events["jurisdiction_events"]; check([r["kind"] for r in rows[-2:]] == ["addBranch", "orderBranch"] and rows[-2]["payload"]["after"] == gj, [r["kind"] for r in rows])
+    names = J(p, "HIERARCHY.hq.find(h=>h.name==='광주전남').branches.map(b=>b.name)")
+    check(names[0] == "함평" and names[names.index("광주") + 1] == "위치시험", names)
+    p.click(".tab-btn[data-tab=snowtable]"); p.wait_for_timeout(300)
+    labels = [t.strip() for t in p.locator("#snowTableWrap tr[data-branch-row^='광주전남'] td.row-label").all_inner_texts()]
+    check(labels[0] == "함평" and labels[labels.index("광주") + 1] == "위치시험", labels)
 
 def t_save_failure_keeps_pending_and_offers_file(b):
     m = SBM.Mock(); p = open_tab(b, mock=m); admin(p)
@@ -526,7 +549,7 @@ def t_private_hq(b):
     check(p.locator("#statBranch").inner_text() == "59", "민자 기관이 강설량 화면 통계에 들어가면 안 됨")
     check(J(p, "HIERARCHY.hq.some(h => h.name === '민자')") is False, "HIERARCHY 에 민자 본부가 생기면 안 됨")
 
-TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload, t_new_branch_id_survives_save, t_legacy_new_branch_without_id_still_works, t_html_in_branch_name_is_text, t_csp_blocks_injected_script, t_snow_from_server_not_public_file, t_snow_server_empty_shows_no_data,
+TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload, t_new_branch_id_survives_save, t_legacy_new_branch_without_id_still_works, t_html_in_branch_name_is_text, t_new_branch_position_and_reorder, t_csp_blocks_injected_script, t_snow_from_server_not_public_file, t_snow_server_empty_shows_no_data,
          t_save_failure_keeps_pending_and_offers_file, t_history_load_failure_falls_back_and_blocks_save, t_history_paging_and_backup_export,
          t_border_on_click_view_mode, t_border_contrast_all_colors, t_admin_click_has_border, t_pick_destination_on_map, t_no_admin_checkbox_and_no_popup_move_button,
          t_save_bar_always_visible, t_unassigned_visible_and_clickable, t_assign_unassigned_to_branch, t_select_all_unassigned_row,

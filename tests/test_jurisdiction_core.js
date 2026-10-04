@@ -181,6 +181,37 @@ test('미리보기: 민자 기관은 관측소·적설을 계산하지 않는다
   assert.strictEqual(rows[0].after.stations.length, 0); assert.strictEqual(rows[0].after.allMax, null);
 });
 
+/* ---------- 기관 순서(번호와 별개): 신설 시 after, 나중에 orderBranch ---------- */
+const hqOrder = (st, hq) => st.order.filter(id => st.branches[id].hq === hq).map(id => st.branches[id].name);
+test('순서: 신설 기관을 "○○ 다음에" 만들면 그 자리에 들어가고, 다른 기관 번호는 그대로', () => {
+  const st = C.resolve(doc, [{ t: 'addBranch', id: 'B900', hq: '광주전남', name: '영암시험', after: bid('광주전남', '광주') }]);
+  const names = hqOrder(st, '광주전남'); assert.strictEqual(names[names.indexOf('광주') + 1], '영암시험');
+  assert.ok(doc.branches.every(b => st.branches[b.id] && st.branches[b.id].name === b.name), '기존 번호·이름 불변');
+});
+test('순서: after 가 없으면 본부 맨 뒤, "" 이면 맨 앞, 다른 본부 기관을 가리키면 무시(맨 뒤)', () => {
+  const a = C.resolve(doc, [{ t: 'addBranch', id: 'B900', hq: '광주전남', name: '끝' }]); assert.strictEqual(hqOrder(a, '광주전남').slice(-1)[0], '끝');
+  const b = C.resolve(doc, [{ t: 'addBranch', id: 'B900', hq: '광주전남', name: '처음', after: '' }]); assert.strictEqual(hqOrder(b, '광주전남')[0], '처음');
+  const c = C.resolve(doc, [{ t: 'addBranch', id: 'B900', hq: '광주전남', name: '엉뚱', after: bid('강원', '춘천') }]); assert.strictEqual(hqOrder(c, '광주전남').slice(-1)[0], '엉뚱');
+});
+test('순서: orderBranch 로 기존·신설 기관을 옮길 수 있고, 강설량 표(H)도 같은 순서가 된다', () => {
+  const ev = [{ t: 'addBranch', id: 'B900', hq: '광주전남', name: '영암시험' },
+    { t: 'move', sections: secsOf(bid('광주전남', '함평')).slice(0, 2).map(s => s.id), to: 'B900', from: [bid('광주전남', '함평')], km: 1 },
+    { t: 'orderBranch', branch: 'B900', after: bid('광주전남', '광주') }, { t: 'orderBranch', branch: bid('광주전남', '남원'), after: '' }];
+  const st = C.resolve(doc, ev); const want = hqOrder(st, '광주전남');
+  assert.strictEqual(want[0], '남원'); assert.strictEqual(want[want.indexOf('광주') + 1], '영암시험');
+  const { H, S } = fresh(); C.applyToData(H, S, doc, stationsDoc, ev);
+  assert.deepStrictEqual(H.hq.find(h => h.name === '광주전남').branches.map(b => b.name), want, '표 순서 = 관할 순서');
+  const r = C.reapply(fresh().H, fresh().S, doc, stationsDoc, ev);
+  assert.deepStrictEqual(r.H.hq.find(h => h.name === '광주전남').branches.map(b => b.name), want, '새로고침 없이 다시 적용해도 같은 순서');
+});
+test('순서만 바꾸면 지사별 적설 값은 하나도 바뀌지 않는다(줄 위치만 바뀜)', () => {
+  const a = fresh(), b = fresh();
+  C.applyToData(a.H, a.S, doc, stationsDoc, []);
+  C.applyToData(b.H, b.S, doc, stationsDoc, [{ t: 'orderBranch', branch: bid('강원', '양양'), after: '' }]);
+  assert.deepStrictEqual(b.S, a.S);
+  assert.strictEqual(b.H.hq.find(h => h.name === '강원').branches[0].name, '양양');
+});
+
 const ok = results.filter(r => r[1]).length;
 results.forEach(r => console.log((r[1] ? 'PASS ' : 'FAIL ') + r[0] + (r[1] ? '' : '  → ' + r[2])));
 console.log('\n' + ok + '/' + results.length + ' 통과');

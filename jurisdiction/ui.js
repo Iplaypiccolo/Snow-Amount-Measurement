@@ -299,7 +299,8 @@
     var h = '<div class="jr-detail">';
     if (S.admin && id !== 'NONE') {
       h += '<div class="jr-row">본부 변경: <select id="jr-hq">' + st.hqs.map(function (hq) { return '<option' + (hq === st.branches[id].hq ? ' selected' : '') + '>' + esc(hq) + '</option>'; }).join('') + '</select>' +
-        '<button class="jr-btn" id="jr-selall">이 지사 구간 전체 선택</button></div>';
+        '<button class="jr-btn" id="jr-selall">이 지사 구간 전체 선택</button></div>' +
+        '<div class="jr-row">순서: <select id="jr-order" title="강설량 표·엑셀에서 이 기관이 놓일 자리. 번호는 바뀌지 않습니다">' + posOptions(st.branches[id].hq, id, prevOf(id)) + '</select></div>';
     } else if (selectMode() && id !== 'NONE') {
       h += '<div class="jr-row"><button class="jr-btn" id="jr-selall">이 지사 구간 전체 선택</button></div>';
     }
@@ -316,7 +317,8 @@
   function describe(ev) {
     var st = S.view.state, nm = function (id) { return id == null || id === 'NONE' ? '미지정' : (st.branches[id] ? st.branches[id].name : id); };
     if (ev.t === 'move') return esc((ev.sections || []).length) + '개 구간(' + esc(ev.km != null ? ev.km : '?') + 'km): ' + esc((ev.from || []).map(nm).join('·')) + ' → <b>' + esc(nm(ev.to)) + '</b>' + (ev.req ? ' <em>요청 #' + esc(ev.req) + '</em>' : '');
-    if (ev.t === 'addBranch') return '신설 기관: <b>' + esc(ev.name) + '</b> (' + esc(ev.hq) + ')';
+    if (ev.t === 'addBranch') return '신설 기관: <b>' + esc(ev.name) + '</b> (' + esc(ev.hq) + (ev.after !== undefined ? ', ' + esc(ev.after === '' ? '맨 앞' : nm(ev.after) + ' 다음') : '') + ')';
+    if (ev.t === 'orderBranch') return '순서: <b>' + esc(nm(ev.branch)) + '</b> → ' + esc(ev.after === '' ? '맨 앞' : nm(ev.after) + ' 다음');
     if (ev.t === 'moveHq') return '<b>' + esc(nm(ev.branch)) + '</b>: ' + esc(ev.fromHq || '?') + ' → ' + esc(ev.hq);
     return esc(ev.t);
   }
@@ -418,7 +420,8 @@
   function addBranchDialog() {
     var st = S.view.state;
     modal('<h3>신설 기관 추가</h3><div class="jr-form"><label>기관 이름 <input id="jr-newname" placeholder="예: 새만금" maxlength="20"></label>' +
-      '<label>소속 본부 <select id="jr-newhq">' + st.hqs.map(function (h) { return '<option>' + esc(h) + '</option>'; }).join('') + '</select></label></div>' +
+      '<label>소속 본부 <select id="jr-newhq">' + st.hqs.map(function (h) { return '<option>' + esc(h) + '</option>'; }).join('') + '</select></label>' +
+      '<label>위치 <select id="jr-newpos" title="강설량 표·엑셀에서 놓일 자리. 다른 기관 번호는 바뀌지 않습니다">' + posOptions(st.hqs[0], null, '__end') + '</select></label></div>' +
       '<p class="jr-hint">만든 뒤 지도에서 구간을 골라 이 기관으로 옮기면 관측소와 신적설이 계산됩니다.</p>' +
       '<div class="jr-row"><button class="jr-btn jr-primary" id="jr-newok">추가</button><button class="jr-btn" id="jr-close">취소</button></div>');
     $('jr-newname').focus();
@@ -430,9 +433,26 @@
     if (name.length > 20 || /[<>"'&`]/.test(name)) { window.alert('기관 이름은 20자 이내로, 기호(< > 따옴표 & `)는 쓸 수 없습니다.'); return; }      // 서버(DB)도 같은 규칙으로 검사
     var dup = Object.keys(S.view.state.branches).some(function (id) { return S.view.state.branches[id].name === name; });
     if (dup) { window.alert('같은 이름의 기관이 이미 있습니다.'); return; }
-    var id = nextBranchId();
-    S.pending.push({ t: 'addBranch', id: id, hq: hq, name: name });
+    var id = nextBranchId(), pos = $('jr-newpos') ? $('jr-newpos').value : '__end';
+    var ev = { t: 'addBranch', id: id, hq: hq, name: name }; if (pos !== '__end') ev.after = pos;       // 맨 뒤면 after 를 넣지 않음
+    S.pending.push(ev);
     S.focus = id; closeModal(); afterChange(true);
+  }
+
+  // 기관 위치 선택 목록: '' = 본부 맨 앞, '__end' = 맨 뒤(신설 기본), 기관 번호 = 그 기관 다음. 번호는 바뀌지 않고 순서만 바뀜
+  function posOptions(hq, self, cur) {
+    var st = S.view.state, ids = st.order.filter(function (x) { return x !== self && st.branches[x].hq === hq; });
+    return '<option value="__end"' + (cur === '__end' ? ' selected' : '') + '>맨 뒤</option><option value=""' + (cur === '' ? ' selected' : '') + '>맨 앞</option>' +
+      ids.map(function (x) { return '<option value="' + esc(x) + '"' + (cur === x ? ' selected' : '') + '>' + esc(st.branches[x].name) + ' 다음</option>'; }).join('');
+  }
+  function prevOf(id) {          // 지금 이 기관 바로 앞 기관(같은 본부). 맨 앞이면 ''
+    var st = S.view.state, ids = st.order.filter(function (x) { return st.branches[x].hq === st.branches[id].hq; }), i = ids.indexOf(id);
+    return i > 0 ? ids[i - 1] : '';
+  }
+  function changeOrder(after) {
+    var id = S.focus, st = S.view.state; if (!id || !st.branches[id] || after === prevOf(id)) return;
+    S.pending.push({ t: 'orderBranch', branch: id, after: after === '__end' ? (function () { var ids = st.order.filter(function (x) { return x !== id && st.branches[x].hq === st.branches[id].hq; }); return ids.length ? ids[ids.length - 1] : ''; })() : after });
+    afterChange(true);
   }
 
   function changeHq(hq) {
@@ -520,7 +540,7 @@
       else if (id === 'jr-newok' && S.admin) createBranch();
       else if (t.classList && t.classList.contains('jr-x')) cancelEvent(parseInt(t.dataset.ev, 10));
     });
-    document.getElementById('view-jurisdiction').addEventListener('change', function (e) { if (e.target.id === 'jr-hq' && S.admin) changeHq(e.target.value); });
+    document.getElementById('view-jurisdiction').addEventListener('change', function (e) { if (e.target.id === 'jr-hq' && S.admin) changeHq(e.target.value); else if (e.target.id === 'jr-order' && S.admin) changeOrder(e.target.value); else if (e.target.id === 'jr-newhq') { var o = $('jr-newpos'); if (o) o.innerHTML = posOptions(e.target.value, null, '__end'); } });
     document.getElementById('view-jurisdiction').addEventListener('input', function (e) { if (e.target.id === 'jr-reason') S.reason = e.target.value; });
     document.getElementById('view-jurisdiction').addEventListener('toggle', function (e) { if (e.target.id === 'jr-reqdet') S.reqOpen = e.target.open; }, true);
   }

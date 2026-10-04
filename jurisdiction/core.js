@@ -22,6 +22,23 @@
     return Object.keys(branches).some(function (id) { return branches[id].name === n; });
   }
 
+  // 기관 순서: 번호(id)는 이름표일 뿐이고, 순서는 order 목록이 정한다. after = 같은 본부의 이 기관 바로 다음, '' = 본부의 맨 앞, 없음 = 그대로(신설은 맨 뒤).
+  // 중간에 끼워도 다른 기관의 번호·값은 바뀌지 않는다(표·엑셀은 이 순서대로 줄만 늘어남).
+  function place(order, branches, id, after) {
+    if (after === undefined || after === null) return false;
+    var hq = branches[id].hq, i = order.indexOf(id), at;
+    if (after === '') {
+      var first = order.filter(function (x) { return x !== id && branches[x].hq === hq; })[0];
+      if (first === undefined) return false;
+      order.splice(i, 1); at = order.indexOf(first);
+    } else {
+      if (after === id || !branches[after] || branches[after].hq !== hq) return false;
+      order.splice(i, 1); at = order.indexOf(after) + 1;
+    }
+    order.splice(at, 0, id);
+    return true;
+  }
+
   /* ---------- 1) 이벤트를 적용한 "소속 상태" 계산 ---------- */
   function resolve(doc, events) {
     var branches = {}, order = [], owner = {};
@@ -34,12 +51,14 @@
         var nm = String(ev.name || '').trim();
         if (ev.id && nm && doc.hqs.indexOf(ev.hq) >= 0 && !branches[ev.id] && !nameTaken(branches, nm)) {
           branches[ev.id] = { id: ev.id, hq: ev.hq, name: nm, added: true };
-          order.push(ev.id);
+          order.push(ev.id); place(order, branches, ev.id, ev.after);
           ok = true;
         }
       } else if (ev.t === 'moveHq') {
         var b = branches[ev.branch];
-        if (b && doc.hqs.indexOf(ev.hq) >= 0 && b.hq !== ev.hq) { b.hq = ev.hq; ok = true; }
+        if (b && doc.hqs.indexOf(ev.hq) >= 0 && b.hq !== ev.hq) { b.hq = ev.hq; place(order, branches, ev.branch, ev.after); ok = true; }
+      } else if (ev.t === 'orderBranch') {
+        if (branches[ev.branch]) ok = place(order, branches, ev.branch, ev.after === undefined ? null : ev.after);
       } else if (ev.t === 'move') {
         if (ev.to === 'NONE' || branches[ev.to]) {
           var toId = ev.to === 'NONE' ? null : ev.to;        // 소속이 없는 구간의 owner 는 null
@@ -214,7 +233,18 @@
       if (oldKey && oldKey !== newKey) dropSeries(oldKey);
       changed.push({ id: id, key: newKey, oldKey: oldKey, added: b.added });
     });
+    sortHierarchy(H, st);
     return { state: st, changed: changed, recomputed: canRecompute };
+  }
+  // 강설량 화면 목록(H)의 본부 안 지사 순서를 관할 순서(st.order)에 맞춤(표·엑셀·지도 목록이 이 순서를 따름)
+  function sortHierarchy(H, st) {
+    var idx = {};
+    st.order.forEach(function (id, i) { var b = st.branches[id]; idx[b.hq + '|||' + b.name] = i; });
+    H.hq.forEach(function (h) {
+      var pos = h.branches.map(function (b, i) { var k = idx[h.name + '|||' + b.name]; return { b: b, k: k === undefined ? 1e9 + i : k }; });
+      pos.sort(function (a, b) { return a.k - b.k; });
+      h.branches = pos.map(function (x) { return x.b; });
+    });
   }
 
   /* ---------- 5-2) 새로고침 없이 다시 적용 ----------

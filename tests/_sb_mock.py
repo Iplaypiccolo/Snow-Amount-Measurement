@@ -75,7 +75,7 @@ class Mock:
     def usable(self, u): p = u and u["profile"]; return bool(p and not p["must_change"] and not p["disabled"])
     def events_api(self, tbl, req, u, q, body, send):
         """변경 이력 표와 같은 권한 규칙: 읽기=활성 로그인 사용자(임시 비밀번호·비활성 제외), 쓰기=관리자만(종류 검사, 한 줄이라도 틀리면 전부 취소), 지우기·고치기 없음"""
-        kinds = {"jurisdiction_events": ("move", "addBranch", "moveHq"), "grid_events": ("cellAdd", "cellRemove")}[tbl]
+        kinds = {"jurisdiction_events": ("move", "addBranch", "moveHq", "orderBranch"), "grid_events": ("cellAdd", "cellRemove")}[tbl]
         rows = self.events[tbl]
         if self.events_fail and (req.method != "GET" or self.events_fail[0] == "get"):
             return send(*self.events_fail[1])
@@ -97,7 +97,7 @@ class Mock:
         self.event_calls.append(("save_jurisdiction", body))
         if self.events_fail and self.events_fail[0] != "get": return send(*self.events_fail[1])
         if not self.active_admin(u): return send(403, {"code": "42501", "message": "new row violates row-level security policy"})
-        if not isinstance(evs, list) or not evs or any(not isinstance(b, dict) or b.get("kind") not in ("move", "addBranch", "moveHq") or not isinstance(b.get("payload"), dict) for b in evs): return send(400, {"code": "23514", "message": "check violation"})
+        if not isinstance(evs, list) or not evs or any(not isinstance(b, dict) or b.get("kind") not in ("move", "addBranch", "moveHq", "orderBranch") or not isinstance(b.get("payload"), dict) for b in evs): return send(400, {"code": "23514", "message": "check violation"})
         reqs = [r for r in self.requests if r["id"] in set(ids)]
         if len(reqs) != len(set(ids)) or any(r["status"] != "pending" for r in reqs): return send(400, {"code": "55000", "message": "request_not_pending"})
         rows = self.events["jurisdiction_events"]

@@ -31,7 +31,7 @@ python tools/run_all_tests.py            # 전체 시험 (약 5분, 병렬). --f
 | `admin/` | 관리 콘솔: 계정, **비밀번호 일괄 설정(엑셀표)**, **적설 자료(메모장 txt → 서버)**, 접속 로그 |
 | `equipment/` | 장비 지원 화면(iframe). **아직 샘플 자료이며 서버로 옮기지 않음** |
 | `data/*.json` | 기본(baseline) 자료. 구간 1,011 · 관측소 260 · 격자 1,070쌍. `*_changes.json` 은 서버 장애 때의 비상용(비어 있음). **적설 파일(`snow_data.json`)은 서버로 옮긴 뒤 지움** — 적설은 서버 `snow_daily`→`snapshots`, 시험은 `tests/fixtures/snow_sample.json` |
-| `supabase/migrations/` | DB 변경 SQL(01~12). `functions/` Edge Function 3개(`account-admin`, `import-reference`, `import-snow`). `tests/*.sql` 권한 시험(`save_check_test.sql` 포함) |
+| `supabase/migrations/` | DB 변경 SQL(01~14). `functions/` Edge Function 3개(`account-admin`, `import-reference`, `import-snow`). `tests/*.sql` 권한 시험(`save_check_test.sql` 포함) |
 | `tests/` | 자동 시험. `_sb_mock.py` 는 **가짜 Supabase 서버**(실제 서버에 접속하지 않고 화면을 시험) |
 | `tools/` | 자료 만들기·검증 도구. GIS 원본(`highway_links.gpkg` 등)은 저장소에 없음. `check_gaps_against_source.py` = 끊긴 구간을 원본과 대조 |
 | `.github/workflows/` | `supabase-keepalive.yml` 월·목 서버 깨우기(비밀값 없음, `keepalive()` 함수) — `docs/server-keepalive.md`. 이 폴더를 올리려면 토큰에 workflow 권한 필요 |
@@ -65,7 +65,8 @@ python tools/run_all_tests.py            # 전체 시험 (약 5분, 병렬). --f
 - Supabase API 경로는 **WHERE 없는 DELETE 를 막는다**(`where true` 필요).
 - 서버는 한 번에 **1,000줄**까지만 돌려준다 → `auth/events.js` 가 나눠 읽는다.
 - `raw.githubusercontent.com` 은 몇 분 캐시한다 → 서버 이전 함수를 부를 때 **커밋 번호(`ref`)를 지정**한다.
-- 신설 기관(`addBranch`)의 `id` 는 기관 번호다. 예전 버그로 번호 없이 저장된 줄(서버 줄 번호 `10`, `11`)이 있어 **읽을 때 줄 번호를 기관 번호로 쓰는 호환 코드**가 있다 — 지우지 말 것.
+- 신설 기관(`addBranch`)의 `id` 는 기관 번호(이름표, 순서 아님)다. 예전 버그로 번호 없이 저장된 줄(서버 줄 `10`=영암, `11`=민자)은 **읽을 때 `B060`·`B061` 로 바꿔 읽는다**(`auth/events.js` 의 `LEGACY_BRANCH`, 이력 안의 '10'·'11' 도 함께) — 지우지 말 것. 서버 `branches` 에도 B060·B061 로 등록됨.
+- 신설 기관을 저장하면 DB 트리거가 `branches` 에 자동 등록(본부 이동도 반영). 기관 순서는 번호가 아니라 이력의 `after`(신설 시)·`orderBranch`(나중에)로 정한다 — 중간에 끼워도 다른 번호는 그대로.
 - `tools/add_unassigned_sections.py` 를 다시 돌리면 IC/JC 에서 구간이 끊긴다 → 이어서 `tools/fill_section_gaps.py`, 그다음 `tools/reference_check.py` 로 DB 와 비교.
 - 첫 화면·관리 콘솔에 CSP 가 있어 화면 시험의 `wait_for_function(문자열)` 이 막힌다 → 첫 화면 시험 페이지는 `bypass_csp=True`, CSP 자체는 `t_csp_blocks_injected_script` 가 확인.
 - 일회용 시작 토큰을 settings 에 넣는 일은 Claude Code 안전 장치가 막는다 → 서버 함수 호출은 관리자 로그인(관리 콘솔)으로.
