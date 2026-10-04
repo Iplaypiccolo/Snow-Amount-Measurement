@@ -458,3 +458,8 @@ table.matrix { font-size: 15px; min-width: 900px; }
 .tb-right.mode label { display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
 .slot { min-width: 190px; }
 .slot .tag.rev { align-self: flex-start; }
+/* 이동 현황 필터 버튼: 줄어들거나 글자가 세로로 꺾이지 않게. 좁으면(stacked) 두 줄, 모두 오른쪽 정렬 */
+.filters.split .chip, .filters.split .flabel { flex-shrink: 0; white-space: nowrap; }
+.filters.split .fgroup { overflow: visible; }
+.filters.split.stacked .fgroup { width: 100%; row-gap: 6px; }
+.filters.split.stacked .fgroup .flabel { margin-right: 2px; }

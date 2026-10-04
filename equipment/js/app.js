@@ -249,13 +249,16 @@ function renderFilters() {
     ["전체", ...MOVE_TYPES].map(t => `<button type="button" class="chip" data-type="${esc(t)}" aria-pressed="${S.type === t}">${t === "전체" ? "모든 장비" : esc(t)}</button>`).join("") + `</div>`;
   fitFilters();
 }
-// 구분선은 화면 가운데. 두 묶음이 한 줄에 다 안 들어가면 구분선 없이 모두 오른쪽 정렬
+// 구분선은 화면 가운데. 두 묶음이 각자 절반 폭에 다 안 들어가면 구분선 없이 모두 오른쪽 정렬(버튼 글자는 줄바꿈하지 않음)
 function fitFilters() {
   const f = $("filters"); if (!f || !f.offsetWidth) return;
-  f.classList.remove("stacked");
-  if ([...f.querySelectorAll(".fgroup")].some(g => g.scrollWidth > g.clientWidth + 1)) f.classList.add("stacked");
+  const gs = [...f.querySelectorAll(".fgroup")]; if (!gs.length) return;
+  const need = g => [...g.children].reduce((a, c) => a + c.getBoundingClientRect().width, 0) + 6 * (g.children.length - 1);   // 버튼 폭 합 + 간격
+  const half = (f.clientWidth - 40) / 2;                                   // 가운데 구분선과 양쪽 여백을 뺀 절반
+  f.classList.toggle("stacked", gs.some(g => need(g) > half));
 }
 addEventListener("resize", fitFilters);
+if (window.ResizeObserver) new ResizeObserver(() => fitFilters()).observe($("filters"));   // 탭을 옮겨 다시 보일 때·iframe 크기가 바뀔 때도
 const matches = v => (S.org === "전체" || v.org === S.org) && (S.type === "전체" || v.type === S.type);
 function vehicleRow(v, stops, rec, bid) {
   const st = vval(v, "status"), [cls, label] = STATUS[st] || STATUS[""], run = runOf(v.id, S.date);

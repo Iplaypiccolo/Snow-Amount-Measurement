@@ -367,12 +367,25 @@ def t_bulk_confirm_and_no_holdings(p):
     p.click("#confirmAll"); p.wait_for_timeout(200); check("확정할 지사가 없습니다" in toast(p), toast(p))
     as_user(p, "br1"); tab(p, "branch"); check(p.locator("#confirmAll").count() == 0, "지사는 일괄 확정 없음")
 
+def t_filters_fit_any_width(p):
+    """이동 현황 필터: 넓으면 한 줄·구분선 가운데, 좁으면 구분선 없이 모두 오른쪽 정렬. 어느 폭에서도 버튼 글자가 꺾이지 않음"""
+    for w, stacked in ((1440, False), (900, True), (420, True)):
+        p.set_viewport_size({"width": w, "height": 800}); p.wait_for_timeout(250)
+        r = p.evaluate("""(() => { const f = document.getElementById('filters'), sep = f.querySelector('.fsep').getBoundingClientRect(), fr = f.getBoundingClientRect();
+          const chips = [...f.querySelectorAll('.chip, .flabel')]; return { stacked: f.classList.contains('stacked'), center: Math.abs((sep.left + sep.width / 2) - (fr.left + fr.width / 2)),
+          oneLine: chips.every(c => c.getBoundingClientRect().height < 46), right: Math.max(...chips.map(c => c.getBoundingClientRect().right)) - fr.right }; })()""")
+        check(r["stacked"] == stacked and r["oneLine"], f"{w}px: {r}")
+        if not stacked: check(r["center"] < 3, f"{w}px 구분선이 가운데: {r}")
+        else: check(abs(r["right"]) < 3, f"{w}px 오른쪽 정렬: {r}")
+    p.click("[data-tab=fleet]"); p.set_viewport_size({"width": 1440, "height": 800}); p.wait_for_timeout(150); p.click("[data-tab=move]"); p.wait_for_timeout(250)
+    check(not p.evaluate("document.getElementById('filters').classList.contains('stacked')"), "다른 탭에서 넓힌 뒤 돌아와도 맞게")
+
 TESTS = [t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
          t_typing_then_clicking_next_input_keeps_both, t_round_delete, t_pending_branches_shown_grey, t_ui_version_reload_once,
-         t_route_kind_and_eta, t_equip_can_edit_eta, t_bulk_confirm_and_no_holdings]
+         t_route_kind_and_eta, t_equip_can_edit_eta, t_bulk_confirm_and_no_holdings, t_filters_fit_any_width]
 
 # ---------------------------------------------------------------- 서버 모드(가짜 Supabase, tests/_sb_mock.py) — 실제 로그인 권한·저장 함수 호출
 sys.path.insert(0, str(Path(__file__).resolve().parent))
