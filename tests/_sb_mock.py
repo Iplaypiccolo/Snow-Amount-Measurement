@@ -8,9 +8,9 @@ from urllib.parse import urlparse, parse_qs
 
 _SNAP = {}
 def snow_snapshot_text():
-    """서버의 적설 요약본(snapshots 'snow')을 data/snow_data.json 으로 흉내 — DB 함수 admin_rebuild_snow_snapshot 과 같은 규칙(결측 -99.9 제외, 시즌별 11/15~3/15 전체 날짜)"""
+    """서버의 적설 요약본(snapshots 'snow')을 시험용 표본(tests/fixtures/snow_sample.json)으로 흉내 — DB 함수 admin_rebuild_snow_snapshot 과 같은 규칙(결측 -99.9 제외, 시즌별 11/15~3/15 전체 날짜)"""
     if "t" not in _SNAP:
-        sd = json.load(open(Path(__file__).resolve().parent.parent / "data" / "snow_data.json", encoding="utf-8"))["stationData"]
+        sd = json.load(open(Path(__file__).resolve().parent / "fixtures" / "snow_sample.json", encoding="utf-8"))["stationData"]
         def y_of(d): return int(d[:4]) if int(d[4:6]) >= 11 else int(d[:4]) - 1
         seasons = {}
         for stn, rec in sd.items():

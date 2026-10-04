@@ -289,10 +289,8 @@
       '먼저 <b>[검사]</b>로 새 값·바뀔 값 개수를 확인한 뒤 <b>[저장]</b>하세요. 결측(-99.9)과 시즌(11.15~3.15) 밖 날짜는 저장하지 않습니다.</p>' +
       '<div class="row"><input type="file" id="sf" accept=".txt,text/plain" multiple> <label class="inline"><input type="checkbox" id="sow"> 이미 있는 값과 다르면 바꾸기(덮어쓰기)</label></div>' +
       '<div class="row"><button type="button" id="splan">검사</button> <button type="button" id="sload" disabled>저장</button></div><div id="sm"></div>' +
-      '<h3>예전 파일에서 처음 옮기기 (한 번만)</h3><p class="hint">저장소의 data/snow_data.json(2017~2026 시즌)을 서버로 옮깁니다. 이미 옮겼으면 "새 값 0"으로 나오며 다시 해도 바뀌지 않습니다.</p>' +
-      '<div class="row"><button type="button" id="gplan">검사</button> <button type="button" id="gload">옮기기</button></div><div id="gm"></div>' +
       '<h3>최근 저장 기록</h3><div class="tw" id="sup">불러오는 중…</div></div>';
-    function busy(on) { ['splan', 'sload', 'gplan', 'gload'].forEach(function (id) { if ($(id)) $(id).disabled = on || (id === 'sload' && !planned); }); }
+    function busy(on) { ['splan', 'sload'].forEach(function (id) { if ($(id)) $(id).disabled = on || (id === 'sload' && !planned); }); }
     function readFiles() {
       var fs = $('sf').files; if (!fs || !fs.length) return Promise.reject(new Error('nofile'));
       return Promise.all(Array.prototype.map.call(fs, function (f) { return f.text(); })).then(function (ts) { return ts.join('\n'); });
@@ -314,11 +312,6 @@
       if (!planned || txt == null) return;
       if (!window.confirm('검사한 내용대로 서버에 저장할까요?' + ($('sow').checked ? '\n(덮어쓰기: 기존과 다른 값은 새 값으로 바뀝니다)' : ''))) return;
       run('sm', { action: 'load', txt: txt, overwrite: $('sow').checked }, function (r) { if (r.ok) { planned = null; loadUploads(); } });
-    };
-    $('gplan').onclick = function () { run('gm', { action: 'plan', source: 'github', ref: 'main' }); };
-    $('gload').onclick = function () {
-      if (!window.confirm('예전 파일(data/snow_data.json)의 적설 자료를 서버로 옮길까요? 이미 있는 값은 그대로 둡니다.')) return;
-      run('gm', { action: 'load', source: 'github', ref: 'main' }, function (r) { if (r.ok) loadUploads(); });
     };
     function loadUploads() {
       rest('snow_uploads?select=at,date_from,date_to,stations,rows_written,ok,note&order=id.desc&limit=20').then(function (r) {

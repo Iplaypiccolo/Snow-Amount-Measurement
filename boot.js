@@ -9,12 +9,7 @@
   Promise.all([
     fetch('data/roads.json', {cache: 'no-cache'}).then(function(r){return r.json();}),
     fetch('data/hierarchy.json', {cache: 'no-cache'}).then(function(r){return r.json();}),
-    // 적설: 서버 요약본 한 줄(로그인한 사람만 읽을 수 있음). 서버에 아직 옮기기 전(요약본 없음)에만 예전 파일로 대신 보여 줌
-    SSSnow.load().then(function(d){
-      if(Object.keys(d.seasons).length) return d;
-      return fetch('data/snow_data.json', {cache: 'no-cache'}).then(function(r){ return r.ok ? r.json() : d; })
-        .then(function(f){ if(!f || !f.seasons) return d; Object.keys(f.seasons).forEach(function(k){ f.seasons[k].branches = {}; }); f.fromFile = true; return f; }).catch(function(){ return d; });
-    }),
+    SSSnow.load(),                                                         // 적설: 서버 요약본 한 줄(로그인한 사람만 읽을 수 있음)
     // 관할 구간(IC/JC 사이)·관측소 목록·변경 이력: 없어도 기존 화면은 그대로 동작
     fetch('data/sections.json', {cache: 'no-cache'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),
     fetch('data/stations.json', {cache: 'no-cache'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}),

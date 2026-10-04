@@ -208,8 +208,7 @@ def t_snow_upload_tab(b, m):
     check(m.snow_calls[-1]["action"] == "load" and m.snow_calls[-1]["txt"] == txt and any("저장할까요" in d for d in dl), "확인 후 같은 내용으로 저장")
     check(p.locator("#sload").is_disabled(), "저장 뒤에는 다시 검사해야 저장 가능")
     p.check("#sow"); check(p.locator("#sload").is_disabled(), "옵션을 바꾸면 다시 검사")
-    p.click("#gplan"); p.wait_for_selector("#gm >> text=새 값")
-    check(m.snow_calls[-1] == {"action": "plan", "source": "github", "ref": "main"}, m.snow_calls[-1])
+    check(p.locator("#gplan").count() == 0, "예전 파일 옮기기 버튼은 없앰(이전 끝남)")
     check("txt by admin-01" in p.locator("#sup").inner_text(), "최근 저장 기록 표시")
 
 def t_audit_tab(b, m):

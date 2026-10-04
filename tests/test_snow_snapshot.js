@@ -1,4 +1,4 @@
-/* 적설 요약본(서버 snapshots 'snow') → 화면 계산 자동 테스트 — 실제 data/snow_data.json 사용
+/* 적설 요약본(서버 snapshots 'snow') → 화면 계산 자동 테스트 — 시험용 표본 tests/fixtures/snow_sample.json(예전 파일의 2024-25 시즌) 사용
    핵심: 서버에는 관측소별 원자료만 두고 지사별 값은 화면이 계산한다. 그 결과가 예전 파일에 들어 있던 지사별 값과 "정확히" 같아야 한다.
    - makeSnapshot 은 DB 함수 admin_rebuild_snow_snapshot 과 같은 규칙으로 요약본을 만든다(결측 -99.9 는 서버에 넣지 않으므로 뺀다).
    - tools/snow_checksum.js 와 같은 지문을 써서, 실제 서버 요약본과도 비교할 수 있다.
@@ -7,7 +7,7 @@ const fs = require('fs'), path = require('path'), assert = require('assert');
 const C = require('../jurisdiction/core.js');
 const SN = require('../auth/snow.js');
 const R = (n) => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', n + '.json'), 'utf8'));
-const H0 = R('hierarchy'), F = R('snow_data'), doc = R('sections'), st = R('stations');
+const H0 = R('hierarchy'), F = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'snow_sample.json'), 'utf8')), doc = R('sections'), st = R('stations');
 const clone = (x) => JSON.parse(JSON.stringify(x));
 const results = [];
 function test(name, fn) { try { fn(); results.push([name, true]); } catch (e) { results.push([name, false, String(e.message).split('\n')[0]]); } }
@@ -32,7 +32,7 @@ function makeSnapshot(stationData) {
 const snap = makeSnapshot(F.stationData);
 const S = SN.fromSnapshot(snap);
 
-test('시즌 9개와 날짜가 예전 파일과 같다(윤년 2월 29일 포함)', () => {
+test('시즌과 날짜(11/15~3/15 전체)가 예전 파일과 같다', () => {
   assert.deepEqual(Object.keys(S.seasons).sort(), Object.keys(F.seasons).sort());
   Object.keys(F.seasons).forEach((k) => assert.deepEqual(S.seasons[k].dates, F.seasons[k].dates, k));
 });
@@ -42,17 +42,17 @@ test('관측소 원자료: 결측(-99.9)만 빠지고 나머지 값은 모두 �
     const v = F.stationData[s][d];
     if (v < 0) { neg++; assert.equal((S.stationData[s] || {})[d], undefined); } else { n++; assert.equal(S.stationData[s][d], v, s + ' ' + d); }
   }));
-  assert.equal(neg, 2078); assert.equal(n, 437797);
-  assert.equal(Object.values(S.stationData).reduce((a, r) => a + Object.keys(r).length, 0), 437797, '없던 값이 생기지 않음');
+  assert.equal(neg, 371); assert.equal(n, 76838);
+  assert.equal(Object.values(S.stationData).reduce((a, r) => a + Object.keys(r).length, 0), 76838, '없던 값이 생기지 않음');
 });
-test('지사별 값(531개 시리즈)을 화면이 계산하면 예전 파일과 정확히 같다', () => {
+test('지사별 값(59개 지사 시리즈)을 화면이 계산하면 예전 파일과 정확히 같다', () => {
   const H = clone(H0); C.rebuildAllSeries(H, S);
   let n = 0;
   Object.keys(F.seasons).forEach((k) => {
     assert.deepEqual(Object.keys(S.seasons[k].branches).sort(), Object.keys(F.seasons[k].branches).sort(), k);
     Object.keys(F.seasons[k].branches).forEach((b) => { assert.deepEqual(S.seasons[k].branches[b], F.seasons[k].branches[b], k + ' ' + b); n++; });
   });
-  assert.equal(n, 531);
+  assert.equal(n, 59);
 });
 test('관할 변경이 있어도: 서버 요약본에서 시작한 결과 = 예전 파일에서 시작한 결과', () => {
   const ev = [{ t: 'addBranch', id: 'B900', hq: '강원', name: '신설시험' },

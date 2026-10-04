@@ -34,12 +34,12 @@ await test('메모장 읽기: 빈 파일·관측 줄 없음은 거절', () => {
   assert.equal(code(() => parseTxt('#### DATE 20251201 ####\n# 없음')), 'no_rows');
   assert.equal(code(() => parseTxt('202512010900, 90, x, x, x, x, 3.5')), 'no_rows');     // 날짜 머리줄 없이 온 줄은 쓰지 않음
 });
-await test('실제 예전 파일(snow_data.json): 관측소 680곳 · 값 439,875개, 기간 2017-11-15 ~ 2026-03-15', () => {
-  const doc = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/snow_data.json'), 'utf8'));
+await test('예전 파일 모양(시험용 표본 2024-25 시즌): 관측소 644곳 · 값 77,209개', () => {
+  const doc = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests/fixtures/snow_sample.json'), 'utf8'));
   const r = fromSnowJson(doc);
-  assert.equal(Object.keys(r.data).length, 680); assert.equal(r.lines, 439875); assert.deepEqual(r.dates, ['20171115', '20260315']);
-  const cs = chunks(r.data); assert.equal(cs.length, Math.ceil(680 / CHUNK_STATIONS));
-  assert.equal(cs.reduce((a, c) => a + Object.keys(c).length, 0), 680);
+  assert.equal(Object.keys(r.data).length, 644); assert.equal(r.lines, 77209); assert.deepEqual(r.dates, ['20241115', '20250315']);
+  const cs = chunks(r.data); assert.equal(cs.length, Math.ceil(644 / CHUNK_STATIONS));
+  assert.equal(cs.reduce((a, c) => a + Object.keys(c).length, 0), 644);
 });
 await test('예전 파일 검사: stationData 없음·이상한 번호·숫자 아닌 값 거절', () => {
   assert.equal(code(() => fromSnowJson({})), 'bad_file');
@@ -119,11 +119,11 @@ await test('시즌 밖(4~10월, 11/1~14) 날짜는 넣지 않음', async () => {
 });
 await test('예전 파일(github): 커밋 번호로 읽고 관측소를 묶음으로 나눠 넣음', async () => {
   const w = world(); admin(w);
-  w.file = fs.readFileSync(path.join(ROOT, 'data/snow_data.json'), 'utf8');
+  w.file = fs.readFileSync(path.join(ROOT, 'tests/fixtures/snow_sample.json'), 'utf8');
   const r = await call(w, { action: 'plan', source: 'github', ref: 'e73689a' }, { jwt: 'jwt-a' });
   assert.equal(r.status, 200); assert.equal(w.fetched[0], 'https://raw.githubusercontent.com/Iplaypiccolo/Snow-Amount-Measurement/e73689a/data/snow_data.json');
-  assert.equal(w.calls.length, Math.ceil(680 / CHUNK_STATIONS)); assert.equal(r.j.summary.values, 439875);
-  assert.equal(r.j.counts.skipped_missing, 2078, '결측(-99.9) 2,078개는 넣지 않음'); assert.equal(r.j.counts.new, 439875 - 2078);
+  assert.equal(w.calls.length, Math.ceil(644 / CHUNK_STATIONS)); assert.equal(r.j.summary.values, 77209);
+  assert.equal(r.j.counts.skipped_missing, 371, '결측(-99.9)은 넣지 않음'); assert.equal(r.j.counts.new, 77209 - 371);
 });
 await test('일회용 시작 토큰: 한 번만 통과', async () => {
   const w = world(); w.boot = { hash: await sha('tok-123'), expires_at: '2026-10-04T00:10:00Z' };

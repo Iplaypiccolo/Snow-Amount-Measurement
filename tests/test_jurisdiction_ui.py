@@ -275,24 +275,25 @@ def t_snow_from_server_not_public_file(b):
     p.on("request", lambda r: reqs.append(r.url)); p.route("**/*", route); SBM.install(p, m); p.goto(URL)
     p.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)
     check(not any("snow_data.json" in u for u in reqs) and any("/rest/v1/snapshots" in u for u in reqs), [u for u in reqs if "snow" in u])
-    F = json.load(open(ROOT / "data/snow_data.json", encoding="utf-8")); lab = "2024-11-15~2025-03-15"
+    F = json.load(open(ROOT / "tests/fixtures/snow_sample.json", encoding="utf-8")); lab = "2024-11-15~2025-03-15"
     got = J(p, f"SNOW_DATA.seasons['{lab}'].branches['강원|||대관령']")
     check(got == F["seasons"][lab]["branches"]["강원|||대관령"], "지사별 값이 예전 파일과 같아야 함")
-    check(J(p, "Object.keys(SNOW_DATA.seasons).length") == 9 and J(p, "!!document.getElementById('downloadJsonBtn') || !!document.getElementById('snowFileInput')") is False, "시즌 9개, 예전 JSON 저장·임시 업로드 버튼 없음")
+    check(J(p, "Object.keys(SNOW_DATA.seasons).length") == 1 and J(p, "!!document.getElementById('downloadJsonBtn') || !!document.getElementById('snowFileInput')") is False, "시즌(표본 1개), 예전 JSON 저장·임시 업로드 버튼 없음")
     check(p.locator("#snowAdminLink").is_visible(), "관리자에게는 적설 자료 올리기 링크")
     p2 = b.new_page(bypass_csp=True, viewport={"width": 1400, "height": 900}); OPENED.append(p2)
     p2.route("**/*", route); SBM.install(p2, m, "exchungju"); m.users["exchungju"]["profile"]["must_change"] = False; p2.goto(URL)
     p2.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)
     check(not p2.locator("#snowAdminLink").is_visible(), "지사에게는 링크가 보이지 않음")
 
-def t_snow_server_empty_falls_back_to_file(b):
-    """서버에 적설 요약본이 아직 없으면(처음 옮기기 전) 예전 파일로 대신 보여 줘서 표가 비지 않는다. 지사별 값은 같은 방식으로 계산"""
-    m = SBM.Mock(); m.snow_empty = True
-    p = open_tab(b, mock=m, click_tab=False)
+def t_snow_server_empty_shows_no_data(b):
+    """서버에 적설 요약본이 없으면(자료를 아직 안 넣었거나 지워진 경우) 화면은 열리고 표는 '자료 없음'. 예전 공개 파일은 읽지 않음"""
+    m = SBM.Mock(); m.snow_empty = True; reqs = []
+    p = b.new_page(bypass_csp=True, viewport={"width": 1400, "height": 900}); OPENED.append(p)
+    p.on("request", lambda r: reqs.append(r.url)); p.route("**/*", route); SBM.install(p, m); p.goto(URL)
+    p.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)
     p.click(".tab-btn[data-tab=snowtable]"); p.wait_for_timeout(300)
-    F = json.load(open(ROOT / "data/snow_data.json", encoding="utf-8")); lab = "2024-11-15~2025-03-15"
-    check(J(p, "SNOW_DATA.fromFile") is True and J(p, "Object.keys(SNOW_DATA.seasons).length") == 9, "예전 파일로 대신")
-    check(J(p, f"SNOW_DATA.seasons['{lab}'].branches['강원|||대관령']") == F["seasons"][lab]["branches"]["강원|||대관령"] and "자료 없음" not in p.locator("#snowTableWrap").inner_text(), "표가 채워지고 값이 같음")
+    check("자료 없음" in p.locator("#snowTableWrap").inner_text() and J(p, "Object.keys(SNOW_DATA.seasons).length") == 0, p.locator("#snowTableWrap").inner_text()[:100])
+    check(not any("snow_data.json" in u for u in reqs), "예전 파일을 받지 않음")
 
 def t_save_failure_keeps_pending_and_offers_file(b):
     m = SBM.Mock(); p = open_tab(b, mock=m); admin(p)
@@ -525,7 +526,7 @@ def t_private_hq(b):
     check(p.locator("#statBranch").inner_text() == "59", "민자 기관이 강설량 화면 통계에 들어가면 안 됨")
     check(J(p, "HIERARCHY.hq.some(h => h.name === '민자')") is False, "HIERARCHY 에 민자 본부가 생기면 안 됨")
 
-TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload, t_new_branch_id_survives_save, t_legacy_new_branch_without_id_still_works, t_html_in_branch_name_is_text, t_csp_blocks_injected_script, t_snow_from_server_not_public_file, t_snow_server_empty_falls_back_to_file,
+TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload, t_new_branch_id_survives_save, t_legacy_new_branch_without_id_still_works, t_html_in_branch_name_is_text, t_csp_blocks_injected_script, t_snow_from_server_not_public_file, t_snow_server_empty_shows_no_data,
          t_save_failure_keeps_pending_and_offers_file, t_history_load_failure_falls_back_and_blocks_save, t_history_paging_and_backup_export,
          t_border_on_click_view_mode, t_border_contrast_all_colors, t_admin_click_has_border, t_pick_destination_on_map, t_no_admin_checkbox_and_no_popup_move_button,
          t_save_bar_always_visible, t_unassigned_visible_and_clickable, t_assign_unassigned_to_branch, t_select_all_unassigned_row,

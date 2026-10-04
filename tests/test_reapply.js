@@ -4,7 +4,7 @@
 const fs = require('fs'), path = require('path'), assert = require('assert');
 const C = require('../jurisdiction/core.js');
 const R = (n) => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', n + '.json'), 'utf8'));
-const H0 = R('hierarchy'), S0 = R('snow_data'), doc = R('sections'), st = R('stations');
+const H0 = R('hierarchy'), S0 = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'snow_sample.json'), 'utf8')), doc = R('sections'), st = R('stations');
 const clone = (x) => JSON.parse(JSON.stringify(x));
 const results = [];
 function test(name, fn) { try { fn(); results.push([name, true]); } catch (e) { results.push([name, false, String(e.message).split('\n')[0]]); } }

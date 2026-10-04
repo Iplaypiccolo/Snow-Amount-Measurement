@@ -4,7 +4,7 @@ const fs = require('fs'), path = require('path'), assert = require('assert');
 const C = require('../jurisdiction/core.js');
 const D = p => JSON.parse(fs.readFileSync(path.join(__dirname, '..', p), 'utf8'));
 const doc = D('data/sections.json'), stationsDoc = D('data/stations.json');
-const fresh = () => ({ H: D('data/hierarchy.json'), S: D('data/snow_data.json') });
+const fresh = () => ({ H: D('data/hierarchy.json'), S: D('tests/fixtures/snow_sample.json') });
 const results = [];
 function test(name, fn) { try { fn(); results.push([name, true]); } catch (e) { results.push([name, false, e.message.split('\n')[0]]); } }
 
