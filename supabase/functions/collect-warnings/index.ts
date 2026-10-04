@@ -15,6 +15,7 @@ function decode(buf: ArrayBuffer) {
 
 const deps = {
   now: () => Date.now(),
+  sleep: (ms: number) => new Promise((r) => setTimeout(r, ms)),
   env: (k: string) => Deno.env.get(k) ?? '',
   async fetchText(u: string) {
     const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 20000);

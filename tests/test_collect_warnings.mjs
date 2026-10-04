@@ -92,12 +92,17 @@ await test('정상: 특보현황 한 번 받아 넣고, 대설 줄 수를 알려
   assert.equal(r.j.snow, 3); assert.ok(!JSON.stringify(r.j).includes(w.key));
 });
 await test('실패: 기상청 오류·형식 다름·연결 실패·키 없음은 실패로 기록(키는 기록에 안 남음)', async () => {
-  for (const [resp, want] of [[{ status: 500, text: '' }, '응답 500'], [{ status: 200, text: `인증 실패 authKey=${'K'.repeat(32)}` }, '형식이 다름'], [{ status: 0, text: '' }, '연결 실패']]) {
+  for (const [resp, want] of [[{ status: 503, text: '' }, '응답 503'], [{ status: 200, text: `인증 실패 authKey=${'K'.repeat(32)}` }, '형식이 다름'], [{ status: 0, text: '' }, '연결 실패']]) {
     const w = world({ resp }); const r = await call(w, {}, { token: 'tok' });
     assert.equal(w.ingested[0].ok, false); assert.ok(w.ingested[0].error.includes(want), w.ingested[0].error);
     assert.ok(!w.ingested[0].error.includes(w.key) && !JSON.stringify(r.j).includes(w.key));
   }
   const w = world({ key: '' }); await call(w, {}, { token: 'tok' }); assert.equal(w.fetched.length, 0); assert.ok(w.ingested[0].error.includes('KMA_AUTH_KEY'));
+});
+await test('연결 실패·서버 오류는 한 번 더 받아 봄', async () => {
+  let n = 0; const w = world(); w.deps.fetchText = async (u) => { w.fetched.push(u); return n++ === 0 ? { status: 0, text: '' } : { status: 200, text: NOW }; };
+  await call(w, {}, { token: 'tok' }); assert.equal(w.fetched.length, 2); assert.equal(w.ingested[0].ok, true);
+  const w2 = world({ resp: { status: 0, text: '' } }); await call(w2, {}, { token: 'tok' }); assert.equal(w2.fetched.length, 2); assert.equal(w2.ingested[0].ok, false);
 });
 await test('새 주소 권한이 없으면(401) 예전 주소로, 기준시각은 받은 시각', async () => {
   assert.equal(kstNow(Date.UTC(2026, 11, 15, 0, 41)), '202612150941');

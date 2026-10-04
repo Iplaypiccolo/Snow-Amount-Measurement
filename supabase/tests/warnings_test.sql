@@ -1,5 +1,5 @@
 -- ============================================================
--- 특보 연동(마이그레이션 23·24) 시험 — 받아 넣기·종류 스위치·받을 필요 판단·지사별 최고 단계·특보구역 더하기/빼기·확정할 때 고정·권한 — SQL Editor 에 통째로 붙여넣고 실행
+-- 특보 연동(마이그레이션 23·24·25) 시험 — 받아 넣기·종류 스위치·받을 필요 판단·지사별 최고 단계·특보구역 더하기/빼기·확정할 때 고정·권한 — SQL Editor 에 통째로 붙여넣고 실행
 -- 마지막에 일부러 오류를 내서 시험 자료를 전부 되돌립니다(지금 특보·수집 상태도 원래대로). "전체 N, 실패 0" 이어야 합니다.
 -- ============================================================
 create temp table _t (n serial, name text, got text, want text, ok boolean);
@@ -103,7 +103,7 @@ begin
   perform pg_temp.chk('관리자: 그때 확정','authenticated',a,format('select public.save_requests(%s, ''[{"branch_id":"B003","confirmed":true}]'')', rid),'ok:1');
   perform pg_temp.yes('자료가 없으면 특보 없음으로 고정 + 이유', (select warn_level is null and warn_at is not null and warn_note like '%30분%' from public.round_requests where round_id = rid and branch_id = 'B003'));
   perform pg_temp.yes('수집 기록은 변화·실패 때만', (select count(*) filter (where ok) = 3 and count(*) filter (where not ok) = 1 from public.collector_runs where job = 'warnings' and started_at = now()));
-  -- 받을 필요 판단: 기준일자 당일~+2일, 확정을 기다리는 지사가 있을 때만
+  -- 받을 필요 판단: 기준일자를 만든 시각부터(기준일자 +2일까지), 확정을 기다리는 지사가 있을 때만
   update public.support_rounds set start_date = '2000-01-01'::date + (id % 30000)::int;     -- 기준일자는 날짜마다 하나라 서로 다르게
   perform pg_temp.yes('최근 기준일자가 없으면 받지 않음', not private.warn_needed() and private.kick_warnings(false) is null);
   j := pg_temp.st(b);
@@ -116,7 +116,12 @@ begin
   insert into public.round_requests (round_id, branch_id, req_truck) values (rid, 'B002', 1);
   perform pg_temp.yes('요청 넣고 확정 안 된 지사가 생기면 다시 받음', private.warn_needed());
   update public.support_rounds set start_date = (now() at time zone 'Asia/Seoul')::date + 1 where id = rid;
-  perform pg_temp.yes('내일 기준일자는 당일 0시부터', not private.warn_needed());
+  perform pg_temp.yes('내일 기준일자도 만든 그 시각부터 받음(마이그레이션 25)', private.warn_needed());
+  update public.round_requests set confirmed = true where round_id = rid;
+  perform pg_temp.yes('모두 확정하면 멈춤', not private.warn_needed());
+  delete from public.collector_state where job = 'warnings_kick';
+  insert into public.support_rounds (name, start_date) values ('t3', (now() at time zone 'Asia/Seoul')::date + 3);
+  perform pg_temp.yes('기준일자를 만들면 그 자리에서 바로 한 번 받음', exists (select 1 from public.collector_state where job = 'warnings_kick' and started_at = now()));
   perform pg_temp.yes('특보구역 목록 받기는 필요와 상관없이', private.kick_warnings(true) is not null);
 
   select count(*), count(*) filter (where not ok) into total, fails from _t;

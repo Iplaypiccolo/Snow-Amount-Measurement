@@ -1,8 +1,9 @@
 // ============================================================
 // collect-warnings — 기상청 API허브 특보현황을 받아 서버(warnings_active)에 넣는다
-//  * 부르는 곳: pg_cron 이 5분마다 private.kick_warnings() → pg_net (헤더 x-collector-token = 서버 안 전용 토큰)
+//  * 부르는 곳: pg_cron 이 10분마다(받을 필요가 있을 때만) private.kick_warnings() → pg_net (헤더 x-collector-token = 서버 안 전용 토큰)
 //              또는 관리자 로그인 토큰(JWT)으로 직접(시험·급할 때)
-//  * body {zones:true} 면 특보구역 목록(wrn_reg)도 다시 받음(하루 한 번 예약)
+//  * body {zones:true} 면 특보구역 목록(wrn_reg)도 다시 받음(매주 예약)
+//  * body {raw:true} 면 기상청이 준 글(키 없음)과 줄 수 통계도 돌려줌 — 특보가 빠지지 않는지 확인용
 //  * 기상청 키는 함수 비밀값 KMA_AUTH_KEY 에만 있다. 키가 들어간 주소는 오류·기록 어디에도 남기지 않는다.
 //  * 받지 못하면(키 오류·시간 초과·형식 이상) 실패로 기록만 하고 지금 특보는 그대로 둔다(30분 넘게 실패하면 화면은 특보 없음)
 //  * 순수 로직은 Node 로 시험: tests/test_collect_warnings.mjs
@@ -93,6 +94,7 @@ export async function handle(req, deps) {
   if (!key) p = { ok: false, error: 'KMA_AUTH_KEY 비밀값이 없음' };
   else {
     let r = await deps.fetchText(NOW_URL + encodeURIComponent(key)), src = 'new';
+    if (r.status === 0 || r.status >= 500) { if (deps.sleep) await deps.sleep(3000); r = await deps.fetchText(NOW_URL + encodeURIComponent(key)); }   // 연결 실패·기상청 서버 오류는 3초 뒤 한 번 더
     if (r.status === 401 || r.status === 403) { r = await deps.fetchText(OLD_URL + encodeURIComponent(key)); src = 'old'; }   // 키에 새 주소 권한이 없으면 예전 주소
     const ms = deps.now() - t0;
     const parsed = parseNow(r.text);
@@ -101,6 +103,10 @@ export async function handle(req, deps) {
     if (r.status !== 200) p = { ok: false, http: r.status, ms, error: r.status ? `기상청 응답 ${r.status}${said ? ': ' + said : ''}` : '기상청 연결 실패(시간 초과 등)' };
     else if (!parsed.base) p = { ok: false, http: r.status, ms, error: '기상청 응답 형식이 다름(키 확인 필요): ' + said };
     else p = { ok: true, http: r.status, ms, base: parsed.base, rows: parsed.rows, src };
+    if (body && body.raw === true) {                 // 확인용: 받은 글 그대로(키는 주소에만 있어 글에는 없음)와 줄 종류별 개수
+      const lines = String(r.text || '').split(/\r?\n/).filter((l) => l.trim() && l[0] !== '#');
+      result.raw = { text: String(r.text || '').slice(0, 30000), lines: lines.length, land: lines.filter((l) => /^\s*\S*\s*,[^,]*,\s*L\d{7}/.test(l)).length, parsed: parsed.rows.length };
+    }
   }
   const { data, error } = await deps.store.ingest(p);
   if (error) return json(500, { ok: false, error: 'db', ...result });
