@@ -135,4 +135,10 @@
 - **첫 화면에 CSP**: 이 사이트·cdnjs(지도·엑셀 라이브러리)·OpenStreetMap(지도 그림)·Supabase 만 허용, HTML 안 스크립트 금지. 외부 라이브러리는 CDN 유지(사용자: 항상 접속 가능). 저장소 안에 넣는 것은 필수 아님.
 - **끊긴 구간은 원본에 있는 것만 잇는다(직선 금지, 사용자 결정).** `tools/check_gaps_against_source.py` 로 끊긴 끝점 213곳을 원본 도로망과 대조: 원본에 도로가 있는데 빠진 곳 4곳(수도권제1순환 통일로IC~송추IC 2.3km 등, 모두 미지정 구간)만 원본 선으로 이음(+4.7km). 나머지는 원본에서 이어지지 않거나, 반대 차로·연결로를 크게 돌아야 하거나, 자기 선을 되짚는(실제로는 도로·연결로의 끝) 곳. 양쪽이 지사 구간인 1곳(중부선 하남IC~하남JC)은 규칙상 건드리지 않음. 보고서 `docs/section-gaps-source-check.md`. DB 기본 자료도 같게 반영(마이그레이션 12, `reference_check` 12항목 모두 true).
   - 함정: 처음 대조에서는 "IC~IC교차로" 같은 짧은 연결 구간이 자기 선을 되짚어 빈틈을 "메우는" 결과가 나왔다(같은 선을 두 번 그림). 자기 구간·상대 구간을 30% 넘게 되짚는 경로는 제외하도록 고쳤다.
-- **백업·깨우기**(작업 파일은 `tools/github-actions/` 에 두고 사용자가 `.github/workflows/` 로 옮김 — Claude 토큰에 workflow 권한 없음): GitHub Actions 가 월·목 깨우기, 월요일 DB 전체(public·auth)를 암호화해 `backups` 브랜치에 최근 8개. 비공개 저장소일 때만 백업. 비밀값 `SUPABASE_DB_URL`(Session pooler)·`BACKUP_PASSPHRASE` 는 사용자가 GitHub 설정에 직접 넣는다(`docs/backup.md`). **무료 계정은 비공개 저장소에서 GitHub Pages 를 쓸 수 없음**(GitHub Pro 필요) — 사용자 확인 필요.
+- **깨우기**: (아래 2026-10-04 두 번째 항목에서 백업 없이 깨우기만으로 바꿈)
+
+## 깨우기만·예전 적설 파일 삭제·기록 규칙 (2026-10-04, 두 번째)
+- **백업은 하지 않고 서버 깨우기만 한다**(사용자: 백업 파일은 깨우기 목적이었음). `keepalive()`(현재 시각만 돌려줌, 표 접근 없음)를 비로그인도 부를 수 있게 하고, GitHub Actions 가 공개 키로 월·목 호출 → 비밀값 불필요.
+- **GitHub·Claude 외 모든 서비스는 무료**(사용자 방침). 무료 GitHub 는 비공개 저장소로 Pages 불가 → 비공개 전환은 사이트를 Cloudflare Pages(무료)로 옮긴 뒤 하기를 권함(`docs/server-keepalive.md`).
+- **예전 `data/snow_data.json` 삭제**: 서버에 437,797값 저장 → 지문 5가지 일치 → 실제 사이트에서 서버 자료로 표시·지사별 합계 일치 확인 뒤 삭제(사용자 조건). 시험은 2024-25 한 시즌 표본(`tests/fixtures/snow_sample.json`). `tools/build_jurisdiction.py`(처음 구간 만들 때 쓴 도구)는 이 파일을 읽고 쓰므로 그대로는 더 이상 쓸 수 없음.
+- **채팅·Code 기록 규칙**: 푸시마다 handoff.md 에 내 커밋들을 묶은 항목 하나 + 끝에 작성자 서명(`✍ Claude Code 작성` / `✍ Claude 채팅 작성`). 상대 항목은 고치지 않음.

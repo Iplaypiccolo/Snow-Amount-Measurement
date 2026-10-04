@@ -9,7 +9,7 @@ index.html              페이지 골격 (데이터는 fetch로 불러옴). 맨 
 app.js                  화면 로직 (지도, 표, 탭 전환, 업로드 병합 등)
 data/roads.json         고속도로 노선 좌표 (거의 변경 없음)
 data/hierarchy.json     본부/지사/관측소 배정 정보 (거의 변경 없음)
-data/snow_data.json     시즌별 일 신적설 데이터
+(적설)                  서버(Supabase) snow_daily → snapshots('snow'). 예전 data/snow_data.json 은 2026-10-04 서버로 옮긴 뒤 삭제(시험용 표본 tests/fixtures/snow_sample.json)
 
 jurisdiction/           '기관별 관할 고속도로' 탭 (구간을 눌러 지사 이동, 신설 기관, 본부 이동)
   core.js                 변경 적용·관측소 배정·적설 재계산 (화면 없이 계산만)
@@ -53,7 +53,7 @@ boot.js                 첫 화면 시작 코드(보안 정책 CSP 때문에 ind
 auth/snow.js            적설: 서버 요약본(snapshots 'snow')을 읽어 화면 자료로 바꿈
 supabase/functions/import-snow/  기상청 메모장(txt) → 서버 적설 표(snow_daily) → 요약본 (관리 콘솔 "적설 자료" 탭이 부름)
 tools/check_gaps_against_source.py  끊긴 구간을 원본 도로망과 대조(원본에 있는데 빠진 곳만 잇기) — docs/section-gaps-source-check.md
-tools/github-actions/supabase-backup.yml  (.github/workflows/ 로 옮겨야 동작) 서버 깨우기(월·목) + 암호화 백업(월, 비공개 저장소에서만) — docs/backup.md
+.github/workflows/supabase-keepalive.yml  서버 깨우기(월·목, 비밀값 없음) — docs/server-keepalive.md
 tests/test_import_snow.mjs · tests/test_snow_snapshot.js · supabase/tests/save_check_test.sql  적설 넣기·요약본 계산·저장 검사 시험
 auth/                   로그인 공통 부품(auth.js)·변경 이력 저장/읽기 부품(events.js)·첫 화면 로그인 잠금(gate.js·gate.css) — docs/login-gate.md
 docs/accounts.md           계정 목록(아이디만, 비밀번호 없음)

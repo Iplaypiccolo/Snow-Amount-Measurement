@@ -12,7 +12,7 @@
 - 사용자는 **비전공자**입니다. 한국어로, 새 용어는 풀어서 설명하세요. 확인하지 못한 것을 "확인했다"고 쓰지 마세요(확인한 것/못 한 것을 구분).
 - 새 기능과 큰 설계는 사용자가 **claude.ai 채팅**에서 Claude 와 합니다. **그 채팅은 이 세션의 내용을 볼 수 없습니다.**
 - 그래서 Claude Code 는 **① 실제 서버·사이트 연결 확인 ② 버그 조사·수정 ③ 시험 실행** 위주로 합니다. 설계 변경이 필요해 보이면 구현하지 말고 `docs/handoff.md` 에 **"제안"** 으로 적고 멈추세요.
-- **작업을 마칠 때마다 `docs/handoff.md` 맨 위에 항목을 추가하고 커밋·푸시하세요.** 이것이 채팅 쪽 Claude 가 알 수 있는 유일한 통로입니다.
+- **푸시할 때마다 `docs/handoff.md` "기록" 맨 위에 그 푸시의 내 커밋들을 묶은 항목 하나를 쓰고, 끝에 `— ✍ Claude Code 작성` 서명.** 채팅 Claude 가 쓴 항목은 고치지 않는다. 규칙은 handoff.md 맨 위. 이것이 채팅 쪽 Claude 가 알 수 있는 유일한 통로입니다.
 
 ## 명령어
 ```
@@ -30,11 +30,11 @@ python tools/run_all_tests.py            # 전체 시험 (약 5분, 병렬). --f
 | `grid/` | 예보 격자 편입 탭 (`core.js` 계산, `ui.js`) |
 | `admin/` | 관리 콘솔: 계정, **비밀번호 일괄 설정(엑셀표)**, **적설 자료(메모장 txt → 서버)**, 접속 로그 |
 | `equipment/` | 장비 지원 화면(iframe). **아직 샘플 자료이며 서버로 옮기지 않음** |
-| `data/*.json` | 기본(baseline) 자료. 구간 1,011 · 관측소 260 · 격자 1,070쌍. `*_changes.json` 은 서버 장애 때의 비상용(비어 있음). **`snow_data.json` 은 화면이 더 이상 읽지 않음**(적설은 서버 `snow_daily`→`snapshots`; 시험·처음 옮기기용) |
+| `data/*.json` | 기본(baseline) 자료. 구간 1,011 · 관측소 260 · 격자 1,070쌍. `*_changes.json` 은 서버 장애 때의 비상용(비어 있음). **적설 파일(`snow_data.json`)은 서버로 옮긴 뒤 지움** — 적설은 서버 `snow_daily`→`snapshots`, 시험은 `tests/fixtures/snow_sample.json` |
 | `supabase/migrations/` | DB 변경 SQL(01~12). `functions/` Edge Function 3개(`account-admin`, `import-reference`, `import-snow`). `tests/*.sql` 권한 시험(`save_check_test.sql` 포함) |
 | `tests/` | 자동 시험. `_sb_mock.py` 는 **가짜 Supabase 서버**(실제 서버에 접속하지 않고 화면을 시험) |
 | `tools/` | 자료 만들기·검증 도구. GIS 원본(`highway_links.gpkg` 등)은 저장소에 없음. `check_gaps_against_source.py` = 끊긴 구간을 원본과 대조 |
-| `tools/github-actions/` | `supabase-backup.yml` 월·목 깨우기 + 월요일 암호화 백업(비공개 저장소에서만, 비밀값 2개 필요). **`.github/workflows/` 로 옮겨야 동작**(Claude 토큰에 workflow 권한 없음) — `docs/backup.md` |
+| `.github/workflows/` | `supabase-keepalive.yml` 월·목 서버 깨우기(비밀값 없음, `keepalive()` 함수) — `docs/server-keepalive.md`. 이 폴더를 올리려면 토큰에 workflow 권한 필요 |
 | `docs/` | **`decisions.md`(결정 이력)**, `supabase-design.md`(서버 전체), `jurisdiction-rules.md`, `grid-assign-rules.md`, `admin-console.md`, `login-gate.md` |
 
 ## 작업 규칙 (사용자와 합의한 것)
