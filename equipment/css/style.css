@@ -331,3 +331,35 @@ table.eq { min-width: 1100px; }
 .status-wrap { display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
 @media (max-width: 720px) { .vrow .status-wrap { grid-area: status; justify-self: end; } }
 .slot-x { margin-top: 0; }
+
+/* ============ v3: 표 제목 고정·필터 나누기·화면 모드·지원일 자동 ============ */
+/* 표 제목은 스크롤해도 맨 위에 불투명하게 고정(입력칸·첫 열이 제목 위로 올라오지 않게 겹침 순서를 둠) */
+.eq thead th { z-index: 3; background: var(--bg); box-shadow: inset 0 -1px 0 var(--line); }
+.eq thead th:first-child { z-index: 4; left: 0; }
+.eq tbody td:first-child { z-index: 2; }
+.plate-in { width: 112px; font-weight: 700; letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+.sl-d.auto { font-size: 12.5px; color: var(--ink-soft); padding: 4px 2px; white-space: nowrap; }
+.cols-ctl { margin-left: auto; display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--ink-soft); }
+.cols-ctl select.ci { min-height: 32px; }
+.tag.day { background: color-mix(in srgb, var(--plow) 22%, transparent); color: var(--ink); font-weight: 600; }
+
+/* 이동 현황 필터: 왼쪽 = 출발 기관, 오른쪽 = 장비, 사이에 세로 구분선 */
+.filters.split { display: flex; justify-content: space-between; align-items: center; gap: 12px 24px; flex-wrap: wrap; }
+.fgroup { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.fgroup.right { margin-left: auto; padding-left: 24px; border-left: 2px solid var(--line); justify-content: flex-end; }
+.flabel { font-size: 12px; font-weight: 700; color: var(--ink-soft); letter-spacing: .04em; margin-right: 4px; padding: 3px 8px; border-radius: 6px; background: var(--bg); border: 1px solid var(--line); }
+@media (max-width: 720px) { .fgroup.right { margin-left: 0; padding-left: 0; border-left: 0; padding-top: 10px; border-top: 2px solid var(--line); width: 100%; justify-content: flex-start; } }
+
+/* 이동 현황 표: 세로 = 피지원 기관(많아질 수 있음), 가로 = 출발 기관 */
+.matrix tbody th .sub, .matrix thead th .sub { display: block; font-size: 11px; color: var(--ink-soft); font-weight: 400; }
+.matrix tbody tr.none th, .matrix tbody tr.none td strong { color: var(--ink-soft); font-weight: 500; }
+.matrix-wrap { max-height: 60vh; overflow: auto; }
+.matrix thead th, .matrix tfoot th, .matrix tfoot td { position: sticky; background: var(--surface); z-index: 2; }
+.matrix thead th { top: 0; box-shadow: inset 0 -1px 0 var(--line); }
+.matrix tfoot th, .matrix tfoot td { bottom: 0; box-shadow: inset 0 1px 0 var(--line); }
+
+/* 화면 모드: 라이트/다크 두 칸 버튼 */
+.theme-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.theme-toggle button { border: 0; background: transparent; color: var(--ink-soft); padding: 0 12px; height: 34px; font: inherit; font-size: 13px; cursor: pointer; }
+.theme-toggle button + button { border-left: 1px solid var(--line); }
+.theme-toggle button[aria-pressed="true"] { background: var(--ink); color: var(--bg); font-weight: 700; }

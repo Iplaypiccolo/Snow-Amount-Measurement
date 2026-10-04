@@ -46,15 +46,19 @@ const hqOf = b => Object.keys(DATA.branches).find(h => DATA.branches[h].some(r =
 const WD = "일월화수목금토";
 function fmtMD(iso) { const [y, m, d] = iso.split("-").map(Number); return `${m}/${d}(${WD[new Date(y, m - 1, d).getDay()]})`; }
 const sameDay = iso => new Date(iso).toDateString() === new Date().toDateString();
+const todayISO = () => { const t = new Date(); return `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`; };
+function addDays(iso, n) { const [y, m, d] = iso.split("-").map(Number); const t = new Date(y, m - 1, d + n); return `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`; }
+const vehById = id => DATA.vehicles.find(x => x.id === id);
+const plateOf = id => (vehById(id) || {}).plate || id;
 const todayEdits = k => LOG.filter(l => l.kind === "수정" && l.key === k && sameDay(l.at));   // 말풍선은 '오늘' 수정분만
 const hasHist = k => todayEdits(k).length > 0;
 const TAB_NAME = { fleet: "기관별 장비", branch: "지사별 요청·편성" };
-const FIELD = { "req.truck": "요청 제설차", "req.blower": "요청 제설기", "assigned.truck": "편성 제설차", "assigned.blower": "편성 제설기",
+const FIELD = { plate: "차량번호", "req.truck": "요청 제설차", "req.blower": "요청 제설기", "assigned.truck": "편성 제설차", "assigned.blower": "편성 제설기",
   snowCm: "예상 적설", warning: "특보", arrive: "도착 요청", reason: "사유", status: "지원 여부", days: "지원 일자·기관" };
 function describeKey(key) {
   const [t, id, f] = key.split(":"), fl = FIELD[f] || f;
   if (t === "req") return `${id} 지사 · ${fl}`;
-  return `${id} · ${fl}`;
+  return `${plateOf(id)} · ${fl}`;          // 장비는 고유 번호(id)로 기록하고, 화면에는 지금 차량번호로 보여 줌
 }
 function logAdd(o) { LOG.push({ at: new Date().toISOString(), by: me().label, ip: "-", key: null, from: null, to: null, ...o }); }
 
@@ -66,7 +70,7 @@ function getVal(key) {
     if (!r) return f === "snowCm" ? null : f === "warning" ? false : f === "arrive" || f === "reason" ? "" : 0;
     return f.split(".").reduce((o, k) => o[k], r);
   }
-  if (t === "veh") return DATA.vehicles.find(x => x.plate === id)[f];
+  if (t === "veh") return vehById(id)[f];
 }
 function putVal(key, val) {
   const [t, id, f] = key.split(":");
@@ -75,7 +79,7 @@ function putVal(key, val) {
     const path = f.split("."); const last = path.pop();
     path.reduce((o, k) => o[k], r)[last] = val;
   } else if (t === "veh") {
-    const v = DATA.vehicles.find(x => x.plate === id);
+    const v = vehById(id);
     v[f] = Array.isArray(val) ? JSON.parse(JSON.stringify(val)) : val;
   }
 }
@@ -108,7 +112,7 @@ const SNAP = {};      // 마지막으로 저장한 상태(되돌리기용 사본
 const TABS = ["fleet", "branch"];
 const tabOf = key => ({ req: "branch", veh: "fleet" })[key.split(":")[0]];
 const slice = {
-  fleet:  () => JSON.stringify(DATA.vehicles.map(v => [v.plate, v.status, v.days])),
+  fleet:  () => JSON.stringify(DATA.vehicles.map(v => [v.id, v.plate, v.status, v.days])),
   branch: () => JSON.stringify(DATA.requests)
 };
 const takeSnap = t => { SNAP[t] = slice[t](); };
@@ -117,7 +121,7 @@ const canEditTab = t => t === "branch" ? (isAdmin() || me().role === "branch") :
 function dropPending(t) { for (let i = PENDING.length - 1; i >= 0; i--) if (tabOf(PENDING[i].key) === t) PENDING.splice(i, 1); }
 function restore(t) {
   const s = JSON.parse(SNAP[t]);
-  if (t === "fleet") s.forEach(([p, st, ds]) => { const v = DATA.vehicles.find(x => x.plate === p); v.status = st; v.days = ds; });
+  if (t === "fleet") s.forEach(([id, pl, st, ds]) => { const v = vehById(id); v.plate = pl; v.status = st; v.days = ds; });
   else DATA.requests = s;
   dropPending(t);
 }
@@ -206,18 +210,19 @@ const movesOn = date => {   // 그 날짜에 이동하는 장비와, 그날 들�
   return out;
 };
 function renderMatrix() {
-  const dests = Object.keys(DATA.requests), moves = movesOn(state.date);
+  // 세로(행) = 피지원 기관: 50곳이 넘을 수 있어 아래로 늘어나게. 가로(열) = 출발 기관 5곳(서울경기·충북·전북·대구경북·지역본부)
+  const dests = Object.keys(DATA.requests), moves = movesOn(state.date), src = DATA.sourceOrgs;
   const cell = (org, d) => {
     const l = moves.filter(m => m.v.org === org && m.stops.includes(d));
     return { n: l.length, t: l.filter(m => m.v.type === "제설차").length, b: l.filter(m => m.v.type === "제설기").length };
   };
-  let h = `<thead><tr><th class="l" scope="col">출발 기관</th>${dests.map(d => `<th scope="col">${esc(d)}</th>`).join("")}<th scope="col">합계</th></tr></thead><tbody>`;
-  DATA.orgs.forEach(org => {
-    const cs = dests.map(d => cell(org, d));
-    const distinct = moves.filter(m => m.v.org === org).length;   // 여러 기관을 들러도 장비 1대로 셈
-    h += `<tr><th scope="row">${esc(org)}</th>${cs.map(c => c.n ? `<td>${c.n}<span class="sub">차 ${c.t} · 기 ${c.b}</span></td>` : `<td class="zero">0</td>`).join("")}<td><strong>${distinct}</strong></td></tr>`;
+  const td = c => c.n ? `<td>${c.n}<span class="sub">차 ${c.t} · 기 ${c.b}</span></td>` : `<td class="zero">0</td>`;
+  let h = `<thead><tr><th class="l" scope="col">피지원 기관</th>${src.map(o => `<th scope="col">${esc(o)}${o === "지역본부" ? '<span class="sub">연동 예정</span>' : ""}</th>`).join("")}<th scope="col">합계</th></tr></thead><tbody>`;
+  dests.forEach(d => {
+    const n = moves.filter(m => m.stops.includes(d)).length;
+    h += `<tr${n ? "" : ' class="none"'}><th scope="row">${esc(d)}<span class="sub">${esc(hqOf(d) || "")}</span></th>${src.map(o => td(cell(o, d))).join("")}<td><strong>${n}</strong></td></tr>`;
   });
-  h += `</tbody><tfoot><tr><th scope="row">합계</th>${dests.map(d => `<td>${moves.filter(m => m.stops.includes(d)).length}</td>`).join("")}<td>${moves.length}</td></tr></tfoot>`;
+  h += `</tbody><tfoot><tr><th scope="row">합계</th>${src.map(o => `<td>${moves.filter(m => m.v.org === o).length}</td>`).join("")}<td>${moves.length}</td></tr></tfoot>`;   // 출발 기관 합계: 여러 기관을 들러도 장비 1대로 셈
   document.getElementById("matrix").innerHTML = h;
   const tr = moves.filter(m => m.v.type === "제설차").length, bl = moves.filter(m => m.v.type === "제설기").length;
   const multi = moves.some(m => m.stops.length > 1);
@@ -226,22 +231,22 @@ function renderMatrix() {
 }
 function renderFilters() {
   const f = document.getElementById("filters");
-  f.innerHTML = ["전체", ...DATA.orgs].map(o => `<button type="button" class="chip" data-org="${esc(o)}" aria-pressed="${state.org === o}">${o === "전체" ? "모든 기관" : esc(o)}</button>`).join("") +
-    `<span style="width:8px"></span>` +
-    ["전체", ...TYPES].map(t => `<button type="button" class="chip" data-type="${esc(t)}" aria-pressed="${state.type === t}">${t === "전체" ? "모든 장비" : esc(t)}</button>`).join("") +
-    `<input class="search" type="search" id="search" placeholder="차량번호 검색 (예: 5272)" value="${esc(state.q)}" aria-label="차량번호 검색">`;
+  f.className = "filters split";
+  f.innerHTML = `<div class="fgroup" role="group" aria-label="출발 기관"><span class="flabel">출발 기관</span>` +
+    ["전체", ...DATA.sourceOrgs].map(o => `<button type="button" class="chip" data-org="${esc(o)}" aria-pressed="${state.org === o}">${o === "전체" ? "모든 기관" : esc(o)}</button>`).join("") + `</div>` +
+    `<div class="fgroup right" role="group" aria-label="장비 종류"><span class="flabel">장비</span>` +
+    ["전체", ...TYPES].map(t => `<button type="button" class="chip" data-type="${esc(t)}" aria-pressed="${state.type === t}">${t === "전체" ? "모든 장비" : esc(t)}</button>`).join("") + `</div>`;
   f.querySelectorAll("[data-org]").forEach(b => b.onclick = () => { state.org = b.dataset.org; renderFilters(); renderDest(); });
   f.querySelectorAll("[data-type]").forEach(b => b.onclick = () => { state.type = b.dataset.type; renderFilters(); renderDest(); });
-  const s = document.getElementById("search"); s.oninput = () => { state.q = s.value.trim(); renderDest(); };
 }
-const matches = v => (state.org === "전체" || v.org === state.org) && (state.type === "전체" || v.type === state.type) &&
-  (!state.q || v.plate.replace(/\s/g, "").includes(state.q.replace(/\s/g, "")));
+const matches = v => (state.org === "전체" || v.org === state.org) && (state.type === "전체" || v.type === state.type);
 function vehicleRow(v, stops = []) {
-  const [cls, label] = STATUS[v.status];
-  return `<button type="button" class="vrow" data-plate="${esc(v.plate)}">
+  const [cls, label] = STATUS[v.status], k = (v.days || []).findIndex(([d]) => d === state.date), n = (v.days || []).filter(([, xs]) => xs.some(Boolean)).length;
+  const dayTag = k >= 0 && n > 1 ? `<span class="tag day" title="지원일 1 = ${esc(fmtMD(v.days[0][0]))}부터 연속">${k + 1}일차 / ${n}일</span>` : "";
+  return `<button type="button" class="vrow" data-vid="${esc(v.id)}">
     <span class="plate">${esc(v.plate)}</span><span class="vtype">${esc(v.type)}</span>
     <span class="vfrom">${esc(v.org)}</span>
-    <span class="status-wrap"><span class="status ${cls}">${label}</span>${stops.length > 1 ? `<span class="tag" title="${esc(stops.join(" → "))}">${stops.length}곳 경유</span>` : ""}</span></button>`;
+    <span class="status-wrap">${dayTag}<span class="status ${cls}">${label}</span>${stops.length > 1 ? `<span class="tag" title="${esc(stops.join(" → "))}">${stops.length}곳 경유</span>` : ""}</span></button>`;
 }
 function renderDest() {
   const out = [], moves = movesOn(state.date), filtered = state.org !== "전체" || state.type !== "전체" || state.q;
@@ -265,7 +270,7 @@ function renderDest() {
   });
   const el = document.getElementById("destList");
   el.innerHTML = out.length ? out.join("") : `<div class="empty-state">${esc(fmtMD(state.date))}에 이동하는 장비가 없습니다. 위의 날짜(‹ ›)를 바꿔 보세요.</div>`;
-  el.querySelectorAll(".vrow").forEach(b => b.onclick = () => openSheet(b.dataset.plate));
+  el.querySelectorAll(".vrow").forEach(b => b.onclick = () => openSheet(b.dataset.vid));
 }
 
 /* ============================================================
@@ -273,7 +278,8 @@ function renderDest() {
    ============================================================ */
 function renderFleet() {
   banner("perm-fleet", canVeh(),
-    "지원 여부와 지원일별 기관(하루 여러 기관은 ＋)을 수정한 뒤 아래 [저장]을 눌러야 확정됩니다.",
+    isAdmin() ? "차량번호·지원 여부·지원일 1(관리자만)·지원일별 기관(하루 여러 기관은 ＋)을 수정한 뒤 아래 [저장]을 눌러야 확정됩니다. 지원일 2부터는 지원일 1 다음 날부터 자동으로 이어집니다."
+              : "차량번호·지원 여부·지원일별 기관(하루 여러 기관은 ＋)을 수정한 뒤 아래 [저장]을 눌러야 확정됩니다. 지원일 1은 관리자가 정하고, 지원일 2부터는 자동으로 이어집니다.",
     "보기만 가능합니다. 수정은 관리자·지원장비 아이디만 할 수 있습니다.");
   document.getElementById("orgGrid").innerHTML = DATA.orgs.map(org => {
     const l = DATA.vehicles.filter(v => v.org === org);
@@ -290,38 +296,62 @@ function renderFleet() {
 
   const edit = canVeh(), dests = Object.keys(DATA.requests), cols = dayCols();
   const rows = DATA.vehicles.filter(v => state.fleetOrg === "전체" || v.org === state.fleetOrg).map(v => {
-    const kS = `veh:${v.plate}:status`, [cls, label] = STATUS[v.status];
+    const kS = `veh:${v.id}:status`, kP = `veh:${v.id}:plate`, [cls, label] = STATUS[v.status];
     const statusCell = edit
       ? `<select class="ci" data-edit="${esc(kS)}" data-type="text" aria-label="${esc(v.plate)} 지원 여부"${hvA(kS, false)}>${["", "O", "X"].map(s => `<option value="${s}" ${v.status === s ? "selected" : ""}>${STATUS[s][1]}</option>`).join("")}</select>`
       : H(kS, `<span class="status ${cls}">${label}</span>`);
-    return `<tr><td><span class="plate">${esc(v.plate)}</span></td><td>${esc(v.type)}</td><td>${esc(v.org)}</td><td>${statusCell}</td>
+    const plateCell = edit
+      ? `<input class="ci plate-in" type="text" maxlength="12" data-edit="${esc(kP)}" data-type="plate" value="${esc(v.plate)}" aria-label="차량번호"${hvA(kP, false)}>`
+      : H(kP, `<span class="plate">${esc(v.plate)}</span>`);
+    return `<tr><td>${plateCell}</td><td>${esc(v.type)}</td><td>${esc(v.org)}</td><td>${statusCell}</td>
       ${Array.from({ length: cols }, (_, i) => `<td>${slotCell(v, i, edit, dests)}</td>`).join("")}</tr>`;
   }).join("");
   document.getElementById("eqTable").innerHTML = `<thead><tr><th>차량번호</th><th>장비</th><th>기관</th><th>지원 여부</th>${Array.from({ length: cols }, (_, i) => `<th>지원일 ${i + 1}</th>`).join("")}</tr></thead><tbody>${rows}</tbody>`;
 }
 
-/* ---------- 지원 일자별 지원 기관: 가로로 '지원일 1, 2, 3, 4 …' 칸 (기본 4칸, [＋ 칸 추가]로 늘림) ---------- */
-Object.assign(state, { dayCols: 4, date: DATA.date, extraStop: new Set() });
-const usedMax = () => Math.max(0, ...DATA.vehicles.map(v => (v.days || []).length));
-const dayCols = () => Math.min(10, Math.max(state.dayCols, usedMax(), 2));
+/* ---------- 지원 일자별 지원 기관: 가로로 '지원일 1, 2, 3 …' 칸 ----------
+   지원일 1 날짜만 관리자가 고르고, 지원일 2부터는 하루씩 자동으로 이어집니다. 날마다 들르는 기관은 관리자·지원장비가 고릅니다(하루 여러 기관은 ＋).
+   v.days = [[날짜, [기관…]], …] — 날짜는 항상 지원일 1부터 하루씩 연속. 이동 현황은 이 날짜·기관으로 그 날 이동하는 장비를 셉니다. */
+Object.assign(state, { dayCols: 4, date: todayISO(), extraStop: new Set() });
+const usedMax = () => Math.max(0, ...DATA.vehicles.map(v => { const d = v.days || []; let n = d.length; while (n > 0 && !d[n - 1][1].some(Boolean)) n--; return n; }));   // 기관이 들어 있는 마지막 지원일
+const dayCols = () => Math.min(10, Math.max(2, state.dayCols));
 function colsCtl() {
   if (!canVeh()) return "";
-  const c = dayCols(), min = Math.max(2, usedMax());
-  return `<label style="margin-left:auto;display:flex;gap:6px;align-items:center;font-size:13px;color:var(--ink-soft)">지원일 칸 수
-    <select class="ci" id="colsSel" style="min-height:32px">${Array.from({ length: 9 }, (_, k) => k + 2).map(n => `<option value="${n}" ${n === c ? "selected" : ""} ${n < min ? "disabled" : ""}>${n}개</option>`).join("")}</select></label>`;
+  const c = dayCols();
+  return `<label class="cols-ctl">지원일 칸 수
+    <select class="ci" id="colsSel">${Array.from({ length: 9 }, (_, k) => k + 2).map(n => `<option value="${n}" ${n === c ? "selected" : ""}>${n}개</option>`).join("")}</select></label>`;
 }
 function slotCell(v, i, edit, dests) {
-  const e = (v.days || [])[i], key = `veh:${v.plate}:days`, pl = esc(v.plate);
-  if (!edit) return e ? H(key, `<div class="sl-d">${esc(fmtMD(e[0]))}</div>${e[1].map(x => `<div class="sl-x">${x ? esc(x) : "기관 미정"}</div>`).join("")}`) : `<span class="muted">-</span>`;
+  const e = (v.days || [])[i], day1 = v.days && v.days[0] ? v.days[0][0] : "", key = `veh:${v.id}:days`, vid = esc(v.id);
+  const date = day1 ? addDays(day1, i) : "";
+  if (!edit) return e && e[1].some(Boolean) ? H(key, `<div class="sl-d">${esc(fmtMD(e[0]))}</div>${e[1].map(x => `<div class="sl-x">${x ? esc(x) : "기관 미정"}</div>`).join("")}`)
+                                            : (date ? `<div class="sl-d muted">${esc(fmtMD(date))}</div>` : `<span class="muted">-</span>`);
   const off = v.status !== "O";
-  const sel = (cur, j, extra) => `<select class="ci" data-sx="${pl}" data-i="${i}" ${extra ? 'data-extra="1"' : ""} data-fk="${extra ? "sxn:" + pl + "|" + esc(e[0]) : `sx:${pl}:${i}:${j}`}" ${off || !e ? "disabled" : ""} aria-label="${pl} 지원일 ${i + 1} 지원 기관 ${j + 1}"${hvA(key, false)}>
+  const sel = (cur, j, extra) => `<select class="ci" data-sx="${vid}" data-i="${i}" ${extra ? 'data-extra="1"' : ""} data-fk="${extra ? "sxn:" + vid + "|" + i : `sx:${vid}:${i}:${j}`}" ${off || !day1 ? "disabled" : ""} aria-label="${esc(v.plate)} 지원일 ${i + 1} 지원 기관 ${j + 1}"${hvA(key, false)}>
       <option value="">기관 선택</option>${dests.map(d => `<option value="${esc(d)}" ${cur === d ? "selected" : ""}>${esc(d)}</option>`).join("")}${cur && !dests.includes(cur) ? `<option value="${esc(cur)}" selected>${esc(cur)}</option>` : ""}<option value="__del">지우기</option></select>`;
-  const stops = e ? e[1] : [""], extra = e && state.extraStop.has(`${v.plate}|${e[0]}`);
-  const plus = e ? `<button type="button" class="btn sm" data-stop-add="${pl}|${esc(e[0])}" ${off ? "disabled" : ""} aria-label="${pl} 지원일 ${i + 1}에 들르는 기관 추가" title="이 날 들르는 기관 추가">＋</button>` : "";
-  return `<div class="slot">
-    <input class="ci" type="date" data-sd="${pl}" data-i="${i}" data-fk="sd:${pl}:${i}" value="${esc(e ? e[0] : "")}" ${off ? "disabled" : ""} aria-label="${pl} 지원일 ${i + 1} 날짜"${hvA(key, false)}>
+  const stops = e ? e[1] : [""], extra = state.extraStop.has(`${v.id}|${i}`);
+  const plus = day1 ? `<button type="button" class="btn sm" data-stop-add="${vid}|${i}" ${off ? "disabled" : ""} aria-label="${esc(v.plate)} 지원일 ${i + 1}에 들르는 기관 추가" title="이 날 들르는 기관 추가">＋</button>` : "";
+  const dateEl = i === 0
+    ? (isAdmin() ? `<input class="ci" type="date" data-sd="${vid}" data-fk="sd:${vid}" value="${esc(day1)}" ${off ? "disabled" : ""} aria-label="${esc(v.plate)} 지원일 1 날짜"${hvA(key, false)}>`
+                 : `<div class="sl-d auto" title="지원일 1은 관리자가 정합니다">${day1 ? esc(fmtMD(day1)) : "관리자 지정 전"}</div>`)
+    : `<div class="sl-d auto" title="지원일 1 다음 날부터 자동">${date ? esc(fmtMD(date)) : "-"}</div>`;
+  return `<div class="slot">${dateEl}
     ${stops.map((x, j) => `<div class="slot-x">${sel(x, j, false)}${j === stops.length - 1 && !extra ? plus : ""}</div>`).join("")}
     ${extra ? `<div class="slot-x">${sel("", stops.length, true)}</div>` : ""}</div>`;
+}
+// 지원일 칸의 입력을 모아 days 로: 날짜는 지원일 1부터 하루씩, 끝쪽의 기관 없는 날은 지움
+function buildDays(vid, day1Override) {
+  const v = vehById(vid), day1 = day1Override !== undefined ? day1Override : (v.days && v.days[0] ? v.days[0][0] : "");
+  if (!day1) return [];
+  const xs = [...document.querySelectorAll("select[data-sx]")].filter(q => q.dataset.sx === vid);
+  const n = Math.max(dayCols(), (v.days || []).length), out = [];
+  for (let i = 0; i < n; i++) {
+    const mine = xs.filter(q => +q.dataset.i === i);
+    let stops = mine.length ? [...new Set(mine.filter(q => q.value !== "__del").map(q => q.value).filter(Boolean))] : ((v.days || [])[i] ? v.days[i][1].filter(Boolean) : []);
+    out.push([addDays(day1, i), stops.length ? stops : [""]]);
+  }
+  while (out.length > 1 && !out[out.length - 1][1].some(Boolean)) out.pop();      // 끝쪽 빈 날은 지움(지원일 1은 남김)
+  return out;
 }
 
 /* ============================================================
@@ -409,16 +439,16 @@ const describeKeyLog = describeKey;
    ============================================================ */
 const sheet = document.getElementById("sheet"), backdrop = document.getElementById("backdrop");
 let lastFocus = null, curPlate = null;
-function openSheet(plate) {
-  const v = DATA.vehicles.find(x => x.plate === plate); if (!v) return;
-  curPlate = plate;
+function openSheet(vid) {
+  const v = vehById(vid); if (!v) return;
+  curPlate = vid;
   const cur = (v.days || []).find(([d]) => d === state.date), curStops = cur ? cur[1].filter(Boolean) : [], [cls, label] = STATUS[v.status];
   sheet.innerHTML = `<button type="button" class="sheet-close" id="sheetClose">닫기</button>
     <span class="plate" style="font-size:18px">${esc(v.plate)}</span>
     <h2 id="sheetTitle">${esc(v.org)} ${esc(v.type)}</h2>
-    ${H(`veh:${v.plate}:status`, `<span class="status ${cls}">${label}</span>`)}
+    ${H(`veh:${v.id}:status`, `<span class="status ${cls}">${label}</span>`)}
     <section><h3>이동</h3><dl class="kv"><dt>출발</dt><dd>${esc(v.org)} 기계화부</dd>
-      <dt>지원 일자</dt><dd>${v.days && v.days.length ? H(`veh:${v.plate}:days`, v.days.map(([d, xs]) => `${esc(fmtMD(d))} → ${esc(xs.map(x => x || "기관 미정").join(" → "))}`).join("<br>")) : "-"}</dd>
+      <dt>지원 일자</dt><dd>${v.days && v.days.length ? H(`veh:${v.id}:days`, v.days.map(([d, xs], k) => `${k + 1}일차 ${esc(fmtMD(d))} → ${esc(xs.map(x => x || "기관 미정").join(" → "))}`).join("<br>")) : "-"}</dd>
       <dt>도착 요청</dt><dd>${curStops.length ? curStops.map(x => DATA.requests[x] ? `${esc(x)} ${H(`req:${x}:arrive`, fmtTime(DATA.requests[x].arrive))}` : esc(x)).join("<br>") : "-"}</dd></dl></section>`;
   sheet.hidden = false; backdrop.hidden = false;
   if (!lastFocus) lastFocus = document.activeElement;
@@ -433,27 +463,30 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !sheet.hid
    [9] 이벤트 (수정·삭제·보기) — 한 곳에서 처리
    ============================================================ */
 document.addEventListener("change", e => {
-  if (e.target.id === "colsSel") { state.dayCols = +e.target.value; renderFleet(); return; }
+  if (e.target.id === "colsSel") {           // 칸 수: 2~10개. 기관이 들어 있는 지원일보다 줄이면 그 뒤 지원일의 기관을 지울지 묻고 지움(저장 전까지는 되돌리기 가능)
+    const n = +e.target.value, cut = DATA.vehicles.filter(v => (v.days || []).slice(n).some(([, xs]) => xs.some(Boolean)));
+    if (cut.length && !confirm(`${cut.length}대 장비의 지원일 ${n + 1} 이후 기관이 지워집니다. 줄일까요?\n(저장하기 전에는 [되돌리기]로 돌아갈 수 있습니다)`)) { e.target.value = dayCols(); return; }
+    state.dayCols = n;
+    cut.forEach(v => { const d = v.days.slice(0, n); while (d.length > 1 && !d[d.length - 1][1].some(Boolean)) d.pop(); commitRaw(`veh:${v.id}:days`, d); });
+    refresh(); return;
+  }
   const sl = e.target.closest("[data-sd], [data-sx]");
-  if (sl) {   // 지원일 칸: 같은 장비의 (날짜, 들르는 기관들)을 모아 한 번에 처리
-    const plate = sl.dataset.sd ?? sl.dataset.sx, key = `veh:${plate}:days`;
-    const ds = [...document.querySelectorAll("input[data-sd]")].filter(i => i.dataset.sd === plate);
-    const xs = [...document.querySelectorAll("select[data-sx]")].filter(i => i.dataset.sx === plate);
-    const filled = ds.filter(i => i.value);
-    if (new Set(filled.map(i => i.value)).size < filled.length) { toast("같은 날짜가 이미 입력되어 있습니다. 다른 날짜를 골라 주세요.", true); renderFleet(); return; }
-    const days = [];
-    filled.forEach(inp => {
-      const mine = xs.filter(q => q.dataset.i === inp.dataset.i), deleted = mine.some(q => q.value === "__del");
-      let stops = [...new Set(mine.filter(q => q.value !== "__del").map(q => q.value).filter(Boolean))];   // 비어 있는 기관은 제거, 중복 기관은 한 번만
-      if (!stops.length) { if (deleted) return; stops = [""]; }   // '지우기'로 마지막 기관을 지우면 그 날짜도 삭제
-      days.push([inp.value, stops]);
-    });
-    days.sort((a, b) => a[0].localeCompare(b[0]));
-    [...state.extraStop].filter(k => k.startsWith(plate + "|")).forEach(k => state.extraStop.delete(k));
+  if (sl) {   // 지원일 칸: 지원일 1 날짜(관리자) 또는 날별 기관을 바꾸면, 그 장비의 days 를 새로 만듦
+    const vid = sl.dataset.sd ?? sl.dataset.sx, key = `veh:${vid}:days`;
+    if (sl.dataset.sd !== undefined && !isAdmin()) { renderFleet(); return; }       // 지원일 1은 관리자만
+    const days = buildDays(vid, sl.dataset.sd !== undefined ? sl.value : undefined);
+    [...state.extraStop].filter(k => k.startsWith(vid + "|")).forEach(k => state.extraStop.delete(k));
     const same = JSON.stringify(getVal(key)) === JSON.stringify(days);
     commit(key, days);
     if (same) renderFleet();
     return;
+  }
+  const pe = e.target.closest('[data-type="plate"]');
+  if (pe) {                                   // 차량번호: 형식(예: 12가3456)과 중복 검사
+    const val = pe.value.replace(/\s/g, ""), vid = pe.dataset.edit.split(":")[1];
+    if (!/^\d{2,3}[가-힣]\d{4}$/.test(val)) { toast("차량번호 형식이 올바르지 않습니다 (예: 12가3456)", true); renderFleet(); return; }
+    if (DATA.vehicles.some(v => v.id !== vid && v.plate === val)) { toast("같은 차량번호가 이미 있습니다", true); renderFleet(); return; }
+    commit(pe.dataset.edit, val); return;
   }
   const el = e.target.closest("[data-edit]"); if (!el) return;
   const t = el.dataset.type; let v;
@@ -467,7 +500,7 @@ document.addEventListener("change", e => {
 document.addEventListener("click", e => {
   const sa = e.target.closest("[data-stop-add]");
   if (sa && canVeh()) {
-    state.extraStop.add(sa.dataset.stopAdd); renderFleet();
+    state.extraStop.add(sa.dataset.stopAdd); renderFleet();          // 값: "장비id|지원일 칸 번호"
     const n = [...document.querySelectorAll("[data-fk]")].find(i => i.dataset.fk === "sxn:" + sa.dataset.stopAdd); if (n) n.focus();
   }
   const sv = e.target.closest("[data-save]");
@@ -503,11 +536,14 @@ function shiftDate(n) { const [y, m, d] = state.date.split("-").map(Number); con
 dateInput.onchange = () => setDate(dateInput.value);
 document.getElementById("prevDay").onclick = () => shiftDate(-1);
 document.getElementById("nextDay").onclick = () => shiftDate(1);
-document.getElementById("themeBtn").onclick = () => {
-  const root = document.documentElement;
-  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-  root.dataset.theme = dark ? "light" : "dark";
-};
+// 화면 모드: [라이트 모드] [다크 모드] 두 칸 버튼. 고른 모드는 이 브라우저에 기억
+const THEME_KEY = "eq_theme";
+function curTheme() { const r = document.documentElement.dataset.theme; return r || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); }
+function paintThemeBtns() { document.querySelectorAll("[data-theme-set]").forEach(b => b.setAttribute("aria-pressed", b.dataset.themeSet === curTheme())); }
+function setTheme(t) { document.documentElement.dataset.theme = t; try { localStorage.setItem(THEME_KEY, t); } catch (e) {} paintThemeBtns(); }
+try { const t = localStorage.getItem(THEME_KEY); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+document.querySelectorAll("[data-theme-set]").forEach(b => b.onclick = () => setTheme(b.dataset.themeSet));
+paintThemeBtns();
 const userSel = document.getElementById("userSel");
 userSel.innerHTML =
   `<optgroup label="관리자">${["admin1", "admin2"].map(u => `<option value="${u}">${esc(USERS[u].label)}</option>`).join("")}</optgroup>` +
