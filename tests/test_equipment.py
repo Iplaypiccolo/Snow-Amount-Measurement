@@ -81,7 +81,7 @@ def t_dest_order_and_day_tag(p):
 def t_route_choices_confirmed_only(p):
     """경로의 피지원 지사는 고른 기준일자에서 편성이 확정된 지사만(춘천은 요청만 하고 미확정)"""
     tab(p, "fleet"); d0 = day(p, 0)
-    opts = p.locator(rsel("V004", d0) + " option").all_inner_texts()
+    opts = p.locator(rsel("V004", d0) + " option:not([disabled])").all_inner_texts()
     check([o for o in opts if o not in ("지사 선택", "지우기")] == ["대관령", "양양", "엄정"], opts)
     old = ev(p, "S.rounds.find(r => r.start_date === addDays(todayISO(), -7)).id")
     p.select_option("#roundSelFleet", str(old)); p.wait_for_timeout(300)
@@ -264,10 +264,43 @@ def t_no_driver_info_anywhere(p):
         check(word not in p.locator("body").inner_text(), f"화면에 '{word}'가 남아 있음")
     check(ev(p, "S.vehicles.every(v => !('driverIds' in v))"), "장비에 운전원 정보가 남아 있음")
 
+def t_typing_then_clicking_next_input_keeps_both(p):
+    """(사용자 신고 2026-10-04) 한 칸에 입력하고 바로 다른 칸을 눌러 입력해도 두 값이 모두 남아야 함(예전에는 표 전체를 다시 그려 두 번째 칸이 사라짐)"""
+    tab(p, "branch"); p.click("#onlyActive"); p.wait_for_timeout(150); b = bid(p, "인천")
+    p.click(f"[data-rq={b}][data-f=req_blower]"); p.keyboard.press("Control+A"); p.keyboard.type("1")
+    p.click(f"[data-arr={b}][data-part=d]"); p.keyboard.type("10042026"); p.wait_for_timeout(200)
+    p.select_option(f"[data-arr={b}][data-part=h]", "16"); p.wait_for_timeout(150)
+    p.click(f"[data-rq={b}][data-f=req_truck]"); p.keyboard.press("Control+A"); p.keyboard.type("2")
+    p.click(f"[data-rq={b}][data-f=reason]"); p.keyboard.type("시험"); p.click(f"[data-rq={b}][data-f=snow_cm]"); p.wait_for_timeout(200)
+    d = ev(p, f"S.rdraft.get('{b}')")
+    check(d.get("req_blower") == 1 and d.get("req_truck") == 2 and d.get("reason") == "시험" and (d.get("arrive_at") or "").endswith("T16:00"), d)
+    hq = p.locator("#branchTable tr.hq").first.locator("[data-s=req_blower]").inner_text(); check(hq == "1", f"본부 합계 즉시 반영: {hq}")
+    # 기관별 장비: 경로 칸을 고르고 바로 옆 칸을 골라도 둘 다 남음
+    tab(p, "fleet"); d0, d3 = day(p, 0), day(p, 3)
+    p.select_option(rsel("V002", d3), bid(p, "양양")); p.select_option(rsel("V003", d3), bid(p, "엄정")); p.wait_for_timeout(150)
+    check(route(p, "V002", d3) == ["양양"] and route(p, "V003", d3) == ["엄정"], "두 칸 모두")
+
+def t_round_delete(p):
+    tab(p, "branch"); r = ev(p, "S.round")
+    check(p.locator("#roundDel").count() == 1, "관리자에게 기준일자 삭제 버튼")
+    p.click("#roundDel"); p.wait_for_timeout(300)
+    check("지웠습니다" in toast(p) and ev(p, f"S.rounds.some(x => x.id === {r})") is False, "삭제")
+    check(ev(p, "curRound().start_date") == day(p, -7), "남은 기준일자로 바뀜")
+    check(ev(p, "S.routes.size") > 0, "장비 경로 기록은 남음")
+    tab(p, "log"); check("기준일자" in p.locator("#logTable tbody tr").first.inner_text(), "삭제 기록")
+    as_user(p, "br1"); tab(p, "branch"); check(p.locator("#roundDel").count() == 0, "권한 없으면 버튼 없음")
+
+def t_pending_branches_shown_grey(p):
+    """확정 전(요청만) 지사는 경로 목록에 회색(고를 수 없음)으로 보이고, 위 안내에 이름이 나옴"""
+    tab(p, "fleet"); opts = p.locator(rsel("V002", day(p, 3)) + " option[disabled]").all_inner_texts()
+    check(opts == ["춘천"], opts)
+    check("확정 전인 지사: 춘천" in p.locator("#perm-fleet").inner_text(), p.locator("#perm-fleet").inner_text())
+
 TESTS = [t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_fleet_header_stays_on_top, t_theme_toggle,
-         t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere]
+         t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
+         t_typing_then_clicking_next_input_keeps_both, t_round_delete, t_pending_branches_shown_grey]
 
 # ---------------------------------------------------------------- 서버 모드(가짜 Supabase, tests/_sb_mock.py) — 실제 로그인 권한·저장 함수 호출
 sys.path.insert(0, str(Path(__file__).resolve().parent))

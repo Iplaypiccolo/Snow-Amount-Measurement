@@ -333,6 +333,7 @@ def t_new_accounts(b, m):
     dl = []; p = org_sub(b, m, "new", dl); p.wait_for_selector("#preset table")
     check(p.locator("#preset tbody tr").count() == 13 and p.locator("#preset .tag.warn").count() == 13, "추천 13개, 모두 없음")
     check("admin" not in p.locator("#nrole option").evaluate_all("os => os.map(o => o.value)"), "관리자 역할 없음")
+    p.select_option("#nrole", "viewer"); check("아직 다른 계정이 없어" in p.locator("#nposHint").inner_text() and p.locator("#npos option").count() == 1, f"빈 묶음 위치 안내: {p.locator('#nposHint').inner_text()} {p.locator('#npos option').all_inner_texts()}")
     m.add("exgangwon", "강원본부", "hq", None, "x", hq_id="H03")                      # 하나는 이미 있는 상황
     p.reload(); p.wait_for_selector(".tabs"); p.click('.tabs button[data-t=sheet]'); p.click('.subtabs button[data-s=new]'); p.wait_for_selector("#preset table")
     check("12개" in p.locator("#mkpreset").inner_text(), p.locator("#mkpreset").inner_text())
@@ -346,6 +347,7 @@ def t_new_accounts(b, m):
     # 하나 만들기
     p.select_option("#nrole", "viewer"); check(p.locator("#nwhere").is_disabled() and p.locator(".npc:checked").count() == 0, "보기 전용은 소속·기본 권한 없음")
     p.select_option("#nrole", "equip"); check(p.locator(".npc:checked").evaluate_all("cs => cs.map(c => c.value)") == ["equip.edit.own"], "지원장비 기본 권한")
+    p.select_option("#nrole", "equip"); check("이 묶음 안의 순서" in p.locator("#nposHint").inner_text(), "위치 목록 설명")
     check(p.locator("#nwhere option").all_inner_texts() == ["서울경기", "충북", "전북", "대구경북"], p.locator("#nwhere option").all_inner_texts())
     p.select_option("#nwhere", "전북"); p.fill("#nuser", "exjeonbuk2"); p.fill("#nname", "전북 지원장비2"); p.select_option("#npos", "exjeonbukgigyae")
     p.check(".npc[value='log.view']")

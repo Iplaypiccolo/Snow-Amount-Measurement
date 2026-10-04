@@ -52,6 +52,10 @@ const Api = (() => {
       return SSAuth.authed("/rest/v1/support_rounds?select=id,name,start_date", { method: "POST", body: { name: date + " 기준", start_date: date }, headers: { Prefer: "return=representation" } })
         .then(r => r.ok && r.json && r.json[0] ? { ok: true, round: r.json[0] } : fail(r, "기준일자를 만들지 못했습니다.")).catch(NET);
     },
+    deleteRound(id) {           // 그 기준일자의 지사 요청은 DB 가 함께 지움(외래키 cascade, 지운 줄은 수정 기록에 남음)
+      return SSAuth.authed(`/rest/v1/support_rounds?id=eq.${+id}&select=id`, { method: "DELETE", headers: { Prefer: "return=representation" } })
+        .then(r => r.ok && r.json && r.json.length ? { ok: true } : fail(r, "기준일자를 지우지 못했습니다(권한이 없을 수 있습니다).")).catch(NET);
+    },
     addVehicle(v) {
       return SSAuth.authed("/rest/v1/vehicles?select=id,org,type,plate,status,sort,active", { method: "POST", body: v, headers: { Prefer: "return=representation" } })
         .then(r => r.ok && r.json && r.json[0] ? { ok: true, vehicle: r.json[0] } : fail(r, "장비를 추가하지 못했습니다.")).catch(NET);
@@ -111,6 +115,13 @@ const Api = (() => {
         if (db.rounds.some(r => r.start_date === date)) return done({ ok: false, message: ERR["23505"] });
         const r = { id: Math.max(0, ...db.rounds.map(x => x.id)) + 1, name: date + " 기준", start_date: date }; db.rounds.push(r); log("추가", "support_rounds", "support_rounds:" + r.id, null, r);
         return done({ ok: true, round: clone(r) });
+      },
+      deleteRound(id) {
+        if (!can("req.confirm")) return done({ ok: false, message: ERR["42501"] });
+        const r = db.rounds.find(x => x.id === +id); if (!r) return done({ ok: false, message: ERR["23503"] });
+        db.requests.filter(x => x.round_id === +id).forEach(x => log("삭제", "round_requests", `round_requests:${id},${x.branch_id}`, clone(x), null));
+        db.requests = db.requests.filter(x => x.round_id !== +id); db.rounds = db.rounds.filter(x => x.id !== +id); log("삭제", "support_rounds", "support_rounds:" + id, r, null);
+        return done({ ok: true });
       },
       addVehicle(v) {
         if (!can("equip.edit.all")) return done({ ok: false, message: ERR["42501"] });

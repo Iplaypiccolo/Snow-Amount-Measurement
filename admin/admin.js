@@ -412,7 +412,7 @@
       '<div class="card"><h2>새 아이디 하나 만들기</h2><div id="m"></div>' +
       '<div class="form2"><label>역할<select id="nrole"><option value="equip">지원장비(출발 기관)</option><option value="hq">지역본부</option><option value="viewer">보기 전용</option><option value="branch">피지원지사</option></select></label>' +
       '<label>소속<select id="nwhere"></select></label><label>아이디<input id="nuser" autocapitalize="none" spellcheck="false" placeholder="영문 소문자·숫자 (예: exseoulgigyae)"></label><label>이름<input id="nname" placeholder="예: 서울경기 지원장비"></label>' +
-      '<label>위치(목록 순서)<select id="npos"></select></label></div><div id="nperms" class="permpick"></div><p><button type="button" class="primary" id="nmake">만들기</button></p></div>';
+      '<label>위치(목록 순서)<select id="npos"></select><span class="hint" id="nposHint"></span></label></div><div id="nperms" class="permpick"></div><p><button type="button" class="primary" id="nmake">만들기</button></p></div>';
     loadDirectory().then(function () {
       if (vt !== S.vt) return;
       drawPreset(); fillNewForm();
@@ -450,6 +450,8 @@
     var g = groupOfNew(), list = g ? S.users.filter(function (u) { return u.role !== 'admin' && u.role !== 'branch' && hierInfo(u).g === g; }).sort(cmpHier) : [];
     $('npos').innerHTML = g ? '<option value="">맨 앞</option>' + list.map(function (u, i) { return '<option value="' + esc(u.username) + '"' + (i === list.length - 1 ? ' selected' : '') + '>' + esc(u.display_name) + ' 다음</option>'; }).join('') : '<option value="">지사 순서(자동)</option>';
     $('npos').disabled = !g;
+    // 같은 묶음(지원장비끼리 / 같은 본부의 지역본부 계정끼리 / 보기 전용 등)에 이미 있는 계정 사이에서 어디에 둘지. 비밀번호·권한 표에 나오는 순서
+    $('nposHint').textContent = !g ? '지사 계정은 강설량 화면의 지사 순서를 따릅니다.' : list.length ? '계정 관리·비밀번호·권한 표에서 이 묶음 안의 순서입니다.' : '이 묶음에 아직 다른 계정이 없어 "맨 앞"뿐입니다. 계정이 생기면 "○○ 다음"을 고를 수 있습니다.';
   }
   function makeOne() {
     var role = val('nrole'), w = val('nwhere'), u = { username: val('nuser').trim().toLowerCase(), display_name: val('nname').trim(), role: role,
