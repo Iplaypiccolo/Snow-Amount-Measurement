@@ -1,0 +1,32 @@
+# Supabase(snow-support) 자동 정지 방지 — 서버 깨우기만 합니다(백업 파일은 받지 않음)
+#  - 무료 플랜은 1주일 동안 쓰지 않으면 자동 정지 → 월·목 03:00(한국 시각)에 서버의 keepalive 함수(현재 시각만 돌려줌)를 1번 부릅니다.
+#  - 비밀값이 필요 없습니다: 화면 코드에도 들어 있는 공개 키(publishable)만 씁니다. keepalive 는 어떤 표도 읽거나 쓰지 않습니다
+#    (supabase/migrations/20261004_13_keepalive.sql).
+#  - 실패하면(서버가 이미 정지됐거나 주소가 바뀜) 빨간색으로 표시되고 GitHub 알림 메일이 갑니다 → Supabase 대시보드에서 Restore.
+name: Supabase 깨우기
+
+on:
+  schedule:
+    - cron: '0 18 * * 0,3'      # 일·수 18:00 UTC = 월·목 03:00 KST
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SB_URL: https://yzwbnohzhnctdvufntig.supabase.co
+      SB_KEY: sb_publishable_PQNwbLdG3wNUqA8u50G6Sw_qks53KcQ     # 공개 키(브라우저 화면에도 있는 키). 비밀 키 아님
+    steps:
+      - name: 서버 깨우기(keepalive 함수 호출)
+        run: |
+          for i in 1 2 3; do
+            code=$(curl -s -o out.txt -w '%{http_code}' -X POST -H "apikey: $SB_KEY" -H 'Content-Type: application/json' "$SB_URL/rest/v1/rpc/keepalive" -d '{}') || code=000
+            echo "시도 $i: HTTP $code $(cat out.txt 2>/dev/null)"
+            [ "$code" = "200" ] && exit 0
+            sleep 20
+          done
+          echo "::error::서버를 깨우지 못했습니다. Supabase 대시보드에서 프로젝트가 정지(Paused)됐는지 확인하세요."
+          exit 1
