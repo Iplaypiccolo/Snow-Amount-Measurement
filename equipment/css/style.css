@@ -477,3 +477,8 @@ table.matrix { font-size: 15px; min-width: 900px; }
 .filters.two .chips { display: flex; gap: calc(var(--s) * 6px); flex-wrap: nowrap; }
 .filters.two .chip { flex-shrink: 0; white-space: nowrap; font-size: calc(var(--s) * 14px); padding: calc(var(--s) * 6px) calc(var(--s) * 13px); }
 .filters.two .flabel { font-size: max(7px, calc(var(--s) * 10.5px)); }
+/* 두 줄 제목 표(지사별 요청·편성, 이동 현황): 제목은 항상 입력칸·본부 줄보다 위, 불투명 배경. 둘째 줄의 top 은 stickHead() 가 첫 줄 높이로 정함 */
+.branch thead th { z-index: 4; background: var(--bg); }
+.branch thead tr:first-child th { box-shadow: inset 0 -1px 0 var(--line); }
+.branch thead tr:last-child th { box-shadow: inset 0 -2px 0 var(--line); }
+.matrix thead th { z-index: 4; }

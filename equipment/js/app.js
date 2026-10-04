@@ -236,6 +236,7 @@ function renderMatrix() {
     `<tr>${cols.map(o => MOVE_TYPES.map((t, k) => `<th scope="col" class="${k ? "c2" : "c1"}${o == null ? " tot" : ""}">${t}</th>`).join("")).join("")}</tr></thead>` +
     `<tbody>${body || `<tr><td class="empty" colspan="${cols.length * 2 + 1}">${esc(fmtMD(S.date))}에 이동하는 장비가 없습니다.</td></tr>`}</tbody>` +
     `<tfoot><tr><th scope="row">합계</th>${cells(null)}</tr></tfoot>`;
+  stickHead($("matrix"));
   const tr = moves.filter(m => m.v.type === "제설차").length, bl = moves.filter(m => m.v.type === "제설기").length;
   $("dateText").textContent = fmtMD(S.date); $("dateInput").value = S.date;      // 제목의 큰 날짜(누르면 달력)
   $("summaryNote").innerHTML = `<b>제설차 ${tr}대</b> · <b>제설기 ${bl}대</b>` + (moves.some(m => m.stops.length > 1) ? `<span class="hint"> 하루에 여러 지사를 들르는 장비는 각 지사에 모두 세고, 합계는 1대로 셉니다</span>` : "");
@@ -474,6 +475,13 @@ function afterReq(id) {          // 지사 요청 칸을 고친 뒤: 그 줄 표
   if (hr) { const sm = hqSums(b.hq_id); HQ_SUM_KEYS.forEach(k => { const c = hr.querySelector(`[data-s="${k}"]`); if (c) c.textContent = sm[k]; }); }
   afterAnyChange();
 }
+// 제목 줄이 두 줄인 표: 스크롤해도 두 줄이 겹치지 않게, 둘째 줄은 첫 줄 높이만큼 아래에 붙임(높이는 화면 폭에 따라 달라서 매번 잼)
+function stickHead(table) {
+  if (!table || !table.tHead || !table.offsetParent) return;
+  let top = 0;
+  [...table.tHead.rows].forEach(tr => { [...tr.cells].forEach(th => { if (th.rowSpan <= 1 || tr.rowIndex === 0) th.style.top = (th.rowSpan > 1 ? 0 : top) + "px"; }); top += tr.getBoundingClientRect().height; });
+}
+addEventListener("resize", () => { stickHead($("branchTable")); stickHead($("matrix")); });
 function renderBranch() {
   const m = S.me, r = curRound();
   banner("perm-branch", canAnyReq(),
@@ -517,6 +525,7 @@ function renderBranch() {
     });
   });
   $("branchTable").innerHTML = h + "</tbody>";
+  stickHead($("branchTable"));
 }
 // 지사 줄 저장(바뀐 열만). extra 는 그 줄에 더할 값(확정 버튼: { confirmed: true/false })
 async function saveBranchRows(ids, extra, msg) {
@@ -739,7 +748,7 @@ document.addEventListener("keydown", e => { const tr = e.target.closest && e.tar
 document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
   document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", x === t));
   document.querySelectorAll(".panel").forEach(p => p.hidden = p.id !== "panel-" + t.dataset.tab);
-  hideTip(); if (t.dataset.tab === "move") fitFilters();
+  hideTip(); if (t.dataset.tab === "move") { fitFilters(); stickHead($("matrix")); } if (t.dataset.tab === "branch") stickHead($("branchTable"));
 });
 const dateInput = $("dateInput"); dateInput.value = S.date;
 async function setDate(v) { if (!v) return; S.date = v; dateInput.value = v; await ensureRoutes(); renderMatrix(); renderDest(); }   // 이동 현황은 고른 날짜 기준

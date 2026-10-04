@@ -390,12 +390,23 @@ def t_date_in_title(p):
     p.click("#nextDay"); p.wait_for_timeout(200); check(p.locator("#dateText").inner_text() == ev(p, "fmtMD(addDays(todayISO(), 1))"), "다음날")
     go_date(p, day(p, -7)); check(p.locator("#dateText").inner_text() == ev(p, "fmtMD(addDays(todayISO(), -7))") and "춘천" in p.locator("#matrix").inner_text(), "달력으로 고른 날짜")
 
+def t_branch_header_stays_on_top(p):
+    """지사별 요청·편성 표를 스크롤해도 두 줄 제목이 겹치지 않고(둘째 줄은 첫 줄 아래), 입력칸이 제목 위로 올라오지 않음"""
+    tab(p, "branch"); p.click("#onlyActive"); p.wait_for_timeout(200)
+    p.evaluate("document.querySelector('#panel-branch .table-wrap').scrollTop = 500"); p.wait_for_timeout(200)
+    r = p.evaluate("""(() => { const w = document.querySelector('#panel-branch .table-wrap'), wr = w.getBoundingClientRect(), rows = [...document.querySelectorAll('#branchTable thead tr')];
+      const h1 = rows[0].getBoundingClientRect().height;
+      return [...document.querySelectorAll('#branchTable thead th')].filter(th => { const b = th.getBoundingClientRect(); return b.left + b.width / 2 < wr.right - 12; }).map(th => { const b = th.getBoundingClientRect(), el = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+        return [th.textContent.trim(), Math.round(b.top - wr.top - (th.parentElement === rows[1] ? h1 : 0)), !!(el && th.contains(el))]; }); })()""")
+    check(all(abs(x[1]) <= 2 for x in r), f"제목 줄 위치: {r}")
+    check(all(x[2] for x in r), f"제목이 가려짐: {[x[0] for x in r if not x[2]]}")
+
 TESTS = [t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
          t_typing_then_clicking_next_input_keeps_both, t_round_delete, t_pending_branches_shown_grey, t_ui_version_reload_once,
-         t_route_kind_and_eta, t_equip_can_edit_eta, t_bulk_confirm_and_no_holdings, t_filters_fit_any_width, t_date_in_title]
+         t_route_kind_and_eta, t_equip_can_edit_eta, t_bulk_confirm_and_no_holdings, t_filters_fit_any_width, t_date_in_title, t_branch_header_stays_on_top]
 
 # ---------------------------------------------------------------- 서버 모드(가짜 Supabase, tests/_sb_mock.py) — 실제 로그인 권한·저장 함수 호출
 sys.path.insert(0, str(Path(__file__).resolve().parent))
