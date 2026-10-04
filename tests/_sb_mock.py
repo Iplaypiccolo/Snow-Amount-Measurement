@@ -60,8 +60,12 @@ class Mock:
         self.routes = [{"date": self.today, "vehicle_id": "V002", "stops": ["B019"]}]
         self.rounds = [{"id": 1, "name": self.today + " 기준", "start_date": self.today}]
         self.round_reqs = [{"round_id": 1, "branch_id": "B019", "snow_cm": 5, "warning": False, "req_truck": 2, "req_blower": 0, "assigned_truck": 1, "assigned_blower": 0,
-                            "arrive_at": self.today + "T13:00:00+00:00", "reason": None, "confirmed": True}]
+                            "arrive_at": self.today + "T13:00:00+00:00", "reason": None, "confirmed": True,
+                            "warn_level": "경보", "warn_zones": [["L1041100", "충주", "경보"]], "warn_base": "202612150600", "warn_at": "2026-12-14T21:10:00Z", "warn_note": None}]
         self.eq_calls = []
+        # 대설 특보(마이그레이션 23): warning_status 결과. 확정한 B019 는 확정할 때 경보로 고정돼 있고 지금은 주의보
+        self.warn_status = {"ok": True, "base": "202612150700", "fetched_at": "2026-12-14T22:00:00Z", "note": None,
+                            "branches": {"B019": {"level": "주의", "zones": [["L1041100", "충주", "주의"]]}, "B011": {"level": "예비", "zones": [["L1021300", "횡성", "예비"]]}}}
         self.branches = [{"id": b, "name": d.replace("지사", ""), "hq_id": h} for _, d, b, h in names]
         self.hqs = [{"id": "H01", "name": "수도권", "sort": 1}, {"id": "H02", "name": "서울경기", "sort": 2}, {"id": "H03", "name": "강원", "sort": 3}, {"id": "H04", "name": "충북", "sort": 4}, {"id": "H07", "name": "광주전남", "sort": 7}]
         self.users["stranger"] = {"id": "id-stranger", "username": "stranger", "password": "Stranger#Pass-123", "profile": None}
@@ -201,6 +205,8 @@ class Mock:
                 return route.fulfill(status=200, headers={**CORS, "content-type": "application/json"}, body=snow_snapshot_text())
             if tbl == "snow_uploads": return send(200, [{"at": "2026-10-04T01:00:00Z", "date_from": "2025-12-01", "date_to": "2025-12-02", "stations": 2, "rows_written": 2, "ok": True, "note": "txt by admin-01"}] if self.can(u, "snow.upload") else [])
             if tbl == "save_jurisdiction" and "/rpc/" in path: return self.save_rpc(u, body, send)
+            if tbl == "warning_status" and "/rpc/" in path:
+                self.eq_calls.append((tbl, body)); return send(200, self.warn_status) if self.usable(u) else send(401, {"message": "login"})
             if tbl in ("save_fleet", "save_requests") and "/rpc/" in path:
                 self.eq_calls.append((tbl, body))
                 if tbl == "save_fleet":

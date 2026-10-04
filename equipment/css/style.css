@@ -482,3 +482,21 @@ table.matrix { font-size: 15px; min-width: 900px; }
 .branch thead tr:first-child th { box-shadow: inset 0 -1px 0 var(--line); }
 .branch thead tr:last-child th { box-shadow: inset 0 -2px 0 var(--line); }
 .matrix thead th { z-index: 4; }
+
+/* ---------- 대설 특보 표시: 예비 노랑 / 주의보 주황 / 경보 빨강 (마우스를 올리면 구역 이름) ---------- */
+:root { --w1: #8A6A00; --w1-bg: #FFF4C2; --w2: #A34A00; --w2-bg: #FFE1C2; --w3: #FFFFFF; --w3-bg: #D62B2B; }
+:root[data-theme="dark"] { --w1: #FFE27A; --w1-bg: #3D3410; --w2: #FFB774; --w2-bg: #45290F; --w3: #FFFFFF; --w3-bg: #C02626; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --w1: #FFE27A; --w1-bg: #3D3410; --w2: #FFB774; --w2-bg: #45290F; --w3: #FFFFFF; --w3-bg: #C02626; } }
+.wb { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 700; white-space: nowrap; cursor: help; border: 1px solid transparent; }
+.wb.w0 { color: var(--ink-soft); font-weight: 500; border-color: var(--line); background: transparent; }
+.wb.w1 { color: var(--w1); background: var(--w1-bg); border-color: color-mix(in srgb, var(--w1) 35%, transparent); }
+.wb.w2 { color: var(--w2); background: var(--w2-bg); border-color: color-mix(in srgb, var(--w2) 35%, transparent); }
+.wb.w3 { color: var(--w3); background: var(--w3-bg); }
+.wb .wfix { font-style: normal; font-size: 10.5px; font-weight: 600; opacity: .75; }
+.wb:focus-visible { outline: 2px solid var(--plow); outline-offset: 2px; }
+.zlist { list-style: none; margin: 6px 0 12px; padding: 0; }
+.zlist li { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.zlist li > span:first-child { flex: 1; }
+.zadd { display: flex; gap: 6px; flex-wrap: wrap; }
+.zadd select { min-width: 200px; max-width: 100%; }
+#zlist { margin-top: 12px; }

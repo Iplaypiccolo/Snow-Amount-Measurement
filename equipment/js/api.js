@@ -6,6 +6,7 @@
    - 저장은 "바뀐 칸만" 보내고, 한 번의 [확정]/[저장]은 서버 함수 하나로 "전부 되거나 전부 안 되게" 처리합니다.
      · 기관별 장비 [확정] → save_fleet(장비 도공번호·지원 여부, (날짜, 장비)별 경로 — 경로는 관리자)
      · 지사별 요청·편성 [저장] → save_requests(기준일자, 지사별 바뀐 열)
+     · 대설 특보 → warning_status(서버가 5분마다 기상청에서 받은 것) / 특보구역 관리(관리자) → branch_zone_list + branch_zone_overrides
    - 모든 함수는 Promise 를 돌려줍니다. 실패하면 { ok:false, message } 입니다.
    ============================================================ */
 const Api = (() => {
@@ -14,7 +15,7 @@ const Api = (() => {
     "23514": "값의 형식이 올바르지 않습니다.", "23503": "없는 지사·장비·기준일자입니다.", "22023": "저장할 내용이 없습니다.", "54000": "한 번에 너무 많이 저장하려고 합니다." };
   const fail = (r, fallback) => ({ ok: false, message: (r && r.json && ERR[r.json.code]) || fallback || "저장하지 못했습니다. 잠시 후 다시 시도해 주세요.", code: r && r.json && r.json.code });
   const NET = () => ({ ok: false, message: (window.SSAuth && SSAuth.NET_MSG) || "서버에 연결할 수 없습니다." });
-  const EQUIP_TABS = "vehicles,vehicle_routes,round_requests,support_rounds";
+  const EQUIP_TABS = "vehicles,vehicle_routes,round_requests,support_rounds,branch_zone_overrides";
 
   /* ---------- 서버(Supabase) ---------- */
   const server = {
@@ -35,8 +36,22 @@ const Api = (() => {
       return SSAuth.rest(`vehicle_routes?select=date,vehicle_id,stops,revised,times&vehicle_id=eq.${encodeURIComponent(vid)}&order=date.desc&limit=400`).then(r => r.ok ? { ok: true, rows: r.json } : fail(r)).catch(NET);
     },
     requests(round) {
-      return SSAuth.rest(`round_requests?select=round_id,branch_id,snow_cm,warning,req_truck,req_blower,assigned_truck,assigned_blower,arrive_at,reason,confirmed&round_id=eq.${+round}`)
+      return SSAuth.rest(`round_requests?select=round_id,branch_id,snow_cm,warning,req_truck,req_blower,assigned_truck,assigned_blower,arrive_at,reason,confirmed,warn_level,warn_zones,warn_base,warn_at,warn_note&round_id=eq.${+round}`)
         .then(r => r.ok ? { ok: true, rows: r.json } : fail(r, "요청을 불러오지 못했습니다.")).catch(NET);
+    },
+    warnings() {
+      return SSAuth.authed("/rest/v1/rpc/warning_status", { method: "POST", body: {} }).then(r => r.ok ? { ok: true, status: r.json } : fail(r, "특보를 불러오지 못했습니다.")).catch(NET);
+    },
+    zoneData() {
+      return Promise.all([SSAuth.authed("/rest/v1/rpc/branch_zone_list", { method: "POST", body: {} }), SSAuth.rest("branch_zone_overrides?select=branch_id,zone_code,include"),
+        SSAuth.rest("warning_zones?select=zone_code,name,sp,up_code&zone_code=like.L*&order=zone_code")])
+        .then(([a, o, z]) => a.ok && o.ok && z.ok ? { ok: true, list: a.json || {}, overrides: o.json, zones: z.json } : fail(!a.ok ? a : !o.ok ? o : z, "특보구역을 불러오지 못했습니다.")).catch(NET);
+    },
+    setZone(branch, zone, include) {       // include null = 손댄 것을 지움(자동대로)
+      const q = `branch_zone_overrides?branch_id=eq.${encodeURIComponent(branch)}&zone_code=eq.${encodeURIComponent(zone)}`;
+      const p = include === null ? SSAuth.authed("/rest/v1/" + q, { method: "DELETE", headers: { Prefer: "return=representation" } })
+        : SSAuth.authed("/rest/v1/branch_zone_overrides?on_conflict=branch_id,zone_code", { method: "POST", body: { branch_id: branch, zone_code: zone, include }, headers: { Prefer: "resolution=merge-duplicates,return=representation" } });
+      return p.then(r => r.ok ? { ok: true } : fail(r, "특보구역을 바꾸지 못했습니다(관리자만).")).catch(NET);
     },
     audit() {         // 장비 지원 관련 수정 기록(최근 300건). log.view 권한이 없으면 서버가 0건을 돌려줌
       return SSAuth.rest(`audit_log?select=id,at,username,kind,tab,target,from_val,to_val,ip&tab=in.(${EQUIP_TABS})&order=id.desc&limit=300`)
@@ -74,6 +89,18 @@ const Api = (() => {
     const vehOk = vid => { const v = db.vehicles.find(x => x.id === vid); return v && (can("equip.edit.all") || (can("equip.edit.own") && v.org === actor.org)); };
     const log = (kind, tab, target, from_val, to_val) => db.audit.push({ at: new Date().toISOString(), username: actor.username || actor.label, ip: "-", kind, tab, target, from_val, to_val });
     const done = x => Promise.resolve(x);
+    // 샘플 대설 특보: 서버 warning_status 와 같은 모양(지사 구역 중 가장 높은 단계)
+    const RANK = { "예비": 1, "주의": 2, "경보": 3 };
+    const zname = c => (db.zones.find(z => z.zone_code === c) || {}).name || c;
+    function zonesOf(b) { return [...(db.zoneAuto[b] || []).filter(z => !db.zoneOver.some(o => o.branch_id === b && o.zone_code === z)), ...db.zoneOver.filter(o => o.branch_id === b && o.include).map(o => o.zone_code)]; }
+    function warnStatus() {
+      const branches = {};
+      db.branches.forEach(b => {
+        const zs = zonesOf(b.id).filter(z => db.warnActive[z]).map(z => [z, zname(z), db.warnActive[z]]).sort((x, y) => RANK[y[2]] - RANK[x[2]] || x[1].localeCompare(y[1]));
+        if (zs.length) branches[b.id] = { level: zs[0][2], zones: zs };
+      });
+      return { ok: true, base: db.warnBase, fetched_at: new Date().toISOString(), branches, note: null };
+    }
     return {
       setActor(a) { actor = a; },
       load(today) {
@@ -84,6 +111,22 @@ const Api = (() => {
       vehicleHistory(vid) { return done({ ok: true, rows: clone(db.routes.filter(r => r.vehicle_id === vid).sort((a, b) => b.date.localeCompare(a.date))) }); },
       requests(round) { return done({ ok: true, rows: clone(db.requests.filter(r => r.round_id === +round)) }); },
       audit() { return done({ ok: true, rows: can("log.view") ? clone(db.audit) : [] }); },
+      warnings() { return done({ ok: true, status: clone(warnStatus()) }); },
+      zoneData() {
+        if (!actor) return done({ ok: false, message: ERR["42501"] });
+        const list = {};
+        Object.entries(db.zoneAuto).forEach(([b, zs]) => { list[b] = zs.filter(z => !db.zoneOver.some(o => o.branch_id === b && o.zone_code === z)).map(z => [z, zname(z), "auto"]); });
+        db.zoneOver.filter(o => o.include).forEach(o => (list[o.branch_id] = list[o.branch_id] || []).push([o.zone_code, zname(o.zone_code), "manual"]));
+        return done({ ok: true, list, overrides: clone(db.zoneOver), zones: clone(db.zones) });
+      },
+      setZone(branch, zone, include) {
+        if (!actor || actor.role !== "admin") return done({ ok: false, message: ERR["42501"] });
+        const i = db.zoneOver.findIndex(o => o.branch_id === branch && o.zone_code === zone), t = `branch_zone_overrides:${branch},${zone}`;
+        if (include === null) { if (i >= 0) { log("삭제", "branch_zone_overrides", t, db.zoneOver[i], null); db.zoneOver.splice(i, 1); } }
+        else if (i >= 0) db.zoneOver[i].include = include;
+        else { db.zoneOver.push({ branch_id: branch, zone_code: zone, include }); log("추가", "branch_zone_overrides", t, null, { include }); }
+        return done({ ok: true });
+      },
       saveFleet(vehicles, routes) {
         // 경로는 관리자(equip.edit.all)만. 지원장비는 자기 기관 장비의 정해진 경로(지사 그대로)에서 도착 예상 시각만
         const timeOnlyOk = r => vehOk(r.vehicle_id) && db.routes.some(x => x.date === r.date && x.vehicle_id === r.vehicle_id && JSON.stringify(x.stops) === JSON.stringify(r.stops));
@@ -111,7 +154,10 @@ const Api = (() => {
         rows.forEach(p => {
           let cur = db.requests.find(x => x.round_id === +round && x.branch_id === p.branch_id), from = {}, to = {};
           if (!cur) { cur = { round_id: +round, branch_id: p.branch_id, snow_cm: null, warning: false, req_truck: 0, req_blower: 0, assigned_truck: 0, assigned_blower: 0, arrive_at: null, reason: null, confirmed: false }; db.requests.push(cur); }
+          const was = cur.confirmed;
           Object.keys(p).filter(k => k !== "branch_id").forEach(k => { from[k] = cur[k]; to[k] = p[k]; cur[k] = p[k]; });
+          if (cur.confirmed && !was) { const w = warnStatus().branches[cur.branch_id]; Object.assign(cur, { warn_level: w ? w.level : null, warn_zones: w ? w.zones : [], warn_base: db.warnBase, warn_at: new Date().toISOString(), warn_note: null }); to.warn_level = cur.warn_level; }   // 서버 트리거 흉내: 확정 순간 특보 고정
+          if (!cur.confirmed) Object.assign(cur, { warn_level: null, warn_zones: null, warn_base: null, warn_at: null, warn_note: null });
           log("수정", "round_requests", `round_requests:${round},${p.branch_id}`, from, to);
         });
         return done({ ok: true });

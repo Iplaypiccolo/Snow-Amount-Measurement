@@ -401,12 +401,53 @@ def t_branch_header_stays_on_top(p):
     check(all(abs(x[1]) <= 2 for x in r), f"제목 줄 위치: {r}")
     check(all(x[2] for x in r), f"제목이 가려짐: {[x[0] for x in r if not x[2]]}")
 
+def badge(p, name): return p.locator(f"td[data-wcell='{bid(p, name)}'] .wb")
+def t_warning_auto_badge(p):
+    """대설 특보 칸은 자동 표시(체크칸 없음): 확정 전 = 지금 특보, 확정한 지사 = 확정할 때 고정한 값. 색은 단계별, 마우스를 올리면 구역 이름"""
+    tab(p, "branch")
+    check(p.locator("[data-f=warning]").count() == 0 and "대설 특보" in p.locator("#branchTable thead").inner_text(), "체크칸 대신 자동 표시")
+    check(badge(p, "춘천").inner_text() == "예비특보" and "w1" in badge(p, "춘천").get_attribute("class"), "확정 전 춘천 = 지금 예비특보(노랑)")
+    check(badge(p, "대관령").inner_text().replace("\n", "") == "대설주의보고정" and "w2" in badge(p, "대관령").get_attribute("class"), "대관령 = 확정 때 주의보로 고정(지금은 경보)")
+    check(badge(p, "양양").inner_text().replace("\n", "") == "특보 없음고정", badge(p, "양양").inner_text())
+    badge(p, "춘천").hover(); p.wait_for_timeout(100); tp = p.locator("#tip").inner_text()
+    check("춘천 지사" in tp and "홍천평지 — 예비특보" in tp and "5분마다" in tp and "기준" in tp, tp)
+    badge(p, "엄정").hover(); p.wait_for_timeout(100); tp = p.locator("#tip").inner_text()
+    check("30분 넘게" in tp and "고정" in tp, "자료가 없어 특보 없음으로 고정한 이유: " + tp)
+    tab(p, "move"); card = p.locator(".dest", has_text="대관령")
+    check(card.locator(".tag.wb").inner_text() == "대설주의보", "이동 현황 카드도 고정값")
+    tab(p, "branch"); p.click(f"[data-confirm='{bid(p, '춘천')}']"); p.wait_for_timeout(300)
+    check("예비특보 고정" in toast(p) and badge(p, "춘천").inner_text().replace("\n", "") == "예비특보고정", toast(p))
+    p.click(f"[data-unconfirm='{bid(p, '대관령')}']"); p.wait_for_timeout(300)
+    check(badge(p, "대관령").inner_text() == "대설경보" and "w3" in badge(p, "대관령").get_attribute("class"), "확정을 풀면 다시 지금 값(경보, 빨강)")
+    badge(p, "대관령").hover(); p.wait_for_timeout(100); tp = p.locator("#tip").inner_text()
+    check(tp.index("평창산지 — 대설경보") < tp.index("강릉산지 — 대설주의보"), "높은 단계부터: " + tp)
+    bg = [ev(p, f"getComputedStyle(document.querySelector(\"td[data-wcell='{bid(p, n)}'] .wb\")).backgroundColor") for n in ("춘천", "양양", "대관령")]
+    check(len(set(bg)) == 3, f"단계마다 다른 색: {bg}")
+    as_user(p, "br2"); tab(p, "branch")
+    check(p.locator("#zoneMgr").count() == 0 and badge(p, "양양").count() == 1, "지사도 보지만 특보구역 관리는 관리자만")
+
+def t_zone_manager(p):
+    """관리자: 특보구역 관리 창에서 지사 구역을 빼고 더하면 그 지사 대설 특보가 바로 바뀜(기록 남음)"""
+    tab(p, "branch"); p.click("#zoneMgr"); p.wait_for_selector("#zlist h3")
+    p.select_option("#zbr", bid(p, "춘천")); p.wait_for_timeout(100)
+    check([x.strip() for x in p.locator("#zlist ul").first.locator("li > span:first-child").all_inner_texts()] == ["강원도 · 춘천", "강원도 · 홍천평지", "강원도 · 홍천산지"], p.locator("#zlist").inner_text())
+    p.click("[data-zset=L1022710]"); p.wait_for_timeout(200)
+    check(badge(p, "춘천").inner_text() == "특보 없음" and "되살리기" in p.locator("#zlist").inner_text(), "홍천평지를 빼면 특보 없음")
+    p.select_option("#zadd", "L1022520"); p.click("#zaddBtn"); p.wait_for_timeout(200)
+    check(badge(p, "춘천").inner_text() == "대설주의보" and "더함" in p.locator("#zlist").inner_text(), "강릉산지(주의보)를 더하면 주의보")
+    p.click("#zlist [data-zset=L1022710]"); p.wait_for_timeout(200)
+    check(badge(p, "춘천").inner_text() == "대설주의보" and "뺀 구역" not in p.locator("#zlist").inner_text(), "되살려도 더 높은 주의보")
+    p.click("#sheetClose"); tab(p, "log")
+    check("특보구역" in p.locator("#panel-log").inner_text(), "수정 기록에 특보구역")
+    as_user(p, "hq-gw"); tab(p, "branch"); check(p.locator("#zoneMgr").count() == 0, "본부는 관리 버튼 없음")
+
 TESTS = [t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
          t_typing_then_clicking_next_input_keeps_both, t_round_delete, t_pending_branches_shown_grey, t_ui_version_reload_once,
-         t_route_kind_and_eta, t_equip_can_edit_eta, t_bulk_confirm_and_no_holdings, t_filters_fit_any_width, t_date_in_title, t_branch_header_stays_on_top]
+         t_route_kind_and_eta, t_equip_can_edit_eta, t_bulk_confirm_and_no_holdings, t_filters_fit_any_width, t_date_in_title, t_branch_header_stays_on_top,
+         t_warning_auto_badge, t_zone_manager]
 
 # ---------------------------------------------------------------- 서버 모드(가짜 Supabase, tests/_sb_mock.py) — 실제 로그인 권한·저장 함수 호출
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -449,7 +490,16 @@ def t_server_branch_save(b):
     check(row["arrive_at"].endswith("Z") and ev(p, f"localInput('{row['arrive_at']}')").endswith(":40"), row)
     check("저장했습니다" in toast(p), toast(p)); p.close()
 
-SERVER_TESTS = [t_server_equip_confirm, t_server_branch_save]
+def t_server_warning(b):
+    """서버 모드: warning_status 를 불러 특보 표시, 확정한 지사는 서버가 고정한 값(warn_*)을 보여 줌"""
+    m = Mock(); m.users["exchungju"]["profile"]["must_change"] = False
+    p = server_page(b, m, "exchungju"); tab(p, "branch")
+    check(any(c[0] == "warning_status" for c in m.eq_calls), "특보 요약을 서버에서 읽음")
+    w = p.locator("td[data-wcell='B019'] .wb"); check(w.inner_text().replace("\n", "") == "대설경보고정", w.inner_text())
+    w.hover(); p.wait_for_timeout(100); tp = p.locator("#tip").inner_text(); check("충주 — 대설경보" in tp and "확정할 때 고정" in tp, tp)
+    p.close()
+
+SERVER_TESTS = [t_server_equip_confirm, t_server_branch_save, t_server_warning]
 
 if __name__ == "__main__":
     only = sys.argv[1:]
