@@ -38,7 +38,7 @@ python tools/run_all_tests.py            # 전체 시험 (약 5분, 병렬). --f
 | `docs/` | **`decisions.md`(결정 이력)**, `supabase-design.md`(서버 전체), `jurisdiction-rules.md`, `grid-assign-rules.md`, `admin-console.md`, `login-gate.md` |
 
 ## 작업 규칙 (사용자와 합의한 것)
-1. **반영 전에 `tools/run_all_tests.py` 를 통과**시킨다. 변경은 작게 나눠 커밋하고, 커밋 메시지는 한국어로 "무엇을, 왜"를 쓴다.
+1. **js·css 를 고쳤으면 `python tools/stamp_assets.py` 로 꼬리표(`?v=`)를 갱신**한다(안 하면 사용자 브라우저가 최대 10분 예전 파일을 씀 — `tests/test_asset_stamps.py` 가 막음). **반영 전에 `tools/run_all_tests.py` 를 통과**시킨다. 변경은 작게 나눠 커밋하고, 커밋 메시지는 한국어로 "무엇을, 왜"를 쓴다.
 2. 반영은 **`main` 에 직접**(브랜치·PR 없음). 데스크톱 앱이 작업 사본(worktree)에서 일했더라도 끝낼 때: `git fetch` → `git rebase origin/main` → 시험 통과 → `git push origin HEAD:main`.
    채팅 쪽 Claude 도 같은 `main` 에 푸시하므로 **일 시작 전에 항상 `git pull`**, 푸시 전에 `git fetch` 로 새 커밋이 있는지 확인.
 3. **되돌리기 어려운 일은 실행 전에 사용자에게 먼저 알리고 확인**받는다: 데이터 삭제(`delete`/`truncate`/`drop`), 권한 규칙(RLS) 변경, 계정 대량 변경·비밀번호 변경, 변경 이력 수정, DB 구조 변경. **실행할 SQL 을 먼저 보여 준다.**
