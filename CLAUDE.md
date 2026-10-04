@@ -31,7 +31,7 @@ python tools/run_all_tests.py            # 전체 시험 (약 5분, 병렬). --f
 | `admin/` | 관리 콘솔: 계정 관리, **산하기관 아이디 관리**(비밀번호 일괄 설정·권한·순서·새 아이디/추천 13개), **적설 자료(메모장 txt → 서버)**, 접속 로그. 탭은 권한대로 |
 | `equipment/` | 장비 지원 화면(iframe). **서버 저장**(장비·날짜별 경로·기준일자·지사 요청). `?sample=1` = 샘플 시연. 규칙 `docs/equipment-rules.md`. **index.html 의 칸(id) 구성을 바꾸면 `<meta name="ui-version">` 과 `app.js` 의 `UI_VERSION` 을 함께 올릴 것**(배포 직후 예전 틀이 남은 브라우저가 한 번 새로 받음) |
 | `data/*.json` | 기본(baseline) 자료. 구간 1,011 · 관측소 260 · 격자 1,070쌍. `*_changes.json` 은 서버 장애 때의 비상용(비어 있음). **적설 파일(`snow_data.json`)은 서버로 옮긴 뒤 지움** — 적설은 서버 `snow_daily`→`snapshots`, 시험은 `tests/fixtures/snow_sample.json` |
-| `supabase/migrations/` | DB 변경 SQL(01~23; 15 세부 권한, 16~22 장비 서버, 23 대설 특보). `functions/` Edge Function 4개(`account-admin`, `import-reference`, `import-snow`, `collect-warnings`). `tests/*.sql` 권한 시험(`rls_test.sql`·`equipment_save_test.sql`·`warnings_test.sql` 등) |
+| `supabase/migrations/` | DB 변경 SQL(01~24; 15 세부 권한, 16~22 장비 서버, 23·24 특보). `functions/` Edge Function 4개(`account-admin`, `import-reference`, `import-snow`, `collect-warnings`). `tests/*.sql` 권한 시험(`rls_test.sql`·`equipment_save_test.sql`·`warnings_test.sql` 등) |
 | `tests/` | 자동 시험. `_sb_mock.py` 는 **가짜 Supabase 서버**(실제 서버에 접속하지 않고 화면을 시험) |
 | `tools/` | 자료 만들기·검증 도구. GIS 원본(`highway_links.gpkg` 등)은 저장소에 없음. `check_gaps_against_source.py` = 끊긴 구간을 원본과 대조 |
 | `.github/workflows/` | `supabase-keepalive.yml` 월·목 서버 깨우기(비밀값 없음, `keepalive()` 함수) — `docs/server-keepalive.md`. 이 폴더를 올리려면 토큰에 workflow 권한 필요 |
@@ -58,7 +58,7 @@ python tools/run_all_tests.py            # 전체 시험 (약 5분, 병렬). --f
 - 관할·격자 **변경은 이력(이벤트)으로 쌓고**, 화면이 기본 자료 위에 다시 적용해 계산한다(`JurisCore.reapply`). 기본 자료 읽기는 아직 파일(DB 사본과 동일)이며 DB 읽기로 옮기는 것이 다음 단계.
 - 지사의 구간 변경 요청: 표 `jurisdiction_requests`(지사 요청 → 관리자 알림 → 이동 준비 → 저장 시 승인). 요청과 연결된 저장은 DB 함수 `save_jurisdiction` 이 **저장+승인을 한 번에**(하나라도 안 되면 전부 취소).
 - 관할 이력 값은 DB 트리거가 검사(신설 기관 번호 `B000` 형식, 이름 1~20자·`< > " ' & \``금지, 실제 본부 이름).
-- 대설 특보: pg_cron 이 5분마다 Edge Function `collect-warnings` 호출(기상청 API허브 `wrn_now_data_new`, 키는 함수 비밀값 `KMA_AUTH_KEY` 에만) → `warnings_active`/`warnings_history`. 지사 ↔ 특보구역 = `section_zones`(고속도로 구간 × 시·군·구 경계, `tools/build_section_zones.py` → `data/section_zones.json`) + 관리자 손질 `branch_zone_overrides`. 화면은 `warning_status()`, 확정하면 트리거가 `round_requests.warn_*` 에 고정.
+- 특보: pg_cron 이 10분마다(매시 01·11…분) **받을 필요가 있을 때만**(`private.warn_needed()` = 기준일자 당일~+2일에 확정을 기다리는 지사가 있음) Edge Function `collect-warnings` 호출(기상청 API허브 `wrn_now_data_new`, 키는 함수 비밀값 `KMA_AUTH_KEY` 에만). 종류 스위치 `settings('warnings')` = `{"kinds":"all"}`(확인용, 지금) / `{"kinds":["대설"]}` → `warnings_active`/`warnings_history`. 지사 ↔ 특보구역 = `section_zones`(고속도로 구간 × 시·군·구 경계, `tools/build_section_zones.py` → `data/section_zones.json`) + 관리자 손질 `branch_zone_overrides`. 화면은 `warning_status()`, 확정하면 트리거가 `round_requests.warn_*` 에 고정.
 - 적설: 원자료 `snow_daily`(관측소 680곳, 결측 -99.9 제외) → 요약본 `snapshots('snow')` → 화면이 지사별 최댓값 계산. 넣기는 관리 콘솔 '적설 자료' 탭(Edge Function `import-snow`, plan→load).
 - 일회용 시작 토큰(`settings` 의 `bootstrap_token`, 15분)으로 Edge Function 을 부르는 방식이 있다. 쓸 때는 `pg_net` 을 `extensions` 스키마에 잠시 만들고 **끝나면 반드시 지운다**.
 

@@ -44,8 +44,8 @@ const Api = (() => {
     },
     zoneData() {
       return Promise.all([SSAuth.authed("/rest/v1/rpc/branch_zone_list", { method: "POST", body: {} }), SSAuth.rest("branch_zone_overrides?select=branch_id,zone_code,include"),
-        SSAuth.rest("warning_zones?select=zone_code,name,sp,up_code&zone_code=like.L*&order=zone_code")])
-        .then(([a, o, z]) => a.ok && o.ok && z.ok ? { ok: true, list: a.json || {}, overrides: o.json, zones: z.json } : fail(!a.ok ? a : !o.ok ? o : z, "특보구역을 불러오지 못했습니다.")).catch(NET);
+        SSAuth.rest("warning_zones?select=zone_code,name,sp,up_code&zone_code=like.L*&order=zone_code"), SSAuth.authed("/rest/v1/rpc/warning_active_list", { method: "POST", body: {} })])
+        .then(([a, o, z, w]) => a.ok && o.ok && z.ok ? { ok: true, list: a.json || {}, overrides: o.json, zones: z.json, active: w.ok ? w.json : null } : fail(!a.ok ? a : !o.ok ? o : z, "특보구역을 불러오지 못했습니다.")).catch(NET);
     },
     setZone(branch, zone, include) {       // include null = 손댄 것을 지움(자동대로)
       const q = `branch_zone_overrides?branch_id=eq.${encodeURIComponent(branch)}&zone_code=eq.${encodeURIComponent(zone)}`;
@@ -96,10 +96,11 @@ const Api = (() => {
     function warnStatus() {
       const branches = {};
       db.branches.forEach(b => {
-        const zs = zonesOf(b.id).filter(z => db.warnActive[z]).map(z => [z, zname(z), db.warnActive[z]]).sort((x, y) => RANK[y[2]] - RANK[x[2]] || x[1].localeCompare(y[1]));
-        if (zs.length) branches[b.id] = { level: zs[0][2], zones: zs };
+        const zs = zonesOf(b.id).filter(z => db.warnActive[z]).map(z => { const [lv, k] = db.warnActive[z].split(":"); return [z, zname(z), lv, k || "대설"]; })
+          .sort((x, y) => RANK[y[2]] - RANK[x[2]] || (x[3] !== "대설") - (y[3] !== "대설") || x[1].localeCompare(y[1]));
+        if (zs.length) branches[b.id] = { level: zs[0][2], kind: zs[0][3], zones: zs };
       });
-      return { ok: true, base: db.warnBase, fetched_at: new Date().toISOString(), branches, note: null };
+      return { ok: true, paused: false, all: true, base: db.warnBase, fetched_at: new Date().toISOString(), branches, note: null };
     }
     return {
       setActor(a) { actor = a; },
@@ -117,7 +118,9 @@ const Api = (() => {
         const list = {};
         Object.entries(db.zoneAuto).forEach(([b, zs]) => { list[b] = zs.filter(z => !db.zoneOver.some(o => o.branch_id === b && o.zone_code === z)).map(z => [z, zname(z), "auto"]); });
         db.zoneOver.filter(o => o.include).forEach(o => (list[o.branch_id] = list[o.branch_id] || []).push([o.zone_code, zname(o.zone_code), "manual"]));
-        return done({ ok: true, list, overrides: clone(db.zoneOver), zones: clone(db.zones) });
+        const rows = Object.entries(db.warnActive).map(([zone, v]) => { const [level, kind] = v.split(":"); return { zone, name: zname(zone), kind: kind || "대설", level, branches: db.branches.filter(b => zonesOf(b.id).includes(zone)).map(b => b.id) }; })
+          .sort((x, y) => RANK[y.level] - RANK[x.level] || x.kind.localeCompare(y.kind));
+        return done({ ok: true, list, overrides: clone(db.zoneOver), zones: clone(db.zones), active: { state: { fetched_at: new Date().toISOString(), ok: true }, needed: true, all: true, rows } });
       },
       setZone(branch, zone, include) {
         if (!actor || actor.role !== "admin") return done({ ok: false, message: ERR["42501"] });

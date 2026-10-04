@@ -7,7 +7,8 @@
        req.edit.own    자기 지사 요청 / req.edit.hq  자기 본부 지사들 요청 / req.confirm  편성·확정·기준일자 만들기 / log.view  수정 기록
      ⚠ 화면의 권한 검사는 보기 좋게 정리하는 용도이고, 실제로 막는 것은 서버 규칙(RLS·트리거)입니다.
    - 경로는 (날짜, 장비)마다 한 줄로 서버에 남습니다. 다른 날짜를 확정해도 지난 날짜 경로는 지워지지 않습니다.
-   - 대설 특보: 서버가 5분마다 기상청에서 받아 둔 것(warning_status)을 자동 표시. 확정한 지사는 확정 순간 값으로 서버가 고정(warn_* 열)
+   - 특보: 서버가 10분마다(확정을 기다리는 기준일자가 있을 때만) 기상청에서 받아 둔 것(warning_status)을 자동 표시. 확정한 지사는 확정 순간 값으로 서버가 고정(warn_* 열)
+     서버 스위치(settings 'warnings')가 "all" 이면 모든 종류(확인용), 아니면 대설만 — 화면은 받은 그대로 종류 이름을 붙여 보여 줌
    - 사람이 읽는 규칙 설명: docs/equipment-rules.md
    ============================================================ */
 // 배포 직후 브라우저에 예전 index.html(최대 10분 저장)이 남아 있으면 새 app.js 와 화면 틀이 맞지 않아 탭이 비어 보임
@@ -86,20 +87,23 @@ const REQ_DEF = { snow_cm: null, warning: false, req_truck: 0, req_blower: 0, as
 const rbase = (b, f) => { const r = S.reqs[b]; return r ? r[f] : REQ_DEF[f]; };
 const rval = (b, f) => { const d = S.rdraft.get(b); return d && f in d ? d[f] : rbase(b, f); };
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
-/* ---------- 대설 특보 — 지사 관할 특보구역 중 가장 높은 단계. 확정한 지사는 확정 순간 값(서버가 고정), 자료가 없으면 특보 없음 ---------- */
+/* ---------- 특보 — 지사 관할 특보구역 중 가장 높은 단계. 확정한 지사는 확정 순간 값(서버가 고정), 자료가 없으면 특보 없음 ---------- */
 const WLV = { "예비": ["w1", "예비특보"], "주의": ["w2", "대설주의보"], "경보": ["w3", "대설경보"] };
-function warnOf(bid) {     // { level, zones:[[코드, 이름, 단계]…], base, note, fixed, at }
+// 단계 + 종류 → 이름(대설은 예전 그대로: 예비특보·대설주의보·대설경보 / 다른 종류: 강풍 예비특보·강풍주의보·강풍경보)
+const wlabel = (level, kind) => !level ? "특보 없음" : (!kind || kind === "대설") ? (WLV[level] || [0, level])[1] : kind + (level === "예비" ? " 예비특보" : level === "주의" ? "주의보" : "경보");
+function warnOf(bid) {     // { level, kind, zones:[[코드, 이름, 단계, 종류]…], base, note, fixed, at }
   const r = S.reqs[bid];
-  if (r && r.confirmed) return r.warn_at ? { level: r.warn_level || null, zones: r.warn_zones || [], base: r.warn_base, note: r.warn_note, fixed: true, at: r.warn_at } : { none: true };
+  if (r && r.confirmed) { const z = r.warn_zones || []; return r.warn_at ? { level: r.warn_level || null, kind: z.length ? z[0][3] : null, zones: z, base: r.warn_base, note: r.warn_note, fixed: true, at: r.warn_at } : { none: true }; }
   const w = S.warn || {}, x = (w.branches || {})[bid];
-  return { level: x ? x.level : null, zones: x ? x.zones : [], base: w.base, note: w.ok ? null : (w.note || "기상청 자료를 받지 못함"), fixed: false };
+  return { level: x ? x.level : null, kind: x ? x.kind : null, zones: x ? x.zones : [], base: w.base, note: w.ok ? null : (w.note || "기상청 자료를 받지 못함"), fixed: false };
 }
 function warnBadge(bid) {
   const w = warnOf(bid);
   if (w.none) return `<span class="muted" title="특보 연동 전에 확정한 지사">-</span>`;
-  const [cls, label] = WLV[w.level] || ["w0", "특보 없음"];
-  return `<span class="wb ${cls}" data-wb="${esc(bid)}" tabindex="0">${label}${w.fixed ? '<i class="wfix">고정</i>' : ""}</span>`;
+  const cls = (WLV[w.level] || ["w0"])[0], more = w.zones.length > 1 && new Set(w.zones.map(z => z[3] || "대설")).size > 1 ? ` <i class="wfix">외</i>` : "";
+  return `<span class="wb ${cls}" data-wb="${esc(bid)}" tabindex="0">${esc(wlabel(w.level, w.kind))}${more}${w.fixed ? '<i class="wfix">고정</i>' : ""}</span>`;
 }
+const warnHead = () => (S.warn && S.warn.all) ? "특보" : "대설 특보";
 const fmtBase = b => b && /^\d{12}$/.test(b) ? `${+b.slice(4, 6)}/${+b.slice(6, 8)} ${b.slice(8, 10)}:${b.slice(10, 12)}` : "-";
 async function loadWarn() { const r = await Api.warnings(); if (r.ok) S.warn = r.status; }
 function paintWarn() { document.querySelectorAll("[data-wcell]").forEach(td => { td.innerHTML = warnBadge(td.dataset.wcell); }); }
@@ -191,7 +195,7 @@ const FIELD = { plate: "도공번호", status: "지원 여부", stops: "경로",
   assigned_truck: "편성 제설차", assigned_blower: "편성 제설기", arrive_at: "도착 요청", reason: "사유", confirmed: "확정", start_date: "기준일자", type: "장비", org: "기관", warn_level: "고정 특보", include: "특보구역" };
 const HIDE = new Set(["zone_code", "warn_zones", "warn_base", "warn_at", "warn_note", "updated_by", "updated_at", "confirmed_by", "confirmed_at", "created_by", "created_at", "round_id", "branch_id", "vehicle_id", "date", "id", "sort", "active", "name", "end_date"]);
 function fmtField(f, v) {
-  if (f === "warn_level") return v ? (WLV[v] || [0, v])[1] : "특보 없음";
+  if (f === "warn_level") return v ? (WLV[v] || [0, v])[1].replace("대설", "") || v : "특보 없음";
   if (f === "include") return v == null ? "자동대로" : v ? "더함" : "뺌";
   if (v == null || v === "") return f === "stops" ? "(없음)" : "(빈칸)";
   if (f === "stops") return v.length ? v.map(bn).join(" → ") : "(없음)";
@@ -225,10 +229,10 @@ function placeTip(el) {
 // 대설 특보 표시에 마우스를 올리면: 특보가 난 구역 이름과 단계, 기상청 기준시각(확정 지사는 고정 시각)
 function showWarnTip(el) {
   const w = warnOf(el.dataset.wb), b = S.brById[el.dataset.wb]; if (w.none) return;
-  const lv = WLV[w.level], zl = z => (WLV[z[2]] || [0, z[2]])[1];
-  tip.innerHTML = `<b>${esc(b ? b.name : "")} 지사 · ${lv ? lv[1] : "대설 특보 없음"}</b>` +
-    (w.zones.length ? `<div>${w.zones.map(z => `${esc(z[1])} — ${esc(zl(z))}`).join("<br>")}</div>` : `<div>${esc(w.note || "관할 특보구역에 대설 특보가 없습니다")}</div>`) +
-    `<div>기상청 기준 ${esc(fmtBase(w.base))}${w.fixed ? ` · 확정할 때 고정(${esc(fmtShort(w.at))})` : " · 5분마다 새로 받음"}</div>`;
+  const zl = z => wlabel(z[2], z[3]);
+  tip.innerHTML = `<b>${esc(b ? b.name : "")} 지사 · ${esc(wlabel(w.level, w.kind))}</b>` +
+    (w.zones.length ? `<div>${w.zones.map(z => `${esc(z[1])} — ${esc(zl(z))}`).join("<br>")}</div>` : `<div>${esc(w.note || "관할 특보구역에 특보가 없습니다")}</div>`) +
+    `<div>${w.fixed ? `확정할 때 고정(${esc(fmtShort(w.at))})` : S.warn && S.warn.fetched_at ? `기상청에서 받은 시각 ${esc(fmtShort(S.warn.fetched_at))} · 10분마다` : "기상청 자료 없음"}</div>`;
   placeTip(el);
 }
 const hideTip = () => { tip.hidden = true; };
@@ -314,7 +318,7 @@ function renderDest() {
       cards.push(`<article class="dest"><div class="dest-head">
         <h3 class="dest-name">${esc(b.name)}<span>${esc(h.name)}본부</span></h3>
         <div class="dest-time"><strong>${etas.length ? esc(fmtMD(S.date) + " " + etas[0]) : "미정"}</strong><small>도착 예상${etas.length > 1 ? " (가장 이른 장비, 장비마다 다름)" : ""}</small></div>
-        <div class="dest-meta"><span class="tag req">도착 요청 ${H(t, "arrive_at", esc(fmtTime(arr)))}</span>${snow != null ? `<span class="tag snow">예상 적설 ${H(t, "snow_cm", esc(snow) + "cm")}</span>` : ""}${warnOf(b.id).level ? `<span class="tag wb ${WLV[warnOf(b.id).level][0]}" data-wb="${esc(b.id)}" tabindex="0">${WLV[warnOf(b.id).level][1]}</span>` : ""}
+        <div class="dest-meta"><span class="tag req">도착 요청 ${H(t, "arrive_at", esc(fmtTime(arr)))}</span>${snow != null ? `<span class="tag snow">예상 적설 ${H(t, "snow_cm", esc(snow) + "cm")}</span>` : ""}${warnOf(b.id).level ? `<span class="tag wb ${WLV[warnOf(b.id).level][0]}" data-wb="${esc(b.id)}" tabindex="0">${esc(wlabel(warnOf(b.id).level, warnOf(b.id).kind))}</span>` : ""}
           ${why ? `<span class="tag">사유: ${H(t, "reason", esc(why))}</span>` : ""}
           <span class="tag api">날씨 연동 예정</span></div></div>
         ${list.length ? list.map(m => vehicleRow(m.v, m.stops, m.rec, b.id)).join("") : `<div class="empty-state" style="border:0">조건에 맞는 장비가 없습니다.</div>`}</article>`);
@@ -526,11 +530,11 @@ function renderBranch() {
     (can("req.confirm") && r ? `<button type="button" class="btn danger" id="roundDel" title="고른 기준일자와 그 지사 요청·편성을 지웁니다(장비 경로 기록은 남음)">기준일자 삭제</button>` : "") +
     (can("req.confirm") ? `<span class="sep"></span><label class="ctl">새 기준일자 <input class="ci" type="date" id="newRoundDate" value="${esc(todayISO())}"></label><button type="button" class="btn" id="roundMake">만들기</button>` : "");
   $("branchCtl").innerHTML = r ? `<div class="tb-row"><span class="tb-label">보기</span><button type="button" class="chip" id="onlyActive" aria-pressed="${S.onlyActive}">요청 있는 지사만</button>` +
-    `<span class="tb-right hint">${can("req.confirm") ? "편성 대수를 정하고 [확정]을 누르면 그 지사가 기관별 장비의 선택지에 나옵니다. 대설 특보는 확정할 때 고정됩니다." : "대설 특보는 기상청 자료로 자동 표시됩니다."}</span>` +
+    `<span class="tb-right hint">${can("req.confirm") ? "편성 대수를 정하고 [확정]을 누르면 그 지사가 기관별 장비의 선택지에 나옵니다. 특보는 확정할 때 고정됩니다." : "특보는 기상청 자료로 자동 표시됩니다."}</span>` +
     (S.me.role === "admin" ? `<button type="button" class="btn sm" id="zoneMgr" title="지사마다 대설 특보를 볼 기상청 특보구역(고속도로가 지나는 시·군)을 확인·수정">특보구역 관리</button>` : "") + `</div>` : "";
   if (!r) { $("branchTable").innerHTML = `<tbody><tr><td class="empty">기준일자가 없습니다.${can("req.confirm") ? " 위에서 기준일자를 만드세요." : " 관리자가 기준일자를 만들면 요청을 입력할 수 있습니다."}</td></tr></tbody>`; return; }
   const conf = can("req.confirm");
-  let h = `<thead><tr><th class="l" rowspan="2">지사</th><th rowspan="2">예상 적설(cm)</th><th rowspan="2">대설 특보</th><th colspan="2">지사 요청</th><th colspan="2">편성</th><th>확정</th><th class="l" rowspan="2">도착 요청</th><th class="l" rowspan="2">사유</th></tr>
+  let h = `<thead><tr><th class="l" rowspan="2">지사</th><th rowspan="2">예상 적설(cm)</th><th rowspan="2">${warnHead()}</th><th colspan="2">지사 요청</th><th colspan="2">편성</th><th>확정</th><th class="l" rowspan="2">도착 요청</th><th class="l" rowspan="2">사유</th></tr>
     <tr><th>제설차</th><th>제설기</th><th>제설차</th><th>제설기</th><th>${conf ? `<button type="button" class="btn sm primary" id="confirmAll" title="요청이 있고 아직 확정 안 된 지사를 모두 확정(바로 저장)">일괄 확정</button>` : ""}</th></tr></thead><tbody>`;
   const has = b => !!S.reqs[b.id] || S.rdraft.has(b.id);
   const mine = b => (m.branch_id === b.id) || (can("req.edit.hq") && !can("req.confirm") && b.hq_id === m.hq_id);
@@ -574,7 +578,7 @@ async function saveBranchRows(ids, extra, msg) {
   list.forEach(({ o, f }) => { S.reqs[o.branch_id] = { ...REQ_DEF, round_id: S.round, branch_id: o.branch_id, ...(S.reqs[o.branch_id] || {}), ...f }; S.rdraft.delete(o.branch_id); });
   if (extra && "confirmed" in extra) {                // 확정하면 서버가 그 순간 대설 특보를 고정 → 다시 읽어 표시
     await loadReqs();
-    if (extra.confirmed && ids.length === 1) msg += ` (대설 특보: ${(WLV[warnOf(ids[0]).level] || [0, "특보 없음"])[1]} 고정)`;
+    if (extra.confirmed && ids.length === 1) msg += ` (특보: ${wlabel(warnOf(ids[0]).level, warnOf(ids[0]).kind)} 고정)`;
   }
   await loadAudit(); refresh(); toast(msg);
 }
@@ -617,7 +621,7 @@ async function switchRound(id, force) {
   if (!force && branchDirty() && !confirm("지사별 요청·편성에 저장하지 않은 변경이 있습니다. 버리고 기준일자를 바꿀까요?")) { refresh(); return; }
   S.rdraft.clear(); S.round = +id || null;
   const r = curRound(); if (r) S.day1 = r.start_date;               // 기준일자를 고르면 지원일 1도 그 날짜로
-  await Promise.all([loadReqs(), ensureRoutes()]); refresh();
+  await Promise.all([loadReqs(), ensureRoutes(), loadWarn()]); refresh();
 }
 
 /* ============================================================
@@ -679,17 +683,27 @@ async function openSheet(vid) {
 /* ---------- 특보구역 관리(관리자) — 지사마다 대설 특보를 볼 기상청 특보구역. 자동 목록은 관할 고속도로가 지나는 시·군에서 계산 ---------- */
 async function openZones(bid) {
   sheet.innerHTML = `<button type="button" class="sheet-close" id="sheetClose">닫기</button><h2 id="sheetTitle">특보구역 관리</h2>
-    <p class="muted">지사 관할 고속도로가 지나는 기상청 특보구역(자동)입니다. 이 구역 중 가장 높은 대설 특보가 지사 특보로 표시됩니다. 잘못 들어간 구역은 빼고, 빠진 구역은 더하세요(바로 저장, 수정 기록에 남음).
+    <p class="muted">지사 관할 고속도로가 지나는 기상청 특보구역(자동)입니다. 이 구역 중 가장 높은 특보가 지사 특보로 표시됩니다. 잘못 들어간 구역은 빼고, 빠진 구역은 더하세요(바로 저장, 수정 기록에 남음).
     시·군이 평지/산지·동부/서부로 나뉜 곳은 자동으로 모두 넣었으니 실제로 지나지 않는 쪽은 빼 주세요.</p>
     <label class="ctl">지사 <select class="ci" id="zbr">${S.order.map(b => `<option value="${b.id}">${esc((S.hqById[b.hq_id] || {}).name || "")} · ${esc(b.name)}</option>`).join("")}</select></label>
-    <div id="zlist" class="muted">불러오는 중…</div>`;
+    <div id="zlist" class="muted">불러오는 중…</div><div id="wnow"></div>`;
   sheet.hidden = false; backdrop.hidden = false;
   if (!lastFocus) lastFocus = document.activeElement;
   $("sheetClose").focus(); $("sheetClose").onclick = closeSheet;
   if (bid) $("zbr").value = bid;
   const r = await Api.zoneData();
   if (!r.ok) { if ($("zlist")) $("zlist").textContent = r.message; return; }
-  S.zdata = r; renderZones();
+  S.zdata = r; renderZones(); renderWarnNow();
+}
+// 지금 서버에 받아 둔 특보 전체(전국, 지사와 이어지지 않은 구역 포함) — 특보가 잘 들어오는지 확인용
+function renderWarnNow() {
+  const el = $("wnow"), d = S.zdata && S.zdata.active; if (!el || !d) return;
+  const st = d.state || {}, rows = d.rows || [];
+  el.innerHTML = `<h3>지금 받은 특보 (전국 ${rows.length}건${d.all ? ", 모든 종류" : ", 대설만"})</h3>
+    <p class="muted">${st.fetched_at ? `기상청에서 받은 시각 ${esc(fmtShort(st.fetched_at))}` : "아직 받지 못함"}${st.ok === false && st.note ? ` · 최근 실패: ${esc(st.note)}` : ""} ·
+      ${d.needed ? "수집 중(10분마다)" : "수집 쉬는 중 — 확정을 기다리는 기준일자가 없음"}</p>` +
+    (rows.length ? `<ul class="zlist">${rows.map(x => `<li><span>${esc(x.name)}</span><span class="wb ${(WLV[x.level] || ["w0"])[0]}">${esc(wlabel(x.level, x.kind))}</span>
+      <span class="muted">${x.branches.length ? esc(x.branches.map(bn).join(", ")) : "이어진 지사 없음"}</span></li>`).join("")}</ul>` : `<p class="muted">지금 발효·예정된 특보가 없습니다.</p>`);
 }
 function zoneLabel(code) {          // 시·도 · 구역 이름
   const zs = S.zdata.byCode, z = zs[code]; if (!z) return code;
@@ -714,7 +728,7 @@ async function setZone(code, include) {   // include: true 더함 / false 자동
   if (S.preview) return toast("미리보기에서는 바꿀 수 없습니다.", true);
   const r = await Api.setZone(bid, code, include);
   if (!r.ok) return toast(r.message, true);
-  const z = await Api.zoneData(); if (z.ok) { S.zdata = z; renderZones(); }
+  const z = await Api.zoneData(); if (z.ok) { S.zdata = z; renderZones(); renderWarnNow(); }
   await Promise.all([loadWarn(), loadAudit()]); paintWarn(); renderLog(); if (!$("panel-move").hidden) renderDest(); toast(`${bn(bid)} 지사 특보구역을 바꿨습니다`);
 }
 function closeSheet() { sheet.hidden = true; backdrop.hidden = true; hideTip(); if (lastFocus) lastFocus.focus(); lastFocus = null; }
@@ -864,10 +878,14 @@ async function switchUser(uid) {
   await loadAudit(); refresh();
 }
 
-// 대설 특보는 서버가 5분마다 기상청에서 받으므로 화면도 5분마다(보이는 동안만) 다시 읽어 특보 칸만 고침
+// 특보는 서버가 매시 01·11·21…분에 받으므로 화면은 그 1분 뒤(02·12·22…분)에, 보이는 동안만 다시 읽어 특보 칸만 고침.
+// 서버 수집이 쉬는 중(확정을 기다리는 기준일자 없음)이면 읽지 않음 → 기준일자를 바꾸거나 새로 열 때 다시 읽음
 let warnAt = 0;
-async function tickWarn() { if (document.hidden || !S.me) return; warnAt = Date.now(); await loadWarn(); paintWarn(); if (!$("panel-move").hidden) renderDest(); }
-setInterval(tickWarn, 5 * 60e3);
-document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - warnAt > 2 * 60e3) tickWarn(); });
+async function tickWarn(force) {
+  if (!S.me || (!force && (document.hidden || (S.warn && S.warn.paused)))) return;
+  warnAt = Date.now(); await loadWarn(); paintWarn(); if (!$("panel-move").hidden) renderDest();
+}
+(function schedWarn() { const now = new Date(), m = (12 - now.getMinutes() % 10) % 10 || 10; setTimeout(() => { tickWarn(); schedWarn(); }, (m * 60 - now.getSeconds()) * 1000); })();
+document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - warnAt > 10 * 60e3) tickWarn(); });
 
 boot();
