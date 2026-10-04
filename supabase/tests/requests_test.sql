@@ -28,9 +28,9 @@ begin
   insert into auth.users (id, aud, role, email) values
     (a,'authenticated','authenticated','ra@t.test'),(b1,'authenticated','authenticated','rb1@t.test'),(b2,'authenticated','authenticated','rb2@t.test'),
     (e,'authenticated','authenticated','re@t.test'),(d,'authenticated','authenticated','rd@t.test'),(m,'authenticated','authenticated','rm@t.test');
-  insert into public.profiles (id,username,display_name,role,branch_id,disabled,must_change) values
-    (a,'rq-adm','관리자','admin',null,false,false),(b1,'rq-b1','지사1','branch','B001',false,false),(b2,'rq-b2','지사2','branch','B002',false,false),
-    (e,'rq-eq','장비','equip',null,false,false),(d,'rq-dis','비활성','branch','B001',true,false),(m,'rq-tmp','임시','branch','B001',false,true);
+  insert into public.profiles (id,username,display_name,role,branch_id,org,perms,disabled,must_change) values
+    (a,'rq-adm','관리자','admin',null,null,'{}',false,false),(b1,'rq-b1','지사1','branch','B001',null,'{juris.request,req.edit.own}',false,false),(b2,'rq-b2','지사2','branch','B002',null,'{juris.request,req.edit.own}',false,false),
+    (e,'rq-eq','장비','equip',null,'서울경기','{equip.edit.own}',false,false),(d,'rq-dis','비활성','branch','B001',null,'{juris.request,req.edit.own}',true,false),(m,'rq-tmp','임시','branch','B001',null,'{juris.request,req.edit.own}',false,true);
 
   -- A. 비로그인
   perform pg_temp.chk('비로그인: 읽기 차단','anon',null,'select 1 from public.jurisdiction_requests','err:42501');

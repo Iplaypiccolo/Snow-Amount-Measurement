@@ -18,7 +18,7 @@ const deps = {
   },
   auth: { async getUser(jwt: string) { const { data, error } = await admin.auth.getUser(jwt); return { id: data?.user?.id ?? null, error }; } },
   store: {
-    async getProfileById(id: string) { const { data } = await admin.from('profiles').select('id,username,role,disabled,must_change').eq('id', id).maybeSingle(); return data; },
+    async getProfileById(id: string) { const { data } = await admin.from('profiles').select('id,username,role,perms,disabled,must_change').eq('id', id).maybeSingle(); return data; },
     // 일회용 시작 토큰: 맞는 해시를 "지우면서" 확인 → 동시에 두 번 불러도 한 번만 통과
     async consumeBootstrap(hash: string, now: Date) {
       const { data } = await admin.from('settings').delete().eq('key', 'bootstrap_token').eq('value->>hash', hash).select('value');

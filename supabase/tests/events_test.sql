@@ -22,8 +22,8 @@ do $t$
 declare a uuid := gen_random_uuid(); b uuid := gen_random_uuid(); e uuid := gen_random_uuid(); m uuid := gen_random_uuid(); rep text; fails int; total int; r record; ev0 bigint; gv0 bigint;
 begin
   insert into auth.users (id, aud, role, email) values (a,'authenticated','authenticated','ea@t.test'),(b,'authenticated','authenticated','eb@t.test'),(e,'authenticated','authenticated','ee@t.test'),(m,'authenticated','authenticated','em@t.test');
-  insert into public.profiles (id,username,display_name,role,branch_id,must_change) values
-    (a,'ev-adm','관리자','admin',null,false),(b,'ev-br','지사','branch','B001',false),(e,'ev-eq','장비','equip',null,false),(m,'ev-tmp','임시','admin',null,true);
+  insert into public.profiles (id,username,display_name,role,branch_id,org,perms,must_change) values
+    (a,'ev-adm','관리자','admin',null,null,'{}',false),(b,'ev-br','지사','branch','B001',null,'{juris.request,req.edit.own}',false),(e,'ev-eq','장비','equip',null,'서울경기','{equip.edit.own}',false),(m,'ev-tmp','임시','admin',null,null,'{}',true);
   select count(*) into ev0 from public.jurisdiction_events; select count(*) into gv0 from public.grid_events;   -- 운영 DB 에 이미 있는 이력 수(그만큼 더해서 비교)
 
   perform pg_temp.chk('비로그인: 관할 이력 읽기 차단','anon',null,'select 1 from public.jurisdiction_events','err:42501');

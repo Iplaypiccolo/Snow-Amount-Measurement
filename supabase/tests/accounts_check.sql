@@ -27,15 +27,15 @@ begin
   perform pg_temp.chk('낯선 가입자: 지사 목록 0건','authenticated',x,'select 1 from public.branches','ok:0');
   perform pg_temp.chk('낯선 가입자: 계정 목록 0건','authenticated',x,'select 1 from public.profiles','ok:0');
   perform pg_temp.chk('낯선 가입자: 기록 0건','authenticated',x,'select 1 from public.audit_log','ok:0');
-  perform pg_temp.chk('낯선 가입자: 장비 추가 차단','authenticated',x,'insert into public.vehicles values (''11가1111'',''서울경기'',''제설차'',true)','err:42501');
+  perform pg_temp.chk('낯선 가입자: 장비 추가 차단','authenticated',x,'insert into public.vehicles (id,org,type,plate) values (''V9001'',''서울경기'',''제설차'',''11가1111'')','err:42501');
   perform pg_temp.chk('낯선 가입자: 스스로 관리자 계정 만들기 차단','authenticated',x,format('insert into public.profiles (id,username,display_name,role) values (%L,''me-admin'',''x'',''admin'')',x),'err:42501');
   perform pg_temp.chk('낯선 가입자: 비공개 저장소 파일 목록 0건','authenticated',x,'select 1 from storage.objects where bucket_id = ''credentials''','ok:0');
   perform pg_temp.chk('비로그인: 비공개 저장소 파일 0건','anon',null,'select 1 from storage.objects','ok:0');
   perform pg_temp.chk('새 지사 계정(임시 비밀번호 상태): 본부 목록 0건','authenticated',br,'select 1 from public.hqs','ok:0');
   perform pg_temp.chk('새 지사 계정: 본인 계정 정보는 1건','authenticated',br,'select 1 from public.profiles','ok:1');
   perform pg_temp.chk('새 지사 계정: 비공개 저장소 0건','authenticated',br,'select 1 from storage.objects where bucket_id = ''credentials''','ok:0');
-  perform pg_temp.chk('관리자(admin-01): 본부 목록 10건','authenticated',ad,'select 1 from public.hqs','ok:10');
-  perform pg_temp.chk('관리자(admin-01): 계정 목록 61건','authenticated',ad,'select 1 from public.profiles','ok:61');
+  perform pg_temp.chk('관리자(admin-01): 본부 목록 전체','authenticated',ad,'select 1 from public.hqs','ok:' || (select count(*) from public.hqs));
+  perform pg_temp.chk('관리자(admin-01): 계정 목록 전체','authenticated',ad,'select 1 from public.profiles','ok:' || (select count(*) from public.profiles));
   perform pg_temp.chk('관리자(admin-01)도 임시 비밀번호 파일은 앱(API)으로 못 읽음 — 대시보드에서만','authenticated',ad,'select 1 from storage.objects where bucket_id = ''credentials''','ok:0');
   perform pg_temp.chk('계정 표에 비밀번호 열이 없음','authenticated',ad,'select password from public.profiles','err:42703');
 

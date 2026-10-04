@@ -7,6 +7,7 @@ const url = Deno.env.get('SUPABASE_URL') ?? '';
 const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SECRET_KEY') ?? '';
 const admin = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 
+const PROFILE_COLS = 'id,username,display_name,role,branch_id,org,hq_id,perms,sort,disabled,must_change';
 const hex = (buf: ArrayBuffer) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 
 const deps = {
@@ -24,10 +25,13 @@ const deps = {
     async deleteUser(id: string) { const { error } = await admin.auth.admin.deleteUser(id); return { error }; },
   },
   store: {
-    async getProfileById(id: string) { const { data } = await admin.from('profiles').select('id,username,display_name,role,branch_id,disabled,must_change').eq('id', id).maybeSingle(); return data; },
-    async getProfileByUsername(u: string) { const { data } = await admin.from('profiles').select('id,username,display_name,role,branch_id,disabled,must_change').eq('username', u).maybeSingle(); return data; },
+    async getProfileById(id: string) { const { data } = await admin.from('profiles').select(PROFILE_COLS).eq('id', id).maybeSingle(); return data; },
+    async getProfileByUsername(u: string) { const { data } = await admin.from('profiles').select(PROFILE_COLS).eq('username', u).maybeSingle(); return data; },
     async existingUsernames(list: string[]) { const { data } = await admin.from('profiles').select('username').in('username', list); return (data ?? []).map((r: { username: string }) => r.username); },
     async branchIds(ids: string[]) { if (!ids.length) return []; const { data } = await admin.from('branches').select('id').in('id', ids); return (data ?? []).map((r: { id: string }) => r.id); },
+    async orgNames(names: string[]) { if (!names.length) return []; const { data } = await admin.from('equip_orgs').select('name').in('name', names); return (data ?? []).map((r: { name: string }) => r.name); },
+    async hqIds(ids: string[]) { if (!ids.length) return []; const { data } = await admin.from('hqs').select('id').in('id', ids); return (data ?? []).map((r: { id: string }) => r.id); },
+    async permissions() { const { data } = await admin.from('permissions').select('key,default_roles').order('sort'); return data ?? []; },
     async insertProfile(p: Record<string, unknown>) { const { error } = await admin.from('profiles').insert(p); return { error }; },
     async updateProfile(id: string, patch: Record<string, unknown>) { const { error } = await admin.from('profiles').update(patch).eq('id', id); return { error }; },
     async countActiveAdmins() { const { count } = await admin.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'admin').eq('disabled', false); return count ?? 0; },

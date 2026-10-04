@@ -1,12 +1,12 @@
 // ============================================================
-// import-snow — 일 신적설을 서버(snow_daily)에 넣고, 화면용 요약본(snapshots 'snow')을 다시 만든다 (관리자 전용)
+// import-snow — 일 신적설을 서버(snow_daily)에 넣고, 화면용 요약본(snapshots 'snow')을 다시 만든다 (관리자 또는 snow.upload 권한)
 //  * 자료 두 가지:
 //      ① txt  : 기상청 API허브 콘솔 스크립트가 만든 메모장 파일 그대로("#### DATE YYYYMMDD ####" + 관측 줄). 앞으로 새 자료는 이것으로 넣는다.
 //      ② github: 예전 파일 data/snow_data.json 의 stationData (처음 한 번 옮길 때만. 서버 안에서 GitHub 파일을 직접 읽음)
 //  * 기상청 결측 표시(-99.9 등 음수)와 시즌(11.15~3.15) 밖 날짜는 DB 함수가 걸러 내고 개수만 알려 준다.
 //  * action "plan" = 넣지 않고 새 값·바뀔 값·같은 값 개수만 셈, "load" = 실제로 넣고 요약본을 다시 만듦
 //    overwrite=false(기본)면 이미 있는 값은 그대로 두고 새 값만 넣는다. 바뀔 값이 있으면 plan 결과를 사람이 보고 overwrite=true 로 다시 부른다.
-//  * 인증: 관리자 로그인 토큰(JWT) 또는 일회용 시작 토큰(x-bootstrap-token, 한 번 쓰면 바로 지워짐)
+//  * 인증: 관리자·snow.upload 권한 계정의 로그인 토큰(JWT) 또는 일회용 시작 토큰(x-bootstrap-token, 한 번 쓰면 바로 지워짐)
 //  * 순수 로직은 Node 로 시험: tests/test_import_snow.mjs
 // ============================================================
 export const REPO = 'Iplaypiccolo/Snow-Amount-Measurement';
@@ -77,7 +77,9 @@ async function authenticate(req, d) {
   const u = await d.auth.getUser(m[1]);
   if (!u.id) return { res: fail(401, 'not_logged_in', '로그인이 필요합니다.') };
   const p = await d.store.getProfileById(u.id);
-  if (!p || p.disabled || p.must_change || p.role !== 'admin') return { res: fail(403, 'forbidden', '관리자만 할 수 있는 작업입니다.') };
+  // 관리자 또는 '적설 자료 올리기'(snow.upload) 권한이 있는 계정만
+  const can = p && !p.disabled && !p.must_change && (p.role === 'admin' || (Array.isArray(p.perms) && p.perms.includes('snow.upload')));
+  if (!can) return { res: fail(403, 'forbidden', '적설 자료 올리기 권한이 있는 계정만 할 수 있습니다.') };
   return { actor: { id: u.id, username: p.username, bootstrap: false } };
 }
 

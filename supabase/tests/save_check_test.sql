@@ -21,7 +21,7 @@ do $t$
 declare a uuid := gen_random_uuid(); b uuid := gen_random_uuid(); rep text; fails int; total int; r1 bigint; r2 bigint;
 begin
   insert into auth.users (id, aud, role, email) values (a,'authenticated','authenticated','sa@t.test'),(b,'authenticated','authenticated','sb@t.test');
-  insert into public.profiles (id,username,display_name,role,branch_id,must_change) values (a,'sv-adm','관리자','admin',null,false),(b,'sv-br','지사','branch','B001',false);
+  insert into public.profiles (id,username,display_name,role,branch_id,perms,must_change) values (a,'sv-adm','관리자','admin',null,'{}',false),(b,'sv-br','지사','branch','B001','{juris.request,req.edit.own}',false);
 
   -- 10. 이력 값 검사
   perform pg_temp.chk('신설 기관: 정상 이름은 저장','authenticated',a,'insert into public.jurisdiction_events (kind, payload) values (''addBranch'', ''{"id":"B990","hq":"광주전남","name":"새만금"}'')','ok:1');

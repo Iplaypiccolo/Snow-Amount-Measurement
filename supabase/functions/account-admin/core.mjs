@@ -6,7 +6,10 @@
 // ============================================================
 export const EMAIL_DOMAIN = 'snow-support.invalid';
 export const USERNAME_RE = /^[a-z0-9._-]{3,32}$/;
-export const ROLES = ['admin', 'branch', 'equip'];
+// 만들 수 있는 역할. 관리자 계정은 새로 만들지 않는다(사용자 결정 2026-10-04 — 필요하면 따로 요청).
+//  branch 지사(소속 지사) / equip 지원장비(출발 기관) / hq 지역본부(본부) / viewer 보기 전용
+export const ROLES = ['branch', 'equip', 'hq', 'viewer'];
+const MAX_SORT = 100000;
 // 프로젝트의 비밀번호 규칙(소문자·대문자·숫자·기호를 각각 1개 이상)을 항상 만족하도록, 종류별로 하나씩 넣고 나머지를 채웁니다.
 // 헷갈리는 글자(0 O 1 l I)와 CSV·엑셀에서 문제가 되는 기호(쉼표 따옴표 역슬래시 괄호 등)는 뺍니다.
 const LOWER = 'abcdefghijkmnpqrstuvwxyz', UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ', DIGIT = '23456789', SYMBOL = '!#$%&*+-=?@';
@@ -58,7 +61,7 @@ export function genPassword(randomBytes, len = 16) {
 export function toCsv(rows) {
   const esc = (v) => { const s = String(v ?? ''); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const head = ['아이디', '이름', '임시 비밀번호', '역할', '소속 지사 번호'];
-  return '\uFEFF' + [head, ...rows.map((r) => [r.username, r.display_name, r.temp_password, r.role, r.branch_id || ''])].map((l) => l.map(esc).join(',')).join('\r\n') + '\r\n';
+  return '\uFEFF' + [head, ...rows.map((r) => [r.username, r.display_name, r.temp_password, r.role, r.branch_id || r.org || r.hq_id || ''])].map((l) => l.map(esc).join(',')).join('\r\n') + '\r\n';
 }
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-bootstrap-token', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
@@ -102,33 +105,51 @@ async function actCreate(req, d, actor, body) {
   const users = body.users;
   if (!Array.isArray(users) || users.length < 1 || users.length > MAX_USERS) return fail(400, 'bad_request', `계정은 1~${MAX_USERS}개씩 만들 수 있습니다.`);
   const errs = [], seen = new Set();
-  const want = users.filter((u) => u && u.role === 'branch' && typeof u.branch_id === 'string').map((u) => u.branch_id);
-  const branches = new Set(await d.store.branchIds(want));
+  const strs = (role, k) => users.filter((u) => u && u.role === role && typeof u[k] === 'string').map((u) => u[k]);
+  const [branches, orgs, hqs, perms] = await Promise.all([
+    d.store.branchIds(strs('branch', 'branch_id')).then((x) => new Set(x)),
+    d.store.orgNames(strs('equip', 'org')).then((x) => new Set(x)),
+    d.store.hqIds(strs('hq', 'hq_id')).then((x) => new Set(x)),
+    d.store.permissions(),
+  ]);
+  const permKeys = new Set(perms.map((p) => p.key));
   users.forEach((u, i) => {
     const e = (m) => errs.push({ index: i, username: u && u.username, error: m });
     if (!u || typeof u !== 'object') return e('형식 오류');
     if (!USERNAME_RE.test(u.username || '')) e('아이디는 영문 소문자·숫자·. _ - 로 3~32자');
     if (seen.has(u.username)) e('요청 안에서 아이디가 중복'); seen.add(u.username);
-    if (typeof u.display_name !== 'string' || !u.display_name.trim() || u.display_name.length > 40 || /[\u0000-\u001f]/.test(u.display_name)) e('이름은 1~40자');
-    if (!ROLES.includes(u.role)) e('역할은 admin / branch / equip');
+    if (!nameOk(u.display_name)) e('이름은 1~40자');
+    if (u.role === 'admin') e('관리자 계정은 여기서 만들 수 없음');
+    else if (!ROLES.includes(u.role)) e('역할은 branch / equip / hq / viewer');
     if (u.role === 'branch' && !branches.has(u.branch_id)) e('없는 지사 번호');
     if (u.role !== 'branch' && u.branch_id) e('지사 계정이 아니면 지사 번호를 넣을 수 없음');
+    if (u.role === 'equip' && !orgs.has(u.org)) e('없는 출발 기관');
+    if (u.role !== 'equip' && u.org) e('지원장비 계정이 아니면 출발 기관을 넣을 수 없음');
+    if (u.role === 'hq' && !hqs.has(u.hq_id)) e('없는 본부');
+    if (u.role !== 'hq' && u.hq_id) e('지역본부 계정이 아니면 본부를 넣을 수 없음');
+    const pe = permsProblem(u.perms, permKeys); if (pe) e(pe);
+    if (!sortOk(u.sort)) e(`순서는 0~${MAX_SORT} 정수`);
   });
   if (errs.length) return fail(400, 'validation', '입력을 확인하세요.', { details: errs });
   const taken = await d.store.existingUsernames(users.map((u) => u.username));
   if (taken.length) return fail(409, 'exists', '이미 있는 아이디가 있습니다.', { details: taken });
+  const defaults = (role) => perms.filter((p) => (p.default_roles || []).includes(role)).map((p) => p.key);
 
   const results = await pool(users, CONCURRENCY, async (u) => {
     const pw = genPassword(d.random);
     const c = await d.auth.createUser({ email: emailOf(u.username), password: pw });
     if (!c.id) return { username: u.username, ok: false, error: 'auth_create_failed', detail: c.error && c.error.message };
-    const ins = await d.store.insertProfile({ id: c.id, username: u.username, display_name: u.display_name.trim(), role: u.role, branch_id: u.role === 'branch' ? u.branch_id : null, must_change: true, disabled: false });
+    const row = { id: c.id, username: u.username, display_name: u.display_name.trim(), role: u.role,
+      branch_id: u.role === 'branch' ? u.branch_id : null, org: u.role === 'equip' ? u.org : null, hq_id: u.role === 'hq' ? u.hq_id : null,
+      perms: Array.isArray(u.perms) ? [...new Set(u.perms)] : defaults(u.role), sort: u.sort ?? null, must_change: true, disabled: false };
+    const ins = await d.store.insertProfile(row);
     if (ins && ins.error) { await d.auth.deleteUser(c.id); return { username: u.username, ok: false, error: 'profile_insert_failed', detail: ins.error.message }; }
-    return { username: u.username, ok: true, user: u, temp_password: pw };
+    return { username: u.username, ok: true, user: row, temp_password: pw };
   });
   const ok = results.filter((r) => r.ok), failed = results.filter((r) => !r.ok).map(({ username, error, detail }) => ({ username, error, detail }));
-  if (ok.length) await audit(d, actor, req, ok.map((r) => ({ kind: '계정생성', target: `${r.username} (${r.user.role}${r.user.branch_id ? ':' + r.user.branch_id : ''})` })));
-  const creds = ok.map((r) => ({ username: r.username, display_name: r.user.display_name.trim(), role: r.user.role, branch_id: r.user.branch_id || null, temp_password: r.temp_password }));
+  const where = (r) => r.branch_id || r.org || r.hq_id;
+  if (ok.length) await audit(d, actor, req, ok.map((r) => ({ kind: '계정생성', target: `${r.username} (${r.user.role}${where(r.user) ? ':' + where(r.user) : ''})`, to_val: { perms: r.user.perms } })));
+  const creds = ok.map((r) => ({ username: r.username, display_name: r.user.display_name, role: r.user.role, branch_id: r.user.branch_id, org: r.user.org, hq_id: r.user.hq_id, temp_password: r.temp_password }));
   const dl = ok.length ? await deliver(d, actor, creds, 'accounts') : {};
   if (dl.error) return fail(500, 'delivery_failed', dl.error, { created: ok.map((r) => r.username), failed });
   return json(failed.length ? 207 : 201, { ok: failed.length === 0, created: ok.length, failed, ...dl,
@@ -164,6 +185,50 @@ async function actSetPasswords(req, d, actor, body) {
   const okRows = results.filter((r) => r.ok), failed = results.filter((r) => !r.ok).map(({ username, error }) => ({ username, error }));
   if (okRows.length) await audit(d, actor, req, okRows.map((r) => ({ kind: '비밀번호설정', target: r.username, to_val: { require_change: requireChange } })));
   return json(failed.length ? 207 : 200, { ok: failed.length === 0, updated: okRows.length, failed, require_change: requireChange });
+}
+
+// 계정 고치기: 이름·권한·목록 순서 (역할·소속은 바꾸지 않음 — 바꿔야 하면 새 계정). 관리자 계정은 대상이 아님(관리자는 모든 권한).
+async function actUpdate(req, d, actor, body) {
+  if (actor.bootstrap) return fail(403, 'forbidden', '이 작업은 관리자 로그인으로만 할 수 있습니다.');
+  const items = body.items;
+  if (!Array.isArray(items) || items.length < 1 || items.length > MAX_USERS) return fail(400, 'bad_request', `계정은 1~${MAX_USERS}개씩 고칠 수 있습니다.`);
+  const permKeys = new Set((await d.store.permissions()).map((p) => p.key));
+  const errs = [], seen = new Set();
+  items.forEach((it, i) => {
+    const e = (m) => errs.push({ index: i, username: it && it.username, error: m });
+    if (!it || typeof it !== 'object' || typeof it.username !== 'string' || !USERNAME_RE.test(it.username)) return e('아이디 형식 오류');
+    if (seen.has(it.username)) e('같은 아이디가 두 번 들어 있음'); seen.add(it.username);
+    if ('display_name' in it && !nameOk(it.display_name)) e('이름은 1~40자');
+    if ('perms' in it) { const pe = permsProblem(it.perms, permKeys); if (pe) e(pe); }
+    if ('sort' in it && !sortOk(it.sort)) e(`순서는 0~${MAX_SORT} 정수`);
+    if (!('display_name' in it) && !('perms' in it) && !('sort' in it)) e('바꿀 항목이 없음');
+  });
+  if (errs.length) return fail(400, 'validation', '입력을 확인하세요.', { details: errs });
+  const results = await pool(items, CONCURRENCY, async (it) => {
+    const t = await d.store.getProfileByUsername(it.username);
+    if (!t) return { username: it.username, ok: false, error: '계정을 찾을 수 없음' };
+    if (t.role === 'admin') return { username: it.username, ok: false, error: '관리자 계정은 모든 권한이 있어 고칠 것이 없음' };
+    const before = { display_name: t.display_name, perms: t.perms, sort: t.sort }, patch = {};   // 저장 전에 이전 값을 잡아 둠
+    if ('display_name' in it) patch.display_name = it.display_name.trim();
+    if ('perms' in it) patch.perms = [...new Set(it.perms)];
+    if ('sort' in it) patch.sort = it.sort;
+    const up = await d.store.updateProfile(t.id, patch);
+    if (up && up.error) return { username: it.username, ok: false, error: '저장하지 못함' };
+    return { username: it.username, ok: true, patch, before };
+  });
+  const okRows = results.filter((r) => r.ok), failed = results.filter((r) => !r.ok).map(({ username, error }) => ({ username, error }));
+  if (okRows.length) await audit(d, actor, req, okRows.map((r) => ({ kind: '계정수정', target: r.username,
+    from_val: Object.fromEntries(Object.keys(r.patch).map((k) => [k, r.before[k] ?? null])), to_val: r.patch })));
+  return json(failed.length ? 207 : 200, { ok: failed.length === 0, updated: okRows.length, failed });
+}
+
+const nameOk = (s) => typeof s === 'string' && !!s.trim() && s.length <= 40 && !/[\u0000-\u001f<>"]/.test(s);
+const sortOk = (v) => v === undefined || v === null || (Number.isInteger(v) && v >= 0 && v <= MAX_SORT);
+function permsProblem(perms, keys) {
+  if (perms === undefined) return null;
+  if (!Array.isArray(perms) || perms.length > 50 || perms.some((p) => typeof p !== 'string')) return '권한 목록 형식 오류';
+  const bad = perms.filter((p) => !keys.has(p));
+  return bad.length ? '없는 권한: ' + bad.slice(0, 3).join(', ') : null;
 }
 
 async function findTarget(d, username) {
@@ -215,6 +280,7 @@ export async function handle(req, d) {
     if (body.action === 'create') return await actCreate(req, d, a.actor, body);
     if (body.action === 'reset') return await actReset(req, d, a.actor, body);
     if (body.action === 'set_passwords') return await actSetPasswords(req, d, a.actor, body);
+    if (body.action === 'update') return await actUpdate(req, d, a.actor, body);
     if (body.action === 'disable') return await actDisable(req, d, a.actor, body, true);
     if (body.action === 'enable') return await actDisable(req, d, a.actor, body, false);
     return fail(400, 'bad_action', '알 수 없는 작업입니다.');

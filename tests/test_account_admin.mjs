@@ -12,7 +12,7 @@ const hex = async (t) => [...new Uint8Array(await crypto.subtle.digest('SHA-256'
 function world(over = {}) {
   const w = {
     now: new Date('2026-10-02T10:00:00Z'), users: new Map(), profiles: new Map(), audit: [], files: new Map(), sessionsRevoked: [], bans: new Map(), pwUpdates: [],
-    branches: new Set(['B001', 'B002', 'B003']), boot: null, jwt: new Map(), failAuthFor: new Set(), failProfileFor: new Set(), uploadFails: false, seq: 0, ...over,
+    branches: new Set(['B001', 'B002', 'B003']), orgs: new Set(['서울경기', '충북', '전북', '대구경북']), hqs: new Set(['H01', 'H02']), boot: null, jwt: new Map(), failAuthFor: new Set(), failProfileFor: new Set(), uploadFails: false, seq: 0, ...over,
   };
   w.deps = {
     now: () => w.now, random: (n) => crypto.getRandomValues(new Uint8Array(n)), sha256hex: hex,
@@ -28,6 +28,9 @@ function world(over = {}) {
       async getProfileByUsername(u) { return [...w.profiles.values()].find((p) => p.username === u) || null; },
       async existingUsernames(list) { return [...w.profiles.values()].map((p) => p.username).filter((u) => list.includes(u)); },
       async branchIds(ids) { return ids.filter((i) => w.branches.has(i)); },
+      async orgNames(names) { return names.filter((i) => w.orgs.has(i)); },
+      async hqIds(ids) { return ids.filter((i) => w.hqs.has(i)); },
+      async permissions() { return PERMS; },
       async insertProfile(p) { if ([...w.failProfileFor].includes(p.username)) return { error: { message: 'insert failed' } }; w.profiles.set(p.id, { ...p }); return { error: null }; },
       async updateProfile(id, patch) { Object.assign(w.profiles.get(id), patch); return { error: null }; },
       async countActiveAdmins() { return [...w.profiles.values()].filter((p) => p.role === 'admin' && !p.disabled).length; },
@@ -39,6 +42,12 @@ function world(over = {}) {
   };
   return w;
 }
+const PERMS = [
+  { key: 'juris.request', default_roles: ['branch'] }, { key: 'juris.edit', default_roles: [] }, { key: 'grid.edit', default_roles: [] }, { key: 'snow.upload', default_roles: [] },
+  { key: 'req.edit.own', default_roles: ['branch'] }, { key: 'req.edit.hq', default_roles: ['hq'] }, { key: 'req.confirm', default_roles: [] },
+  { key: 'equip.edit.own', default_roles: ['equip'] }, { key: 'equip.edit.all', default_roles: [] }, { key: 'hq.supply.edit', default_roles: ['hq'] }, { key: 'log.view', default_roles: [] },
+];
+const EQ = (username, o = {}) => ({ username, display_name: '지원장비', role: 'equip', org: '서울경기', ...o });
 const addAdmin = (w, name = 'admin-01', jwt = 'jwt-admin') => { const id = 'a-' + name; w.profiles.set(id, { id, username: name, display_name: '관리자', role: 'admin', branch_id: null, disabled: false, must_change: false }); w.jwt.set(jwt, id); return id; };
 const call = (w, body, { jwt, boot, method = 'POST', raw } = {}) => {
   const h = new Headers({ 'x-forwarded-for': '203.0.113.5' }); if (jwt) h.set('authorization', 'Bearer ' + jwt); if (boot) h.set('x-bootstrap-token', boot);
@@ -88,7 +97,7 @@ await test('GET/OPTIONS/깨진 요청/너무 큰 요청 처리', async () => {
 
 await test('관리자가 계정을 만들면: 임시 비밀번호는 응답에 한 번, 계정은 must_change, 이메일은 가짜 주소, 기록이 남는다', async () => {
   const w = world(); addAdmin(w);
-  const r = await J(await call(w, { action: 'create', users: [U('exchungju', { branch_id: 'B002' }), { username: 'equip-01', display_name: '지원장비', role: 'equip' }] }, { jwt: 'jwt-admin' }));
+  const r = await J(await call(w, { action: 'create', users: [U('exchungju', { branch_id: 'B002' }), EQ('equip-01')] }, { jwt: 'jwt-admin' }));
   assert.equal(r.status, 201); assert.equal(r.body.created, 2); assert.equal(r.body.creds.length, 2);
   const c = r.body.creds.find((x) => x.username === 'exchungju'); assert.equal(c.temp_password.length, 16);
   const prof = [...w.profiles.values()].find((p) => p.username === 'exchungju');
@@ -102,7 +111,7 @@ await test('관리자가 계정을 만들면: 임시 비밀번호는 응답에 �
 await test('시작 토큰: 한 번만 통과, 만료·틀린 토큰 거절, 비밀번호는 응답이 아닌 비공개 CSV 파일에만', async () => {
   const w = world(); const tok = 'bootstrap-secret-123';
   w.boot = { hash: await hex(tok), expires_at: '2026-10-02T10:15:00Z' };
-  const body = { action: 'create', users: [U('exdongseoul', { branch_id: 'B001' }), { username: 'admin-02', display_name: '관리자2', role: 'admin' }] };
+  const body = { action: 'create', users: [U('exdongseoul', { branch_id: 'B001' }), EQ('exseoulgigye')] };
   assert.equal((await call(w, body, { boot: 'wrong' })).status, 403);
   const r = await J(await call(w, body, { boot: tok }));
   assert.equal(r.status, 201); assert.equal(r.body.created, 2);
@@ -143,11 +152,11 @@ await test('일부 실패: 한 계정이 실패해도 나머지는 만들고(207
   assert.deepEqual(r.body.creds.map((c) => c.username).sort(), ['exa', 'exd']); assert.equal(w.audit.length, 2);
 });
 
-await test('59개 지사 + 관리자 2개를 한 번에: 동시 처리해도 모두 만들어지고 비밀번호는 겹치지 않는다', async () => {
+await test('59개 지사 + 지원장비 1개를 한 번에: 동시 처리해도 모두 만들어지고 비밀번호는 겹치지 않는다', async () => {
   const w = world(); w.branches = new Set(Array.from({ length: 59 }, (_, i) => 'B' + String(i + 1).padStart(3, '0')));
   const tok = 'boot-xyz'; w.boot = { hash: await hex(tok), expires_at: '2026-10-02T10:10:00Z' };
   const users = Array.from({ length: 59 }, (_, i) => U('exbranch' + String.fromCharCode(97 + (i % 26)) + String.fromCharCode(97 + Math.floor(i / 26)), { branch_id: 'B' + String(i + 1).padStart(3, '0') }));
-  users.push({ username: 'admin-02', display_name: '관리자2', role: 'admin' });
+  users.push(EQ('exseoulgigye'));
   const r = await J(await call(w, { action: 'create', users }, { boot: tok }));
   assert.equal(r.status, 201); assert.equal(r.body.created, 60);
   const lines = [...w.files.values()][0].trim().split('\r\n'); assert.equal(lines.length, 61);
@@ -177,8 +186,9 @@ await test('비밀번호 초기화: 새 임시 비밀번호, must_change 다시 
 
 await test('비활성화·활성화: 즉시 로그인 종료와 로그인 차단, 본인·마지막 관리자는 막는다', async () => {
   const w = world(); const aid = addAdmin(w);
-  await call(w, { action: 'create', users: [U('exwonju'), { username: 'admin-02', display_name: '관리자2', role: 'admin' }] }, { jwt: 'jwt-admin' });
-  const wid = [...w.profiles.values()].find((p) => p.username === 'exwonju').id, a2 = [...w.profiles.values()].find((p) => p.username === 'admin-02').id;
+  await call(w, { action: 'create', users: [U('exwonju')] }, { jwt: 'jwt-admin' });
+  const a2 = addAdmin(w, 'admin-02', 'jwt-a2-old'); w.profiles.get(a2).must_change = true;
+  const wid = [...w.profiles.values()].find((p) => p.username === 'exwonju').id;
   let r = await J(await call(w, { action: 'disable', username: 'exwonju' }, { jwt: 'jwt-admin' }));
   assert.equal(r.status, 200); assert.equal(w.profiles.get(wid).disabled, true); assert.equal(w.bans.get(wid), true); assert.deepEqual(w.sessionsRevoked, [wid]);
   r = await J(await call(w, { action: 'enable', username: 'exwonju' }, { jwt: 'jwt-admin' }));
@@ -221,7 +231,7 @@ await test('비밀번호 규칙: 12자·소문자·대문자·숫자·기호, �
 
 await test('일괄 설정: 관리자가 지사·장비 계정 비밀번호를 정하면 반영되고, 다음 로그인 때 변경 요구가 기본이며, 기존 로그인은 끊기고, 비밀번호는 응답·기록에 없다', async () => {
   const w = world(); addAdmin(w);
-  await call(w, { action: 'create', users: [U('exchungju', { branch_id: 'B001' }), U('exwonju', { branch_id: 'B002' }), { username: 'equip-01', display_name: '지원장비', role: 'equip' }] }, { jwt: 'jwt-admin' });
+  await call(w, { action: 'create', users: [U('exchungju', { branch_id: 'B001' }), U('exwonju', { branch_id: 'B002' }), EQ('equip-01')] }, { jwt: 'jwt-admin' });
   const ids = Object.fromEntries([...w.profiles.values()].filter((p) => p.role !== 'admin').map((p) => [p.username, p.id]));
   for (const id of Object.values(ids)) w.profiles.get(id).must_change = false;            // 모두 이미 비밀번호를 바꾼 상태
   w.audit.length = 0;
@@ -272,6 +282,74 @@ await test('일괄 설정: Auth 가 비밀번호를 거절하면 그 계정만 �
   const r = await J(await call(w, { action: 'set_passwords', items: [{ username: 'exok1', password: GOOD(1) }, { username: 'exbad2', password: GOOD(2) }] }, { jwt: 'jwt-admin' }));
   assert.equal(r.status, 207); assert.equal(r.body.updated, 1); assert.equal(r.body.failed[0].username, 'exbad2');
   assert.ok(!JSON.stringify(r.body).includes(GOOD(2)), '오류 문구에 비밀번호가 새어 나감');
+});
+
+
+/* ---------- 역할·권한(2단계) ---------- */
+await test('관리자 계정은 새로 만들 수 없다(관리자 로그인·시작 토큰 모두)', async () => {
+  const w = world(); addAdmin(w); const tok = 'tk2'; w.boot = { hash: await hex(tok), expires_at: '2026-10-02T10:10:00Z' };
+  const body = { action: 'create', users: [{ username: 'admin-03', display_name: '관리자3', role: 'admin' }] };
+  for (const o of [{ jwt: 'jwt-admin' }, { boot: tok }]) {
+    const r = await J(await call(w, body, o)); assert.equal(r.status, 400); assert.match(r.body.details[0].error, /관리자 계정은 여기서 만들 수 없음/);
+  }
+  assert.equal(w.users.size, 0);
+});
+
+await test('지원장비·지역본부·보기 전용 계정: 소속(출발 기관·본부)이 맞아야 하고, 권한을 안 주면 역할 기본 권한이 들어간다', async () => {
+  const w = world(); addAdmin(w);
+  const r = await J(await call(w, { action: 'create', users: [
+    EQ('exseoulgigye', { sort: 10 }), { username: 'exgangwon', display_name: '강원본부', role: 'hq', hq_id: 'H02' }, { username: 'exviewer', display_name: '보기', role: 'viewer' }, U('exchungju', { branch_id: 'B002' }),
+  ] }, { jwt: 'jwt-admin' }));
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const P = (u) => [...w.profiles.values()].find((p) => p.username === u);
+  assert.deepEqual([P('exseoulgigye').org, P('exseoulgigye').hq_id, P('exseoulgigye').branch_id, P('exseoulgigye').sort], ['서울경기', null, null, 10]);
+  assert.deepEqual(P('exseoulgigye').perms, ['equip.edit.own']);
+  assert.deepEqual([P('exgangwon').hq_id, P('exgangwon').org], ['H02', null]); assert.deepEqual(P('exgangwon').perms, ['req.edit.hq', 'hq.supply.edit']);
+  assert.deepEqual(P('exviewer').perms, []); assert.deepEqual(P('exchungju').perms, ['juris.request', 'req.edit.own']);
+  assert.equal(r.body.creds.find((c) => c.username === 'exseoulgigye').org, '서울경기');
+  assert.deepEqual(w.audit.find((a) => a.target.startsWith('exgangwon')).to_val, { perms: ['req.edit.hq', 'hq.supply.edit'] });
+});
+
+await test('계정 만들 때 권한을 직접 고를 수 있고, 없는 권한·잘못된 소속·순서는 거절', async () => {
+  const w = world(); addAdmin(w);
+  const r = await J(await call(w, { action: 'create', users: [EQ('exchungbukgigye', { org: '충북', perms: ['equip.edit.own', 'log.view', 'log.view'] })] }, { jwt: 'jwt-admin' }));
+  assert.equal(r.status, 201); assert.deepEqual([...w.profiles.values()].find((p) => p.username === 'exchungbukgigye').perms, ['equip.edit.own', 'log.view']);
+  const bad = async (u) => { const x = await J(await call(w, { action: 'create', users: [u] }, { jwt: 'jwt-admin' })); assert.equal(x.status, 400, JSON.stringify(x.body)); return x.body.details.map((d) => d.error).join('|'); };
+  assert.match(await bad(EQ('exa', { perms: ['root.all'] })), /없는 권한: root\.all/);
+  assert.match(await bad(EQ('exa', { perms: 'equip.edit.own' })), /권한 목록 형식/);
+  assert.match(await bad(EQ('exa', { org: '부산' })), /없는 출발 기관/);
+  assert.match(await bad(EQ('exa', { org: undefined })), /없는 출발 기관/);
+  assert.match(await bad({ username: 'exa', display_name: 'x', role: 'hq', hq_id: 'H99' }), /없는 본부/);
+  assert.match(await bad({ username: 'exa', display_name: 'x', role: 'viewer', org: '충북' }), /출발 기관을 넣을 수 없음/);
+  assert.match(await bad(U('exa', { hq_id: 'H01' })), /본부를 넣을 수 없음/);
+  assert.match(await bad(EQ('exa', { sort: -1 })), /순서/); assert.match(await bad(EQ('exa', { sort: 1.5 })), /순서/);
+  assert.match(await bad(EQ('exa', { display_name: '<b>x</b>' })), /이름/);
+});
+
+await test('계정 고치기(update): 이름·권한·순서를 여러 계정 한 번에, 이전 값·새 값이 기록되고 관리자 계정은 대상이 아니다', async () => {
+  const w = world(); addAdmin(w); addAdmin(w, 'admin-02', 'jwt-a2');
+  await call(w, { action: 'create', users: [U('exchungju'), EQ('exseoulgigye')] }, { jwt: 'jwt-admin' });
+  w.audit.length = 0;
+  const r = await J(await call(w, { action: 'update', items: [
+    { username: 'exchungju', perms: ['juris.request', 'req.edit.own', 'grid.edit'], sort: 3 }, { username: 'exseoulgigye', display_name: ' 서울경기 지원장비 ' }, { username: 'admin-02', perms: [] }, { username: 'exnobody', sort: 1 },
+  ] }, { jwt: 'jwt-admin' }));
+  assert.equal(r.status, 207); assert.equal(r.body.updated, 2);
+  const f = Object.fromEntries(r.body.failed.map((x) => [x.username, x.error])); assert.match(f['admin-02'], /관리자/); assert.match(f.exnobody, /찾을 수 없음/);
+  const P = (u) => [...w.profiles.values()].find((p) => p.username === u);
+  assert.deepEqual(P('exchungju').perms, ['juris.request', 'req.edit.own', 'grid.edit']); assert.equal(P('exchungju').sort, 3);
+  assert.equal(P('exseoulgigye').display_name, '서울경기 지원장비'); assert.deepEqual(P('exseoulgigye').perms, ['equip.edit.own']);
+  const a = w.audit.find((x) => x.target === 'exchungju'); assert.equal(a.kind, '계정수정');
+  assert.deepEqual(a.from_val, { perms: ['juris.request', 'req.edit.own'], sort: null }); assert.deepEqual(a.to_val, { perms: ['juris.request', 'req.edit.own', 'grid.edit'], sort: 3 });
+  // 검사: 하나라도 틀리면 아무것도 안 바꿈
+  const bad = await J(await call(w, { action: 'update', items: [{ username: 'exchungju', perms: ['nope.x'] }, { username: 'exseoulgigye' }] }, { jwt: 'jwt-admin' }));
+  assert.equal(bad.status, 400); assert.match(bad.body.details[0].error, /없는 권한/); assert.match(bad.body.details[1].error, /바꿀 항목이 없음/);
+  assert.deepEqual(P('exchungju').perms, ['juris.request', 'req.edit.own', 'grid.edit']);
+  // 권한 없는 사람·시작 토큰은 거절
+  w.profiles.set('b1', { id: 'b1', username: 'exb', role: 'branch', branch_id: 'B001', perms: ['juris.request'], disabled: false, must_change: false }); w.jwt.set('jwt-b', 'b1');
+  assert.equal((await call(w, { action: 'update', items: [{ username: 'exb', perms: ['juris.edit'] }] }, { jwt: 'jwt-b' })).status, 403);
+  const tok = 'tu'; w.boot = { hash: await hex(tok), expires_at: '2026-10-02T10:10:00Z' };
+  assert.equal((await call(w, { action: 'update', items: [{ username: 'exchungju', sort: 1 }] }, { boot: tok })).status, 403);
+  assert.deepEqual(P('exb').perms, ['juris.request']);
 });
 
 const ok = results.filter((r) => r[1]).length;

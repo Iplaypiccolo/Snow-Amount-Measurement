@@ -94,6 +94,14 @@ await test('권한: 비로그인·지사·임시 비밀번호 관리자는 거�
   assert.equal((await call(w, { action: 'plan', txt: TXT }, { jwt: 'jwt-t' })).status, 403);
   assert.equal(w.calls.length, 0);
 });
+
+await test('권한: 관리자가 아니어도 snow.upload 권한을 받은 계정은 올릴 수 있음', async () => {
+  const w = world();
+  w.users['jwt-s'] = 'u-s'; w.profiles['u-s'] = { id: 'u-s', username: 'exgangwon', role: 'hq', perms: ['req.edit.hq', 'snow.upload'], disabled: false, must_change: false };
+  assert.equal((await call(w, { action: 'plan', txt: TXT }, { jwt: 'jwt-s' })).status, 200);
+  w.profiles['u-s'].perms = ['req.edit.hq'];
+  assert.equal((await call(w, { action: 'plan', txt: TXT }, { jwt: 'jwt-s' })).status, 403);
+});
 await test('plan: 넣지 않고 개수만 셈(결측·시즌 밖 개수 포함), 요약본도 안 만듦', async () => {
   const w = world(); admin(w);
   const r = await call(w, { action: 'plan', txt: TXT }, { jwt: 'jwt-a' });

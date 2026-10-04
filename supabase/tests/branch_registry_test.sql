@@ -21,7 +21,7 @@ do $t$
 declare a uuid := gen_random_uuid(); b uuid := gen_random_uuid(); rep text; fails int; total int;
 begin
   insert into auth.users (id, aud, role, email) values (a,'authenticated','authenticated','ra@t.test'),(b,'authenticated','authenticated','rb@t.test');
-  insert into public.profiles (id,username,display_name,role,branch_id,must_change) values (a,'rg-adm','관리자','admin',null,false),(b,'rg-br','지사','branch','B001',false);
+  insert into public.profiles (id,username,display_name,role,branch_id,perms,must_change) values (a,'rg-adm','관리자','admin',null,'{}',false),(b,'rg-br','지사','branch','B001','{juris.request,req.edit.own}',false);
 
   perform pg_temp.yes('영암 B060·민자 B061 이 기관 목록에 있음', (select count(*) from public.branches where (id, name) in (('B060','영암'),('B061','민자'))) = 2);
   perform pg_temp.chk('지사: 영암(B060)으로 구간 변경 요청 가능(예전엔 외래키 오류)','authenticated',b,
