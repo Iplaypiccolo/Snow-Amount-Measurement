@@ -5,7 +5,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>제설장비 지원 현황</title>
-<link rel="stylesheet" href="css/style.css?v=6a316c1b">
+<link rel="stylesheet" href="css/style.css?v=29828a89">
 <script src="../auth/auth.js?v=671ac2b8"></script>
 <script>
 /* 로그인 잠금(가벼운 확인): 로그인 정보가 이 브라우저에 없으면 화면을 만들지 않고 안내만 보여 줍니다(?sample=1 시연 화면은 예외).
@@ -64,8 +64,9 @@ if (!/[?&]sample(=|&|$)/.test(location.search) && (!window.SSAuth || !SSAuth.has
   <!-- ===== 기관별 장비 ===== -->
   <section class="panel" id="panel-fleet" hidden>
     <div class="perm" id="perm-fleet"></div>
-    <div class="filters" id="fleetFilters"></div>
+    <div class="round-bar" id="fleetRound"></div>
     <div class="org-grid" id="orgGrid"></div>
+    <div class="toolbar" id="fleetFilters"></div>
     <div class="table-wrap tall"><table class="eq" id="eqTable"></table></div>
     <div class="savebar" id="save-fleet" hidden>
       <span class="save-state" aria-live="polite"></span>
@@ -77,8 +78,9 @@ if (!/[?&]sample(=|&|$)/.test(location.search) && (!window.SSAuth || !SSAuth.has
   <!-- ===== 지사별 요청·편성 ===== -->
   <section class="panel" id="panel-branch" hidden>
     <div class="perm" id="perm-branch"></div>
-    <div class="filters" id="branchCtl"></div>
-    <div class="table-wrap"><table class="branch" id="branchTable"></table></div>
+    <div class="round-bar" id="branchRound"></div>
+    <div class="toolbar" id="branchCtl"></div>
+    <div class="table-wrap tall"><table class="branch" id="branchTable"></table></div>
     <div class="savebar" id="save-branch" hidden>
       <span class="save-state" aria-live="polite"></span>
       <button type="button" class="btn" data-revert="branch">되돌리기</button>
@@ -99,8 +101,8 @@ if (!/[?&]sample(=|&|$)/.test(location.search) && (!window.SSAuth || !SSAuth.has
 <div class="tip" id="tip" hidden role="tooltip"></div>
 <div class="toast" id="toast" hidden role="status"></div>
 <!-- 코드는 아래 순서대로 불러옵니다 (순서가 중요합니다). auth.js 는 위 <head> 에서 먼저 불러옴 -->
-<script src="js/sample-data.js?v=c0df0ac8"></script>
-<script src="js/api.js?v=1ac875f4"></script>
-<script src="js/app.js?v=c9854fb1"></script>
+<script src="js/sample-data.js?v=30bf5078"></script>
+<script src="js/api.js?v=0e3f8522"></script>
+<script src="js/app.js?v=7c031e96"></script>
 </body>
 </html>

@@ -391,3 +391,21 @@ ol.vhist li { padding: 2px 0; } ol.vhist li.on { font-weight: 700; color: var(--
 .branch th, .branch td { padding: 6px 6px; } .branch thead th { white-space: nowrap; }
 .branch input.num { width: 56px; } .branch input.rs { width: 140px; }
 table.branch { min-width: 1180px; }
+
+/* ---------- 정리(2026-10-04): 넓은 화면은 넓게, 기준일자 줄 / 표 바로 위 도구 줄 ---------- */
+.topbar-inner, .tabs, main { max-width: 1680px; }
+.round-bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 0 0 16px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.round-bar .hint { font-size: 13px; color: var(--ink-soft); }
+.round-bar .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
+.toolbar { display: flex; flex-direction: column; gap: 8px; margin: 0 0 8px; }
+.toolbar:empty { display: none; }
+.tb-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tb-label { font-size: 12.5px; font-weight: 700; color: var(--ink-soft); min-width: 56px; }
+.tb-right { margin-left: auto; display: inline-flex; gap: 8px; align-items: center; font-size: 13px; }
+.tb-row .ci { min-height: 34px; }
+.tb-row .plate-in { width: 150px; }
+/* 지사별 요청·편성: 화면 너비에 맞추고, 좁을 때만 표 안에서 좌우 스크롤(스크롤바는 표 상자 아래에 항상 보임) */
+table.branch { min-width: 1020px; width: 100%; }
+#panel-branch .table-wrap.tall { max-height: calc(100vh - 230px); }
+.branch td.cf { white-space: nowrap; }
+.branch td.cf .btn { min-height: 28px; }

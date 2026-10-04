@@ -4,13 +4,13 @@
    - 주소에 ?sample=1 이 있으면: 서버 대신 sample-data.js 의 샘플로 움직입니다(시연·자동 시험용, 저장은 이 화면 안에만).
    - 권한 검사는 서버(DB 규칙)가 다시 합니다. 화면의 검사는 보기 좋게 정리하는 용도입니다.
    - 저장은 "바뀐 칸만" 보내고, 한 번의 [확정]/[저장]은 서버 함수 하나로 "전부 되거나 전부 안 되게" 처리합니다.
-     · 기관별 장비 [확정] → save_fleet(장비 차량번호·지원 여부, (날짜, 장비)별 경로)
+     · 기관별 장비 [확정] → save_fleet(장비 도공번호·지원 여부, (날짜, 장비)별 경로 — 경로는 관리자)
      · 지사별 요청·편성 [저장] → save_requests(기준일자, 지사별 바뀐 열)
    - 모든 함수는 Promise 를 돌려줍니다. 실패하면 { ok:false, message } 입니다.
    ============================================================ */
 const Api = (() => {
   const SAMPLE = new URLSearchParams(location.search).has("sample");
-  const ERR = { "42501": "권한이 없습니다(다른 기관·지사 자료이거나 권한이 바뀌었습니다).", "23505": "이미 있는 값입니다(차량번호·기준일자 중복).",
+  const ERR = { "42501": "권한이 없습니다(다른 기관·지사 자료이거나 권한이 바뀌었습니다).", "23505": "이미 있는 값입니다(도공번호·기준일자 중복).",
     "23514": "값의 형식이 올바르지 않습니다.", "23503": "없는 지사·장비·기준일자입니다.", "22023": "저장할 내용이 없습니다.", "54000": "한 번에 너무 많이 저장하려고 합니다." };
   const fail = (r, fallback) => ({ ok: false, message: (r && r.json && ERR[r.json.code]) || fallback || "저장하지 못했습니다. 잠시 후 다시 시도해 주세요.", code: r && r.json && r.json.code });
   const NET = () => ({ ok: false, message: (window.SSAuth && SSAuth.NET_MSG) || "서버에 연결할 수 없습니다." });
@@ -85,7 +85,7 @@ const Api = (() => {
       requests(round) { return done({ ok: true, rows: clone(db.requests.filter(r => r.round_id === +round)) }); },
       audit() { return done({ ok: true, rows: can("log.view") ? clone(db.audit) : [] }); },
       saveFleet(vehicles, routes) {
-        if (vehicles.some(v => !vehOk(v.id)) || routes.some(r => !vehOk(r.vehicle_id))) return done({ ok: false, message: ERR["42501"] });
+        if (vehicles.some(v => !vehOk(v.id)) || (routes.length && !can("equip.edit.all"))) return done({ ok: false, message: ERR["42501"] });   // 경로는 관리자(equip.edit.all)만
         if (!can("equip.edit.all") && vehicles.some(v => Object.keys(v).some(k => !["id", "plate", "status"].includes(k)))) return done({ ok: false, message: ERR["42501"] });
         const plates = new Map(db.vehicles.map(v => [v.id, v.plate])); vehicles.forEach(v => { if ("plate" in v) plates.set(v.id, v.plate); });
         if (new Set(plates.values()).size !== plates.size) return done({ ok: false, message: ERR["23505"] });
@@ -124,7 +124,7 @@ const Api = (() => {
         return done({ ok: true });
       },
       addVehicle(v) {
-        if (!can("equip.edit.all")) return done({ ok: false, message: ERR["42501"] });
+        if (!(can("equip.edit.all") || (can("equip.edit.own") && v.org === actor.org))) return done({ ok: false, message: ERR["42501"] });
         if (db.vehicles.some(x => x.plate === v.plate || x.id === v.id)) return done({ ok: false, message: ERR["23505"] });
         const nv = { status: "", active: true, ...v }; db.vehicles.push(nv); log("추가", "vehicles", "vehicles:" + v.id, null, nv); return done({ ok: true, vehicle: clone(nv) });
       },

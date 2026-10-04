@@ -55,8 +55,8 @@ class Mock:
         # 장비 지원(마이그레이션 16·17): 장비, 날짜별 경로, 기준일자, 지사 요청. 저장 함수 호출은 eq_calls 에 기록
         import datetime as _dt
         self.today = _dt.date.today().isoformat()
-        self.vehicles = [{"id": "V001", "org": "서울경기", "type": "제설차", "plate": "11가1111", "status": "O", "sort": 10, "active": True},
-                         {"id": "V002", "org": "충북", "type": "제설기", "plate": "22나2222", "status": "O", "sort": 20, "active": True}]
+        self.vehicles = [{"id": "V001", "org": "서울경기", "type": "제설차", "plate": "서울경기-901", "status": "O", "sort": 10, "active": True},
+                         {"id": "V002", "org": "충북", "type": "제설기", "plate": "충북-901", "status": "O", "sort": 20, "active": True}]
         self.routes = [{"date": self.today, "vehicle_id": "V002", "stops": ["B019"]}]
         self.rounds = [{"id": 1, "name": self.today + " 기준", "start_date": self.today}]
         self.round_reqs = [{"round_id": 1, "branch_id": "B019", "snow_cm": 5, "warning": False, "req_truck": 2, "req_blower": 0, "assigned_truck": 1, "assigned_blower": 0,
@@ -205,7 +205,7 @@ class Mock:
                 self.eq_calls.append((tbl, body))
                 if tbl == "save_fleet":
                     ok = lambda vid: self.can(u, "equip.edit.all") or (self.can(u, "equip.edit.own") and next((v for v in self.vehicles if v["id"] == vid), {}).get("org") == u["profile"].get("org"))
-                    if any(not ok(v["id"]) for v in body["p_vehicles"]) or any(not ok(r["vehicle_id"]) for r in body["p_routes"]): return send(403, {"code": "42501", "message": "route not allowed"})
+                    if any(not ok(v["id"]) for v in body["p_vehicles"]) or (body["p_routes"] and not self.can(u, "equip.edit.all")): return send(403, {"code": "42501", "message": "routes need equip.edit.all"})
                     for r in body["p_routes"]:
                         self.routes = [x for x in self.routes if not (x["date"] == r["date"] and x["vehicle_id"] == r["vehicle_id"])] + ([r] if r["stops"] else [])
                     return send(200, {"vehicles": len(body["p_vehicles"]), "routes_saved": len(body["p_routes"]), "routes_deleted": 0})
