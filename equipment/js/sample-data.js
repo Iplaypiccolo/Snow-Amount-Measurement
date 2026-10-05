@@ -18,12 +18,13 @@ function makeSample(today) {
     "전북":     [["전주",20,1],["부안",18,1],["무주",14,1],["논산",14,0],["진안",20,0],["보령",14,1]],
     "광주전남": [["광주",17,1],["담양",13,1],["순천",8,0],["함평",18,1],["구례",16,1],["보성",16,1],["남원",11,0]],
     "대구경북": [["구미",12,0],["대구",19,0],["군위",10,0],["영천",10,0],["고령",10,0],["영주",10,0],["성주",10,0],["청송",18,0]],
+    "민자":     [["민자",0,0]],
     "부산경남": [["울산",8,0],["양산",9,0],["창원",10,0],["진주",9,0],["산청",8,1],["경주",7,0],["창녕",7,0],["고성",4,0],["서울산",8,0],["밀양",8,0]]
   };
   const hqs = [], branches = [], holdings = {};
   let n = 0;
   Object.entries(H).forEach(([hq, rows], i) => {
-    const hid = "H" + p2(i + 1); hqs.push({ id: hid, name: hq, sort: i + 1 });
+    const hid = "H" + p2(i + 1); hqs.push({ id: hid, name: hq, sort: i + 1, is_private: hq === "민자" });
     rows.forEach(([name, t, w]) => { const id = "B" + String(++n).padStart(3, "0"); branches.push({ id, name, hq_id: hid }); holdings[id] = { truck: t, blower: w }; });
   });
   const B = name => branches.find(b => b.name === name).id;

@@ -450,6 +450,13 @@ def t_zone_manager(p):
     check("특보구역" in p.locator("#panel-log").inner_text(), "수정 기록에 특보구역")
     as_user(p, "hq-gw"); tab(p, "branch"); check(p.locator("#zoneMgr").count() == 0, "본부는 관리 버튼 없음")
 
+def t_private_hq_hidden_in_branch_tab(p):
+    """민자는 지사별 요청·편성에 나오지 않음('요청 있는 지사만'을 꺼도)"""
+    tab(p, "branch"); p.click("#onlyActive"); p.wait_for_timeout(200)
+    hqs = [x.strip() for x in p.locator("#branchTable tr.hq td.l").all_inner_texts()]
+    check("민자" not in hqs and len(hqs) == ev(p, "S.hqs.filter(h => !h.is_private).length"), f"본부 줄에 민자 없음: {hqs}")
+    check(p.locator(f"#branchTable tr[data-b='{bid(p, '민자')}']").count() == 0, "민자 지사 줄 없음")
+
 def t_snow_forecast(p):
     """강설 [적설 | 강수] = 기상청 단기예보 24시간 합의 지사 최댓값(입력칸 없음), 제목 옆 발표 기준, 확정하면 고정, 누르면 기관별 24시간 예보로"""
     tab(p, "branch"); head = p.locator("#branchTable thead").inner_text()
@@ -474,7 +481,7 @@ TESTS = [t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_con
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
          t_typing_then_clicking_next_input_keeps_both, t_round_delete, t_pending_branches_shown_grey, t_ui_version_reload_once,
          t_route_kind_and_eta, t_equip_can_edit_eta, t_bulk_confirm_and_no_holdings, t_filters_fit_any_width, t_date_in_title, t_branch_header_stays_on_top,
-         t_warning_auto_badge, t_zone_manager, t_snow_forecast]
+         t_warning_auto_badge, t_zone_manager, t_snow_forecast, t_private_hq_hidden_in_branch_tab]
 
 # ---------------------------------------------------------------- 서버 모드(가짜 Supabase, tests/_sb_mock.py) — 실제 로그인 권한·저장 함수 호출
 sys.path.insert(0, str(Path(__file__).resolve().parent))

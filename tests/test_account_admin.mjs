@@ -45,7 +45,7 @@ function world(over = {}) {
 const PERMS = [
   { key: 'juris.request', default_roles: ['branch'] }, { key: 'juris.edit', default_roles: [] }, { key: 'grid.edit', default_roles: [] }, { key: 'snow.upload', default_roles: [] },
   { key: 'req.edit.own', default_roles: ['branch'] }, { key: 'req.edit.hq', default_roles: ['hq'] }, { key: 'req.confirm', default_roles: [] },
-  { key: 'equip.edit.own', default_roles: ['equip'] }, { key: 'equip.edit.all', default_roles: [] }, { key: 'hq.supply.edit', default_roles: ['hq'] }, { key: 'log.view', default_roles: [] },
+  { key: 'equip.edit.own', default_roles: ['equip'] }, { key: 'equip.edit.all', default_roles: [] }, { key: 'log.view', default_roles: [] },
 ];
 const EQ = (username, o = {}) => ({ username, display_name: '지원장비', role: 'equip', org: '서울경기', ...o });
 const addAdmin = (w, name = 'admin-01', jwt = 'jwt-admin') => { const id = 'a-' + name; w.profiles.set(id, { id, username: name, display_name: '관리자', role: 'admin', branch_id: null, disabled: false, must_change: false }); w.jwt.set(jwt, id); return id; };
@@ -304,10 +304,10 @@ await test('지원장비·지역본부·보기 전용 계정: 소속(출발 기�
   const P = (u) => [...w.profiles.values()].find((p) => p.username === u);
   assert.deepEqual([P('exseoulgigye').org, P('exseoulgigye').hq_id, P('exseoulgigye').branch_id, P('exseoulgigye').sort], ['서울경기', null, null, 10]);
   assert.deepEqual(P('exseoulgigye').perms, ['equip.edit.own']);
-  assert.deepEqual([P('exgangwon').hq_id, P('exgangwon').org], ['H02', null]); assert.deepEqual(P('exgangwon').perms, ['req.edit.hq', 'hq.supply.edit']);
+  assert.deepEqual([P('exgangwon').hq_id, P('exgangwon').org], ['H02', null]); assert.deepEqual(P('exgangwon').perms, ['req.edit.hq']);
   assert.deepEqual(P('exviewer').perms, []); assert.deepEqual(P('exchungju').perms, ['juris.request', 'req.edit.own']);
   assert.equal(r.body.creds.find((c) => c.username === 'exseoulgigye').org, '서울경기');
-  assert.deepEqual(w.audit.find((a) => a.target.startsWith('exgangwon')).to_val, { perms: ['req.edit.hq', 'hq.supply.edit'] });
+  assert.deepEqual(w.audit.find((a) => a.target.startsWith('exgangwon')).to_val, { perms: ['req.edit.hq'] });
 });
 
 await test('계정 만들 때 권한을 직접 고를 수 있고, 없는 권한·잘못된 소속·순서는 거절', async () => {

@@ -21,7 +21,7 @@ const Api = (() => {
   const server = {
     load() {
       const R = SSAuth.rest;
-      return Promise.all([SSAuth.restore(), R("hqs?select=id,name,sort&order=sort"), R("branches?select=id,name,hq_id,status&order=id"),
+      return Promise.all([SSAuth.restore(), R("hqs?select=id,name,sort,is_private&order=sort"), R("branches?select=id,name,hq_id,status&order=id"),
         R("vehicles?select=id,org,type,plate,status,sort,active&order=sort,id"), R("support_rounds?select=id,name,start_date&order=start_date.desc"), R("equip_orgs?select=name")])
         .then(([me, h, b, v, s, o]) => {
           if (!me.ok) return { ok: false, message: me.message || "로그인이 필요합니다.", login: true };

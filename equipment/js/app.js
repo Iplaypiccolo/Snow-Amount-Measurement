@@ -44,7 +44,7 @@ const sameDay = iso => new Date(iso).toDateString() === new Date().toDateString(
 // 접속 아이디(데모): 정식 출시 전까지 유지(사용자 결정 2026-10-04). 서버에 연결된 화면에서는 "미리보기"이고 저장은 내 아이디로만.
 const DEMO = [
   { id: "admin1", label: "관리자1", role: "admin", g: "관리자" }, { id: "admin2", label: "관리자2", role: "admin", g: "관리자" },
-  { id: "hq-gw", label: "강원본부", role: "hq", hq: "강원", perms: ["req.edit.hq", "hq.supply.edit"], g: "지역본부" },
+  { id: "hq-gw", label: "강원본부", role: "hq", hq: "강원", perms: ["req.edit.hq"], g: "지역본부" },
   { id: "br1", label: "대관령지사", role: "branch", branch: "대관령", perms: ["juris.request", "req.edit.own"], g: "피지원지사" },
   { id: "br2", label: "양양지사", role: "branch", branch: "양양", perms: ["juris.request", "req.edit.own"], g: "피지원지사" },
   { id: "br3", label: "엄정지사", role: "branch", branch: "엄정", perms: ["juris.request", "req.edit.own"], g: "피지원지사" },
@@ -593,6 +593,7 @@ function renderBranch() {
   const has = b => !!S.reqs[b.id] || S.rdraft.has(b.id);
   const mine = b => (m.branch_id === b.id) || (can("req.edit.hq") && !can("req.confirm") && b.hq_id === m.hq_id);
   S.hqs.forEach(hq => {
+    if (hq.is_private) return;                                   // 민자는 지사별 요청·편성에 나오지 않음
     const rows = S.order.filter(b => b.hq_id === hq.id), shown = rows.filter(b => !S.onlyActive || has(b) || mine(b));
     if (!shown.length) return;
     const closed = S.closedHq.has(hq.id), hsum = hqSums(hq.id);
@@ -639,7 +640,7 @@ async function saveBranchRows(ids, extra, msg) {
 const saveBranch = () => saveBranchRows([...S.rdraft.keys()], null, `저장했습니다 (${S.rdraft.size}개 지사)`);
 function confirmAll() {              // 요청(저장됐거나 입력 중)이 있고 아직 확정 안 된 지사를 모두 확정
   if (!can("req.confirm")) return;
-  const ids = S.order.filter(b => (S.reqs[b.id] || S.rdraft.has(b.id)) && !rval(b.id, "confirmed")).map(b => b.id);
+  const ids = S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private && (S.reqs[b.id] || S.rdraft.has(b.id)) && !rval(b.id, "confirmed")).map(b => b.id);
   if (!ids.length) return toast("확정할 지사가 없습니다(요청이 있고 확정 전인 지사만 일괄 확정합니다)");
   if (!confirm(`${ids.length}개 지사를 확정할까요? 바로 저장됩니다.\n${ids.map(bn).join(", ")}\n이 지사 줄에서 고친 값도 함께 저장됩니다.`)) return;
   saveBranchRows(ids, { confirmed: true }, `${ids.length}개 지사를 확정했습니다`);

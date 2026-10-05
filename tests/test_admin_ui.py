@@ -298,7 +298,7 @@ def org_sub(b, m, sub, dialogs=None):
 def t_perm_tab(b, m):
     """권한·순서: 체크칸·묶음 전체 켜기·위치(○○ 다음) → 바꾼 계정만 update 로 보냄, 관리자는 표에 없음"""
     dl = []; p = org_sub(b, m, "perm", dl); p.wait_for_selector("table.perm")
-    check(p.locator("table.perm th.pc").count() == 11, "권한 11개 열")
+    check(p.locator("table.perm th.pc").count() == 10, "권한 10개 열(hq.supply.edit 없앰)")
     users = [x.get_attribute("data-u") for x in p.locator("input.pchk[data-p='juris.edit']").all()]
     check("admin-01" not in users and "exchungju" in users and "equip-01" in users, users)
     check(p.locator("input.pchk[data-u=exchungju][data-p='juris.request']").is_checked() and not p.locator("input.pchk[data-u=exchungju][data-p='grid.edit']").is_checked(), "지사 기본 권한 표시")

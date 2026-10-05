@@ -33,7 +33,7 @@ ADMIN_PW = "Admin#Pass-2026x!"
 # 서버 표 permissions 와 같은 목록(마이그레이션 15)
 PERMS = [("juris.request", "관할 구간 변경 요청", ["branch"]), ("juris.edit", "관할 변경 저장·요청 승인", []), ("grid.edit", "예보 격자 편입", []), ("snow.upload", "적설 자료 올리기", []),
          ("req.edit.own", "자기 지사 요청 입력", ["branch"]), ("req.edit.hq", "자기 본부 지사 요청 입력", ["hq"]), ("req.confirm", "요청 확정·편성·기준일자", []),
-         ("equip.edit.own", "자기 기관 장비·경로 입력", ["equip"]), ("equip.edit.all", "모든 기관 장비·경로 입력", []), ("hq.supply.edit", "지역본부 지원 가능 장비 입력", ["hq"]), ("log.view", "접속·수정 기록 보기", [])]
+         ("equip.edit.own", "자기 기관 장비·경로 입력", ["equip"]), ("equip.edit.all", "모든 기관 장비·경로 입력", []), ("log.view", "접속·수정 기록 보기", [])]
 def default_perms(role): return [k for k, _, r in PERMS if role in r]
 TEMP_PW = "Tmp#Start-Ab12Cd34"
 
