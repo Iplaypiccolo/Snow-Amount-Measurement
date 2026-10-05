@@ -487,21 +487,18 @@ def server_page(b, mock, user):
     install(p, mock, user); p.goto(SERVER_URL); p.wait_for_selector("#matrix tbody tr", timeout=15000); return p
 
 def t_server_equip_confirm(b):
-    """지원장비 계정(서울경기)으로 로그인: 자기 기관 장비만, [확정]은 save_fleet 에 바뀐 칸만 보냄. 다른 아이디는 미리보기(확정 불가)"""
+    """지원장비 계정(서울경기)으로 로그인: 자기 기관 장비만, [확정]은 save_fleet 에 바뀐 칸만 보냄. 접속 아이디(데모·미리보기) 선택은 없음"""
     m = Mock(); p = server_page(b, m, "equip-01")
-    check(p.locator("#userSel").input_value() == "__me" and "내 아이디" in p.locator("#userSel option").first.inner_text(), "내 아이디로 시작")
+    check(p.locator(".user-box").is_hidden(), "로그인한 화면에는 접속 아이디(데모) 선택이 없음(2026-10-05)")
     tab(p, "fleet"); check(p.locator("[data-vs=V001]").count() == 1 and p.locator("[data-vs=V002]").count() == 0 and p.locator("select[data-rv]").count() == 0, "자기 기관 도공번호·지원 여부만(경로는 관리자)")
     d0 = m.today
     p.select_option("[data-vs=V001]", "M"); p.fill("[data-vp=V001]", "911"); p.press("[data-vp=V001]", "Tab"); p.wait_for_timeout(150); confirm_fleet(p)
     check(m.eq_calls[-1] == ("save_fleet", {"p_vehicles": [{"id": "V001", "status": "M", "plate": "서울경기911"}], "p_routes": []}), m.eq_calls)
     check("확정했습니다" in toast(p), toast(p))
-    as_user(p, "admin1"); tab(p, "fleet")
-    check("미리보기" in p.locator("#perm-fleet").inner_text(), "미리보기 안내")
+    p.close()
+    p = server_page(b, m, "admin-01"); tab(p, "fleet")
     opts = p.locator(rsel("V002", d0) + " option:not([disabled])").all_inner_texts()
-    check([o for o in opts if o not in ("지사 선택", "지우기")] == ["충주"], f"확정된 지사만: {opts}")
-    p.select_option(rsel("V002", d0), "__del"); p.wait_for_timeout(150)
-    check(p.locator("#save-fleet [data-save]").is_disabled() and "확정 불가" in p.locator("#save-fleet .save-state").inner_text(), "미리보기는 확정 불가")
-    n = len(m.eq_calls); ev(p, "confirmFleet()"); p.wait_for_timeout(200); check(len(m.eq_calls) == n, "미리보기에서 서버로 보내면 안 됨")
+    check([o for o in opts if o not in ("지사 선택", "지우기")] == ["충주"], f"관리자: 확정된 지사만: {opts}")
     p.close()
 
 def t_server_branch_save(b):

@@ -215,6 +215,8 @@ class Mock:
             if tbl in self.events: return self.events_api(tbl, req, u, q, body, send)
             if tbl == "snapshots":
                 if not self.usable(u) or self.snow_empty or q.get("key") != ["eq.snow"]: return send(200, [])
+                self.snow_selects = getattr(self, "snow_selects", []) + [(q.get("select") or [""])[0]]
+                if q.get("select") == ["built_at"]: return send(200, [{"built_at": r.get("built_at")} for r in json.loads(snow_snapshot_text())])   # 만든 시각만
                 return route.fulfill(status=200, headers={**CORS, "content-type": "application/json"}, body=snow_snapshot_text())
             if tbl == "snow_uploads": return send(200, [{"at": "2026-10-04T01:00:00Z", "date_from": "2025-12-01", "date_to": "2025-12-02", "stations": 2, "rows_written": 2, "ok": True, "note": "txt by admin-01"}] if self.can(u, "snow.upload") else [])
             if tbl == "save_jurisdiction" and "/rpc/" in path: return self.save_rpc(u, body, send)

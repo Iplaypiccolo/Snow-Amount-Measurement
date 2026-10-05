@@ -528,3 +528,4 @@ table.matrix { font-size: 15px; min-width: 900px; }
 .fcbase { display: block; width: max-content; margin: 1px auto 0; font-size: 11px; font-weight: 700; color: var(--base-ink); border-bottom: 1px dashed var(--base-ink); cursor: help; }
 .fcv { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
 .fcv.wet { color: #2f7d4f; }
+.user-box[hidden] { display: none; }

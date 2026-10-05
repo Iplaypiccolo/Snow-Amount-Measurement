@@ -931,6 +931,8 @@ try { const t = localStorage.getItem(THEME_KEY); if (t === "light" || t === "dar
 document.querySelectorAll("[data-theme-set]").forEach(b => b.onclick = () => setTheme(b.dataset.themeSet));
 paintThemeBtns();
 function buildUserSel() {
+  const box = $("userSel").closest(".user-box"); if (box) box.hidden = !!S.real;     // 로그인한 실제 화면에서는 없음(?sample=1 시연·자동 시험에서만)
+  if (S.real) return;
   const groups = [...new Set(DEMO.map(d => d.g))];
   $("userSel").innerHTML = (S.real ? `<option value="__me">내 아이디 · ${esc(S.real.label)}</option>` : "") +
     groups.map(g => `<optgroup label="${S.real ? "미리보기(저장 안 됨) · " : ""}${esc(g)}">${DEMO.filter(d => d.g === g).map(d => `<option value="${d.id}">${esc(d.label)}</option>`).join("")}</optgroup>`).join("");

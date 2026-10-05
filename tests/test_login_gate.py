@@ -173,6 +173,16 @@ def t_logout_from_equip_then_login_starts_first_screen(b, ctx, m):
     typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".pagebar", state="visible"); p.wait_for_timeout(500)
     check(p.locator("#page-snow").is_visible() and "#equip" not in p.url, "예전 주소로 열어도 첫 화면부터")
 
+def t_snow_snapshot_cached(b, ctx, m):
+    """적설 요약본(약 1.5MB)은 이 브라우저에 보관: 처음엔 받고, 다시 열 때는 만든 시각만 묻고 같으면 받지 않음(무료 내려받기 한도 절약)"""
+    p = open_site(ctx, m); typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".pagebar", state="visible"); p.wait_for_timeout(800)
+    first = list(getattr(m, "snow_selects", []))
+    check(first == ["built_at", "body,built_at"], f"처음: 만든 시각 → 요약본: {first}")
+    p.reload(); p.wait_for_selector(".pagebar", state="visible"); p.wait_for_timeout(800)
+    again = getattr(m, "snow_selects", [])[len(first):]
+    check(again == ["built_at"], f"다시 열면 만든 시각만: {again}")
+    check(p.evaluate("Object.keys(SNOW_DATA.seasons).length") > 0, "보관한 요약본으로 화면이 그려짐")
+
 def t_no_secrets_and_safe_text(b, ctx, m):
     m.add("exxss", "<img src=x onerror=window.__x=1>", "branch", "B001", "Xss#Pass-998877aZ"); m.users["exxss"]["profile"]["must_change"] = False
     p = open_site(ctx, m); typed_login(p, "exxss", "Xss#Pass-998877aZ", remember=True, auto=True); p.wait_for_selector(".pagebar", state="visible")
@@ -183,7 +193,7 @@ def t_no_secrets_and_safe_text(b, ctx, m):
     check("Xss#Pass" not in p.evaluate("document.body.innerHTML"), "화면 어디에도 비밀번호가 없어야 함")
 
 TESTS = [t_locked_before_login, t_wrong_and_empty, t_login_session_only, t_remember_id, t_auto_login, t_auto_login_expired, t_server_revoked, t_special_accounts,
-         t_branch_set_by_admin_enters_main_directly, t_cross_tab_logout, t_network_problems, t_equipment_gate, t_logout_from_equip_then_login_starts_first_screen, t_no_secrets_and_safe_text]
+         t_branch_set_by_admin_enters_main_directly, t_cross_tab_logout, t_network_problems, t_equipment_gate, t_logout_from_equip_then_login_starts_first_screen, t_snow_snapshot_cached, t_no_secrets_and_safe_text]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()
