@@ -366,11 +366,11 @@
   </header>
 
   <div class="tabbar">
-    <button class="tab-btn active" data-tab="snowtable">연도별 신적설</button>
+    <button class="tab-btn active" data-tab="forecast">기관별 24시간 예보</button>
+    <button class="tab-btn" data-tab="snowtable">연도별 신적설</button>
     <button class="tab-btn" data-tab="map">관측소 지도</button>
-    <button class="tab-btn" data-tab="sources">데이터 출처</button>
     <button class="tab-btn" data-tab="jurisdiction">기관별 관할 고속도로</button>
-    <button class="tab-btn" data-tab="forecast">기관별 24시간 예보</button>
+    <button class="tab-btn" data-tab="sources">데이터 출처</button>
     <button class="tab-btn" data-tab="grid" id="tabGridBtn" style="display:none">예보 격자 편입</button>
   </div>
 
@@ -397,7 +397,7 @@
   </div>
   </div>
 
-  <div id="view-snowtable" class="view">
+  <div id="view-snowtable" class="view" style="display:none;">
     <div class="snow-toolbar">
       <label>기간 선택
         <select id="seasonSelect"></select>
@@ -416,21 +416,29 @@
 
   <div id="view-grid" class="view" style="display:none;"></div>
 
-  <div id="view-forecast" class="view" style="display:none;"></div>
+  <div id="view-forecast" class="view"></div>
 
   <div id="view-sources" class="view sources-view" style="display:none;">
     <div class="sources-content">
       <h2>데이터 출처 및 산출 방법</h2>
 
-      <h3>1. 고속도로 노선 데이터</h3>
+      <h3>1. 기관별 24시간 예보 (예상 적설·강수)</h3>
+      <p>기상청 API허브 <span class="mono">nph-dfs_shrt_grd</span>(단기예보 격자, 5km)의 <b>1시간 신적설(SNO, cm)</b>과 <b>1시간 강수량(PCP, mm)</b>을 씁니다.
+      단기예보 발표(02·05·08·11·14·17·20·23시) 15분 뒤부터 가장 최근 발표분을 받아, <b>받기 시작한 시각의 다음 정시부터 24시간</b>을 격자마다 더합니다.
+      지사 값 = 그 지사에 편입된 격자(예보 격자 편입 탭 기준) 중 <b>가장 큰 값</b>. 지난 발표분은 남기지 않습니다.</p>
+
+      <h3>2. 대설 특보 (장비 지원 → 지사별 요청·편성)</h3>
+      <p>기상청 API허브 <span class="mono">wrn_now_data_new</span>(특보 현황)를 <b>10분마다</b>(매시 01·11·21·31·41·51분) 받습니다. 지사마다 관할 구간이 지나는 특보구역에 대설 예비특보·주의보·경보가 있으면 표시합니다(구역은 장비 지원 → 특보구역 관리에서 조정). 지난 특보는 남기지 않고, 요청을 확정하면 그때의 특보가 그 요청에 고정됩니다.</p>
+
+      <h3>3. 고속도로 노선 데이터</h3>
       <p>국가교통정보센터(ITS) <b>전국표준노드링크</b> 중 <span class="mono">ROAD_RANK = 101(고속도로)</span> 링크만 추출해 사용했습니다.
       각 지사가 관할하는 노선의 시점·종점 IC/JC 명칭을 표준노드링크의 노드에 매칭한 뒤, 그래프 최단경로(다익스트라) 알고리즘으로 두 지점 사이의 실제 도로 선형을 그대로 추출해 지사 관할구간으로 사용했습니다.</p>
 
-      <h3>2. 적설관측지점</h3>
-      <p>기상청 API허브 <span class="mono">stn_snow.php</span>(적설관측지점 조회)로 받은 <b>공식 적설관측지점 669개</b>의 지점번호·위경도를 사용했습니다.</p>
+      <h3>4. 적설관측지점</h3>
+      <p>기상청 API허브 <span class="mono">stn_snow.php</span>(적설관측지점 조회)의 <b>공식 적설관측지점 669개</b> 중, 지사에 배정된 <b>260곳</b>의 지점번호·위경도를 화면 계산에 씁니다. 신적설 원자료는 모든 관측지점 값을 서버에 저장합니다.</p>
 
-      <h3>3. 지사별 관측소 배정 기준 — 적응형 반경</h3>
-      <p>각 관측지점과 지사 관할구간(위 1번) 사이의 최단거리를 계산해 배정했습니다. 한 관측지점이 여러 지사의 관할구간과 가까우면 <b>모든 지사에 중복으로 포함</b>됩니다(배타적 1:1 배정 아님).</p>
+      <h3>5. 지사별 관측소 배정 기준 — 적응형 반경</h3>
+      <p>각 관측지점과 지사 관할구간(위 3번) 사이의 최단거리를 계산해 배정했습니다. 한 관측지점이 여러 지사의 관할구간과 가까우면 <b>모든 지사에 중복으로 포함</b>됩니다(배타적 1:1 배정 아님).</p>
       <ul>
         <li>기본 반경: <b>5km</b></li>
         <li>5km 이내 관측소가 5대 이하이면 → <b>6km</b>로 확대</li>
@@ -438,21 +446,21 @@
         <li>7km 이내도 5대 이하이면 → <b>8km</b>로 확대(최대)</li>
       </ul>
 
-      <h3>4. 일 신적설 데이터</h3>
-      <p>기상청 API허브 <span class="mono">kma_snow1.php</span>로 하루 00시부터 24시까지 1시간 간격으로 관측값을 조회한 뒤, <b>관측소별로 그날의 최댓값</b>을 그 날짜의 일 신적설로 사용했습니다(기상청 API가 특정 시각에만 관측치를 표출하는 경우가 있어, 시간대별 데이터를 전부 확인해 누락을 방지했습니다).</p>
+      <h3>6. 일 신적설 데이터</h3>
+      <p>기상청 API허브 <span class="mono">kma_snow1.php</span>(<span class="mono">sd=day</span>)로 하루 00시부터 23시까지 1시간 간격으로 관측값을 조회한 뒤, <b>관측소별로 그날의 최댓값</b>을 그 날짜의 일 신적설로 사용합니다(기상청 API가 특정 시각에만 관측치를 표출하는 경우가 있어, 시간대별 데이터를 전부 확인해 누락을 방지합니다). 결측(-99.9)은 저장하지 않습니다.</p>
 
-      <h3>5. 지사·본부 집계 방식</h3>
+      <h3>7. 지사·본부 집계 방식</h3>
       <p>지사의 특정 일자 값 = 그 지사에 배정된 관측소들의 그날 값 중 <b>최댓값</b>. 지사의 시즌 합계 = 기간 내 일별 값의 합. 본부의 일자별 값 = 소속 지사 일자값의 평균. 본부의 시즌 평균 = <b>소속 지사 시즌 합계를 전부 더한 뒤 지사 수로 나눈 값</b>.</p>
 
-      <h3>6. 조회 기간 및 보유 현황</h3>
-      <p>매 시즌 11월 15일 ~ 익년 3월 15일만 조회합니다. 현재 보유 중인 시즌은 아래 표와 같습니다 (자동으로 최신 상태를 표시).</p>
+      <h3>8. 조회 기간 및 보유 현황</h3>
+      <p>매 시즌 11월 15일 ~ 익년 3월 15일만 조회합니다. 연도별 신적설·관측소 지도에서는 <b>최근 3시즌</b>을 고를 수 있고, 그 이전 시즌은 연도별 신적설의 <b>[지난 시즌] → 엑셀 받기</b>로 받습니다. 현재 보유 중인 시즌은 아래 표와 같습니다 (자동으로 최신 상태를 표시).</p>
       <table class="seasons-table" id="seasonsTable">
         <thead><tr><th>시즌</th><th>보유 일수</th><th>자료 있는 날짜 수</th></tr></thead>
         <tbody><tr><td colspan="3">불러오는 중...</td></tr></tbody>
       </table>
 
-      <h3>7. 새로운 기간 데이터 추가하기</h3>
-      <p><b>자동 수집</b>: 시즌(11.15~3.15) 동안 매일 <b>01:10</b>에 서버가 <b>전날</b> 자료를 위 4번과 같은 방법(00~23시 24번 조회 → 관측소별 최댓값)으로 받아 저장합니다. 기상청 응답이 늦어 못 받은 시각은 오전 11:40까지 30분마다 그 시각만 다시 받습니다.</p>
+      <h3>9. 새로운 기간 데이터 추가하기</h3>
+      <p><b>자동 수집</b>: 시즌(11.15~3.15) 동안 매일 <b>01:10</b>에 서버가 <b>전날</b> 자료를 위 6번과 같은 방법(00~23시 24번 조회 → 관측소별 최댓값)으로 받아 저장합니다. 기상청 응답이 늦어 못 받은 시각은 오전 11:40까지 30분마다 그 시각만 다시 받습니다.</p>
       <p>자동 수집이 빠졌거나 지난 기간을 다시 넣어야 할 때는 아래 수동 절차를 씁니다.</p>
       <ol style="font-size:13.5px;line-height:1.9;padding-left:22px;">
         <li><a href="https://apihub.kma.go.kr" target="_blank" rel="noopener">apihub.kma.go.kr</a> 접속한 상태에서 브라우저 개발자도구(F12) → Console 탭에 아래 스크립트를 붙여넣고 실행 (authKey / 시작일 / 종료일만 바꾸면 됨) → txt 파일 자동 다운로드</li>
@@ -527,6 +535,6 @@
 <script src="auth/events.js?v=0c959479"></script>
 <script src="auth/gate.js?v=309218bc"></script>
 <script src="auth/snow.js?v=2f5aaf21"></script>
-<script src="boot.js?v=20fc7652"></script>
+<script src="boot.js?v=a0ee4c7a"></script>
 </body>
 </html>

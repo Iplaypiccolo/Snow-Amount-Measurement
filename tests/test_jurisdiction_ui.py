@@ -81,7 +81,7 @@ def t_tab_loads(b):
     p = open_tab(b, user="equip-01")
     check(J(p, "Object.keys(JurisdictionUI._state().polys).length") == J(p, "JURIS.doc.sections.length") > 600, "구간 선이 그려지지 않음")
     check(p.locator(".jr-br").count() == 1 and p.locator('.jr-br[data-id="NONE"]').count() == 1, "처음엔 본부 줄만(관측소 지도처럼 접힘) + 미지정 행")
-    check(p.locator("#jr-tree [data-hqpick]").count() == 10 and p.locator(".jr-hqname").count() == 11, "본부 9개 + 민자 1개 + 미지정 1개")
+    check(p.locator("#jr-tree [data-hqpick]").count() == 10 and p.locator("#jr-tree .jr-hqname").count() == 11, "본부 9개 + 민자 1개 + 미지정 1개")
     open_hq(p, "강원"); check(p.locator(".jr-br").count() == 1 + 6, "강원을 펼치면 강원 지사 6곳")
     check(p.locator("#jr-add").is_hidden(), "보기 모드에서 신설 버튼이 보임")
     check(p.locator("#jr-selbar").is_hidden(), "보기 모드에서 이동 바가 보임")
@@ -150,7 +150,7 @@ def t_move_branch_hq(b):
     open_hq(p, "충북"); p.click(".jr-br:has-text('엄정')"); p.wait_for_timeout(200)
     p.select_option("#jr-hq", "강원"); p.wait_for_timeout(250)
     check("엄정" in p.locator(".jr-ev").first.inner_text() and "강원" in p.locator(".jr-ev").first.inner_text(), "본부 이동 표시")
-    check(p.locator(".jr-hqname:has-text('강원') ~ .jr-br:has-text('엄정')").count() == 1, "강원 아래로 옮겨지지 않음")
+    check(p.locator("#jr-tree .jr-hqname:has-text('강원') ~ .jr-br:has-text('엄정')").count() == 1, "강원 아래로 옮겨지지 않음")
 
 def t_save_then_everyone_sees(b):
     """저장하면 서버에 쌓이고, 새로고침하면 다른 탭(강설량 계산)에도 새 관할이 반영되며, 다른 사용자(지사·장비 계정)가 열어도 같은 관할로 보인다"""
@@ -262,7 +262,7 @@ def t_csp_blocks_injected_script(b):
     """첫 화면 보안 정책(CSP): 화면이 정상으로 열리고, 누군가 HTML 을 끼워 넣어도 그 안의 스크립트(onerror 등)는 실행되지 않는다"""
     p = b.new_page(viewport={"width": 1400, "height": 900}); OPENED.append(p)          # bypass_csp 없이 실제와 같은 조건
     p.on("pageerror", lambda e: errors.append(str(e))); p.route("**/*", route); SBM.install(p, SBM.Mock())
-    p.goto(URL); p.wait_for_selector("body.authed"); p.wait_for_selector("#snowTableWrap table", timeout=60000)
+    p.goto(URL); p.wait_for_selector("body.authed"); p.wait_for_selector("#snowTableWrap table", state="attached", timeout=60000)   # 첫 탭은 예보라 표는 숨어 있음
     csp = p.evaluate("document.querySelector('meta[http-equiv=Content-Security-Policy]').content")
     check("script-src 'self' https://cdnjs.cloudflare.com" in csp and "connect-src 'self' https://*.supabase.co" in csp and "unsafe-inline" not in csp.split("script-src")[1].split(";")[0], csp)
     p.evaluate("""() => { const d = document.createElement('div'); d.innerHTML = '<img src="data:," onerror="window.__xss=1"><a href="javascript:window.__xss=2" id="__l">x</a>'; document.body.appendChild(d);
@@ -282,10 +282,12 @@ def t_snow_from_server_not_public_file(b):
     got = J(p, f"SNOW_DATA.seasons['{lab}'].branches['강원|||대관령']")
     check(got == F["seasons"][lab]["branches"]["강원|||대관령"], "지사별 값이 예전 파일과 같아야 함")
     check(J(p, "Object.keys(SNOW_DATA.seasons).length") == 1 and J(p, "!!document.getElementById('downloadJsonBtn') || !!document.getElementById('snowFileInput')") is False, "시즌(표본 1개), 예전 JSON 저장·임시 업로드 버튼 없음")
+    p.click(".tab-btn[data-tab=snowtable]"); p.wait_for_timeout(200)
     check(p.locator("#snowAdminLink").is_visible(), "관리자에게는 적설 자료 올리기 링크")
     p2 = b.new_page(bypass_csp=True, viewport={"width": 1400, "height": 900}); OPENED.append(p2)
     p2.route("**/*", route); SBM.install(p2, m, "exchungju"); m.users["exchungju"]["profile"]["must_change"] = False; p2.goto(URL)
     p2.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)
+    p2.click(".tab-btn[data-tab=snowtable]"); p2.wait_for_timeout(200)
     check(not p2.locator("#snowAdminLink").is_visible(), "지사에게는 링크가 보이지 않음")
 
 def t_snow_seasons_recent_and_older(b):
@@ -633,10 +635,10 @@ def t_row_click_view_mode(b):
 
 def t_private_hq(b):
     p = open_tab(b); admin(p)
-    check(p.locator(".jr-hqname:has-text('민자')").count() == 1, "민자 본부가 목록에 보여야 함(비어 있어도)")
-    check("관측소·적설 계산 안 함" in p.locator(".jr-hqname:has-text('민자')").inner_text(), "민자 안내 표시")
+    check(p.locator("#jr-tree .jr-hqname:has-text('민자')").count() == 1, "민자 본부가 목록에 보여야 함(비어 있어도)")
+    check("관측소·적설 계산 안 함" in p.locator("#jr-tree .jr-hqname:has-text('민자')").inner_text(), "민자 안내 표시")
     p.click("#jr-add"); p.fill("#jr-newname", "시험민자"); p.select_option("#jr-newhq", "민자"); p.click("#jr-newok"); p.wait_for_timeout(300)
-    check(p.locator(".jr-hqname:has-text('민자') ~ .jr-br:has-text('시험민자')").count() == 1, "민자 아래에 새 기관")
+    check(p.locator("#jr-tree .jr-hqname:has-text('민자') ~ .jr-br:has-text('시험민자')").count() == 1, "민자 아래에 새 기관")
     pid = J(p, "Object.keys(JurisdictionUI._state().view.state.branches).slice(-1)[0]")
     un = un_ids(p)[:2]
     for u in un: click_sec(p, u)

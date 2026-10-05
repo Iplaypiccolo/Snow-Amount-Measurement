@@ -74,7 +74,19 @@ def t_branch_user_can_view(b):
     p.click(".tab-btn[data-tab=forecast]"); p.wait_for_timeout(800)
     check(p.locator("#fc-tree [data-fchq]").count() == 9, "지사 계정도 목록이 보임")
 
-TESTS = [t_levels, t_open_from_equipment, t_branch_user_can_view]
+def t_first_tab_and_order(b):
+    """강설량 측정 탭 순서(2026-10-05): 기관별 24시간 예보(처음 열림) → 연도별 신적설 → 관측소 지도 → 관할 → 데이터 출처 → 예보 격자 편입(권한)"""
+    p, m = open_page(b); p.wait_for_timeout(800)
+    tabs = [t for t in p.locator(".tab-btn").all_inner_texts()]
+    check(tabs == ["기관별 24시간 예보", "연도별 신적설", "관측소 지도", "기관별 관할 고속도로", "데이터 출처", "예보 격자 편입"], tabs)
+    check("active" in p.locator(".tab-btn[data-tab=forecast]").get_attribute("class") and p.locator("#view-forecast").is_visible() and not p.locator("#view-snowtable").is_visible(), "처음 열면 기관별 24시간 예보")
+    check(J(p, f"{S}.lines.getLayers().length") > 900, "예보 지도가 그려짐")
+    p.click(".tab-btn[data-tab=snowtable]"); p.wait_for_timeout(300)
+    check(p.locator("#snowTableWrap table").is_visible() and not p.locator("#view-forecast").is_visible(), "연도별 신적설로 바꾸면 표")
+    p2, _ = open_page(b, user="exchungju"); p2.wait_for_timeout(500)
+    check(not p2.locator(".tab-btn[data-tab=grid]").is_visible() and p2.locator("#view-forecast").is_visible(), "권한 없으면 격자 편입 탭 없음, 첫 탭은 같음")
+
+TESTS = [t_first_tab_and_order, t_levels, t_open_from_equipment, t_branch_user_can_view]
 
 if __name__ == "__main__":
     only = sys.argv[1:]
