@@ -259,6 +259,9 @@
     background:#fff; font-family:var(--sans);
   }
   .upload-btn:hover{background:#eef6ef;}
+  /* 지난 시즌(최근 3시즌 이전): 화면 표에는 없고 엑셀로만 받음 */
+  .old-season{display:flex; align-items:center; gap:8px; margin-left:auto; padding-left:16px; border-left:1px solid var(--line); font-size:13px; color:var(--muted);}
+  .old-season[hidden]{display:none;}
   #uploadStatus{font-size:11.5px; color:var(--muted); font-family:var(--mono);}
 
   .sources-view{overflow:auto; background:var(--panel); display:block;}
@@ -400,6 +403,10 @@
         <select id="seasonSelect"></select>
       </label>
       <button class="upload-btn" id="exportXlsxBtn" type="button">⬇ 현재 표 엑셀(xlsx)로 내보내기</button>
+      <span class="old-season" id="oldSeasonBox" hidden>
+        <label>지난 시즌 <select id="oldSeasonSelect"></select></label>
+        <button class="upload-btn" id="oldSeasonXlsxBtn" type="button">⬇ 엑셀(xlsx) 받기</button>
+      </span>
       <a class="upload-btn" id="snowAdminLink" href="admin/" hidden>+ 적설 자료 올리기(관리 콘솔)</a>
     </div>
     <div class="snowtable-wrap" id="snowTableWrap"></div>
@@ -445,7 +452,8 @@
       </table>
 
       <h3>7. 새로운 기간 데이터 추가하기</h3>
-      <p>자동 수집 서버는 두지 않습니다 (기상청 API가 클라우드 서버의 IP를 차단하는 문제가 있어서, 안전하고 확실한 수동 방식을 씁니다). 아래 절차로 추가합니다.</p>
+      <p><b>자동 수집</b>: 시즌(11.15~3.15) 동안 매일 <b>01:10</b>에 서버가 <b>전날</b> 자료를 위 4번과 같은 방법(00~23시 24번 조회 → 관측소별 최댓값)으로 받아 저장합니다. 기상청 응답이 늦어 못 받은 시각은 오전 11:40까지 30분마다 그 시각만 다시 받습니다.</p>
+      <p>자동 수집이 빠졌거나 지난 기간을 다시 넣어야 할 때는 아래 수동 절차를 씁니다.</p>
       <ol style="font-size:13.5px;line-height:1.9;padding-left:22px;">
         <li><a href="https://apihub.kma.go.kr" target="_blank" rel="noopener">apihub.kma.go.kr</a> 접속한 상태에서 브라우저 개발자도구(F12) → Console 탭에 아래 스크립트를 붙여넣고 실행 (authKey / 시작일 / 종료일만 바꾸면 됨) → txt 파일 자동 다운로드</li>
         <li>관리자가 <b>관리 콘솔 → "적설 자료"</b> 탭에서 그 txt 파일을 고르고 <b>[검사]</b> → <b>[저장]</b> — 날짜를 보고 알맞은 시즌(11.15~3.15)에 들어갑니다. 결측(-99.9)은 저장하지 않습니다</li>
@@ -511,14 +519,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="jurisdiction/core.js?v=5591dde2"></script>
 <script src="jurisdiction/requests.js?v=f1f6c948"></script>
-<script src="jurisdiction/ui.js?v=2de994ac"></script>
+<script src="jurisdiction/ui.js?v=e953f16e"></script>
 <script src="grid/core.js?v=e04501e0"></script>
 <script src="grid/ui.js?v=7cfa34d7"></script>
 <script src="forecast/ui.js?v=69e7a2f9"></script>
 <script src="auth/auth.js?v=3a94d92b"></script>
 <script src="auth/events.js?v=0c959479"></script>
 <script src="auth/gate.js?v=309218bc"></script>
-<script src="auth/snow.js?v=8b4545c9"></script>
+<script src="auth/snow.js?v=2f5aaf21"></script>
 <script src="boot.js?v=20fc7652"></script>
 </body>
 </html>

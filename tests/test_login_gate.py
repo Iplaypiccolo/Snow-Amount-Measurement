@@ -174,13 +174,13 @@ def t_logout_from_equip_then_login_starts_first_screen(b, ctx, m):
     check(p.locator("#page-snow").is_visible() and "#equip" not in p.url, "예전 주소로 열어도 첫 화면부터")
 
 def t_snow_snapshot_cached(b, ctx, m):
-    """적설 요약본(약 1.5MB)은 이 브라우저에 보관: 처음엔 받고, 다시 열 때는 만든 시각만 묻고 같으면 받지 않음(무료 내려받기 한도 절약)"""
+    """적설 요약본은 시즌별(마이그레이션 31)이고 이 브라우저에 보관: 처음엔 목록 + 최근 시즌만 받고, 다시 열 때는 만든 시각만 묻고 같으면 받지 않음(무료 내려받기 한도 절약)"""
     p = open_site(ctx, m); typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".pagebar", state="visible"); p.wait_for_timeout(800)
     first = list(getattr(m, "snow_selects", []))
-    check(first == ["built_at", "body,built_at"], f"처음: 만든 시각 → 요약본: {first}")
+    check(first == ["like.snow*|key,built_at", 'in.("snow")|key,body,built_at', 'in.("snow:2024-11-15~2025-03-15")|key,body,built_at'], f"처음: 만든 시각 → 목록 → 최근 시즌: {first}")
     p.reload(); p.wait_for_selector(".pagebar", state="visible"); p.wait_for_timeout(800)
     again = getattr(m, "snow_selects", [])[len(first):]
-    check(again == ["built_at"], f"다시 열면 만든 시각만: {again}")
+    check(again == ["like.snow*|key,built_at"], f"다시 열면 만든 시각만: {again}")
     check(p.evaluate("Object.keys(SNOW_DATA.seasons).length") > 0, "보관한 요약본으로 화면이 그려짐")
 
 def t_no_secrets_and_safe_text(b, ctx, m):

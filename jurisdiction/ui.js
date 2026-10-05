@@ -391,7 +391,15 @@
   }
 
   /* ---------- 미리보기 ---------- */
+  // 적설은 최근 시즌만 먼저 받으므로, '전체 시즌 최대'를 보여 주기 전에 나머지 시즌을 받음(한 번 받으면 브라우저에 보관)
   function preview() {
+    if (window.SSEnsureAllSeasons) {
+      modal('<h3>변경 미리보기</h3><p style="font-size:13.5px">적설 자료를 불러오는 중…</p>');
+      return window.SSEnsureAllSeasons().then(previewNow, previewNow);
+    }
+    previewNow();
+  }
+  function previewNow() {
     var rows = C.impact(J().doc, J().stations, window.SNOW_DATA, base(), events());
     var warn = '';
     if (!J().stations || J().stations.complete === false) warn = '<div class="jr-warn">⚠ 관측소 목록이 일부(지사에 배정된 적이 있는 관측소)만 들어 있어, 새로 편입되는 지역의 관측소가 빠질 수 있습니다. 기상청 적설관측지점 전체 목록을 받으면 더 정확해집니다.</div>';

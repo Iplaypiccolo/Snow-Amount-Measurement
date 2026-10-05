@@ -288,6 +288,43 @@ def t_snow_from_server_not_public_file(b):
     p2.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)
     check(not p2.locator("#snowAdminLink").is_visible(), "지사에게는 링크가 보이지 않음")
 
+def t_snow_seasons_recent_and_older(b):
+    """적설은 최근 시즌만 먼저 받음. 기간 선택 = 최근 3시즌(고르면 그때 받음), 그 이전은 [지난 시즌]에서 엑셀로만. 관할 미리보기는 전체 시즌을 받아 계산"""
+    reqs = []; m = SBM.Mock()
+    p = b.new_page(bypass_csp=True, viewport={"width": 1400, "height": 900}, accept_downloads=True); OPENED.append(p)
+    p.on("request", lambda r: reqs.append(r.url)); p.route("**/*", route); SBM.install(p, m); p.goto(URL)
+    p.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)
+    L = [f"{y}-11-15~{y + 1}-03-15" for y in range(2020, 2025)]
+    check(J(p, "Object.keys(SNOW_DATA.seasons)") == [L[4]], "처음엔 최근 시즌만 받음")
+    p.click(".tab-btn[data-tab=snowtable]"); p.wait_for_timeout(300)
+    check(p.locator("#seasonSelect option").all_inner_texts() == L[2:], f"기간 선택 = 최근 3시즌: {p.locator('#seasonSelect option').all_inner_texts()}")
+    check(p.locator("#oldSeasonBox").is_visible() and p.locator("#oldSeasonSelect option").all_inner_texts() == [L[1], L[0]], "지난 시즌은 오른쪽 따로(최근 것부터)")
+    n = len([u for u in reqs if "/rest/v1/snapshots" in u])
+    p.select_option("#seasonSelect", L[2]); p.wait_for_function("document.querySelector('#snowTableWrap table') && Object.keys(SNOW_DATA.seasons).length === 2", timeout=10000)
+    F = json.load(open(ROOT / "tests/fixtures/snow_sample.json", encoding="utf-8"))["seasons"][L[4]]["branches"]["강원|||대관령"]
+    got = J(p, f"SNOW_DATA.seasons['{L[2]}'].branches['강원|||대관령']")
+    check(got == [None if v is None else round(v * 0.5, 1) for v in F], "고른 시즌을 받아 지사별 값 계산")
+    check(len([u for u in reqs if "/rest/v1/snapshots" in u]) == n + 1, "고른 시즌 한 번만 받음")
+    dates = J(p, "Array.from(document.querySelectorAll('#dateSelect option')).map(o => o.value).filter(Boolean)")
+    check(dates[0] == "20221115" and dates[-1] == "20250315", f"지도 날짜 = 받은 최근 시즌들: {dates[0]}~{dates[-1]}")
+    with p.expect_download(timeout=30000) as dl:
+        p.select_option("#oldSeasonSelect", L[0]); p.click("#oldSeasonXlsxBtn")
+    check(dl.value.suggested_filename == f"신적설_{L[0]}.xlsx", dl.value.suggested_filename)
+    check(p.locator("#seasonSelect option").count() == 3 and "20201115" not in J(p, "Array.from(document.querySelectorAll('#dateSelect option')).map(o => o.value)"), "지난 시즌은 기간 선택·지도 날짜에 넣지 않음")
+    p.click(".tab-btn[data-tab=sources]"); p.wait_for_timeout(200)
+    check(p.locator("#seasonsTable tbody tr").count() == 5, "데이터 출처: 서버에 있는 시즌 모두")
+    J(p, "(() => { SSEnsureAllSeasons(); return null })()"); p.wait_for_function("Object.keys(SNOW_DATA.seasons).length === 5", timeout=10000)
+    check(J(p, f"SNOW_DATA.seasons['{L[1]}'].branches['강원|||대관령'].length") == 121, "관할 미리보기용: 전체 시즌을 받아 지사별 값까지")
+
+def t_snow_old_format_still_works(b):
+    """서버가 아직 예전 요약본(한 줄에 모든 시즌)이어도 화면이 열림"""
+    m = SBM.Mock(); m.snow_v1 = True
+    p = b.new_page(bypass_csp=True, viewport={"width": 1400, "height": 900}); OPENED.append(p)
+    p.route("**/*", route); SBM.install(p, m); p.goto(URL)
+    p.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)
+    p.click(".tab-btn[data-tab=snowtable]"); p.wait_for_timeout(300)
+    check(p.locator("#snowTableWrap table").count() == 1 and p.locator("#seasonSelect option").count() == 1 and not p.locator("#oldSeasonBox").is_visible(), "예전 모양도 표가 보임")
+
 def t_snow_server_empty_shows_no_data(b):
     """서버에 적설 요약본이 없으면(자료를 아직 안 넣었거나 지워진 경우) 화면은 열리고 표는 '자료 없음'. 예전 공개 파일은 읽지 않음"""
     m = SBM.Mock(); m.snow_empty = True; reqs = []
@@ -615,7 +652,7 @@ def t_private_hq(b):
     check(p.locator("#statBranch").inner_text() == "59", "민자 기관이 강설량 화면 통계에 들어가면 안 됨")
     check(J(p, "HIERARCHY.hq.some(h => h.name === '민자')") is False, "HIERARCHY 에 민자 본부가 생기면 안 됨")
 
-TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload, t_new_branch_id_survives_save, t_legacy_new_branch_without_id_still_works, t_html_in_branch_name_is_text, t_new_branch_position_and_reorder, t_hq_tabs_admin_all_then_hq_only, t_branch_click_yellow_others_gray, t_unassigned_toggle, t_hq_tabs_branch_starts_with_own_hq, t_csp_blocks_injected_script, t_snow_from_server_not_public_file, t_snow_server_empty_shows_no_data,
+TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload, t_new_branch_id_survives_save, t_legacy_new_branch_without_id_still_works, t_html_in_branch_name_is_text, t_new_branch_position_and_reorder, t_hq_tabs_admin_all_then_hq_only, t_branch_click_yellow_others_gray, t_unassigned_toggle, t_hq_tabs_branch_starts_with_own_hq, t_csp_blocks_injected_script, t_snow_from_server_not_public_file, t_snow_seasons_recent_and_older, t_snow_old_format_still_works, t_snow_server_empty_shows_no_data,
          t_save_failure_keeps_pending_and_offers_file, t_history_load_failure_falls_back_and_blocks_save, t_history_paging_and_backup_export,
          t_border_on_click_view_mode, t_border_contrast_all_colors, t_admin_click_has_border, t_pick_destination_on_map, t_no_admin_checkbox_and_no_popup_move_button,
          t_save_bar_always_visible, t_unassigned_visible_and_clickable, t_assign_unassigned_to_branch, t_select_all_unassigned_row,

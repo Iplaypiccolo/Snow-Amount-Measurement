@@ -26,6 +26,29 @@ def snow_snapshot_text():
         _SNAP["t"] = json.dumps([{"body": {"version": 1, "seasons": seasons}, "built_at": "2026-10-04T00:00:00Z"}])
     return _SNAP["t"]
 
+def snow_v2_rows():
+    """시즌별 요약본(마이그레이션 31): 'snow' = 목록, 'snow:<시즌>' = 그 시즌. 화면이 쓰는 관측소(data/stations.json)만.
+    표본은 2024-25 한 시즌뿐이라, 그 값을 반으로 줄인 2020~2023 시즌을 덧붙여 5시즌으로 만듦(최근 3 + 지난 2)"""
+    if "v2" not in _SNAP:
+        base = json.loads(snow_snapshot_text())[0]["body"]["seasons"]
+        real_label = sorted(base)[-1]; real = base[real_label]
+        ids = {str(x["id"]) for x in json.load(open(Path(__file__).resolve().parent.parent / "data" / "stations.json", encoding="utf-8"))["stations"]}
+        rows, index = {}, []
+        for y in range(2020, 2025):
+            dates, cur = [], datetime.date(y, 11, 15)
+            while cur <= datetime.date(y + 1, 3, 15): dates.append(cur.strftime("%Y%m%d")); cur += datetime.timedelta(days=1)
+            st = {}
+            for stn, arr in real["st"].items():
+                if stn not in ids: continue
+                a = [(arr[i] if y == 2024 else (None if arr[i] is None else round(arr[i] * 0.5, 1))) if i < len(arr) else None for i in range(len(dates))]
+                st[stn] = a
+            lab = f"{y}-11-15~{y + 1}-03-15"
+            rows["snow:" + lab] = {"key": "snow:" + lab, "body": {"dates": dates, "st": st}, "built_at": f"2026-10-0{y - 2019}T00:00:00Z"}
+            index.append({"label": lab, "days": len(dates), "data_days": sum(1 for i in range(len(dates)) if any(v[i] is not None for v in st.values())), "stations": len(st)})
+        rows["snow"] = {"key": "snow", "body": {"version": 2, "seasons": index}, "built_at": "2026-10-05T00:00:00Z"}
+        _SNAP["v2"] = rows
+    return _SNAP["v2"]
+
 SB = "https://yzwbnohzhnctdvufntig.supabase.co"
 DOMAIN = "snow-support.invalid"
 CORS = {"access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "*"}
@@ -214,10 +237,20 @@ class Mock:
             if tbl == "jurisdiction_requests": return self.requests_api(route, req, u, q, body, send)
             if tbl in self.events: return self.events_api(tbl, req, u, q, body, send)
             if tbl == "snapshots":
-                if not self.usable(u) or self.snow_empty or q.get("key") != ["eq.snow"]: return send(200, [])
-                self.snow_selects = getattr(self, "snow_selects", []) + [(q.get("select") or [""])[0]]
-                if q.get("select") == ["built_at"]: return send(200, [{"built_at": r.get("built_at")} for r in json.loads(snow_snapshot_text())])   # 만든 시각만
-                return route.fulfill(status=200, headers={**CORS, "content-type": "application/json"}, body=snow_snapshot_text())
+                if not self.usable(u) or self.snow_empty: return send(200, [])
+                kf, sel = (q.get("key") or [""])[0], (q.get("select") or [""])[0]
+                self.snow_selects = getattr(self, "snow_selects", []) + [kf + "|" + sel]
+                if getattr(self, "snow_v1", False):                                       # 예전 모양(한 줄에 모든 시즌)
+                    if kf not in ("eq.snow", "like.snow*", 'in.("snow")'): return send(200, [])
+                    rows = [dict(r, key="snow") for r in json.loads(snow_snapshot_text())]
+                else:
+                    allrows = snow_v2_rows()
+                    if kf == "like.snow*": rows = list(allrows.values())
+                    elif kf.startswith("in.("): rows = [allrows[k] for k in re.findall(r'"([^"]+)"', kf) if k in allrows]
+                    elif kf.startswith("eq."): rows = [allrows[kf[3:]]] if kf[3:] in allrows else []
+                    else: rows = []
+                cols = sel.split(",")
+                return send(200, [{c: r.get(c) for c in cols} for r in rows])
             if tbl == "snow_uploads": return send(200, [{"at": "2026-10-04T01:00:00Z", "date_from": "2025-12-01", "date_to": "2025-12-02", "stations": 2, "rows_written": 2, "ok": True, "note": "txt by admin-01"}] if self.can(u, "snow.upload") else [])
             if tbl == "save_jurisdiction" and "/rpc/" in path: return self.save_rpc(u, body, send)
             if tbl == "branch_forecast": return send(200, self.branch_forecast if self.usable(u) else [])

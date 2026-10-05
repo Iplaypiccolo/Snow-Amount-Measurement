@@ -482,18 +482,40 @@ function initApp(){
   }
   recomputeBranchKeys();
 
+  // 화면에서 고를 수 있는 시즌 = 최근 3시즌(SSSnow 가 정함). 그 이전 시즌은 [지난 시즌] 엑셀로만 받음
+  function recentLabels(){ return (SNOW_DATA.recent || Object.keys(SNOW_DATA.seasons)).slice().sort(); }
+  // 아직 안 받은 시즌을 서버에서 받아 지사별 값까지 계산(관할에 맞춰)
+  function ensureSeason(label){
+    if(SNOW_DATA.seasons[label]) return Promise.resolve();
+    return SSSnow.loadSeason(SNOW_DATA, label).then(function(){
+      if(window.JurisCore) JurisCore.rebuildAllSeries(HIERARCHY, SNOW_DATA);
+      refreshDateOptions();
+    });
+  }
+  window.SSEnsureAllSeasons = function(){                     // 관할 미리보기(전체 시즌 최대)용
+    if(!window.SSSnow || !SNOW_DATA.index) return Promise.resolve();
+    return SSSnow.loadAll(SNOW_DATA).then(function(){ if(window.JurisCore) JurisCore.rebuildAllSeries(HIERARCHY, SNOW_DATA); });
+  };
+
   function refreshSeasonOptions(){
     var sel = document.getElementById('seasonSelect');
-    var labels = Object.keys(SNOW_DATA.seasons).sort();
+    var labels = recentLabels();
     var prev = sel.value;
     sel.innerHTML = labels.map(function(l){return '<option value="'+esc(l)+'">'+esc(l)+'</option>';}).join('');
     if(labels.indexOf(prev) !== -1) sel.value = prev;
     else if(labels.length) sel.value = labels[labels.length-1];
+    var older = (SNOW_DATA.older || []).slice().sort().reverse();
+    var osel = document.getElementById('oldSeasonSelect');
+    if(osel){
+      osel.innerHTML = older.map(function(l){return '<option value="'+esc(l)+'">'+esc(l)+'</option>';}).join('');
+      document.getElementById('oldSeasonBox').hidden = !older.length;
+    }
   }
 
   function refreshDateOptions(){
-    var allDates = {};
+    var allDates = {}, recent = recentLabels();
     Object.keys(SNOW_DATA.seasons).forEach(function(label){
+      if(recent.indexOf(label) === -1) return;                // 지난 시즌(엑셀·미리보기로만 받은 것)은 지도 날짜에 넣지 않음
       SNOW_DATA.seasons[label].dates.forEach(function(d){ allDates[d] = true; });
     });
     var sorted = Object.keys(allDates).sort();
@@ -581,13 +603,19 @@ function initApp(){
   function buildSeasonsTable(){
     var tbody = document.querySelector('#seasonsTable tbody');
     if(!tbody) return;
-    var labels = Object.keys(SNOW_DATA.seasons).sort();
+    var index = SNOW_DATA.index || [];
+    var labels = index.length ? index.map(function(x){ return x.label; }).sort() : Object.keys(SNOW_DATA.seasons).sort();
     if(labels.length === 0){
       tbody.innerHTML = '<tr><td colspan="3">보유 중인 시즌 없음</td></tr>';
       return;
     }
     tbody.innerHTML = labels.map(function(label){
       var season = SNOW_DATA.seasons[label];
+      var ix = index.filter(function(x){ return x.label === label; })[0];
+      if(ix && ix.data_days != null){                          // 서버 목록에 있는 값(시즌을 받지 않아도 보임)
+        return '<tr><td>'+esc(label)+'</td><td class="mono-cell">'+ix.days+'일</td><td class="mono-cell">'+ix.data_days+'일</td></tr>';
+      }
+      if(!season) return '';
       var branchKeys = Object.keys(season.branches);
       var daysWithData = 0;
       for(var i=0;i<season.dates.length;i++){
@@ -603,6 +631,12 @@ function initApp(){
     var label = document.getElementById('seasonSelect').value;
     var season = SNOW_DATA.seasons[label];
     var wrap = document.getElementById('snowTableWrap');
+    if(!season && label && SNOW_DATA.index && window.SSSnow){                 // 아직 안 받은 시즌: 고를 때 받음
+      wrap.innerHTML = '<div style="padding:20px;color:#888;">불러오는 중…</div>';
+      ensureSeason(label).then(function(){ if(document.getElementById('seasonSelect').value === label) buildSnowTable(); },
+        function(){ wrap.innerHTML = '<div style="padding:20px;color:#b5432f;">이 시즌 자료를 불러오지 못했습니다. 잠시 뒤 다시 고르세요.</div>'; });
+      return;
+    }
     if(!season){ wrap.innerHTML = '<div style="padding:20px;color:#888;">자료 없음</div>'; return; }
     var dates = season.dates;
 
@@ -678,8 +712,8 @@ function initApp(){
   document.getElementById('seasonSelect').addEventListener('change', buildSnowTable);
 
   // ---------- 엑셀(xlsx) 내보내기 ----------
-  function exportSnowTableToXlsx(){
-    var label = document.getElementById('seasonSelect').value;
+  function exportSnowTableToXlsx(label){
+    label = label || document.getElementById('seasonSelect').value;
     var season = SNOW_DATA.seasons[label];
     if(!season) return;
     var dates = season.dates;
@@ -733,15 +767,21 @@ function initApp(){
     });
     return xlsxLoading;
   }
-  document.getElementById('exportXlsxBtn').addEventListener('click', function(){
-    var btn = this, txt = btn.textContent;
+  // label 이 없으면 지금 표의 시즌. 지난 시즌은 이때 서버에서 받아 계산한 뒤 엑셀로 만듦(화면 표에는 넣지 않음)
+  function exportClick(btn, label){
+    var txt = btn.textContent;
     btn.disabled = true; btn.textContent = '엑셀 준비 중…';
-    loadXlsx().then(function(){
-      try { exportSnowTableToXlsx(); } catch(e){ window.alert('엑셀 파일을 만들지 못했습니다: ' + (e && e.message || e)); }
-    }, function(){
-      window.alert('엑셀 라이브러리를 불러오지 못했습니다. 인터넷 연결(회사망에서는 cdnjs.cloudflare.com 접속)을 확인하세요.');
+    var seasonReady = label ? ensureSeason(label).then(null, function(){ throw new Error('season'); }) : Promise.resolve();
+    Promise.all([loadXlsx(), seasonReady]).then(function(){
+      try { exportSnowTableToXlsx(label); } catch(e){ window.alert('엑셀 파일을 만들지 못했습니다: ' + (e && e.message || e)); }
+    }, function(e){
+      if(e && e.message === 'season') window.alert('이 시즌 자료를 불러오지 못했습니다. 잠시 뒤 다시 누르세요.');
+      else window.alert('엑셀 라이브러리를 불러오지 못했습니다. 인터넷 연결(회사망에서는 cdnjs.cloudflare.com 접속)을 확인하세요.');
     }).then(function(){ btn.disabled = false; btn.textContent = txt; });
-  });
+  }
+  document.getElementById('exportXlsxBtn').addEventListener('click', function(){ exportClick(this); });
+  var oldBtn = document.getElementById('oldSeasonXlsxBtn');
+  if(oldBtn) oldBtn.addEventListener('click', function(){ var l = document.getElementById('oldSeasonSelect').value; if(l) exportClick(this, l); });
 
   refreshSeasonOptions();
   refreshDateOptions();
