@@ -9,7 +9,7 @@
    - 경로는 (날짜, 장비)마다 한 줄로 서버에 남습니다. 다른 날짜를 확정해도 지난 날짜 경로는 지워지지 않습니다.
    - 특보: 서버가 10분마다 기상청에서 받아 둔 것(warning_status)을 자동 표시. 확정한 지사는 확정 순간 값을 서버가 남김(warn_* 열)
      24시 강설 [적설 | 강수]: 기상청 단기예보 격자의 1시간 신적설(cm)·1시간 강수량(mm) 24시간 합 중 지사 격자의 가장 큰 값(branch_forecast).
-     확정하면 서버가 그 순간 값을 남김(fc_* 열). 값을 누르면 강설량 측정 → 기관별 24시간 예보의 그 지사로 이동. 확정한 지사의 칸은 빨간 네모
+     확정하면 서버가 그 순간 값을 남김(fc_* 열). 값을 누르면 강설량 측정 → 기관별 24시간 예보의 그 지사로 이동. 확정한 지사 줄은 바탕이 노랑
      최저기온 [기온 | 시각]: 같은 예보의 1시간 기온 24시간 중 가장 낮은 값과 그 시각(지사 격자 중 가장 추운 곳, branch_forecast.min_tmp·min_tmp_at)
      [기상현황 직접입력]을 켜면 적설·강수·최저기온·대설특보(종류·발표·발효)를 지사가 직접 넣음(wx_* 열) — 자동 값 대신 보이고, 눌러도 예보로 가지 않음
      지사별 요청·편성은 대설특보(예비·주의보·경보)만: [종류 | 발표 | 발효] 세 칸. 다른 특보는 관리자 [특보구역 관리] 아래 종류별 탭에서만
@@ -134,18 +134,26 @@ function parseMdhm(t) {
   if (!c.length) return undefined;
   return c.sort((a, b) => Math.abs(a - base) - Math.abs(b - base))[0].toISOString();
 }
-const fx = bid => isConf(bid) ? " fixd" : "";                             // 확정한 지사의 적설·강수·특보 칸 = 빨간 네모
-// 지사 줄의 [종류 | 발표 | 발효] 세 칸. 직접입력이면 종류 = 선택, 발표·발효 = 월일시분 8자리
+// 직접입력 대설특보 발표·발효 시각: [시 ▾]:[분 ▾] (시 00~23, 분 10분 단위). 날짜는 기준일자, 시를 '--'로 두면 비움
+function hmSelects(bid, f, label) {
+  const v = rval(bid, f), d = v ? new Date(v) : null, ok = d && !isNaN(d), hh = ok ? p2(d.getHours()) : "", mm = ok ? p2(d.getMinutes()) : "00";
+  const mins = MINS.includes(mm) ? MINS : [...MINS, mm].sort(), a = `data-wxt="${esc(bid)}" data-f="${f}"`;
+  return `<span class="hm"><select class="ci" ${a} data-part="h" data-fk="wh:${esc(bid)}:${f}" aria-label="${esc(label)} 시"${dis(bid)}><option value=""${hh ? "" : " selected"}>--</option>` +
+    HOURS.map(x => `<option${x === hh ? " selected" : ""}>${x}</option>`).join("") + `</select>:` +
+    `<select class="ci" ${a} data-part="m" data-fk="wm:${esc(bid)}:${f}" aria-label="${esc(label)} 분"${hh && !isConf(bid) ? "" : " disabled"}>` +
+    mins.map(x => `<option${x === mm ? " selected" : ""}>${x}</option>`).join("") + `</select></span>`;
+}
+// 지사 줄의 [종류 | 발표 | 발효] 세 칸. 직접입력이면 종류 = 선택, 발표·발효 = 시:분 선택
 function warnCells(bid) {
   const w = warnOf(bid), dash = '<span class="muted">-</span>', b = S.brById[bid];
   if (w.manual && b && canReq(b)) {
-    const lv = rval(bid, "wx_level") || "", inp = f => `<input class="ci wxt" type="text" inputmode="numeric" maxlength="8" placeholder="월일시분" data-rq="${esc(bid)}" data-f="${f}" data-fk="q:${esc(bid)}:${f}" value="${esc(mdhm(rval(bid, f)))}" aria-label="${esc(b.name)} 특보 ${f === "wx_fc" ? "발표" : "발효"}(월일시분)"${dis(bid)}>`;
-    return `<td class="wxe${fx(bid)}" data-wcell="${esc(bid)}"><select class="ci" data-rq="${esc(bid)}" data-f="wx_level" data-fk="q:${esc(bid)}:wx_level" aria-label="${esc(b.name)} 특보 종류"${dis(bid)}>` +
+    const lv = rval(bid, "wx_level") || "", inp = f => hmSelects(bid, f, `${b.name} 특보 ${f === "wx_fc" ? "발표" : "발효"}`);
+    return `<td class="wxe" data-wcell="${esc(bid)}"><select class="ci" data-rq="${esc(bid)}" data-f="wx_level" data-fk="q:${esc(bid)}:wx_level" aria-label="${esc(b.name)} 특보 종류"${dis(bid)}>` +
       [["", "특보 없음"], ["예비", "예비특보"], ["주의", "대설주의보"], ["경보", "대설경보"]].map(([v, l]) => `<option value="${v}"${v === lv ? " selected" : ""}>${l}</option>`).join("") + `</select></td>` +
-      `<td class="wt wxe${fx(bid)}" data-wfc="${esc(bid)}">${inp("wx_fc")}</td><td class="wt wxe${fx(bid)}" data-wef="${esc(bid)}">${inp("wx_ef")}</td>`;
+      `<td class="wt wxe" data-wfc="${esc(bid)}">${inp("wx_fc")}</td><td class="wt wxe" data-wef="${esc(bid)}">${inp("wx_ef")}</td>`;
   }
-  const t = (v, ef) => w.none || !w.level || !v ? dash : esc(fmtWarnTime(v, w.level, ef && !w.manual));
-  return `<td class="${fx(bid).trim()}" data-wcell="${esc(bid)}">${warnBadge(bid)}</td><td class="wt${fx(bid)}" data-wfc="${esc(bid)}">${t(w.fc)}</td><td class="wt${fx(bid)}" data-wef="${esc(bid)}">${t(w.ef, true)}</td>`;
+  const t = (v, ef) => w.none || !w.level || !v ? dash : esc(w.manual ? fmtHM(v) : fmtWarnTime(v, w.level, ef));
+  return `<td class="" data-wcell="${esc(bid)}">${warnBadge(bid)}</td><td class="wt" data-wfc="${esc(bid)}">${t(w.fc)}</td><td class="wt" data-wef="${esc(bid)}">${t(w.ef, true)}</td>`;
 }
 const fmtBase = b => b && /^\d{12}$/.test(b) ? `${+b.slice(4, 6)}/${+b.slice(6, 8)} ${b.slice(8, 10)}:${b.slice(10, 12)}` : "-";
 async function loadWarn() { const [r, f] = await Promise.all([Api.warnings(), Api.forecast()]); if (r.ok) S.warn = r.status; if (f.ok) S.fc = Object.fromEntries(f.rows.map(x => [x.branch_id, x])); }
@@ -161,6 +169,7 @@ function fcOf(bid) {      // { snow, pcp, tmin, tmin_at, tmfc, start, end, nx, n
 }
 const fmtCm = v => v == null ? "-" : (Math.round(v * 10) / 10).toFixed(1);
 const fmtTmp = v => v == null ? "-" : String(Math.round(v * 10) / 10);                        // 기온(℃): -5, 1.5
+const fmtHM = iso => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? `${p2(d.getHours())}:${p2(d.getMinutes())}` : "-"; };   // 직접입력 특보 시각(시:분)
 const fmtAt = iso => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? `${d.getMonth() + 1}/${d.getDate()} ${p2(d.getHours())}시` : "-"; };
 // k = "snow"(적설 cm) / "pcp"(강수 mm) / "tmin"(최저기온 ℃) / "tmin_at"(그 시각). 값을 누르면 기관별 24시간 예보의 그 지사로.
 // 직접입력이면 입력칸(고칠 수 없으면 값만, 누를 수 없음)
@@ -302,7 +311,8 @@ const HIDE = new Set(["fc_tmfc", "fc_at", "zone_code", "warn_zones", "warn_base"
 function fmtField(f, v) {
   if (f === "warn_level" || f === "wx_level") return v ? (WLV[v] || [0, v])[1].replace("대설", "") || v : "특보 없음";
   if (f === "wx_manual") return v ? "켬" : "끔";
-  if ((f === "wx_fc" || f === "wx_ef" || f === "wx_tmin_at") && v) return fmtWarnTime(v);
+  if ((f === "wx_fc" || f === "wx_ef") && v) return fmtHM(v);
+  if (f === "wx_tmin_at" && v) return fmtWarnTime(v);
   if (f === "include") return v == null ? "자동대로" : v ? "더함" : "뺌";
   if (v == null || v === "") return f === "stops" ? "(없음)" : "(빈칸)";
   if (f === "stops") return v.length ? v.map(bn).join(" → ") : "(없음)";
@@ -652,8 +662,8 @@ function renderBranch() {
         : (on ? H(t, f, esc(rval(b.id, f) ?? 0)) : "-");
       const ok = rval(b.id, "confirmed");
       h += `<tr class="${on ? "active" : ""} ${m.branch_id === b.id ? "mine" : ""} ${S.rdraft.has(b.id) ? "changed" : ""} ${isConf(b.id) ? "locked" : ""}" data-b="${b.id}"><td class="l">${esc(b.name)}${m.branch_id === b.id ? ' <span class="tag">내 지사</span>' : ""}</td>
-        <td class="${isManual(b.id) ? "wxe" : ""}${fx(b.id)}" data-fcell="${b.id}">${fcInner(b.id, "snow")}</td><td class="${isManual(b.id) ? "wxe" : ""}${fx(b.id)}" data-pcell="${b.id}">${fcInner(b.id, "pcp")}</td>
-        <td class="${isManual(b.id) ? "wxe" : ""}${fx(b.id)}" data-tcell="${b.id}">${fcInner(b.id, "tmin")}</td><td class="tat ${isManual(b.id) ? "wxe" : ""}${fx(b.id)}" data-tacell="${b.id}">${fcInner(b.id, "tmin_at")}</td>
+        <td class="${isManual(b.id) ? "wxe" : ""}" data-fcell="${b.id}">${fcInner(b.id, "snow")}</td><td class="${isManual(b.id) ? "wxe" : ""}" data-pcell="${b.id}">${fcInner(b.id, "pcp")}</td>
+        <td class="${isManual(b.id) ? "wxe" : ""}" data-tcell="${b.id}">${fcInner(b.id, "tmin")}</td><td class="tat ${isManual(b.id) ? "wxe" : ""}" data-tacell="${b.id}">${fcInner(b.id, "tmin_at")}</td>
         ${warnCells(b.id)}
         <td class="wxm">${ed ? `<input type="checkbox" data-rq="${b.id}" data-f="wx_manual" data-fk="q:${b.id}:wx_manual"${isManual(b.id) ? " checked" : ""} aria-label="${esc(b.name)} 기상현황 직접입력"${hvA(t, "wx_manual")}${d0}>` : (isManual(b.id) ? H(t, "wx_manual", "✓") : '<span class="muted">-</span>')}</td>
         <td>${num("req_truck", "요청 제설차", ed)}</td><td>${num("req_blower", "요청 제설기", ed)}</td><td>${num("assigned_truck", "편성 제설차", ed && conf)}</td><td>${num("assigned_blower", "편성 제설기", ed && conf)}</td>
@@ -923,10 +933,18 @@ document.addEventListener("change", async e => {
     const get = p => (document.querySelector(`[data-arr="${b.id}"][data-part="${p}"]`) || {}).value || "";
     const d = get("d"); setReq(b.id, "arrive_at", d ? `${d}T${get("h") || "00"}:${get("m") || "00"}` : null); return afterReq(b.id);
   }
+  if (t.dataset.wxt) {                      // 직접입력 특보 발표·발효: 시·분 → 기준일자의 그 시각
+    const b = S.brById[t.dataset.wxt], f = t.dataset.f; if (!b || !canEdit(b)) return refresh();
+    const get = part => (document.querySelector(`[data-wxt="${b.id}"][data-f="${f}"][data-part="${part}"]`) || {}).value || "";
+    const hh = get("h"), day = (curRound() || {}).start_date || todayISO();
+    setReq(b.id, f, hh ? new Date(`${day}T${hh}:${get("m") || "00"}`).toISOString() : null);
+    const m = document.querySelector(`[data-wxt="${b.id}"][data-f="${f}"][data-part="m"]`); if (m) m.disabled = !hh;
+    return afterReq(b.id);
+  }
   if (t.dataset.rq) {
     const b = S.brById[t.dataset.rq], f = t.dataset.f; if (!b || !canEdit(b) || (["assigned_truck", "assigned_blower", "confirmed"].includes(f) && !can("req.confirm"))) return refresh();
     let v;
-    if (f === "wx_fc" || f === "wx_ef" || f === "wx_tmin_at") {   // 월일시분 8자리 → 시각. 비우면 지움
+    if (f === "wx_tmin_at") {                              // 최저기온 시각: 월일시분 8자리 → 시각. 비우면 지움
       const raw = t.value.replace(/\D/g, "");
       v = raw === "" ? null : parseMdhm(raw);
       if (v === undefined) { toast("시각은 월일시분 8자리 숫자로 넣으세요 (예: 12월 24일 15시 30분 → 12241530)", true); return refresh(); }

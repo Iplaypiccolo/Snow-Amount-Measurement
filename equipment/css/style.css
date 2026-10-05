@@ -192,7 +192,7 @@ table.branch { border-collapse: collapse; width: 100%; min-width: 820px; font-va
 .branch tr.hq td { background: var(--bg); font-weight: 700; cursor: pointer; }
 .branch tr.hq td:first-child::before { content: "▾ "; color: var(--ink-soft); }
 .branch tr.hq.closed td:first-child::before { content: "▸ "; }
-.branch tr.active td { background: color-mix(in srgb, var(--plow) 12%, transparent); }
+.branch tr.locked td { background: color-mix(in srgb, var(--plow) 12%, transparent); }   /* 확정한 지사 줄만 노랑(취소하면 흰색) */
 .branch td.muted { color: var(--ink-soft); }
 .plus { color: var(--go); font-weight: 700; }
 
@@ -493,8 +493,6 @@ table.matrix { font-size: 15px; min-width: 900px; }
 .wb.w2 { color: var(--w2); background: var(--w2-bg); border-color: color-mix(in srgb, var(--w2) 35%, transparent); }
 .wb.w3 { color: var(--w3); background: var(--w3-bg); }
 .wb .wfix { font-style: normal; font-size: 10.5px; font-weight: 600; opacity: .75; }
-/* 확정한 지사의 적설·강수·특보 칸 = 빨간 네모 */
-#branchTable td.fixd { box-shadow: inset 0 0 0 2px #d42a2a; }
 /* 기상현황 직접입력: 체크칸, 켠 줄의 입력칸(밑줄·이동 없음) */
 #branchTable th.wxh { font-size: 12px; line-height: 1.25; }
 #branchTable td.wxm { text-align: center; }
@@ -502,10 +500,11 @@ table.matrix { font-size: 15px; min-width: 900px; }
 #branchTable td.wxm input:disabled { cursor: not-allowed; }
 /* 확정한 줄: 입력칸은 회색으로 비활성(취소하기 전까지) */
 #branchTable tr.locked input.ci:disabled, #branchTable tr.locked select.ci:disabled { opacity: 1; background: var(--line, #e6e3da); color: var(--muted, #6b6455); cursor: not-allowed; }
-#branchTable td.wxe { background: color-mix(in srgb, var(--plow) 7%, transparent); }
 #branchTable .wxn { width: 62px; }
 #branchTable .wxt { width: 82px; font-variant-numeric: tabular-nums; }
 #branchTable td.wxe select { max-width: 104px; }
+#branchTable .hm { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+#branchTable .hm select { padding-left: 4px; padding-right: 2px; }
 .fcm { font-weight: 700; }
 /* 최저기온: 영하는 파랑, -10℃ 이하는 진한 파랑. 시각은 작게 */
 .fcv.cold { color: #2e5fb8; } .fcv.cold2 { color: #1b3a8a; }
