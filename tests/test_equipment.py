@@ -316,7 +316,7 @@ def t_pending_branches_shown_grey(p):
     """확정 전(요청만) 지사는 경로 목록에 회색(고를 수 없음)으로 보이고, 위 안내에 이름이 나옴"""
     tab(p, "fleet"); opts = p.locator(rsel("V002", day(p, 3)) + " option[disabled]").all_inner_texts()
     check(opts == ["춘천"], opts)
-    check("확정 전(요청만): 춘천" in p.locator("#fleetRound").inner_text(), p.locator("#fleetRound").inner_text())
+    check("확정 전" not in p.locator("#fleetRound").inner_text(), "기준일자 옆 설명 글 없음(2026-10-05): " + p.locator("#fleetRound").inner_text())
 
 def t_ui_version_reload_once(p):
     """화면 틀 판번호가 맞아야 함 + 예전 틀(판번호 다름)이 남아 있으면 한 번만 새로 받음(무한 반복 없음)"""
@@ -413,7 +413,7 @@ def t_warning_auto_badge(p):
     check(badge(p, "대관령").inner_text().replace("\n", "") == "대설주의보고정" and "w2" in badge(p, "대관령").get_attribute("class"), "대관령 = 확정 때 주의보로 고정(지금은 경보)")
     check(badge(p, "양양").inner_text().replace("\n", "") == "특보 없음고정", badge(p, "양양").inner_text())
     badge(p, "춘천").hover(); p.wait_for_timeout(100); tp = p.locator("#tip").inner_text()
-    check("춘천 지사" in tp and "홍천평지 — 예비특보" in tp and "10분마다" in tp and "받은 시각" in tp, tp)
+    check("춘천 지사" in tp and "홍천평지 — 예비특보" in tp and "10분마다" not in tp and "받은 시각" in tp, tp)
     badge(p, "엄정").hover(); p.wait_for_timeout(100); tp = p.locator("#tip").inner_text()
     check("30분 넘게" in tp and "고정" in tp, "자료가 없어 특보 없음으로 고정한 이유: " + tp)
     tab(p, "move"); card = p.locator(".dest", has_text="대관령")

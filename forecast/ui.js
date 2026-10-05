@@ -33,7 +33,6 @@
       '<div class="jr-wrap">' +
       '<div class="jr-side">' +
         '<div class="jr-head"><b>기관별 24시간 예보</b></div>' +
-        '<div class="jr-note">기상청 단기예보(5km 격자)의 <b>24시간 예상 적설·강수량</b>입니다. 본부를 누르면 그 본부 지사들의 격자, 지사를 누르면 격자마다 값이 보입니다. 지사 값 = 지사 격자 중 가장 큰 값.</div>' +
         '<div id="fc-meta" class="fc-meta"></div>' +
         '<div id="fc-tree" class="jr-tree"></div>' +
       '</div>' +
@@ -114,8 +113,8 @@
   function renderMeta() {
     var m = S.meta, fresh = m && Date.now() - Date.parse(m.tmfc) <= STALE;
     $('fc-meta').innerHTML = m ? '<b>' + esc(fmtHour(m.tmfc)) + ' 발표 기준</b>' + (m.start ? ' · ' + esc(fmtHour(m.start)) + ' ~ ' + esc(fmtHour(m.end)) + ' (24시간 합)' : '') +
-        (fresh ? '' : '<div class="fc-stale">발표 후 12시간이 지나 값을 쓰지 않습니다. 기준일자를 만들면(확정 전까지) 3시간마다 새로 받습니다.</div>')
-      : '<span class="fc-stale">아직 받은 예보가 없습니다. 기준일자를 만들면 받기 시작합니다.</span>';
+        (fresh ? '' : '<div class="fc-stale">예보 없음(발표 후 12시간 지남)</div>')
+      : '<span class="fc-stale">예보 없음</span>';
   }
   function cellPair(f) { return f ? '<span class="fc-v s">' + num(f.max_snow_24h) + '<i>cm</i></span><span class="fc-v p">' + num(f.max_pcp_24h) + '<i>mm</i></span>' : '<span class="fc-v s">-</span><span class="fc-v p">-</span>'; }
   function hqMax(hq) {
@@ -148,7 +147,8 @@
   }
   function renderLegend() {
     $('fc-legend').innerHTML = S.focus ? '<b>24시간 예상 적설(cm)</b> ' + SCALE.slice().reverse().map(function (x) { return '<span class="sw" style="background:' + x[1] + '"></span>' + esc(x[2]); }).join(' ') + ' · 칸 위 숫자: 위 = 적설(cm), 아래 = 강수(mm)'
-      : S.hq === 'ALL' ? '고속도로 노선(본부 색) — 본부를 누르면 격자가 보입니다' : '지사 격자(지사 색) — 지사를 누르면 격자마다 값이 보입니다';
+      : '';
+    $('fc-legend').style.display = S.focus ? '' : 'none';
   }
   function render() { drawLines(); drawCells(); renderMeta(); renderTree(); renderLegend(); }
 

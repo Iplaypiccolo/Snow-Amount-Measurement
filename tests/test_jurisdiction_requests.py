@@ -43,8 +43,8 @@ def run(name, fn, browser):
 def t_branch_requests_a_move(b):
     m = mock_with_branch(); p = open_as(b, "exok", m)
     check(p.locator("#jr-admin").count() == 0, "관리자 모드 체크박스가 없어야 함")
-    check(p.locator("#jr-role").inner_text() == "변경 요청 가능" and p.locator("#jr-add").is_hidden() and p.locator("#jr-savebar").is_hidden(), "지사: 신설·저장 도구가 없어야 함")
-    check("[구간 변경 요청]" in p.locator("#jr-note").inner_text(), p.locator("#jr-note").inner_text())
+    check(p.locator("#jr-add").is_hidden() and p.locator("#jr-savebar").is_hidden(), "지사: 신설·저장 도구가 없어야 함")
+    check(p.locator("#jr-note").count() == 0 and p.locator("#jr-role").count() == 0, "설명 글·권한 꼬리표 없음(2026-10-05)")
     check(p.locator("#jr-requests").is_visible() and "내 변경 요청" in p.locator("#jr-requests").inner_text() and "보낸 요청이 없습니다" in p.locator("#jr-requests").inner_text(), "내 요청 칸")
     sel = CJ_SECS[:2]; click_secs(p, sel)
     bar = p.locator("#jr-selbar"); check(bar.is_visible() and "2개 구간" in bar.inner_text() and p.locator("#jr-reqopen").count() == 1, bar.inner_text())
@@ -78,7 +78,7 @@ def t_branch_request_without_destination_and_errors(b):
 
 def t_equip_cannot_request(b):
     m = mock_with_branch(); p = open_as(b, "equip-01", m)
-    check(p.locator("#jr-role").inner_text() == "보기 전용" and p.locator("#jr-requests").is_hidden(), "장비 계정은 보기 전용")
+    check(p.locator("#jr-requests").is_hidden() and p.locator("#jr-add").is_hidden() and p.locator("#jr-savebar").is_hidden(), "장비 계정은 보기 전용(요청·편집 도구 없음)")
     T.click_sec(p, CJ_SECS[0]); check(J(p, "Object.keys(JurisdictionUI._state().selected).length") == 0 and p.locator("#jr-selbar").is_hidden() and p.locator("#jr-reqopen").count() == 0, "선택·요청 버튼이 없어야 함")
 
 def t_branch_cannot_use_admin_features(b):

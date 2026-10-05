@@ -45,12 +45,12 @@ def run(name, fn, browser):
 
 def t_locked_before_login(b, ctx, m):
     reqs = []; p = open_site(ctx, m, reqs=reqs)
-    check(p.locator("#ssGate").is_visible() and "로그인이 필요합니다" in p.locator("#ssGate").inner_text(), "로그인 화면이 보여야 함")
+    check(p.locator("#ssGate").is_visible() and p.locator("#ssU").is_visible() and p.locator("#ssP").is_visible(), "로그인 화면이 보여야 함")
     check(not in_app(p) and not p.locator(".pagebar").is_visible() and not p.locator("#page-snow").is_visible(), "앱 화면이 보이면 안 됨")
     check(not data_fetched(reqs), f"로그인 전에 자료를 불러옴: {data_fetched(reqs)}")
     check(p.evaluate("typeof window.HIERARCHY === 'undefined' && typeof window.JURIS === 'undefined'"), "로그인 전에 자료가 메모리에 있음")
     check(ls(p, "ss_session") is None and ss(p, "ss_session") is None, "로그인 정보가 없어야 함")
-    check(p.locator("#ssAuto").is_checked() is False and "공용 컴퓨터" in p.locator("#ssGate").inner_text(), "자동 로그인은 기본 꺼짐 + 공용 컴퓨터 주의")
+    check(p.locator("#ssAuto").is_checked() is False and "공용 컴퓨터" not in p.locator("#ssGate").inner_text(), "자동 로그인은 기본 꺼짐(설명 글 없음, 2026-10-05)")
 
 def t_wrong_and_empty(b, ctx, m):
     p = open_site(ctx, m)
@@ -112,7 +112,7 @@ def t_server_revoked(b, ctx, m):
 def t_special_accounts(b, ctx, m):
     reqs = []; p = open_site(ctx, m, reqs=reqs)
     typed_login(p, "exchungju", SBM.TEMP_PW, auto=True)
-    check("새 비밀번호를 먼저 정해야" in p.locator("#ssGate").inner_text() and not in_app(p), "임시 비밀번호 계정은 화면을 못 씀")
+    check("새 비밀번호 정하기" in p.locator("#ssGate").inner_text() and not in_app(p), "임시 비밀번호 계정은 화면을 못 씀")
     check(p.locator("#ssGate a.ss-btn").get_attribute("href") == "admin/" and not data_fetched(reqs), "비밀번호 변경 화면으로 안내하고 자료는 불러오지 않음")
     p.click("#ssOther"); p.wait_for_selector("#ssU"); check(ls(p, "ss_session") is None, "다른 계정으로 로그인 누르면 정보 삭제")
     typed_login(p, "stranger", "Stranger#Pass-123"); check("등록되어 있지 않습니다" in p.locator(".ss-msg.warn").inner_text() and ls(p, "ss_session") is None, "프로필 없는 가입자")
@@ -153,6 +153,25 @@ def t_equipment_gate(b, ctx, m):
     p = open_site(ctx, m); typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".pagebar", state="visible"); p.click(".page-btn[data-page=equip]"); p.wait_for_timeout(1200)
     check(p.frame_locator("#equipFrame").locator(".tab").count() >= 3, "로그인한 뒤 첫 화면에서 들어가면 장비 지원 화면이 열려야 함")
 
+def t_logout_from_equip_then_login_starts_first_screen(b, ctx, m):
+    """(사용자 신고 2026-10-05) 장비 지원에서 로그아웃한 뒤 다시 로그인하면 '첫 화면으로 가서 로그인하세요'만 계속 나옴
+       → 로그아웃하면 주소의 #equip 을 지우고, 다시 로그인하면 항상 첫 화면(강설량 측정)부터. 장비 지원은 로그인한 뒤에만 불러옴"""
+    p = open_site(ctx, m); typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".pagebar", state="visible")
+    p.click(".page-btn[data-page=equip]"); p.wait_for_timeout(1200); check(p.url.endswith("#equip"), "장비 지원을 열면 주소에 #equip")
+    p.click("#ssLogout"); p.wait_for_selector("#ssU", timeout=20000); p.wait_for_timeout(300)
+    check("#equip" not in p.url and not p.locator("#equipFrame").get_attribute("src"), "로그아웃하면 #equip 없이, 장비 지원은 아직 안 불러옴")
+    typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".pagebar", state="visible"); p.wait_for_timeout(500)
+    check(p.locator("#page-snow").is_visible() and p.locator(".page-btn[data-page=snow]").get_attribute("class").find("active") >= 0, "다시 로그인하면 첫 화면(강설량 측정)")
+    p.click(".page-btn[data-page=equip]"); p.wait_for_timeout(1500)
+    fr = p.frame_locator("#equipFrame")
+    check(fr.locator(".tab").count() >= 3 and "로그인이 필요합니다" not in fr.locator("body").inner_text(), "장비 지원이 정상으로 열림")
+    # 예전 주소(#equip)로 바로 열어도 로그인 전에는 장비 지원을 불러오지 않고, 로그인하면 첫 화면부터
+    p.click("#ssLogout"); p.wait_for_selector("#ssU", timeout=20000)
+    p.goto(T.URL + "?again=1#equip"); p.wait_for_selector("#ssU", timeout=20000)      # 새로 불러오기(같은 주소에 #만 바꾸면 다시 불러오지 않음)
+    check(not p.locator("#equipFrame").get_attribute("src"), "로그인 전에는 장비 지원을 불러오지 않음")
+    typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".pagebar", state="visible"); p.wait_for_timeout(500)
+    check(p.locator("#page-snow").is_visible() and "#equip" not in p.url, "예전 주소로 열어도 첫 화면부터")
+
 def t_no_secrets_and_safe_text(b, ctx, m):
     m.add("exxss", "<img src=x onerror=window.__x=1>", "branch", "B001", "Xss#Pass-998877aZ"); m.users["exxss"]["profile"]["must_change"] = False
     p = open_site(ctx, m); typed_login(p, "exxss", "Xss#Pass-998877aZ", remember=True, auto=True); p.wait_for_selector(".pagebar", state="visible")
@@ -163,7 +182,7 @@ def t_no_secrets_and_safe_text(b, ctx, m):
     check("Xss#Pass" not in p.evaluate("document.body.innerHTML"), "화면 어디에도 비밀번호가 없어야 함")
 
 TESTS = [t_locked_before_login, t_wrong_and_empty, t_login_session_only, t_remember_id, t_auto_login, t_auto_login_expired, t_server_revoked, t_special_accounts,
-         t_branch_set_by_admin_enters_main_directly, t_cross_tab_logout, t_network_problems, t_equipment_gate, t_no_secrets_and_safe_text]
+         t_branch_set_by_admin_enters_main_directly, t_cross_tab_logout, t_network_problems, t_equipment_gate, t_logout_from_equip_then_login_starts_first_screen, t_no_secrets_and_safe_text]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()

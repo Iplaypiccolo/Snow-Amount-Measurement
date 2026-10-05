@@ -40,8 +40,7 @@
     $('view-grid').innerHTML =
       '<div class="jr-wrap">' +
       '<div class="jr-side">' +
-        '<div class="jr-head"><b>예보 격자 편입</b><span class="jr-role">격자 편입 권한</span></div>' +
-        '<div class="jr-note">기상청 예보는 5km 격자 단위입니다. 칸을 눌러 기관에 편입하세요. 한 칸을 <b>여러 기관이 함께</b> 가질 수 있고, 예보 호출은 편입된 칸을 <b>한 번씩만</b> 합니다. 여러 건을 모아 오른쪽 위 <b>[저장]</b>을 누르면 한꺼번에 적용됩니다.</div>' +
+        '<div class="jr-head"><b>예보 격자 편입</b></div>' +
         '<div id="gr-summary" class="gr-summary"></div>' +
         '<div class="jr-tools"><input id="gr-search" placeholder="기관 검색 (예: 춘천)"></div>' +
         '<div id="gr-tree" class="jr-tree"></div>' +
@@ -49,7 +48,7 @@
       '</div>' +
       '<div class="jr-mapbox"><div id="gmap"></div>' +
         '<div id="gr-savebar" class="jr-savebar" style="display:none"></div>' +
-        '<div id="gr-tools" class="gr-tools" style="display:none"><button class="jr-btn" id="gr-box">▭ 영역 선택(드래그)</button><span class="hint">Shift+드래그도 됩니다</span></div>' +
+        '<div id="gr-tools" class="gr-tools" style="display:none"><button class="jr-btn" id="gr-box">▭ 영역 선택(드래그)</button></div>' +
         '<div id="gr-selbar" class="jr-selbar" style="display:none"></div>' +
         '<div class="jr-legend gr-legend"><span class="sw sw1"></span>기관 편입 <span class="sw sw2"></span>여러 기관 공유 <span class="sw sw0"></span>후보(편입 안 됨) <span class="sw sw3"></span>선택 <span class="sw sw4"></span>변경 대기' +
           ' <label><input type="checkbox" id="gr-ring" checked> 후보 칸</label> <label><input type="checkbox" id="gr-lines" checked> 고속도로</label></div>' +
@@ -113,7 +112,7 @@
   /* ---------- 선택 ---------- */
   function onCellClick(k) {
     if (S.justBoxed) return;
-    if (!S.admin) { var c = G.unkey(k), bs = cellBranches(k); S.rects[k].bindPopup('<b>격자 ' + c[0] + ',' + c[1] + '</b><br>' + (bs.length ? '편입: ' + bs.map(function (b) { return esc(branchName(b)); }).join(', ') : '편입된 기관 없음') + '<br><span class="hint">변경하려면 관리자 모드를 켜세요.</span>').openPopup(); return; }
+    if (!S.admin) { var c = G.unkey(k), bs = cellBranches(k); S.rects[k].bindPopup('<b>격자 ' + c[0] + ',' + c[1] + '</b><br>' + (bs.length ? '편입: ' + bs.map(function (b) { return esc(branchName(b)); }).join(', ') : '편입된 기관 없음')).openPopup(); return; }
     if (S.selected[k]) delete S.selected[k]; else S.selected[k] = true;
     afterChange();
   }
@@ -149,10 +148,8 @@
 
   /* ---------- 요약 카드 ---------- */
   function renderSummary() {
-    var b = G.budget(S.sum.union), cls = { ok: 'ok', warn: 'warn', over: 'over' }[b.level];
-    $('gr-summary').innerHTML = '<div class="gr-big">호출 대상 격자 <b>' + S.sum.union + '칸</b> <span>(여러 기관 공유 ' + S.sum.shared + '칸)</span></div>' +
-      '<div class="gr-sub">하루 호출 약 ' + b.daily.toLocaleString() + '건 · 수집 분할 ' + b.runs + '번(약 ' + b.minutes + '분)</div><div class="gr-badge ' + cls + '">' + esc(b.text) + '</div>' +
-      '<details class="gr-per" id="gr-per-wrap"' + (S.perOpen ? ' open' : '') + '><summary>지사별 칸 수 (많은 순) — 쏠림 보기</summary>' +
+    $('gr-summary').innerHTML = '<div class="gr-big">편입 격자 <b>' + S.sum.union + '칸</b> <span>(여러 기관 공유 ' + S.sum.shared + '칸)</span></div>' +
+      '<details class="gr-per" id="gr-per-wrap"' + (S.perOpen ? ' open' : '') + '><summary>지사별 칸 수</summary>' +
       '<div class="gr-per-tools">지사당 목표 <input id="gr-target" type="number" min="1" max="99" value="' + S.target + '"> 칸</div><div id="gr-per"></div></details>';
     $('gr-per-wrap').addEventListener('toggle', function (e) { S.perOpen = e.target.open; });
     renderPerBranch();
@@ -181,7 +178,7 @@
       var ids = all.filter(function (id) { return !q || st.branches[id].name.indexOf(q) >= 0; });
       if (!all.length || (q && !ids.length)) return '';
       var open = q ? true : S.hqView === hq, total = all.reduce(function (a, id) { return a + (per[id] || 0); }, 0);
-      return '<div class="jr-hq' + (open ? ' open' : '') + '"><div class="jr-hqname jr-hqpick' + (S.hqView === hq ? ' on' : '') + '" data-hqpick="' + esc(hq) + '" title="누르면 이 본부만 펼쳐 지사마다 다른 색으로 봅니다(다시 누르면 접고 전체)">' +
+      return '<div class="jr-hq' + (open ? ' open' : '') + '"><div class="jr-hqname jr-hqpick' + (S.hqView === hq ? ' on' : '') + '" data-hqpick="' + esc(hq) + '">' +
         '<span class="chev">▶</span><span class="hn">' + esc(hq) + ' 본부</span><span class="jr-cnt">' + all.length + '</span><span class="jr-km">' + total + '칸</span></div>' +
         (open ? ids.map(function (id) {
           var on = S.focus === id;
@@ -206,7 +203,7 @@
     var prev = $('gr-dest') ? $('gr-dest').value : '';
     bar.innerHTML = '<b>' + keys.length + '칸 선택</b><span class="hint">(편입된 칸 ' + assigned + ')</span>' +
       '<span class="gr-grp">편입할 기관 <select id="gr-dest">' + opts + '</select><button class="jr-btn jr-primary" data-act="add">편입 추가</button></span>' +
-      '<span class="gr-grp"><button class="jr-btn" data-act="remove"' + (assigned ? '' : ' disabled title="선택한 칸 중 편입된 칸이 없습니다"') + '>편입 제외' + (assigned ? ' (' + assigned + '칸)' : '') + '</button></span>' +
+      '<span class="gr-grp"><button class="jr-btn" data-act="remove"' + (assigned ? '' : ' disabled') + '>편입 제외' + (assigned ? ' (' + assigned + '칸)' : '') + '</button></span>' +
       '<button class="jr-btn" data-act="clear">선택 해제</button>';
     if (prev) $('gr-dest').value = prev;
     bar.style.display = 'flex';
@@ -220,17 +217,17 @@
     var box = $('gr-pending'), com = base(), h = '';
     if (serverDown()) h += '<div class="jr-warn">⚠ 서버에서 변경 이력을 불러오지 못해 예전 파일 기준으로 보고 있습니다. 새로고침해서 서버에 연결된 뒤에 저장하세요.</div>';
     if (com.length) h += '<details class="jr-hist"><summary>저장된 변경 이력 ' + com.length + '건</summary>' + com.slice().reverse().slice(0, 30).map(function (ev) { return '<div class="jr-ev old">' + (ev.at ? esc(String(ev.at).slice(0, 10)) + ' ' : '') + describe(ev) + (ev.note ? ' <em>' + esc(ev.note) + '</em>' : '') + '</div>'; }).join('') +
-      (S.admin ? '<div class="jr-row"><button class="jr-btn" data-act="export" title="변경 이력 전체를 파일로 보관합니다">이력 파일로 내려받기(백업)</button></div>' : '') + '</details>';
+      (S.admin ? '<div class="jr-row"><button class="jr-btn" data-act="export">이력 파일로 내려받기(백업)</button></div>' : '') + '</details>';
     box.innerHTML = h; box.style.display = h ? 'block' : 'none';
   }
   function renderSaveBar() {          // 지도 오른쪽 위 "변경 대기" 패널: 변경 목록·사유·[미리보기][모두 취소][저장]은 여기에만 있음
     var bar = $('gr-savebar'); if (!S.admin) { bar.style.display = 'none'; return; }
     var n = S.pending.length, canSave = n && !S.saving && !serverDown();
     bar.className = 'jr-savebar' + (n ? ' dirty' : '');
-    bar.innerHTML = '<div class="jr-sb-head"><span class="st">' + (n ? '● 변경 대기 ' + n + '건' : '변경 없음 — 칸을 눌러 기관에 편입하세요') + '</span>' +
+    bar.innerHTML = '<div class="jr-sb-head"><span class="st">' + (n ? '● 변경 대기 ' + n + '건' : '변경 없음') + '</span>' +
       '<span class="jr-sb-btns"><button class="jr-btn" data-act="preview"' + (n ? '' : ' disabled') + '>미리보기</button><button class="jr-btn" data-act="cancel"' + (n && !S.saving ? '' : ' disabled') + '>모두 취소</button>' +
-      '<button class="jr-btn jr-primary" data-act="save"' + (canSave ? '' : ' disabled') + ' title="변경 내용을 서버에 저장합니다">' + (S.saving ? '저장 중…' : '저장') + '</button></span></div>' +
-      (n ? '<div class="jr-sb-list">' + S.pending.map(function (ev, i) { return '<div class="jr-ev"><span class="jr-evt">' + describe(ev) + '</span><button class="jr-x" data-ev="' + i + '" title="이 변경만 취소">×</button></div>'; }).join('') + '</div>' +
+      '<button class="jr-btn jr-primary" data-act="save"' + (canSave ? '' : ' disabled') + '>' + (S.saving ? '저장 중…' : '저장') + '</button></span></div>' +
+      (n ? '<div class="jr-sb-list">' + S.pending.map(function (ev, i) { return '<div class="jr-ev"><span class="jr-evt">' + describe(ev) + '</span><button class="jr-x" data-ev="' + i + '">×</button></div>'; }).join('') + '</div>' +
         '<input id="gr-reason" class="jr-reason" placeholder="변경 사유 (선택)" maxlength="200" value="' + esc(S.reason || '') + '">' : '');
     bar.style.display = 'block';
   }
@@ -275,12 +272,11 @@
   function preview() {
     var im = G.impact(GR().baseline, S.ids, base(), events());
     var rows = im.branches.map(function (b) { return '<tr><td>' + esc(branchName(b.id)) + '</td><td>' + b.before + ' → ' + b.after + '칸</td></tr>'; }).join('') || '<tr><td colspan="2">바뀌는 기관이 없습니다.</td></tr>';
-    var ba = im.budgetAfter;
     modal('<h3>변경 미리보기</h3><div class="jr-tablewrap"><table class="jr-table"><thead><tr><th>기관</th><th>편입 격자 수</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       '<table class="jr-table" style="margin-top:10px"><tbody><tr><th>호출 대상 격자(합집합)</th><td>' + im.union[0] + ' → <b>' + im.union[1] + '칸</b></td></tr>' +
       '<tr><th>여러 기관 공유 격자</th><td>' + im.shared[0] + ' → ' + im.shared[1] + '칸</td></tr>' +
-      '<tr><th>하루 호출 / 수집 분할</th><td>' + im.budgetBefore.daily.toLocaleString() + '건 → <b>' + ba.daily.toLocaleString() + '건</b> · ' + ba.runs + '번(약 ' + ba.minutes + '분)</td></tr></tbody></table>' +
-      '<div class="gr-badge ' + ba.level + '" style="margin-top:8px">' + esc(ba.text) + '</div><div class="jr-row"><button class="jr-btn jr-primary" data-act="close">닫기</button></div>');
+      '</tbody></table>' +
+      '<div class="jr-row"><button class="jr-btn jr-primary" data-act="close">닫기</button></div>');
   }
 
   /* ---------- 변경 만들기 ---------- */
@@ -300,7 +296,8 @@
     var ids = Object.keys(per).sort(function (a, b) { return branchOrderIndex(a) - branchOrderIndex(b); });
     if (!ids.length) { window.alert('선택한 칸 중 편입된 칸이 없습니다.'); return; }
     if (!shared) { commitRemove(per, ids); return; }
-    modal('<h3>어느 기관에서 제외할까요?</h3><p class="jr-hint">선택한 칸 중 <b>' + shared + '칸</b>은 여러 기관이 함께 편입하고 있습니다. 제외할 기관을 고르세요. (모두 체크하면 이 칸들은 어느 기관에도 속하지 않게 됩니다)</p>' +
+    modal('<h3>어느 기관에서 제외할까요?</h3>' +
+      '' +
       '<div class="gr-rmlist">' + ids.map(function (b) {
         return '<label class="gr-rm"><input type="checkbox" class="gr-rmchk" value="' + esc(b) + '" checked> <b>' + esc(branchName(b)) + '</b> <span>' + per[b].length + '칸</span></label>';
       }).join('') + '</div><div class="jr-row"><button class="jr-btn jr-primary" data-act="removeok">제외</button><button class="jr-btn" data-act="close">취소</button></div>');

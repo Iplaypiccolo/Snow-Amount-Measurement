@@ -60,9 +60,9 @@
     app.innerHTML = '<div class="card narrow"><h2>로그인</h2>' + (note ? msg('warn', note) : '') + '<div id="m"></div><form id="f" autocomplete="on"><label>아이디<input id="u" autocomplete="username" autocapitalize="none" spellcheck="false" value="' + esc(saved) + '"></label>' +
       '<label>비밀번호<input id="pw" type="password" autocomplete="current-password"></label>' +
       '<label class="inline"><input type="checkbox" id="rem"' + (saved ? ' checked' : '') + '> 아이디 저장</label>' +
-      '<label class="inline"><input type="checkbox" id="auto"> 자동 로그인 <span class="hint">(관리자 ' + A.AUTO_DAYS.admin + '일·그 외 ' + A.AUTO_DAYS.other + '일 유지) 공용 컴퓨터에서는 켜지 마세요</span></label>' +
+      '<label class="inline"><input type="checkbox" id="auto"> 자동 로그인</label>' +
       '<p><button class="primary" type="submit">로그인</button></p></form>' +
-      '<p class="hint">임시 비밀번호로 처음 로그인하면 새 비밀번호를 정하게 됩니다.</p></div>';
+      '</div>';
     (saved ? $('pw') : $('u')).focus();
     $('f').onsubmit = function (e) {
       e.preventDefault(); var u = val('u').trim().toLowerCase(), pw = val('pw'); if (!u || !pw) { $('m').innerHTML = msg('err', '아이디와 비밀번호를 입력하세요.'); return; }
@@ -78,7 +78,7 @@
   /* ---------- 비밀번호 변경 (임시 비밀번호면 반드시) ---------- */
   function viewChangePw(forced) {
     var u = S.me.username;
-    app.innerHTML = '<div class="card narrow"><h2>비밀번호 변경</h2>' + (forced ? '<p class="hint">임시 비밀번호로 로그인했습니다. <b>새 비밀번호를 정해야 계속 사용할 수 있습니다.</b></p>' : '') + '<div id="m"></div>' +
+    app.innerHTML = '<div class="card narrow"><h2>비밀번호 변경</h2>' + '' + '<div id="m"></div>' +
       '<label>현재 비밀번호<input id="c" type="password" autocomplete="current-password"></label>' +
       '<label>새 비밀번호<input id="n" type="password" autocomplete="new-password"></label>' +
       '<ul class="checklist" id="chk"></ul>' +
@@ -162,7 +162,7 @@
   /* ---------- 계정 관리 ---------- */
   function tabUsers() {
     var vt = S.vt;
-    pane().innerHTML = '<div class="card"><h2>계정 관리</h2><p class="hint">임시 비밀번호 발급·비활성화. 새 아이디 만들기·권한·순서·비밀번호 일괄 설정은 <b>산하기관 아이디 관리</b> 탭에 있습니다. 관리자 계정은 새로 만들지 않습니다.</p><div id="m"></div><div class="row"><input id="q" placeholder="아이디·이름·소속 검색" style="min-width:240px"><span class="hint" id="cnt"></span></div><div class="tw" id="list">불러오는 중…</div></div>';
+    pane().innerHTML = '<div class="card"><h2>계정 관리</h2><div id="m"></div><div class="row"><input id="q" placeholder="아이디·이름·소속 검색" style="min-width:240px"><span class="hint" id="cnt"></span></div><div class="tw" id="list">불러오는 중…</div></div>';
     loadDirectory().then(function () { if (vt !== S.vt) return; drawUsers(); $('q').oninput = drawUsers; }).catch(function () { if (vt === S.vt && $('list')) $('list').innerHTML = msg('err', '계정 목록을 불러오지 못했습니다.'); });
   }
   function drawUsers() {
@@ -171,7 +171,7 @@
     $('list').innerHTML = '<table><thead><tr><th>아이디</th><th>이름</th><th>소속</th><th>역할</th><th>상태</th><th></th></tr></thead><tbody>' + rows.map(function (u) {
       var st = u.disabled ? '<span class="tag bad">비활성</span>' : u.must_change ? '<span class="tag warn">비밀번호 변경 대기</span>' : '<span class="tag ok">사용 중</span>', me = u.id === S.me.id;
       return '<tr><td>' + esc(u.username) + '</td><td>' + esc(u.display_name) + '</td><td>' + esc(hqName(u)) + '</td><td>' + esc(ROLE[u.role]) + '</td><td>' + st + '</td><td>' +
-        '<button type="button" data-a="reset" data-u="' + esc(u.username) + '"' + (me ? ' disabled title="본인은 내 정보에서 바꾸세요"' : '') + '>임시 비밀번호 발급</button> ' +
+        '<button type="button" data-a="reset" data-u="' + esc(u.username) + '"' + (me ? ' disabled' : '') + '>임시 비밀번호 발급</button> ' +
         (u.disabled ? '<button type="button" data-a="enable" data-u="' + esc(u.username) + '">활성화</button>' : '<button type="button" class="danger" data-a="disable" data-u="' + esc(u.username) + '"' + (me ? ' disabled' : '') + '>비활성화</button>') + '</td></tr>';
     }).join('') + '</tbody></table>';
     Array.prototype.forEach.call($('list').querySelectorAll('button[data-a]'), function (b) { b.onclick = function () { userAction(b.dataset.a, b.dataset.u); }; });
@@ -209,7 +209,6 @@
   function subPasswords() {
     var vt = S.vt;
     sub().innerHTML = '<div class="card"><h2>비밀번호 일괄 설정</h2>' +
-      '<p class="hint">산하기관(지사·지역본부·지원장비 등) 계정의 비밀번호를 한 번에 정합니다. <b>저장한 비밀번호는 담당자가 그대로 계속 쓸 수 있습니다</b>(처음 로그인할 때 바꾸라고 요구하지 않음. 담당자가 원하면 \'내 정보\'에서 언제든 바꿀 수 있고, 관리자가 다시 정하면 그 비밀번호로 돌아갑니다). 표는 <b>강설량 측정 화면과 같은 본부·지사 순서</b>입니다(엑셀 목록을 같은 순서로 만들어 붙여넣으세요). <b>엑셀에서 비밀번호 열(또는 "아이디 + 비밀번호" 두 열)을 복사해 아무 입력칸에 붙여넣으세요.</b> 한 열만 붙여넣으면 눌러 둔 칸부터 아래로 채워지고, 두 열이면 아이디로 찾아 채웁니다. 관리자 계정은 이 표에 나오지 않습니다.</p>' +
       '<div id="m"></div><div class="row"><label class="inline"><input type="checkbox" id="rc"> 저장 후 처음 로그인할 때 본인이 비밀번호를 바꾸게 하기</label>' +
       '<label class="inline"><input type="checkbox" id="mk" checked> 입력한 비밀번호 가리기</label><input id="q" placeholder="본부·이름·아이디로 거르기" style="min-width:220px"></div>' +
       '<div class="row"><button type="button" id="rnd">빈 칸을 무작위 비밀번호로 채우기</button><button type="button" id="clr">입력 모두 지우기</button><button type="button" id="csv">입력한 비밀번호 CSV로 받기</button><span class="sp"></span><span id="sum" class="hint"></span><button type="button" class="primary" id="save" disabled>저장</button></div>' +
@@ -238,7 +237,7 @@
       if (r.g !== last) {
         last = r.g;
         var grp = vis.filter(function (x) { return x.g === r.g; }), filled = grp.filter(function (x) { return x.pw; }).length, shut = !!S.sheet.collapsed[r.g];
-        html += '<tr class="grp" data-g="' + esc(r.g) + '"><td colspan="6"><button type="button" class="gtoggle" data-g="' + esc(r.g) + '" aria-expanded="' + (!shut) + '" title="접기·펼치기">' + (shut ? '▸' : '▾') + '</button> <b>' + esc(r.gl) + '</b> <span class="hint">계정 ' + grp.length + '개 · 입력 <span class="gcnt">' + filled + '</span></span></td></tr>';
+        html += '<tr class="grp" data-g="' + esc(r.g) + '"><td colspan="6"><button type="button" class="gtoggle" data-g="' + esc(r.g) + '" aria-expanded="' + (!shut) + '">' + (shut ? '▸' : '▾') + '</button> <b>' + esc(r.gl) + '</b> <span class="hint">계정 ' + grp.length + '개 · 입력 <span class="gcnt">' + filled + '</span></span></td></tr>';
       }
       if (S.sheet.collapsed[r.g]) return;                 // 접어도 입력한 값과 붙여넣기 순서에는 영향이 없습니다(보이는 것만 숨김)
       var v = rowView(r, dups);
@@ -318,7 +317,7 @@
   function samePerms(a, b) { return a.length === b.length && a.every(function (x) { return b.indexOf(x) >= 0; }); }
   function subPerms() {
     var vt = S.vt;
-    sub().innerHTML = '<div class="card"><h2>권한·순서</h2><p class="hint">칸에 마우스를 올리면 권한 설명이 나옵니다. <b>묶음 줄의 칸</b>을 누르면 그 묶음 전체를 켜고 끕니다. 바꾼 줄은 노란색이며 <b>[저장]</b>해야 반영됩니다. 실제로 막고 허용하는 것은 서버 규칙이 이 권한으로 검사합니다.</p>' +
+    sub().innerHTML = '<div class="card"><h2>권한·순서</h2>' +
       '<div id="m"></div><div class="row"><input id="q" placeholder="소속·이름·아이디로 거르기" style="min-width:220px"><span class="sp"></span><span id="psum" class="hint"></span><button type="button" id="prev">되돌리기</button><button type="button" class="primary" id="psave" disabled>저장</button></div><div class="tw sheet" id="pgrid">불러오는 중…</div></div>';
     loadDirectory().then(function () {
       if (vt !== S.vt) return;
@@ -338,13 +337,13 @@
   function drawPerms() {
     var q = val('q').trim().toLowerCase(), cols = S.perms, html = '', last = null;
     var vis = S.pm.rows.filter(function (r) { return !q || (hqName(r.u) + ' ' + r.u.display_name + ' ' + r.u.username).toLowerCase().indexOf(q) >= 0; });
-    var head = '<tr><th>소속</th><th>이름</th><th>아이디</th><th>역할</th>' + cols.map(function (p) { return '<th class="pc" title="' + esc(p.description) + '">' + esc(p.label) + '</th>'; }).join('') + '<th>위치(순서)</th></tr>';
+    var head = '<tr><th>소속</th><th>이름</th><th>아이디</th><th>역할</th>' + cols.map(function (p) { return '<th class="pc">' + esc(p.label) + '</th>'; }).join('') + '<th>위치(순서)</th></tr>';
     vis.forEach(function (r) {
       if (r.g !== last) {
         last = r.g; var grp = vis.filter(function (x) { return x.g === r.g; });
         html += '<tr class="grp"><td colspan="4"><b>' + esc(r.gl) + '</b> <span class="hint">' + grp.length + '개</span></td>' + cols.map(function (p) {
           var on = grp.filter(function (x) { return x.perms.indexOf(p.key) >= 0; }).length;
-          return '<td class="pc"><button type="button" class="gall" data-g="' + esc(r.g) + '" data-p="' + esc(p.key) + '" title="' + esc(r.gl) + ' 전체 ' + esc(p.label) + ' ' + (on === grp.length ? '끄기' : '켜기') + '">' + on + '/' + grp.length + '</button></td>';
+          return '<td class="pc"><button type="button" class="gall" data-g="' + esc(r.g) + '" data-p="' + esc(p.key) + '">' + on + '/' + grp.length + '</button></td>';
         }).join('') + '<td></td></tr>';
       }
       var pos = '';
@@ -355,7 +354,7 @@
         }).join('') + '</select>';
       } else pos = '<span class="hint">지사 순서</span>';
       html += '<tr class="' + (r.dirty ? 'dirty' : '') + '"><td>' + esc(hqName(r.u)) + '</td><td>' + esc(r.u.display_name) + '</td><td class="mono">' + esc(r.u.username) + '</td><td>' + esc(ROLE[r.u.role] || r.u.role) + '</td>' +
-        cols.map(function (p) { return '<td class="pc"><input type="checkbox" class="pchk" data-u="' + esc(r.u.username) + '" data-p="' + esc(p.key) + '" title="' + esc(p.label) + '"' + (r.perms.indexOf(p.key) >= 0 ? ' checked' : '') + '></td>'; }).join('') +
+        cols.map(function (p) { return '<td class="pc"><input type="checkbox" class="pchk" data-u="' + esc(r.u.username) + '" data-p="' + esc(p.key) + '"' + (r.perms.indexOf(p.key) >= 0 ? ' checked' : '') + '></td>'; }).join('') +
         '<td>' + pos + '</td></tr>';
     });
     $('pgrid').innerHTML = '<table class="perm"><thead>' + head + '</thead><tbody>' + (html || '<tr><td colspan="' + (cols.length + 5) + '" class="hint">계정이 없습니다.</td></tr>') + '</tbody></table>';
@@ -408,7 +407,7 @@
   function defaultsFor(role) { return S.perms.filter(function (p) { return (p.default_roles || []).indexOf(role) >= 0; }).map(function (p) { return p.key; }); }
   function subNew() {
     var vt = S.vt;
-    sub().innerHTML = '<div class="card"><h2>추천 산하기관 아이디</h2><p class="hint">지원장비 4개(출발 기관별)와 지역본부 9개(본부별)입니다. 아직 없는 아이디만 만들고, 임시 비밀번호는 무작위로 정해 지금 한 번만 보여 줍니다(나중에 <b>비밀번호 일괄 설정</b>에서 원하는 비밀번호로 바꾸세요). 권한은 역할 기본값이며 <b>권한·순서</b>에서 바꿀 수 있습니다.</p><div id="pm"></div><div class="tw" id="preset">불러오는 중…</div><p><button type="button" class="primary" id="mkpreset" disabled>없는 아이디 만들기</button></p></div>' +
+    sub().innerHTML = '<div class="card"><h2>추천 산하기관 아이디</h2><div id="pm"></div><div class="tw" id="preset">불러오는 중…</div><p><button type="button" class="primary" id="mkpreset" disabled>없는 아이디 만들기</button></p></div>' +
       '<div class="card"><h2>새 아이디 하나 만들기</h2><div id="m"></div>' +
       '<div class="form2"><label>역할<select id="nrole"><option value="equip">지원장비(출발 기관)</option><option value="hq">지역본부</option><option value="viewer">보기 전용</option><option value="branch">피지원지사</option></select></label>' +
       '<label>소속<select id="nwhere"></select></label><label>아이디<input id="nuser" autocapitalize="none" spellcheck="false" placeholder="영문 소문자·숫자 (예: exseoulgigyae)"></label><label>이름<input id="nname" placeholder="예: 서울경기 지원장비"></label>' +
@@ -442,7 +441,7 @@
     $('nwhere').innerHTML = opts.length ? opts.map(function (o) { return '<option value="' + esc(o[0]) + '">' + esc(o[1]) + '</option>'; }).join('') : '<option value="">(소속 없음)</option>';
     $('nwhere').disabled = !opts.length;
     var d = defaultsFor(role);
-    $('nperms').innerHTML = '<div class="hint">권한 (역할 기본값이 켜져 있음)</div>' + S.perms.map(function (p) { return '<label class="inline" title="' + esc(p.description) + '"><input type="checkbox" class="npc" value="' + esc(p.key) + '"' + (d.indexOf(p.key) >= 0 ? ' checked' : '') + '> ' + esc(p.label) + '</label>'; }).join('');
+    $('nperms').innerHTML = '<div class="hint">권한</div>' + S.perms.map(function (p) { return '<label class="inline"><input type="checkbox" class="npc" value="' + esc(p.key) + '"' + (d.indexOf(p.key) >= 0 ? ' checked' : '') + '> ' + esc(p.label) + '</label>'; }).join('');
     fillPos();
   }
   function groupOfNew() { var role = val('nrole'), w = val('nwhere'); return role === 'equip' ? '_equip' : role === 'hq' ? w : role === 'branch' ? null : '_other'; }
@@ -451,7 +450,7 @@
     $('npos').innerHTML = g ? '<option value="">맨 앞</option>' + list.map(function (u, i) { return '<option value="' + esc(u.username) + '"' + (i === list.length - 1 ? ' selected' : '') + '>' + esc(u.display_name) + ' 다음</option>'; }).join('') : '<option value="">지사 순서(자동)</option>';
     $('npos').disabled = !g;
     // 같은 묶음(지원장비끼리 / 같은 본부의 지역본부 계정끼리 / 보기 전용 등)에 이미 있는 계정 사이에서 어디에 둘지. 비밀번호·권한 표에 나오는 순서
-    $('nposHint').textContent = !g ? '지사 계정은 강설량 화면의 지사 순서를 따릅니다.' : list.length ? '계정 관리·비밀번호·권한 표에서 이 묶음 안의 순서입니다.' : '이 묶음에 아직 다른 계정이 없어 "맨 앞"뿐입니다. 계정이 생기면 "○○ 다음"을 고를 수 있습니다.';
+    $('nposHint').textContent = '';
   }
   function makeOne() {
     var role = val('nrole'), w = val('nwhere'), u = { username: val('nuser').trim().toLowerCase(), display_name: val('nname').trim(), role: role,
@@ -507,8 +506,6 @@
   function tabSnow() {
     var vt = S.vt, txt = null, planned = null;
     pane().innerHTML = '<div class="card"><h2>적설 자료 (일 신적설)</h2>' +
-      '<p class="hint">기상청 API허브 콘솔 스크립트로 받은 <b>메모장(txt) 파일</b>을 올리면 서버에 저장되고, 모든 사용자의 "연도별 신적설" 표·지도에 바로 반영됩니다. ' +
-      '먼저 <b>[검사]</b>로 새 값·바뀔 값 개수를 확인한 뒤 <b>[저장]</b>하세요. 결측(-99.9)과 시즌(11.15~3.15) 밖 날짜는 저장하지 않습니다.</p>' +
       '<div class="row"><input type="file" id="sf" accept=".txt,text/plain" multiple> <label class="inline"><input type="checkbox" id="sow"> 이미 있는 값과 다르면 바꾸기(덮어쓰기)</label></div>' +
       '<div class="row"><button type="button" id="splan">검사</button> <button type="button" id="sload" disabled>저장</button></div><div id="sm"></div>' +
       '<h3>최근 저장 기록</h3><div class="tw" id="sup">불러오는 중…</div></div>';
@@ -550,7 +547,7 @@
   function tabAudit() {
     var vt = S.vt;
     pane().innerHTML = '<div class="card"><h2>접속·수정 로그</h2><div class="row"><label class="inline">구분 <select id="k"><option value="">전체</option><option>계정생성</option><option>비밀번호설정</option><option>비밀번호초기화</option><option>계정비활성화</option><option>계정활성화</option><option>계정수정</option><option>수정</option><option>추가</option><option>삭제</option></select></label><button type="button" id="go">조회</button></div>' +
-      '<p class="hint">기록은 서버가 남기며 이 화면에서 고치거나 지울 수 없습니다. 비밀번호는 기록되지 않습니다.</p><div class="tw" id="rows">불러오는 중…</div></div>';
+      '<div class="tw" id="rows">불러오는 중…</div></div>';
     $('k').value = S.auditKind;
     var load = function () {
       S.auditKind = val('k');

@@ -21,14 +21,13 @@
 
   function loginView(note, noteKind) {
     var saved = A.savedUser();
-    card('<p class="ss-sub">로그인이 필요합니다.</p>' + (note ? '<div class="ss-msg ' + (noteKind || 'warn') + '" role="alert">' + esc(note) + '</div>' : '') +
+    card((note ? '<div class="ss-msg ' + (noteKind || 'warn') + '" role="alert">' + esc(note) + '</div>' : '') +
       '<form id="ssForm" autocomplete="on">' +
       '<label>아이디<input id="ssU" type="text" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" value="' + esc(saved) + '"></label>' +
       '<label>비밀번호<input id="ssP" type="password" name="password" autocomplete="current-password"></label>' +
       '<label class="ss-chk"><input type="checkbox" id="ssRemember"' + (saved ? ' checked' : '') + '> 아이디 저장</label>' +
-      '<label class="ss-chk"><input type="checkbox" id="ssAuto"> <span>자동 로그인 <span class="ss-hint">이 컴퓨터에서 ' + A.AUTO_DAYS.other + '일(관리자 ' + A.AUTO_DAYS.admin + '일) 동안 비밀번호를 다시 묻지 않습니다. 공용 컴퓨터에서는 켜지 마세요.</span></span></label>' +
-      '<button class="ss-btn" id="ssGo" type="submit">로그인</button></form>' +
-      '<p class="ss-foot">임시 비밀번호로 처음 로그인하면 새 비밀번호를 정하게 됩니다.</p>');
+      '<label class="ss-chk"><input type="checkbox" id="ssAuto"> <span>자동 로그인</span></label>' +
+      '<button class="ss-btn" id="ssGo" type="submit">로그인</button></form>');
     (saved ? $('ssP') : $('ssU')).focus();
     $('ssForm').onsubmit = function (e) {
       e.preventDefault(); var u = $('ssU').value.trim(), pw = $('ssP').value; if (!u || !pw) { loginView('아이디와 비밀번호를 입력하세요.', 'err'); return; }
@@ -41,7 +40,7 @@
     };
   }
   function mustChangeView() {
-    card('<p class="ss-sub"><b>' + esc(me.display_name) + '</b>님, 임시 비밀번호로 로그인했습니다.</p><div class="ss-msg warn">보안을 위해 <b>새 비밀번호를 먼저 정해야</b> 화면을 쓸 수 있습니다.</div>' +
+    card('<p class="ss-sub"><b>' + esc(me.display_name) + '</b>님, 임시 비밀번호로 로그인했습니다.</p>' +
       '<a class="ss-btn" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box" href="' + adminUrl + '">새 비밀번호 정하기</a><button class="ss-btn alt" type="button" id="ssOther">다른 계정으로 로그인</button>');
     $('ssOther').onclick = function () { A.logout().then(function () { loginView(); }); };
   }
@@ -61,7 +60,7 @@
     if (box) {
       box.hidden = false;
       box.innerHTML = '<span><b>' + esc(profile.display_name) + '</b> (' + esc(ROLE[profile.role] || profile.role) + ')</span>' + (profile.role === 'admin' ? '<a href="' + adminUrl + '">관리</a>' : '') + '<button type="button" id="ssLogout">로그아웃</button>';
-      $('ssLogout').onclick = function () { A.logout().then(function () { root.location.reload(); }); };
+      $('ssLogout').onclick = function () { A.logout().then(function () { root.location.replace(root.location.pathname + root.location.search); }); };   // 다시 로그인하면 첫 화면부터
     }
     if (!started) { started = true; if (onReady) onReady(profile); }
   }

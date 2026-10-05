@@ -42,7 +42,7 @@ def t_tab_loads(b):
     p = open_grid(b)
     n = J(p, f"Object.keys({S}.rects).length"); check(n == 1072 + 1389, f"격자 칸 {n}")
     check("934칸" in p.locator("#gr-summary").inner_text(), p.locator("#gr-summary").inner_text())
-    check("수집 분할 10번(약 50분)" in p.locator("#gr-summary").inner_text() and "Worker" not in p.locator("#gr-summary").inner_text() and p.locator(".gr-badge.ok").count() == 1 and p.locator(".gr-badge.over").count() == 0, "934칸은 3시간 안에 충분히 끝남(초록), 무료 Worker 문구 없음")
+    check("편입 격자" in p.locator("#gr-summary").inner_text() and "수집 분할" not in p.locator("#gr-summary").inner_text() and p.locator(".gr-badge").count() == 0, "편입 칸 수만(예전 호출량·분할 계산 문구 없음, 2026-10-05)")
     check(p.locator("#gr-admin").count() == 0 and "관리자 모드" not in p.locator("#view-grid").inner_text(), "관리자 모드 체크박스가 없어야 함")
     check(p.locator("#gr-tools").is_visible() and p.locator("#gr-savebar").is_visible(), "관리자에게는 편집 도구가 바로 보여야 함")
     box = p.locator("#gmap").bounding_box(); check(box and box["width"] > 500 and box["height"] > 400, f"지도 크기 {box}")
@@ -118,7 +118,7 @@ def t_remove_shared_cells_asks_which_branch(b):
 def t_remove_button_state(b):
     p = open_grid(b); admin(p); ring = ring_cells(p, 1)[0]
     click_cell(p, ring); rb = p.locator("#gr-selbar [data-act=remove]")
-    check(rb.is_disabled() and "편입된 칸이 없습니다" in (rb.get_attribute("title") or "") and "편입 제외" == rb.inner_text().strip(), "편입된 칸이 없으면 [편입 제외]는 꺼져 있어야 함")
+    check(rb.is_disabled() and rb.get_attribute("title") is None and "편입 제외" == rb.inner_text().strip(), "편입된 칸이 없으면 [편입 제외]는 꺼져 있어야 함(설명 말풍선 없음)")
     check(p.locator("#gr-selbar [data-act=add]").is_enabled(), "편입 추가는 가능")
     asg = single_cells(p, 1)[0]; click_cell(p, asg)
     check(rb.is_enabled() and "편입 제외 (1칸)" in rb.inner_text(), "편입된 칸을 함께 선택하면 켜지고 개수가 보임")
@@ -207,14 +207,14 @@ def t_box_select(b):
     p.keyboard.down("Shift"); p.mouse.move(x - 60, y - 50); p.mouse.down(); p.mouse.move(x + 60, y + 50, steps=8); p.mouse.up(); p.keyboard.up("Shift"); p.wait_for_timeout(300)
     check(len(J(p, f"Object.keys({S}.selected)")) >= 2, "Shift+드래그 선택")
 
-def t_budget_levels(b):
+def t_union_after_add_and_cancel(b):
+    """후보 칸을 모두 편입하면 편입 칸 수가 늘고, 모두 취소하면 원래대로(예전 '호출 한도' 판정은 예보 방식이 바뀌어 없앰)"""
     p = open_grid(b); admin(p)
     br = first_branch(p); ring = J(p, "GRID.baseline.ring.map(c => c[0] + ',' + c[1])")
     J(p, f"(() => {{ const s = {S}; {json.dumps(ring)}.forEach(k => s.selected[k] = true); }})()")
     p.evaluate("GridUI.show()"); p.wait_for_timeout(200); p.select_option("#gr-dest", br); p.click("#gr-selbar [data-act=add]"); p.wait_for_timeout(500)
     check(union(p) == 934 + 1389, f"합집합 {union(p)}")
-    check(p.locator(".gr-badge.over").count() == 1 and "하루 호출 한도" in p.locator("#gr-summary").inner_text(), "한도 초과 안내")
-    # 대부분 되돌리면 안전 구간(300칸 이하)으로
+    check(str(934 + 1389) + "칸" in p.locator("#gr-summary").inner_text(), "요약에 늘어난 칸 수")
     p.click("#gr-savebar [data-act=cancel]"); p.wait_for_timeout(300)
     check(union(p) == 934, "모두 취소 후 934칸")
 
@@ -269,7 +269,7 @@ def t_hq_tabs_and_per_branch_view(b):
     p.click("#gr-tree [data-hqpick='강원']"); p.wait_for_timeout(300)
     check(p.evaluate("GridUI._state().hqView") == "ALL" and p.evaluate("GridUI._state().focus") is None, "다시 누르면 접히고 전체")
 
-TESTS = [t_hq_tabs_and_per_branch_view, t_tab_loads, t_popup_info_for_unselected_cell, t_remove_needs_no_branch_choice, t_remove_shared_cells_asks_which_branch, t_remove_button_state, t_add_remove_and_save, t_grid_save_failure_and_reload, t_grid_history_failure_blocks_save, t_share_between_branches, t_box_select, t_budget_levels, t_focus_branch,
+TESTS = [t_hq_tabs_and_per_branch_view, t_tab_loads, t_popup_info_for_unselected_cell, t_remove_needs_no_branch_choice, t_remove_shared_cells_asks_which_branch, t_remove_button_state, t_add_remove_and_save, t_grid_save_failure_and_reload, t_grid_history_failure_blocks_save, t_share_between_branches, t_box_select, t_union_after_add_and_cancel, t_focus_branch,
          t_colors_match_other_tab, t_new_branch_from_jurisdiction_appears]
 if __name__ == "__main__":
     with sync_playwright() as pw:

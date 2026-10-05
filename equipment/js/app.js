@@ -112,7 +112,7 @@ function fmtWarnTime(iso, level, ef) {     // "10/5 04:00", 예비특보 발효�
 }
 function warnBadge(bid) {
   const w = warnOf(bid);
-  if (w.none) return `<span class="muted" title="특보 연동 전에 확정한 지사">-</span>`;
+  if (w.none) return `<span class="muted">-</span>`;
   const cls = (WLV[w.level] || ["w0"])[0];
   return `<span class="wb ${cls}" data-wb="${esc(bid)}" tabindex="0">${esc(wlabel(w.level, "대설"))}${w.fixed ? '<i class="wfix">고정</i>' : ""}</span>`;
 }
@@ -138,7 +138,7 @@ const fmtCm = v => v == null ? "-" : (Math.round(v * 10) / 10).toFixed(1);
 function fcInner(bid, k = "snow") {
   const f = fcOf(bid), v = f && !f.none ? f[k] : null;
   if (!f) return `<span class="muted fcv" data-fb="${esc(bid)}" data-fk2="${k}" tabindex="0">-</span>`;
-  if (f.none) return `<span class="muted" title="예상 적설 연동 전에 확정한 지사">-</span>`;
+  if (f.none) return `<span class="muted">-</span>`;
   const cls = k === "snow" ? (v >= 5 ? " hi" : v > 0 ? " some" : "") : (v >= 30 ? " hi" : v > 0 ? " wet" : "");
   return `<span class="fcv${cls}" data-fb="${esc(bid)}" data-fk2="${k}" tabindex="0" role="link">${v == null ? "-" : esc(fmtCm(v))}${f.fixed && k === "snow" ? '<i class="wfix">고정</i>' : ""}</span>`;
 }
@@ -290,25 +290,23 @@ function showWarnTip(el) {
   const zl = z => wlabel(z[2], "대설") + (z[4] ? ` · 발표 ${fmtWarnTime(z[4], z[2])}` : "") + (z[5] ? ` · 발효 ${fmtWarnTime(z[5], z[2], true)}` : "");
   tip.innerHTML = `<b>${esc(b ? b.name : "")} 지사 · ${esc(wlabel(w.level, "대설"))}</b>` +
     (w.zones.length ? `<div>${w.zones.map(z => `${esc(z[1])} — ${esc(zl(z))}`).join("<br>")}</div>` : `<div>${esc(w.note || "관할 특보구역에 대설특보가 없습니다")}</div>`) +
-    `<div>${w.fixed ? `확정할 때 고정(${esc(fmtShort(w.at))})` : S.warn && S.warn.fetched_at ? `기상청에서 받은 시각 ${esc(fmtShort(S.warn.fetched_at))} · 10분마다` : "기상청 자료 없음"}</div>`;
+    `<div>${w.fixed ? `확정할 때 고정(${esc(fmtShort(w.at))})` : S.warn && S.warn.fetched_at ? `기상청에서 받은 시각 ${esc(fmtShort(S.warn.fetched_at))}` : "기상청 자료 없음"}</div>`;
   placeTip(el);
 }
 function showFcTip(el) {
   const f = fcOf(el.dataset.fb), b = S.brById[el.dataset.fb];
   tip.innerHTML = `<b>${esc(b ? b.name : "")} 지사 · 24시간 예상 적설 ${f && f.snow != null ? esc(fmtCm(f.snow)) + "cm" : "없음"} · 강수 ${f && f.pcp != null ? esc(fmtCm(f.pcp)) + "mm" : "없음"}</b>` +
-    (!f ? `<div>${S.warn && S.warn.paused ? "수집 쉬는 중 — 확정을 기다리는 기준일자가 없음" : "기상청 예보를 아직 받지 못함(발표 후 12시간이 지났거나 받는 중)"}</div>`
+    (!f ? `<div>예보 없음</div>`
       : `<div>기상청 단기예보 ${esc(fmtHour(f.tmfc))} 발표${f.start ? ` · ${esc(fmtHour(f.start))}~${esc(fmtHour(f.end))} 24시간 합` : ""}</div>` +
-        `<div>${f.fixed ? `확정할 때 고정(${esc(fmtShort(f.at))})` : `지사 격자 중 가장 많은 곳${f.nx ? ` — 적설 격자 ${f.nx}, ${f.ny}` : ""}${f.pnx ? ` · 강수 격자 ${f.pnx}, ${f.pny}` : ""} · 3시간마다 새 예보`}</div>`) +
-    `<div>누르면 '기관별 24시간 예보'에서 격자별 값을 봅니다</div>`;
+        `<div>${f.fixed ? `확정할 때 고정(${esc(fmtShort(f.at))})` : `지사 격자 중 가장 많은 곳${f.nx ? ` — 적설 격자 ${f.nx}, ${f.ny}` : ""}${f.pnx ? ` · 강수 격자 ${f.pnx}, ${f.pny}` : ""}`}</div>`);
   placeTip(el);
 }
 const hideTip = () => { tip.hidden = true; };
 ["mouseover", "focusin"].forEach(ev => document.addEventListener(ev, e => { if (!e.target.closest) return; const fb = e.target.closest("[data-fb]"); if (fb) return showFcTip(fb); const w = e.target.closest("[data-wb]"); if (w) return showWarnTip(w); const el = e.target.closest("[data-hv]"); if (el) showTip(el); }));
 ["mouseout", "focusout"].forEach(ev => document.addEventListener(ev, e => { if (e.target.closest && e.target.closest("[data-hv], [data-wb], [data-fb]")) hideTip(); }));
-function banner(id, canEdit, ok, no) {
-  const el = $(id); el.className = "perm" + (canEdit ? " can" : "");
-  el.innerHTML = (S.preview ? `<b class="pv">미리보기: ${esc(S.me.label)} 권한으로 보는 화면입니다. 저장·확정은 '내 아이디'로 돌아와야 합니다.</b> ` : "") + esc(canEdit ? ok : no) +
-    (can("log.view") ? `<span class="hint-admin">점선 밑줄이 있는 칸에 마우스를 올리면 그 칸의 오늘 수정 기록이 최대 3건 보입니다. 이전 기록은 '로그 기록' 탭에서 확인하세요.</span>` : "");
+function banner(id) {           // 미리보기(다른 아이디 권한으로 보기) 중일 때만 짧게 알림
+  const el = $(id); el.className = "perm"; el.hidden = !S.preview;
+  el.innerHTML = S.preview ? `<b class="pv">미리보기: ${esc(S.me.label)} (저장 안 됨)</b>` : "";
 }
 function roundSel(id) {
   return `<label class="ctl">기준일자 <select class="ci" id="${id}" data-round>${S.rounds.length ? S.rounds.map(r => `<option value="${r.id}" ${r.id === S.round ? "selected" : ""}>${esc(fmtMD(r.start_date))} ${esc(r.start_date.slice(0, 4))}</option>`).join("") : '<option value="">(없음)</option>'}</select></label>`;
@@ -343,7 +341,7 @@ function renderMatrix() {
   stickHead($("matrix"));
   const tr = moves.filter(m => m.v.type === "제설차").length, bl = moves.filter(m => m.v.type === "제설기").length;
   $("dateText").textContent = fmtMD(S.date); $("dateInput").value = S.date;      // 제목의 큰 날짜(누르면 달력)
-  $("summaryNote").innerHTML = `<b>제설차 ${tr}대</b> · <b>제설기 ${bl}대</b>` + (moves.some(m => m.stops.length > 1) ? `<span class="hint"> 하루에 여러 지사를 들르는 장비는 각 지사에 모두 세고, 합계는 1대로 셉니다</span>` : "");
+  $("summaryNote").innerHTML = `<b>제설차 ${tr}대</b> · <b>제설기 ${bl}대</b>` + (moves.some(m => m.stops.length > 1) ? "" : "");
 }
 function renderFilters() {
   const f = $("filters"); f.className = "filters two";
@@ -368,9 +366,9 @@ const matches = v => (S.org === "전체" || v.org === S.org) && (S.type === "전
 function vehicleRow(v, stops, rec, bid) {
   const st = vval(v, "status"), [cls, label] = STATUS[st] || STATUS[""], run = runOf(v.id, S.date);
   const eta = rec && bid ? rec.times[rec.stops.indexOf(bid)] : null;   // 이 장비가 이 지사에 도착할 예상 시각(기관별 장비에서 입력)
-  const dayTag = run.n > 1 ? `<span class="tag day" title="${esc(fmtMD(run.first))}부터 연속">${run.k}일차 / ${run.n}일</span>` : "";
+  const dayTag = run.n > 1 ? `<span class="tag day">${run.k}일차 / ${run.n}일</span>` : "";
   return `<button type="button" class="vrow" data-vid="${esc(v.id)}"><span class="plate">${esc(vval(v, "plate"))}</span><span class="vtype">${esc(v.type)}</span><span class="vfrom">${esc(v.org)}</span>
-    <span class="status-wrap">${eta ? `<span class="tag eta" title="이 장비의 도착 예상 시각">${esc(eta)} 도착 예상</span>` : ""}${rec && rec.revised ? '<span class="tag rev">수정본</span>' : ""}${dayTag}<span class="status ${cls}">${label}</span>${stops.length > 1 ? `<span class="tag" title="${esc(stops.map(bn).join(" → "))}">${stops.length}곳 경유</span>` : ""}</span></button>`;
+    <span class="status-wrap">${eta ? `<span class="tag eta">${esc(eta)} 도착 예상</span>` : ""}${rec && rec.revised ? '<span class="tag rev">수정본</span>' : ""}${dayTag}<span class="status ${cls}">${label}</span>${stops.length > 1 ? `<span class="tag" title="${esc(stops.map(bn).join(" → "))}">${stops.length}곳 경유</span>` : ""}</span></button>`;
 }
 function renderDest() {
   const moves = movesOn(S.date), filtered = S.org !== "전체" || S.type !== "전체", out = [];
@@ -392,7 +390,7 @@ function renderDest() {
     });
     if (cards.length) out.push(`<h3 class="hq-head">${esc(h.name)}본부</h3>` + cards.join(""));
   });
-  $("destList").innerHTML = out.length ? out.join("") : `<div class="empty-state">${esc(fmtMD(S.date))}에 이동하는 장비가 없습니다. 위의 날짜(‹ ›)를 바꿔 보세요.</div>`;
+  $("destList").innerHTML = out.length ? out.join("") : `<div class="empty-state">${esc(fmtMD(S.date))}에 이동하는 장비가 없습니다.</div>`;
 }
 
 /* ============================================================
@@ -415,20 +413,18 @@ function renderFleet() {
     all ? "도공번호·지원 여부·지원일별 피지원 지사(하루 여러 곳은 ＋)를 고친 뒤 아래 [확정]을 눌러야 저장됩니다. 확정한 날짜의 경로는 날짜별로 계속 남습니다."
         : `${S.me.org || ""} 장비를 추가하고 도공번호·지원 여부를 고칠 수 있습니다(지원일별 경로는 관리자). 고친 뒤 아래 [확정]을 눌러야 저장됩니다.`,
     "보기만 가능합니다.");
-  $("fleetRound").innerHTML = roundSel("roundSelFleet") + `<span class="hint">` +
-    (r ? `피지원 지사는 이 기준일자에 '확정'된 지사만 고를 수 있습니다 (${choices.length}곳).` + (pend.length ? ` 확정 전(요청만): ${esc(pend.map(b => b.name).join(", "))} — 지사별 요청·편성에서 [확정]을 누르세요.` : "")
-       : "기준일자가 없습니다 — 지사별 요청·편성에서 만드세요.") + `</span>`;
+  $("fleetRound").innerHTML = roundSel("roundSelFleet") + (r ? "" : `<span class="hint">기준일자가 없습니다.</span>`);
   renderOrgGrid();
   const myOrgs = all ? S.orgs : S.orgs.filter(o => o === S.me.org);
   $("fleetFilters").innerHTML =
     `<div class="tb-row"><span class="tb-label">기관</span><span class="fgroup">${["전체", ...S.orgs].map(o => `<button type="button" class="chip" data-fo="${esc(o)}" aria-pressed="${S.fleetOrg === o}">${o === "전체" ? "모든 기관" : esc(o)}</button>`).join("")}</span>` +
     `<span class="tb-right"><label class="ctl">지원일 칸 <select class="ci" id="colsSel">${Array.from({ length: 9 }, (_, k) => k + 2).map(n => `<option value="${n}" ${n === S.cols ? "selected" : ""}>${n}개</option>`).join("")}</select></label>` +
-    (all ? `<button type="button" class="btn" id="fleetReset" title="보이는 장비의 지원일 칸 경로와 지원 여부를 비웁니다(확정 전까지는 되돌리기 가능)">초기화</button>` : "") + `</span></div>` +
+    (all ? `<button type="button" class="btn" id="fleetReset">초기화</button>` : "") + `</span></div>` +
     (canAddVeh() && myOrgs.length || all ? `<div class="tb-row">` + (canAddVeh() && myOrgs.length ? `<span class="tb-label">장비 추가</span><select class="ci" id="nvOrg" aria-label="새 장비 기관">${myOrgs.map(o => `<option>${esc(o)}</option>`).join("")}</select>` +
       `<select class="ci" id="nvType" aria-label="새 장비 종류">${TYPES.map(t => `<option>${t}</option>`).join("")}</select>` +
       `<span class="pnum"><span class="pfx" id="nvPfx">${esc(myOrgs[0])}</span><input class="ci" id="nvPlate" inputmode="numeric" maxlength="5" placeholder="901" aria-label="새 장비 도공번호(숫자만)"></span><button type="button" class="btn" id="vehAdd">추가</button>` : "") +
-      (all ? `<span class="tb-right mode" role="group" aria-label="지원 구분"><label title="이 기준일자에 확정된 지사만 고름"><input type="checkbox" id="modeInit" ${S.revisedMode ? "" : "checked"}> 최초 지원</label>` +
-        `<label title="모든 지사 중에서 고름"><input type="checkbox" id="modeRev" ${S.revisedMode ? "checked" : ""}> 수정본</label></span>` : "") + `</div>` : "");
+      (all ? `<span class="tb-right mode" role="group" aria-label="지원 구분"><label><input type="checkbox" id="modeInit" ${S.revisedMode ? "" : "checked"}> 최초 지원</label>` +
+        `<label><input type="checkbox" id="modeRev" ${S.revisedMode ? "checked" : ""}> 수정본</label></span>` : "") + `</div>` : "");
   const dates = windowDates(), head = dates.map((d, i) => `<th class="dayh">지원일 ${i + 1}<span class="sub">` +
     (i === 0 && all ? `<input class="ci" type="date" id="day1In" value="${esc(d)}" aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동)">` : esc(fmtMD(d))) + `</span></th>`).join("");
   const rows = fleetRows().map(v => fleetRowHtml(v, dates, choices, all)).join("");
@@ -439,11 +435,11 @@ function fleetRowHtml(v, dates, choices, all) {
     const statusCell = ed ? `<select class="ci" data-vs="${esc(v.id)}" data-fk="vs:${esc(v.id)}" aria-label="${esc(vval(v, "plate"))} 지원 여부"${hvA(tv, "status")}>${Object.keys(STATUS).map(s => `<option value="${s}" ${st === s ? "selected" : ""}>${STATUS[s][1]}</option>`).join("")}</select>`
       : H(tv, "status", `<span class="status ${cls}">${label}</span>`);
     const old = !plateNum(v) && vval(v, "plate");      // 예전 차량번호 형식이 남은 장비: 숫자를 새로 넣어야 함
-    const plateCell = ed ? `<span class="pnum"${hvA(tv, "plate")}><span class="pfx">${esc(v.org)}</span><input class="ci" inputmode="numeric" maxlength="5" data-vp="${esc(v.id)}" data-fk="vp:${esc(v.id)}" value="${esc(plateNum(v))}" placeholder="901" aria-label="도공번호 숫자"${old ? ` title="예전 번호 ${esc(old)} — 숫자를 넣어 도공번호로 바꾸세요"` : ""}></span>${old ? `<div class="muted sm">예전 번호 ${esc(old)}</div>` : ""}`
+    const plateCell = ed ? `<span class="pnum"${hvA(tv, "plate")}><span class="pfx">${esc(v.org)}</span><input class="ci" inputmode="numeric" maxlength="5" data-vp="${esc(v.id)}" data-fk="vp:${esc(v.id)}" value="${esc(plateNum(v))}" placeholder="901" aria-label="도공번호 숫자"${old ? `` : ""}></span>${old ? `<div class="muted sm">예전 번호 ${esc(old)}</div>` : ""}`
       : H(tv, "plate", `<span class="plate">${esc(vval(v, "plate"))}</span>`);
     const changed = S.vdraft.has(v.id) ? " changed" : "";
     return `<tr class="${changed}" data-vrow="${esc(v.id)}"><td>${plateCell}</td><td>${esc(v.type)}</td><td>${esc(v.org)}</td><td>${statusCell}</td>${dates.map(d => `<td data-cell="${esc(rk(d, v.id))}">${slotCell(v, d, canRoute(), choices)}</td>`).join("")}` +
-      (canAnyVeh() ? `<td>${ed ? `<button type="button" class="btn sm danger" data-vdel="${esc(v.id)}" title="장비를 목록에서 지웁니다(경로 기록도 함께 지워짐)">삭제</button>` : ""}</td>` : "") + `</tr>`;
+      (canAnyVeh() ? `<td>${ed ? `<button type="button" class="btn sm danger" data-vdel="${esc(v.id)}">삭제</button>` : ""}</td>` : "") + `</tr>`;
 }
 function renderOrgGrid() {
   $("orgGrid").innerHTML = S.orgs.map(org => {
@@ -479,7 +475,7 @@ function normTime(x) {
 function slotCell(v, d, ed, confirmed) {
   const rec = recOf(d, v.id), stops = rec.stops, k = rk(d, v.id), t = `vehicle_routes:${d},${v.id}`, changed = S.draft.has(k), vid = esc(v.id);
   const rev = rec.revised ? '<span class="tag rev">수정본</span>' : "";
-  const tIn = (val, j, extra, dis) => `<input class="ci tm" data-rt="${vid}" data-rd="${d}" data-fk="${extra ? "tn" : "t"}:${d}:${vid}:${j}" value="${esc(val || "")}" placeholder="--:--" maxlength="5" inputmode="numeric" ${dis ? "disabled" : ""} title="도착 예상 시각(예: 0730 → 07:30)" aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))} 지사 ${j + 1} 도착 예상 시각">`;
+  const tIn = (val, j, extra, dis) => `<input class="ci tm" data-rt="${vid}" data-rd="${d}" data-fk="${extra ? "tn" : "t"}:${d}:${vid}:${j}" value="${esc(val || "")}" placeholder="--:--" maxlength="5" inputmode="numeric" ${dis ? "disabled" : ""} aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))} 지사 ${j + 1} 도착 예상 시각">`;
   if (!ed) {                     // 경로의 지사는 못 고침. 지원장비 계정은 자기 기관 장비의 도착 예상 시각만 고침
     if (!stops.length) return `<span class="muted">-</span>`;
     const timeEd = canVeh(v);
@@ -493,7 +489,7 @@ function slotCell(v, d, ed, confirmed) {
   const sel = (cur, j, extra) => `<select class="ci" data-rv="${vid}" data-rd="${d}" data-fk="${extra ? "rn" : "r"}:${d}:${vid}:${j}" ${off ? "disabled" : ""} aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))} 피지원 지사 ${j + 1}">${opts(cur)}</select>` +
     tIn(extra ? "" : rec.times[j], j, extra, off);
   const extra = S.extraStop.has(k), list = stops.length ? stops : [""];
-  const plus = `<button type="button" class="btn sm" data-stop-add="${esc(k)}" ${off || !stops.length ? "disabled" : ""} aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))}에 들르는 지사 추가" title="이 날 들르는 지사 추가">＋</button>`;
+  const plus = `<button type="button" class="btn sm" data-stop-add="${esc(k)}" ${off || !stops.length ? "disabled" : ""} aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))}에 들르는 지사 추가">＋</button>`;
   return `<div class="slot${changed ? " changed" : ""}"${hvA(t)}>${list.map((x, j) => `<div class="slot-x">${sel(x, j, false)}${j === list.length - 1 && !extra ? plus : ""}</div>`).join("")}${extra ? `<div class="slot-x">${sel("", list.length, true)}</div>` : ""}${rev}</div>`;
 }
 // 칸 안의 줄(지사 + 도착 예상 시각)을 모아 경로 기록으로. 지사를 고치면 구분 = 표 위 [최초 지원]/[수정본], 시각만 고치면 구분은 그대로
@@ -594,15 +590,15 @@ function renderBranch() {
       : `${bn(m.branch_id)} 지사 행의 요청만 고칠 수 있습니다(편성·확정은 관리자). 고친 뒤 [저장]을 눌러 주세요.`,
     "보기만 가능합니다.");
   $("branchRound").innerHTML = roundSel("roundSelBranch") +
-    (can("req.confirm") && r ? `<button type="button" class="btn danger" id="roundDel" title="고른 기준일자와 그 지사 요청·편성을 지웁니다(장비 경로 기록은 남음)">기준일자 삭제</button>` : "") +
+    (can("req.confirm") && r ? `<button type="button" class="btn danger" id="roundDel">기준일자 삭제</button>` : "") +
     (can("req.confirm") ? `<span class="sep"></span><label class="ctl">새 기준일자 <input class="ci" type="date" id="newRoundDate" value="${esc(todayISO())}"></label><button type="button" class="btn" id="roundMake">만들기</button>` : "");
   $("branchCtl").innerHTML = r ? `<div class="tb-row"><span class="tb-label">보기</span><button type="button" class="chip" id="onlyActive" aria-pressed="${S.onlyActive}">요청 있는 지사만</button>` +
-    `<span class="tb-right hint">${can("req.confirm") ? "편성 대수를 정하고 [확정]을 누르면 그 지사가 기관별 장비의 선택지에 나옵니다. 대설특보는 확정할 때 고정됩니다." : "대설특보는 기상청 자료로 자동 표시됩니다."}</span>` +
-    (S.me.role === "admin" ? `<button type="button" class="btn sm" id="zoneMgr" title="지사마다 대설 특보를 볼 기상청 특보구역(고속도로가 지나는 시·군)을 확인·수정">특보구역 관리</button>` : "") + `</div>` : "";
-  if (!r) { $("branchTable").innerHTML = `<tbody><tr><td class="empty">기준일자가 없습니다.${can("req.confirm") ? " 위에서 기준일자를 만드세요." : " 관리자가 기준일자를 만들면 요청을 입력할 수 있습니다."}</td></tr></tbody>`; return; }
+    `<span class="tb-right"></span>` +
+    (S.me.role === "admin" ? `<button type="button" class="btn sm" id="zoneMgr">특보구역 관리</button>` : "") + `</div>` : "";
+  if (!r) { $("branchTable").innerHTML = `<tbody><tr><td class="empty">기준일자가 없습니다.</td></tr></tbody>`; return; }
   const conf = can("req.confirm");
-  let h = `<thead><tr><th class="l" rowspan="2">지사</th><th colspan="2" class="fch" title="기상청 단기예보 24시간 합 — 지사 격자 중 가장 큰 값. 누르면 기관별 24시간 예보">강설 <small class="fcbase" id="fcBaseHead">${esc(fcBase())}</small></th><th colspan="3" class="wh">대설특보 발표</th><th colspan="2">지사 요청</th><th colspan="2">편성</th><th>확정</th><th class="l" rowspan="2">도착 요청</th><th class="l" rowspan="2">사유</th></tr>
-    <tr><th class="fch">적설<small class="thsub">cm</small></th><th class="fch">강수<small class="thsub">mm</small></th><th class="wh">종류</th><th class="wh">발표</th><th class="wh">발효</th><th>제설차</th><th>제설기</th><th>제설차</th><th>제설기</th><th>${conf ? `<button type="button" class="btn sm primary" id="confirmAll" title="요청이 있고 아직 확정 안 된 지사를 모두 확정(바로 저장)">일괄 확정</button>` : ""}</th></tr></thead><tbody>`;
+  let h = `<thead><tr><th class="l" rowspan="2">지사</th><th colspan="2" class="fch">강설 <small class="fcbase" id="fcBaseHead">${esc(fcBase())}</small></th><th colspan="3" class="wh">대설특보 발표</th><th colspan="2">지사 요청</th><th colspan="2">편성</th><th>확정</th><th class="l" rowspan="2">도착 요청</th><th class="l" rowspan="2">사유</th></tr>
+    <tr><th class="fch">적설<small class="thsub">cm</small></th><th class="fch">강수<small class="thsub">mm</small></th><th class="wh">종류</th><th class="wh">발표</th><th class="wh">발효</th><th>제설차</th><th>제설기</th><th>제설차</th><th>제설기</th><th>${conf ? `<button type="button" class="btn sm primary" id="confirmAll">일괄 확정</button>` : ""}</th></tr></thead><tbody>`;
   const has = b => !!S.reqs[b.id] || S.rdraft.has(b.id);
   const mine = b => (m.branch_id === b.id) || (can("req.edit.hq") && !can("req.confirm") && b.hq_id === m.hq_id);
   S.hqs.forEach(hq => {
@@ -621,8 +617,8 @@ function renderBranch() {
         <td data-fcell="${b.id}">${fcInner(b.id, "snow")}</td><td data-pcell="${b.id}">${fcInner(b.id, "pcp")}</td>
         ${warnCells(b.id)}
         <td>${num("req_truck", "요청 제설차", ed)}</td><td>${num("req_blower", "요청 제설기", ed)}</td><td>${num("assigned_truck", "편성 제설차", ed && conf)}</td><td>${num("assigned_blower", "편성 제설기", ed && conf)}</td>
-        <td class="cf">${conf ? H(t, "confirmed", ok ? `<span class="status go">확정됨</span> <button type="button" class="btn sm" data-unconfirm="${b.id}" title="확정 취소(기관별 장비 선택지에서 빠짐)">취소</button>`
-                                                     : `<button type="button" class="btn sm primary" data-confirm="${b.id}" title="편성 확정 — 누르면 바로 저장되고 기관별 장비에서 이 지사를 고를 수 있음">확정</button>`)
+        <td class="cf">${conf ? H(t, "confirmed", ok ? `<span class="status go">확정됨</span> <button type="button" class="btn sm" data-unconfirm="${b.id}">취소</button>`
+                                                     : `<button type="button" class="btn sm primary" data-confirm="${b.id}">확정</button>`)
                                  : (ok ? H(t, "confirmed", '<span class="status go">확정</span>') : '<span class="muted">-</span>')}</td>
         <td class="l">${arriveCell(b, ed, t)}</td>
         <td class="l">${ed ? `<input class="ci rs" type="text" maxlength="200" data-rq="${b.id}" data-f="reason" data-fk="q:${b.id}:reason" value="${esc(why ?? "")}" aria-label="${esc(b.name)} 사유"${hvA(t, "reason")}>` : (why ? H(t, "reason", esc(why)) : '<span class="muted">-</span>')}</td>
@@ -714,7 +710,7 @@ function renderLog() {
   const box = $("logTable");
   if (!can("log.view")) { box.innerHTML = ""; $("logFilters").innerHTML = ""; return; }
   const pm = $("perm-log"); pm.className = "perm can";
-  pm.textContent = "장비 지원 관련 수정 기록(최근 300건)입니다. 기록은 서버가 남기며 화면에서 고치거나 지울 수 없습니다.";
+  pm.textContent = ""; pm.hidden = true;
   const users = [...new Set(S.audit.map(l => l.username || "-"))];
   $("logFilters").innerHTML = ["전체", "추가", "수정", "삭제"].map(k => `<button type="button" class="chip" data-lk="${k}" aria-pressed="${S.logKind === k}">${k === "전체" ? "모든 구분" : k}</button>`).join("") +
     `<select class="ci" id="logUser" aria-label="아이디로 거르기"><option value="전체">모든 아이디</option>${users.map(u => `<option ${S.logUser === u ? "selected" : ""}>${esc(u)}</option>`).join("")}</select>` +
@@ -750,8 +746,6 @@ async function openSheet(vid) {
 /* ---------- 특보구역 관리(관리자) — 지사마다 대설 특보를 볼 기상청 특보구역. 자동 목록은 관할 고속도로가 지나는 시·군에서 계산 ---------- */
 async function openZones(bid) {
   sheet.innerHTML = `<button type="button" class="sheet-close" id="sheetClose">닫기</button><h2 id="sheetTitle">특보구역 관리</h2>
-    <p class="muted">지사 관할 고속도로가 지나는 기상청 특보구역(자동)입니다. 이 구역 중 가장 높은 대설특보가 지사 대설특보로 표시됩니다. 잘못 들어간 구역은 빼고, 빠진 구역은 더하세요(바로 저장, 수정 기록에 남음).
-    시·군이 평지/산지·동부/서부로 나뉜 곳은 자동으로 모두 넣었으니 실제로 지나지 않는 쪽은 빼 주세요.</p>
     <label class="ctl">지사 <select class="ci" id="zbr">${S.order.map(b => `<option value="${b.id}">${esc((S.hqById[b.hq_id] || {}).name || "")} · ${esc(b.name)}</option>`).join("")}</select></label>
     <div id="zlist" class="muted">불러오는 중…</div><div id="wnow"></div>`;
   sheet.hidden = false; backdrop.hidden = false;
@@ -777,7 +771,7 @@ function renderWarnNow() {
   const list = (by[S.wtab] || []).slice().sort((a, b) => (WLV_RANK[b.level] || 0) - (WLV_RANK[a.level] || 0) || a.name.localeCompare(b.name, "ko"));
   el.innerHTML = `<h3>지금 받은 특보 (전국 ${rows.length}건)</h3>
     <p class="muted">${st.fetched_at ? `기상청에서 받은 시각 ${esc(fmtShort(st.fetched_at))}` : "아직 받지 못함"}${st.ok === false && st.note ? ` · 최근 실패: ${esc(st.note)}` : ""} ·
-      ${d.needed ? "수집 중(10분마다)" : "수집 쉬는 중 — 확정을 기다리는 기준일자가 없음"}</p>
+      ${d.needed ? "수집 중" : "수집 쉬는 중"}</p>
     <div class="wtabs" role="tablist"><div class="wtrow">${kinds.slice(0, half).map(tab).join("")}</div>${half < kinds.length ? `<div class="wtrow">${kinds.slice(half).map(tab).join("")}</div>` : ""}</div>` +
     (list.length ? `<table class="wlist"><thead><tr><th class="l">구역</th><th>단계</th><th>발표</th><th>발효</th><th class="l">이어진 지사</th></tr></thead><tbody>${list.map(x =>
       `<tr><td class="l">${esc(x.name)}</td><td><span class="wb ${(WLV[x.level] || ["w0"])[0]}">${esc(wlv2(x.level))}</span></td><td>${esc(fmtWarnTime(x.tm_fc, x.level))}</td><td>${esc(fmtWarnTime(x.tm_ef, x.level, true))}</td>

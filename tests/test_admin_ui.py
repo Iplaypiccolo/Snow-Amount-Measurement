@@ -80,7 +80,7 @@ def t_unregistered_and_disabled(b, m):
 
 def t_forced_change(b, m):
     p = new_page(b, m); login(p, "exchungju", TEMP_PW)
-    p.wait_for_selector("text=새 비밀번호를 정해야"); check(p.locator(".tabs").count() == 0, "변경 전에는 다른 화면이 없어야 함")
+    p.wait_for_selector("#n"); check(p.locator(".tabs").count() == 0 and "비밀번호 변경" in p.locator("h2").first.inner_text(), "변경 전에는 다른 화면이 없어야 함(비밀번호 변경만)")
     p.fill("#c", TEMP_PW); p.fill("#n", "short"); p.click("#go"); check("규칙에 맞지 않습니다" in p.locator(".msg.err").inner_text(), "약한 비밀번호 거절")
     p.fill("#n", "Snow#Chungju-9Z"); p.click("#go"); check("지사 이름" in p.locator(".msg.err").inner_text(), p.locator(".msg.err").inner_text())
     p.fill("#n", GOOD(1)); p.fill("#n2", "Different#Pass-77x"); p.click("#go"); check("일치하지" in p.locator(".msg.err").inner_text(), "확인 불일치")
@@ -333,7 +333,7 @@ def t_new_accounts(b, m):
     dl = []; p = org_sub(b, m, "new", dl); p.wait_for_selector("#preset table")
     check(p.locator("#preset tbody tr").count() == 13 and p.locator("#preset .tag.warn").count() == 13, "추천 13개, 모두 없음")
     check("admin" not in p.locator("#nrole option").evaluate_all("os => os.map(o => o.value)"), "관리자 역할 없음")
-    p.select_option("#nrole", "viewer"); check("아직 다른 계정이 없어" in p.locator("#nposHint").inner_text() and p.locator("#npos option").count() == 1, f"빈 묶음 위치 안내: {p.locator('#nposHint').inner_text()} {p.locator('#npos option').all_inner_texts()}")
+    p.select_option("#nrole", "viewer"); check(p.locator("#nposHint").inner_text() == "" and p.locator("#npos option").count() == 1, f"빈 묶음 위치 안내: {p.locator('#nposHint').inner_text()} {p.locator('#npos option').all_inner_texts()}")
     m.add("exgangwon", "강원본부", "hq", None, "x", hq_id="H03")                      # 하나는 이미 있는 상황
     p.reload(); p.wait_for_selector(".tabs"); p.click('.tabs button[data-t=sheet]'); p.click('.subtabs button[data-s=new]'); p.wait_for_selector("#preset table")
     check("12개" in p.locator("#mkpreset").inner_text(), p.locator("#mkpreset").inner_text())
@@ -347,7 +347,7 @@ def t_new_accounts(b, m):
     # 하나 만들기
     p.select_option("#nrole", "viewer"); check(p.locator("#nwhere").is_disabled() and p.locator(".npc:checked").count() == 0, "보기 전용은 소속·기본 권한 없음")
     p.select_option("#nrole", "equip"); check(p.locator(".npc:checked").evaluate_all("cs => cs.map(c => c.value)") == ["equip.edit.own"], "지원장비 기본 권한")
-    p.select_option("#nrole", "equip"); check("이 묶음 안의 순서" in p.locator("#nposHint").inner_text(), "위치 목록 설명")
+    p.select_option("#nrole", "equip"); check(p.locator("#nposHint").inner_text() == "" and p.locator("#npos option").count() >= 1, "위치 목록(설명 글 없음, 2026-10-05)")
     check(p.locator("#nwhere option").all_inner_texts() == ["서울경기", "충북", "전북", "대구경북"], p.locator("#nwhere option").all_inner_texts())
     p.select_option("#nwhere", "전북"); p.fill("#nuser", "exjeonbuk2"); p.fill("#nname", "전북 지원장비2"); p.select_option("#npos", "exjeonbukgigyae")
     p.check(".npc[value='log.view']")

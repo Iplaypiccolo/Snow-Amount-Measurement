@@ -84,6 +84,7 @@
   var equip = document.getElementById('page-equip');
   var frame = document.getElementById('equipFrame');
   function show(name){
+    if(name === 'equip' && !document.body.classList.contains('authed')) return;      // 장비 지원은 로그인한 뒤에만(로그인 전에 열면 '로그인 필요'가 남음)
     btns.forEach(function(b){ b.classList.toggle('active', b.dataset.page === name); });
     snow.style.display = (name === 'snow') ? '' : 'none';
     equip.style.display = (name === 'equip') ? 'block' : 'none';
@@ -98,5 +99,6 @@
     if(window.ForecastUI){ ForecastUI.openBranch(id); }
     var t = document.querySelector('.tab-btn[data-tab=forecast]'); if(t){ t.click(); }
   };
-  if(location.hash === '#equip'){ show('equip'); }
+  // 새로 열거나 다시 로그인하면 항상 첫 화면(강설량 측정)부터. 예전 주소의 #equip 은 지움
+  if(location.hash === '#equip'){ try{ history.replaceState(null, '', location.pathname + location.search); }catch(e){} }
 })();

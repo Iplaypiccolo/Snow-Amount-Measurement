@@ -47,8 +47,7 @@ function initApp(){
     document.getElementById('statBranch').textContent = branchCount;
     document.getElementById('statWithin').textContent = withinCount;
     document.getElementById('statUnclass').textContent = HIERARCHY.unclassified.length;
-    document.getElementById('genMeta').textContent =
-      '고속도로 중심선 반경 5km 이내 공식 적설관측지점 · 본부/지사 관할 구간 기준 배정 (' + META_DATE + ' 자료 기준)';
+    document.getElementById('genMeta').textContent = '';
   }
   updateStats();
 

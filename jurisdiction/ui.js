@@ -71,8 +71,7 @@
     root.innerHTML =
       '<div class="jr-wrap">' +
       '<div class="jr-side">' +
-        '<div class="jr-head"><b>기관별 관할 고속도로</b><span class="jr-role" id="jr-role"></span></div>' +
-        '<div class="jr-note" id="jr-note"></div>' +
+        '<div class="jr-head"><b>기관별 관할 고속도로</b></div>' +
         '<div class="jr-tools"><input id="jr-search" placeholder="지사 검색 (예: 춘천)">' +
         '<button id="jr-add" class="jr-btn jr-admin-only">+ 신설 기관</button></div>' +
         '<div id="jr-requests" class="jr-requests" style="display:none"></div>' +
@@ -82,14 +81,10 @@
       '<div class="jr-mapbox"><div id="jmap"></div>' +
         '<div id="jr-selbar" class="jr-selbar" style="display:none"></div>' +
         '<div id="jr-savebar" class="jr-savebar" style="display:none"></div>' +
-        '<div id="jr-pickbar" class="jr-pickbar" style="display:none">도착 지사로 삼을 구간을 지도에서 클릭하세요 <button id="jr-pickcancel" class="jr-btn">취소 (Esc)</button></div>' +
+        '<div id="jr-pickbar" class="jr-pickbar" style="display:none">도착 지사 고르기 <button id="jr-pickcancel" class="jr-btn">취소 (Esc)</button></div>' +
         '<div class="jr-legend"><span>이중 테두리 = 선택한 구간</span><span>점선 = 변경 대기</span><span><b style="color:#3f3f3f">진한 회색 = 미지정</b></span> <label><input type="checkbox" id="jr-none" checked> 미지정 고속도로</label> <label><input type="checkbox" id="jr-roads" checked> 배경 도로</label></div>' +
       '</div></div>' +
       '<div id="jr-modal" class="jr-modal" style="display:none"></div>';
-    $('jr-role').textContent = S.admin ? '관할 편집' : S.canRequest ? '변경 요청 가능' : '보기 전용';
-    $('jr-note').innerHTML = S.admin ? '구간을 눌러 선택하고(Shift+클릭: 범위) 다른 지사로 <b>이동 대기에 추가</b>하세요. 여러 건을 모아 오른쪽 위 <b>[저장]</b>을 누르면 한꺼번에 적용됩니다. 지사가 올린 <b>변경 요청</b>은 아래 목록에 나타납니다.'
-      : S.canRequest ? '구간을 눌러 선택한 뒤 <b>[구간 변경 요청]</b>을 누르면 관리자에게 다른 기관으로 옮겨 달라고 요청할 수 있습니다. 관할 변경은 관리자만 할 수 있습니다.'
-      : '지도에서 구간을 누르면 테두리와 함께 소속 정보가 보입니다. 관할 변경은 관리자만 할 수 있습니다.';
   }
 
   function ensureMap() {
@@ -277,7 +272,7 @@
     var prev = $('jr-dest') ? $('jr-dest').value : '';
     bar.innerHTML = '<b class="jr-selinfo">' + sel.length + '개 구간 · ' + km + 'km 선택</b>' +
       '<span class="jr-grp"><label class="jr-lbl">이동할 지사</label><select id="jr-dest">' + opts + '</select><button id="jr-move" class="jr-btn jr-primary">이동 대기에 추가</button></span>' +
-      '<span class="jr-grp"><button id="jr-pick" class="jr-btn" title="도착 지사의 구간을 지도에서 직접 눌러 정합니다">지도에서 지사 고르기</button><button id="jr-clear" class="jr-btn">선택 해제</button></span>';
+      '<span class="jr-grp"><button id="jr-pick" class="jr-btn">지도에서 지사 고르기</button><button id="jr-clear" class="jr-btn">선택 해제</button></span>';
     if (prev) $('jr-dest').value = prev;
     bar.style.display = 'flex';
   }
@@ -291,7 +286,7 @@
       var ids = all.filter(function (id) { return !q || st.branches[id].name.indexOf(q) >= 0; });
       if (q && !ids.length) return '';
       var open = q ? true : S.hqView === hq, total = round1(all.reduce(function (a, id) { return a + (km[id] || 0); }, 0));
-      return '<div class="jr-hq' + (open ? ' open' : '') + '"><div class="jr-hqname jr-hqpick' + (S.hqView === hq ? ' on' : '') + '" data-hqpick="' + esc(hq) + '" title="누르면 이 본부만 펼쳐 지사마다 다른 색으로 봅니다(다시 누르면 접고 전체)">' +
+      return '<div class="jr-hq' + (open ? ' open' : '') + '"><div class="jr-hqname jr-hqpick' + (S.hqView === hq ? ' on' : '') + '" data-hqpick="' + esc(hq) + '">' +
         '<span class="chev">▶</span><span class="hn">' + esc(hq) + (hq === C.PRIVATE_HQ ? '' : ' 본부') + '</span>' + (hq === C.PRIVATE_HQ ? ' <em class="jr-priv">관측소·적설 계산 안 함</em>' : '') +
         '<span class="jr-cnt">' + all.length + '</span><span class="jr-km">' + total + 'km</span></div>' +
         (open ? ids.map(function (id) {
@@ -304,7 +299,7 @@
     }).join('');
     if (!q || '미지정'.indexOf(q) >= 0) {                      // 어느 지사에도 속하지 않은 고속도로 (맨 위)
       var none = '<div class="jr-hq open"><div class="jr-hqname jr-nonehead">미지정 고속도로 <span>' + round1(km.NONE || 0) + 'km</span>' +
-        '<button type="button" class="jr-nonetoggle' + (S.showNone ? '' : ' off') + '" data-nonetoggle="1" title="지도에서 미지정 고속도로를 ' + (S.showNone ? '숨깁니다' : '보입니다') + '">' + (S.showNone ? '숨기기' : '보기') + '</button></div>' +
+        '<button type="button" class="jr-nonetoggle' + (S.showNone ? '' : ' off') + '" data-nonetoggle="1">' + (S.showNone ? '숨기기' : '보기') + '</button></div>' +
         '<div class="jr-br' + (S.focus === 'NONE' ? ' on' : '') + '" data-id="NONE"><span class="chev">▶</span><i style="background:' + NONE_COLOR + '"></i>' +
         '<span class="n">어느 지사에도 속하지 않음</span><span class="k">' + (cnt.NONE || 0) + '구간</span></div>' + (S.focus === 'NONE' ? branchDetail('NONE') : '') + '</div>';
       html = none + html;
@@ -319,14 +314,14 @@
     if (S.admin && id !== 'NONE') {
       h += '<div class="jr-row">본부 변경: <select id="jr-hq">' + st.hqs.map(function (hq) { return '<option' + (hq === st.branches[id].hq ? ' selected' : '') + '>' + esc(hq) + '</option>'; }).join('') + '</select>' +
         '<button class="jr-btn" id="jr-selall">이 지사 구간 전체 선택</button></div>' +
-        '<div class="jr-row">순서: <select id="jr-order" title="강설량 표·엑셀에서 이 기관이 놓일 자리. 번호는 바뀌지 않습니다">' + posOptions(st.branches[id].hq, id, prevOf(id)) + '</select></div>';
+        '<div class="jr-row">순서: <select id="jr-order">' + posOptions(st.branches[id].hq, id, prevOf(id)) + '</select></div>';
     } else if (selectMode() && id !== 'NONE') {
       h += '<div class="jr-row"><button class="jr-btn" id="jr-selall">이 지사 구간 전체 선택</button></div>';
     }
     if (selectMode() && id === 'NONE') h += '<div class="jr-row"><button class="jr-btn" id="jr-selall">미지정 구간 전체 선택</button></div>';
-    if (!secs.length) return h + '<div class="jr-empty">' + (id === 'NONE' ? '미지정 구간이 없습니다.' : (S.admin ? '관할 구간이 없습니다. 지도에서 구간을 골라 이 지사로 옮기세요.' : '관할 구간이 없습니다.')) + '</div></div>';
+    if (!secs.length) return h + '<div class="jr-empty">' + (id === 'NONE' ? '미지정 구간이 없습니다.' : (S.admin ? '관할 구간이 없습니다.' : '관할 구간이 없습니다.')) + '</div></div>';
     h += secs.map(function (s) {
-      return '<div class="jr-sec' + (S.selected[s.id] ? ' sel' : '') + '" data-sid="' + s.id + '" title="' + (selectMode() ? '누르면 선택/해제하고 지도에 표시합니다 (Shift+클릭: 범위 선택)' : '누르면 지도에 표시합니다') + '">' + (selectMode() ? '<input type="checkbox" data-sid="' + s.id + '"' + (S.selected[s.id] ? ' checked' : '') + '> ' : '') +
+      return '<div class="jr-sec' + (S.selected[s.id] ? ' sel' : '') + '" data-sid="' + s.id + '">' + (selectMode() ? '<input type="checkbox" data-sid="' + s.id + '"' + (S.selected[s.id] ? ' checked' : '') + '> ' : '') +
         '<span>' + esc(s.route) + '</span> ' + esc(s['from']) + ' → ' + esc(s.to) + ' <em>' + s.km + 'km</em></div>';
     }).join('');
     return h + '</div>';
@@ -347,7 +342,7 @@
     if (serverDown()) h += '<div class="jr-warn">⚠ 서버에서 변경 이력을 불러오지 못해 예전 파일 기준으로 보고 있습니다. 새로고침해서 서버에 연결된 뒤에 저장하세요.</div>';
     if (com.length) h += '<details class="jr-hist"><summary>저장된 변경 이력 ' + com.length + '건</summary>' +
       com.slice().reverse().slice(0, 30).map(function (ev) { return '<div class="jr-ev old">' + (ev.at ? esc(String(ev.at).slice(0, 10)) + ' ' : '') + describe(ev) + (ev.note ? ' <em>' + esc(ev.note) + '</em>' : '') + '</div>'; }).join('') +
-      (S.admin ? '<div class="jr-row"><button class="jr-btn" id="jr-export" title="변경 이력 전체를 파일로 보관합니다">이력 파일로 내려받기(백업)</button></div>' : '') + '</details>';
+      (S.admin ? '<div class="jr-row"><button class="jr-btn" id="jr-export">이력 파일로 내려받기(백업)</button></div>' : '') + '</details>';
     box.innerHTML = h;
     box.style.display = h ? 'block' : 'none';
   }
@@ -412,7 +407,7 @@
     }).join('');
     modal('<h3>변경 미리보기</h3>' + warn + '<div class="jr-tablewrap"><table class="jr-table"><thead><tr><th>지사</th><th>관할 길이</th><th>관측소</th><th>최신 시즌 최대 신적설</th><th>전체 시즌 최대 신적설</th></tr></thead><tbody>' +
       (body || '<tr><td colspan="5">바뀌는 지사가 없습니다.</td></tr>') + '</tbody></table></div>' +
-      '<p class="jr-hint">저장하면 이 지사들의 관측소 배정과 일별 신적설이 새 관할로 다시 계산됩니다.</p><div class="jr-row"><button class="jr-btn jr-primary" id="jr-close">닫기</button></div>');
+      '<div class="jr-row"><button class="jr-btn jr-primary" id="jr-close">닫기</button></div>');
   }
 
   function modal(html) { var m = $('jr-modal'); m.innerHTML = '<div class="jr-dialog">' + html + '</div>'; m.style.display = 'flex'; }
@@ -440,8 +435,7 @@
     var st = S.view.state;
     modal('<h3>신설 기관 추가</h3><div class="jr-form"><label>기관 이름 <input id="jr-newname" placeholder="예: 새만금" maxlength="20"></label>' +
       '<label>소속 본부 <select id="jr-newhq">' + st.hqs.map(function (h) { return '<option>' + esc(h) + '</option>'; }).join('') + '</select></label>' +
-      '<label>위치 <select id="jr-newpos" title="강설량 표·엑셀에서 놓일 자리. 다른 기관 번호는 바뀌지 않습니다">' + posOptions(st.hqs[0], null, '__end') + '</select></label></div>' +
-      '<p class="jr-hint">만든 뒤 지도에서 구간을 골라 이 기관으로 옮기면 관측소와 신적설이 계산됩니다.</p>' +
+      '<label>위치 <select id="jr-newpos">' + posOptions(st.hqs[0], null, '__end') + '</select></label></div>' +
       '<div class="jr-row"><button class="jr-btn jr-primary" id="jr-newok">추가</button><button class="jr-btn" id="jr-close">취소</button></div>');
     $('jr-newname').focus();
   }
@@ -512,11 +506,11 @@
     if (!S.admin) { bar.style.display = 'none'; return; }
     var n = S.pending.length, canSave = n && !S.saving && !serverDown();
     bar.className = 'jr-savebar' + (n ? ' dirty' : '');
-    bar.innerHTML = '<div class="jr-sb-head"><span class="st">' + (n ? '● 변경 대기 ' + n + '건' : '변경 없음 — 구간을 눌러 지사를 옮기세요') + '</span>' +
+    bar.innerHTML = '<div class="jr-sb-head"><span class="st">' + (n ? '● 변경 대기 ' + n + '건' : '변경 없음') + '</span>' +
       '<span class="jr-sb-btns"><button class="jr-btn" id="jr-top-preview"' + (n ? '' : ' disabled') + '>미리보기</button>' +
       '<button class="jr-btn" id="jr-top-cancel"' + (n && !S.saving ? '' : ' disabled') + '>모두 취소</button>' +
-      '<button class="jr-btn jr-primary" id="jr-top-save"' + (canSave ? '' : ' disabled') + ' title="변경 내용을 서버에 저장합니다">' + (S.saving ? '저장 중…' : '저장') + '</button></span></div>' +
-      (n ? '<div class="jr-sb-list">' + S.pending.map(function (ev, i) { return '<div class="jr-ev"><span class="jr-evt">' + describe(ev) + '</span><button class="jr-x" data-ev="' + i + '" title="이 변경만 취소">×</button></div>'; }).join('') + '</div>' +
+      '<button class="jr-btn jr-primary" id="jr-top-save"' + (canSave ? '' : ' disabled') + '>' + (S.saving ? '저장 중…' : '저장') + '</button></span></div>' +
+      (n ? '<div class="jr-sb-list">' + S.pending.map(function (ev, i) { return '<div class="jr-ev"><span class="jr-evt">' + describe(ev) + '</span><button class="jr-x" data-ev="' + i + '">×</button></div>'; }).join('') + '</div>' +
         '<input id="jr-reason" class="jr-reason" placeholder="변경 사유 (선택)" maxlength="200" value="' + esc(S.reason || '') + '">' : '');
     bar.style.display = 'block';
   }
@@ -620,7 +614,7 @@
     var pend = S.reqs.filter(function (r) { return r.status === 'pending'; }), done = S.reqs.filter(function (r) { return r.status !== 'pending'; }).slice(0, 15);
     var h = '<details id="jr-reqdet"' + (S.reqOpen === false ? '' : ' open') + '><summary>' + (S.admin ? '변경 요청' : '내 변경 요청') + ' <span class="jr-cnt' + (pend.length ? ' hot' : '') + '">대기 ' + pend.length + '</span></summary>' +
       (S.reqErr ? '<div class="jr-warn">' + esc(S.reqErr) + '</div>' : '') +
-      (pend.length ? pend.map(reqCard).join('') : '<div class="jr-empty">' + (S.admin ? '처리 대기 중인 요청이 없습니다.' : '보낸 요청이 없습니다. 구간을 선택해 [구간 변경 요청]을 누르세요.') + '</div>') +
+      (pend.length ? pend.map(reqCard).join('') : '<div class="jr-empty">' + (S.admin ? '처리 대기 중인 요청이 없습니다.' : '보낸 요청이 없습니다.') + '</div>') +
       (done.length ? '<details class="jr-hist"><summary>처리된 요청 ' + done.length + '건</summary>' + done.map(reqCard).join('') + '</details>' : '') + '</details>';
     box.innerHTML = h; box.style.display = 'block';
   }
@@ -635,7 +629,7 @@
   }
   function pickDestDialog(r) {
     var st = S.view.state;
-    modal('<h3>이동할 지사를 정하세요</h3><p class="jr-hint">' + esc(bname(r.branch_id)) + ' 지사가 도착 지사를 정하지 않고 관리자에게 맡겼습니다.</p>' +
+    modal('<h3>이동할 지사를 정하세요</h3>' +
       '<div class="jr-form"><label>도착 지사 <select id="jr-reqdest">' + destOptions(st) + '</select></label></div>' +
       '<div class="jr-row"><button class="jr-btn jr-primary" id="jr-reqdestok" data-rid="' + r.id + '">이동 준비</button><button class="jr-btn" id="jr-close">취소</button></div>');
   }
@@ -675,7 +669,7 @@
     var st = S.view.state, km = round1(sel.reduce(function (a, s) { return a + s.km; }, 0));
     var rows = sel.slice(0, 8).map(function (s) { var o = st.owner[s.id]; return '<tr><td>' + esc(s.route) + '</td><td>' + esc(s['from']) + ' → ' + esc(s.to) + '</td><td>' + s.km + 'km</td><td>' + (o ? esc(bname(o)) : '미지정') + '</td></tr>'; }).join('') +
       (sel.length > 8 ? '<tr><td colspan="4" class="jr-hint">… 외 ' + (sel.length - 8) + '개 구간</td></tr>' : '');
-    modal('<h3>구간 변경 요청</h3><p class="jr-hint">선택한 구간을 다른 기관으로 옮겨 달라고 관리자에게 요청합니다. 관리자가 확인한 뒤 반영하며, 처리 결과는 "내 변경 요청"에서 볼 수 있습니다.</p>' +
+    modal('<h3>구간 변경 요청</h3>' +
       '<div class="jr-tablewrap"><table class="jr-table"><thead><tr><th>노선</th><th>구간</th><th>길이</th><th>현재 소속</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       '<div class="jr-form"><label>' + sel.length + '개 구간(' + km + 'km)을 옮길 기관 <select id="jr-req-to">' + destOptions(st, true) + '</select></label>' +
       '<label>사유 (선택, 200자 이내) <textarea id="jr-req-reason" maxlength="200" rows="3" placeholder="예: 이 구간은 실제로 ○○지사가 제설하고 있습니다"></textarea></label></div>' +

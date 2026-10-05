@@ -48,7 +48,7 @@ if (!/[?&]sample(=|&|$)/.test(location.search) && (!window.SSAuth || !SSAuth.has
   <section class="panel" id="panel-move">
     <div class="summary">
       <div class="summary-head">
-        <h2 class="move-title"><button type="button" class="dnav" id="prevDay" aria-label="전날">‹</button><label class="bigdate" title="눌러서 날짜 고르기"><span id="dateText"></span><input type="date" id="dateInput" aria-label="이동 현황 날짜"></label><button type="button" class="dnav" id="nextDay" aria-label="다음날">›</button><span id="moveTitle">장비 지원 현황</span></h2>
+        <h2 class="move-title"><button type="button" class="dnav" id="prevDay" aria-label="전날">‹</button><label class="bigdate"><span id="dateText"></span><input type="date" id="dateInput" aria-label="이동 현황 날짜"></label><button type="button" class="dnav" id="nextDay" aria-label="다음날">›</button><span id="moveTitle">장비 지원 현황</span></h2>
         <p id="summaryNote"></p>
       </div>
       <div class="matrix-wrap"><table class="matrix" id="matrix"></table></div>
@@ -99,6 +99,6 @@ if (!/[?&]sample(=|&|$)/.test(location.search) && (!window.SSAuth || !SSAuth.has
 <!-- 코드는 아래 순서대로 불러옵니다 (순서가 중요합니다). auth.js 는 위 <head> 에서 먼저 불러옴 -->
 <script src="js/sample-data.js?v=152978cb"></script>
 <script src="js/api.js?v=1e4a6ffe"></script>
-<script src="js/app.js?v=f52007c2"></script>
+<script src="js/app.js?v=834f9ab8"></script>
 </body>
 </html>
