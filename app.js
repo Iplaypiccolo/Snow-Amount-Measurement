@@ -27,6 +27,9 @@ function initApp(){
     var vg = document.getElementById('view-grid');
     if(vg){ vg.style.display = (name==='grid') ? 'flex' : 'none'; }
     if(name === 'grid' && window.GridUI){ GridUI.show(); }
+    var vf = document.getElementById('view-forecast');
+    if(vf){ vf.style.display = (name==='forecast') ? 'flex' : 'none'; }
+    if(name === 'forecast' && window.ForecastUI){ ForecastUI.show(); }
     if(name === 'map'){ setTimeout(function(){ map.invalidateSize(); }, 50); }
     if(name === 'snowtable'){ buildSnowTable(); }
     if(name === 'sources'){ buildSeasonsTable(); }

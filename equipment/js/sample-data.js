@@ -95,9 +95,9 @@ function makeSample(today) {
   const fix = (name, level, zs, note) => Object.assign(requests.find(r => r.round_id === 2 && r.branch_id === B(name)), { warn_level: level, warn_zones: zs, warn_base: warnBase, warn_at: at(0, 6), warn_note: note || null });
   // 예상 적설(샘플): 2시간 전 발표 단기예보, 다음 정시부터 24시간 신적설 합의 지사 최댓값. 확정한 지사는 확정 때 값 고정
   const hr = Math.floor(Date.now() / 3600e3) * 3600e3, fcTm = new Date(hr - 2 * 3600e3).toISOString(), fcStart = new Date(hr + 3600e3).toISOString(), fcEnd = new Date(hr + 25 * 3600e3).toISOString();   // 2시간 전 발표, 다음 정시부터 24시간
-  const forecast = [["대관령", 14.2, 92, 131], ["양양", 9.0, 93, 137], ["춘천", 3.5, 73, 134], ["엄정", 0, 76, 114], ["강릉", 11.3, 92, 133]]
-    .map(([n, v, nx, ny]) => ({ branch_id: B(n), issued_at: fcTm, max_snow_24h: v, worst_nx: nx, worst_ny: ny, detail: { start_at: fcStart, end_at: fcEnd } }));
-  [["대관령", 12.1], ["양양", 8.0], ["엄정", 0]].forEach(([n, v]) => Object.assign(requests.find(r => r.round_id === 2 && r.branch_id === B(n)), { fc_snow: v, fc_tmfc: kst(0, "05:00"), fc_at: at(0, 6) }));
+  const forecast = [["대관령", 14.2, 18.5, 92, 131], ["양양", 9.0, 12.0, 93, 137], ["춘천", 3.5, 6.2, 73, 134], ["엄정", 0, 0.4, 76, 114], ["강릉", 11.3, 15.0, 92, 133]]
+    .map(([n, v, p, nx, ny]) => ({ branch_id: B(n), issued_at: fcTm, max_snow_24h: v, max_pcp_24h: p, worst_nx: nx, worst_ny: ny, detail: { start_at: fcStart, end_at: fcEnd, pcp_nx: nx, pcp_ny: ny } }));
+  [["대관령", 12.1, 16.0], ["양양", 8.0, 10.5], ["엄정", 0, 0]].forEach(([n, v, p]) => Object.assign(requests.find(r => r.round_id === 2 && r.branch_id === B(n)), { fc_snow: v, fc_pcp: p, fc_tmfc: kst(0, "05:00"), fc_at: at(0, 6) }));
   fix("대관령", "주의", [["L1022520", "강릉산지", "주의", "대설", kst(-1, "22:00"), kst(0, "01:00")]]); fix("양양", null, []); fix("엄정", null, [], "기상청 자료를 30분 넘게 받지 못함");
   return { hqs, branches, holdings, vehicles, routes, rounds, requests, audit, orgs: ["서울경기", "충북", "전북", "대구경북"], zones, zoneAuto, zoneOver: [], warnActive, warnBase, warnFc, warnEf, warnEfPre, forecast };
 }

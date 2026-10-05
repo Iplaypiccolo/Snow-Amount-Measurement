@@ -451,18 +451,22 @@ def t_zone_manager(p):
     as_user(p, "hq-gw"); tab(p, "branch"); check(p.locator("#zoneMgr").count() == 0, "본부는 관리 버튼 없음")
 
 def t_snow_forecast(p):
-    """예상 적설 = 기상청 단기예보 24시간 신적설 합의 지사 최댓값(입력칸 없음), 확정하면 고정, 이동 현황 카드도 같은 값"""
-    tab(p, "branch")
-    check(p.locator("[data-f=snow_cm]").count() == 0 and "24시간" in p.locator("#branchTable thead").inner_text(), "지사 입력칸 없음, 제목에 24시간")
+    """강설 [적설 | 강수] = 기상청 단기예보 24시간 합의 지사 최댓값(입력칸 없음), 제목 옆 발표 기준, 확정하면 고정, 누르면 기관별 24시간 예보로"""
+    tab(p, "branch"); head = p.locator("#branchTable thead").inner_text()
+    check(p.locator("[data-f=snow_cm]").count() == 0 and "강설" in head and "적설" in head and "강수" in head and "발표 기준" in head, "강설 아래 적설·강수, 발표 기준: " + head)
+    check(p.locator(f"td[data-pcell='{bid(p, '춘천')}']").inner_text() == "6.2", "춘천 강수 6.2mm")
     fc = lambda n: p.locator(f"td[data-fcell='{bid(p, n)}']").inner_text().replace(chr(10), "")
     check(fc("춘천") == "3.5" and fc("대관령") == "12.1고정" and fc("양양") == "8.0고정", f"확정 전 = 지금 예보, 확정 = 고정값: {fc('춘천')} {fc('대관령')} {fc('양양')}")
     p.hover(f"td[data-fcell='{bid(p, '춘천')}'] [data-fb]"); p.wait_for_timeout(100); tp = p.locator("#tip").inner_text()
-    check("단기예보" in tp and "24시간 신적설 합" in tp and "격자 73, 134" in tp, tp)
+    check("단기예보" in tp and "24시간 합" in tp and "격자 73, 134" in tp and "강수 6.2mm" in tp, tp)
     p.click(f"[data-confirm='{bid(p, '춘천')}']"); p.wait_for_timeout(300)
-    check("예상 적설 3.5cm 고정" in toast(p) and fc("춘천") == "3.5고정", toast(p))
+    check("예상 적설 3.5cm·강수 6.2mm 고정" in toast(p) and fc("춘천") == "3.5고정", toast(p))
     p.click(f"[data-unconfirm='{bid(p, '대관령')}']"); p.wait_for_timeout(300)
     check(fc("대관령") == "14.2", "확정을 풀면 지금 예보: " + fc("대관령"))
-    tab(p, "move"); check("예상 적설 14.2cm" in p.locator(".dest", has_text="대관령").inner_text(), "이동 현황 카드")
+    tab(p, "move"); check("예상 적설 14.2cm · 강수 18.5mm" in p.locator(".dest", has_text="대관령").inner_text(), "이동 현황 카드")
+    tab(p, "branch"); ev(p, "(() => { window.open = (u, t) => { window.__opened = [u, t]; }; return null })()")
+    p.click(f"td[data-pcell='{bid(p, '양양')}'] [data-fb]"); p.wait_for_timeout(100)
+    check(ev(p, "window.__opened") == [f"../#fc={bid(p, '양양')}", "_top"], f"누르면 기관별 24시간 예보의 그 지사로: {ev(p, 'window.__opened')}")
 
 TESTS = [t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,

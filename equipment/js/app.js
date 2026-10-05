@@ -8,7 +8,8 @@
      ⚠ 화면의 권한 검사는 보기 좋게 정리하는 용도이고, 실제로 막는 것은 서버 규칙(RLS·트리거)입니다.
    - 경로는 (날짜, 장비)마다 한 줄로 서버에 남습니다. 다른 날짜를 확정해도 지난 날짜 경로는 지워지지 않습니다.
    - 특보: 서버가 10분마다(확정을 기다리는 기준일자가 있을 때만) 기상청에서 받아 둔 것(warning_status)을 자동 표시. 확정한 지사는 확정 순간 값으로 서버가 고정(warn_* 열)
-     예상 적설: 기상청 단기예보 격자(1시간 신적설) 24시간 합 중 지사 격자의 가장 큰 값(branch_forecast). 지사 입력칸 없음. 확정하면 서버가 고정(fc_* 열)
+     강설 [적설 | 강수]: 기상청 단기예보 격자의 1시간 신적설(cm)·1시간 강수량(mm) 24시간 합 중 지사 격자의 가장 큰 값(branch_forecast). 지사 입력칸 없음.
+     확정하면 서버가 고정(fc_* 열). 값을 누르면 강설량 측정 → 기관별 24시간 예보의 그 지사로 이동
      지사별 요청·편성은 대설특보(예비·주의보·경보)만: [종류 | 발표 | 발효] 세 칸. 다른 특보는 관리자 [특보구역 관리] 아래 종류별 탭에서만
    - 사람이 읽는 규칙 설명: docs/equipment-rules.md
    ============================================================ */
@@ -124,23 +125,39 @@ function warnCells(bid) {
 const fmtBase = b => b && /^\d{12}$/.test(b) ? `${+b.slice(4, 6)}/${+b.slice(6, 8)} ${b.slice(8, 10)}:${b.slice(10, 12)}` : "-";
 async function loadWarn() { const [r, f] = await Promise.all([Api.warnings(), Api.forecast()]); if (r.ok) S.warn = r.status; if (f.ok) S.fc = Object.fromEntries(f.rows.map(x => [x.branch_id, x])); }
 /* ---------- 예상 적설 — 기상청 단기예보 24시간 신적설 합의 지사 최댓값(발표 후 12시간 안). 확정한 지사는 확정 순간 값 ---------- */
-function fcOf(bid) {      // { snow, tmfc, start, end, nx, ny, fixed, at } 또는 { none } / null(예보 없음)
+function fcOf(bid) {      // { snow, pcp, tmfc, start, end, nx, ny, pnx, pny, fixed, at } 또는 { none } / null(예보 없음)
   const r = S.reqs[bid];
-  if (r && r.confirmed) return r.fc_at ? { snow: r.fc_snow, tmfc: r.fc_tmfc, fixed: true, at: r.fc_at } : { none: true };
+  if (r && r.confirmed) return r.fc_at ? { snow: r.fc_snow, pcp: r.fc_pcp, tmfc: r.fc_tmfc, fixed: true, at: r.fc_at } : { none: true };
   const f = S.fc[bid];
   if (!f || Date.now() - Date.parse(f.issued_at) > 12 * 3600e3) return null;
-  return { snow: f.max_snow_24h, tmfc: f.issued_at, start: f.detail && f.detail.start_at, end: f.detail && f.detail.end_at, nx: f.worst_nx, ny: f.worst_ny, fixed: false };
+  const d = f.detail || {};
+  return { snow: f.max_snow_24h, pcp: f.max_pcp_24h, tmfc: f.issued_at, start: d.start_at, end: d.end_at, nx: f.worst_nx, ny: f.worst_ny, pnx: d.pcp_nx, pny: d.pcp_ny, fixed: false };
 }
 const fmtCm = v => v == null ? "-" : (Math.round(v * 10) / 10).toFixed(1);
-function fcInner(bid) {
-  const f = fcOf(bid);
-  if (!f) return `<span class="muted" data-fb="${esc(bid)}" tabindex="0">-</span>`;
+// k = "snow"(적설 cm) / "pcp"(강수 mm). 값을 누르면 기관별 24시간 예보의 그 지사로
+function fcInner(bid, k = "snow") {
+  const f = fcOf(bid), v = f && !f.none ? f[k] : null;
+  if (!f) return `<span class="muted fcv" data-fb="${esc(bid)}" data-fk2="${k}" tabindex="0">-</span>`;
   if (f.none) return `<span class="muted" title="예상 적설 연동 전에 확정한 지사">-</span>`;
-  return `<span class="fcv${f.snow >= 5 ? " hi" : f.snow > 0 ? " some" : ""}" data-fb="${esc(bid)}" tabindex="0">${f.snow == null ? "-" : esc(fmtCm(f.snow))}${f.fixed ? '<i class="wfix">고정</i>' : ""}</span>`;
+  const cls = k === "snow" ? (v >= 5 ? " hi" : v > 0 ? " some" : "") : (v >= 30 ? " hi" : v > 0 ? " wet" : "");
+  return `<span class="fcv${cls}" data-fb="${esc(bid)}" data-fk2="${k}" tabindex="0" role="link">${v == null ? "-" : esc(fmtCm(v))}${f.fixed && k === "snow" ? '<i class="wfix">고정</i>' : ""}</span>`;
+}
+// 표 제목 옆 "몇 시 기준": 지금 예보(가장 최근 발표)
+function fcBase() {
+  const xs = Object.values(S.fc).filter(f => Date.now() - Date.parse(f.issued_at) <= 12 * 3600e3);
+  if (!xs.length) return "예보 없음";
+  const t = xs.reduce((a, f) => (f.issued_at > a ? f.issued_at : a), xs[0].issued_at);
+  return `${fmtHour(t)} 발표 기준`;
+}
+function openForecast(bid) {          // 강설량 측정 → 기관별 24시간 예보 → 그 지사
+  try { if (window.top !== window && window.top.SSOpenForecast) return window.top.SSOpenForecast(bid); } catch (e) {}
+  window.open("../#fc=" + encodeURIComponent(bid), "_top");
 }
 const fmtHour = iso => { const d = new Date(iso); return isNaN(d) ? "-" : `${d.getMonth() + 1}/${d.getDate()} ${p2(d.getHours())}시`; };
 function paintWarn() {
-  document.querySelectorAll("[data-fcell]").forEach(td => { td.innerHTML = fcInner(td.dataset.fcell); });
+  document.querySelectorAll("[data-fcell]").forEach(td => { td.innerHTML = fcInner(td.dataset.fcell, "snow"); });
+  document.querySelectorAll("[data-pcell]").forEach(td => { td.innerHTML = fcInner(td.dataset.pcell, "pcp"); });
+  const fb = document.getElementById("fcBaseHead"); if (fb) fb.textContent = fcBase();
   document.querySelectorAll("tr[data-b]").forEach(tr => {
     const td = tr.querySelector("[data-wcell]"); if (!td) return;
     const t = document.createElement("tr"); t.innerHTML = warnCells(tr.dataset.b);
@@ -231,7 +248,7 @@ function toast(msg, isErr) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 3500);
 }
 const TAB_LABEL = { vehicles: "장비", vehicle_routes: "경로", round_requests: "지사 요청", support_rounds: "기준일자", branch_zone_overrides: "특보구역" };
-const FIELD = { fc_snow: "고정 예상 적설", plate: "도공번호", status: "지원 여부", stops: "경로", revised: "구분", times: "도착 예상", snow_cm: "예상 적설", warning: "특보", req_truck: "요청 제설차", req_blower: "요청 제설기",
+const FIELD = { fc_snow: "고정 예상 적설", fc_pcp: "고정 예상 강수", plate: "도공번호", status: "지원 여부", stops: "경로", revised: "구분", times: "도착 예상", snow_cm: "예상 적설", warning: "특보", req_truck: "요청 제설차", req_blower: "요청 제설기",
   assigned_truck: "편성 제설차", assigned_blower: "편성 제설기", arrive_at: "도착 요청", reason: "사유", confirmed: "확정", start_date: "기준일자", type: "장비", org: "기관", warn_level: "고정 특보", include: "특보구역" };
 const HIDE = new Set(["fc_tmfc", "fc_at", "zone_code", "warn_zones", "warn_base", "warn_at", "warn_note", "updated_by", "updated_at", "confirmed_by", "confirmed_at", "created_by", "created_at", "round_id", "branch_id", "vehicle_id", "date", "id", "sort", "active", "name", "end_date"]);
 function fmtField(f, v) {
@@ -246,6 +263,7 @@ function fmtField(f, v) {
   if (f === "confirmed") return v ? "확정" : "미확정";
   if (f === "arrive_at") return fmtTime(localInput(v));
   if (f === "snow_cm" || f === "fc_snow") return v + "cm";
+  if (f === "fc_pcp") return v + "mm";
   return String(v);
 }
 // 칸 하나(target)의 오늘 수정 기록. field 를 주면 그 열이 바뀐 기록만
@@ -277,10 +295,11 @@ function showWarnTip(el) {
 }
 function showFcTip(el) {
   const f = fcOf(el.dataset.fb), b = S.brById[el.dataset.fb];
-  tip.innerHTML = `<b>${esc(b ? b.name : "")} 지사 · 예상 적설 ${f && f.snow != null ? esc(fmtCm(f.snow)) + "cm" : "없음"}</b>` +
+  tip.innerHTML = `<b>${esc(b ? b.name : "")} 지사 · 24시간 예상 적설 ${f && f.snow != null ? esc(fmtCm(f.snow)) + "cm" : "없음"} · 강수 ${f && f.pcp != null ? esc(fmtCm(f.pcp)) + "mm" : "없음"}</b>` +
     (!f ? `<div>${S.warn && S.warn.paused ? "수집 쉬는 중 — 확정을 기다리는 기준일자가 없음" : "기상청 예보를 아직 받지 못함(발표 후 12시간이 지났거나 받는 중)"}</div>`
-      : `<div>기상청 단기예보 ${esc(fmtHour(f.tmfc))} 발표${f.start ? ` · ${esc(fmtHour(f.start))}~${esc(fmtHour(f.end))} 24시간 신적설 합` : ""}</div>` +
-        `<div>${f.fixed ? `확정할 때 고정(${esc(fmtShort(f.at))})` : `지사 격자 중 가장 많은 곳${f.nx ? `(격자 ${f.nx}, ${f.ny})` : ""} · 3시간마다 새 예보`}</div>`);
+      : `<div>기상청 단기예보 ${esc(fmtHour(f.tmfc))} 발표${f.start ? ` · ${esc(fmtHour(f.start))}~${esc(fmtHour(f.end))} 24시간 합` : ""}</div>` +
+        `<div>${f.fixed ? `확정할 때 고정(${esc(fmtShort(f.at))})` : `지사 격자 중 가장 많은 곳${f.nx ? ` — 적설 격자 ${f.nx}, ${f.ny}` : ""}${f.pnx ? ` · 강수 격자 ${f.pnx}, ${f.pny}` : ""} · 3시간마다 새 예보`}</div>`) +
+    `<div>누르면 '기관별 24시간 예보'에서 격자별 값을 봅니다</div>`;
   placeTip(el);
 }
 const hideTip = () => { tip.hidden = true; };
@@ -366,7 +385,7 @@ function renderDest() {
       cards.push(`<article class="dest"><div class="dest-head">
         <h3 class="dest-name">${esc(b.name)}<span>${esc(h.name)}본부</span></h3>
         <div class="dest-time"><strong>${etas.length ? esc(fmtMD(S.date) + " " + etas[0]) : "미정"}</strong><small>도착 예상${etas.length > 1 ? " (가장 이른 장비, 장비마다 다름)" : ""}</small></div>
-        <div class="dest-meta"><span class="tag req">도착 요청 ${H(t, "arrive_at", esc(fmtTime(arr)))}</span>${snow != null ? `<span class="tag snow" data-fb="${esc(b.id)}" tabindex="0">예상 적설 ${esc(fmtCm(snow))}cm</span>` : ""}${warnOf(b.id).level ? `<span class="tag wb ${WLV[warnOf(b.id).level][0]}" data-wb="${esc(b.id)}" tabindex="0">${esc(wlabel(warnOf(b.id).level, "대설"))}</span>` : ""}
+        <div class="dest-meta"><span class="tag req">도착 요청 ${H(t, "arrive_at", esc(fmtTime(arr)))}</span>${snow != null ? `<span class="tag snow" data-fb="${esc(b.id)}" tabindex="0">예상 적설 ${esc(fmtCm(snow))}cm · 강수 ${esc(fmtCm(fc.pcp))}mm</span>` : ""}${warnOf(b.id).level ? `<span class="tag wb ${WLV[warnOf(b.id).level][0]}" data-wb="${esc(b.id)}" tabindex="0">${esc(wlabel(warnOf(b.id).level, "대설"))}</span>` : ""}
           ${why ? `<span class="tag">사유: ${H(t, "reason", esc(why))}</span>` : ""}
           <span class="tag api">날씨 연동 예정</span></div></div>
         ${list.length ? list.map(m => vehicleRow(m.v, m.stops, m.rec, b.id)).join("") : `<div class="empty-state" style="border:0">조건에 맞는 장비가 없습니다.</div>`}</article>`);
@@ -582,15 +601,15 @@ function renderBranch() {
     (S.me.role === "admin" ? `<button type="button" class="btn sm" id="zoneMgr" title="지사마다 대설 특보를 볼 기상청 특보구역(고속도로가 지나는 시·군)을 확인·수정">특보구역 관리</button>` : "") + `</div>` : "";
   if (!r) { $("branchTable").innerHTML = `<tbody><tr><td class="empty">기준일자가 없습니다.${can("req.confirm") ? " 위에서 기준일자를 만드세요." : " 관리자가 기준일자를 만들면 요청을 입력할 수 있습니다."}</td></tr></tbody>`; return; }
   const conf = can("req.confirm");
-  let h = `<thead><tr><th class="l" rowspan="2">지사</th><th rowspan="2" title="기상청 단기예보 24시간 신적설 합 — 지사 격자 중 가장 큰 값">예상 적설<small class="thsub">24시간·cm</small></th><th colspan="3" class="wh">대설특보 발표</th><th colspan="2">지사 요청</th><th colspan="2">편성</th><th>확정</th><th class="l" rowspan="2">도착 요청</th><th class="l" rowspan="2">사유</th></tr>
-    <tr><th class="wh">종류</th><th class="wh">발표</th><th class="wh">발효</th><th>제설차</th><th>제설기</th><th>제설차</th><th>제설기</th><th>${conf ? `<button type="button" class="btn sm primary" id="confirmAll" title="요청이 있고 아직 확정 안 된 지사를 모두 확정(바로 저장)">일괄 확정</button>` : ""}</th></tr></thead><tbody>`;
+  let h = `<thead><tr><th class="l" rowspan="2">지사</th><th colspan="2" class="fch" title="기상청 단기예보 24시간 합 — 지사 격자 중 가장 큰 값. 누르면 기관별 24시간 예보">강설 <small class="fcbase" id="fcBaseHead">${esc(fcBase())}</small></th><th colspan="3" class="wh">대설특보 발표</th><th colspan="2">지사 요청</th><th colspan="2">편성</th><th>확정</th><th class="l" rowspan="2">도착 요청</th><th class="l" rowspan="2">사유</th></tr>
+    <tr><th class="fch">적설<small class="thsub">cm</small></th><th class="fch">강수<small class="thsub">mm</small></th><th class="wh">종류</th><th class="wh">발표</th><th class="wh">발효</th><th>제설차</th><th>제설기</th><th>제설차</th><th>제설기</th><th>${conf ? `<button type="button" class="btn sm primary" id="confirmAll" title="요청이 있고 아직 확정 안 된 지사를 모두 확정(바로 저장)">일괄 확정</button>` : ""}</th></tr></thead><tbody>`;
   const has = b => !!S.reqs[b.id] || S.rdraft.has(b.id);
   const mine = b => (m.branch_id === b.id) || (can("req.edit.hq") && !can("req.confirm") && b.hq_id === m.hq_id);
   S.hqs.forEach(hq => {
     const rows = S.order.filter(b => b.hq_id === hq.id), shown = rows.filter(b => !S.onlyActive || has(b) || mine(b));
     if (!shown.length) return;
     const closed = S.closedHq.has(hq.id), hsum = hqSums(hq.id);
-    h += `<tr class="hq ${closed ? "closed" : ""}" data-hq="${hq.id}" tabindex="0"><td class="l">${esc(hq.name)}</td><td></td><td></td><td></td><td></td>
+    h += `<tr class="hq ${closed ? "closed" : ""}" data-hq="${hq.id}" tabindex="0"><td class="l">${esc(hq.name)}</td><td></td><td></td><td></td><td></td><td></td>
       ${HQ_SUM_KEYS.map(k => `<td data-s="${k}">${hsum[k]}</td>`).join("")}<td></td><td></td></tr>`;
     if (closed) return;
     shown.forEach(b => {
@@ -599,7 +618,7 @@ function renderBranch() {
         : (on ? H(t, f, esc(rval(b.id, f) ?? 0)) : "-");
       const why = rval(b.id, "reason"), ok = rval(b.id, "confirmed");
       h += `<tr class="${on ? "active" : ""} ${m.branch_id === b.id ? "mine" : ""} ${S.rdraft.has(b.id) ? "changed" : ""}" data-b="${b.id}"><td class="l">${esc(b.name)}${m.branch_id === b.id ? ' <span class="tag">내 지사</span>' : ""}</td>
-        <td data-fcell="${b.id}">${fcInner(b.id)}</td>
+        <td data-fcell="${b.id}">${fcInner(b.id, "snow")}</td><td data-pcell="${b.id}">${fcInner(b.id, "pcp")}</td>
         ${warnCells(b.id)}
         <td>${num("req_truck", "요청 제설차", ed)}</td><td>${num("req_blower", "요청 제설기", ed)}</td><td>${num("assigned_truck", "편성 제설차", ed && conf)}</td><td>${num("assigned_blower", "편성 제설기", ed && conf)}</td>
         <td class="cf">${conf ? H(t, "confirmed", ok ? `<span class="status go">확정됨</span> <button type="button" class="btn sm" data-unconfirm="${b.id}" title="확정 취소(기관별 장비 선택지에서 빠짐)">취소</button>`
@@ -626,7 +645,7 @@ async function saveBranchRows(ids, extra, msg) {
   list.forEach(({ o, f }) => { S.reqs[o.branch_id] = { ...REQ_DEF, round_id: S.round, branch_id: o.branch_id, ...(S.reqs[o.branch_id] || {}), ...f }; S.rdraft.delete(o.branch_id); });
   if (extra && "confirmed" in extra) {                // 확정하면 서버가 그 순간 대설 특보를 고정 → 다시 읽어 표시
     await loadReqs();
-    if (extra.confirmed && ids.length === 1) { const f = fcOf(ids[0]); msg += ` (대설특보: ${wlabel(warnOf(ids[0]).level, "대설")}, 예상 적설 ${f && f.snow != null ? fmtCm(f.snow) + "cm" : "없음"} 고정)`; }
+    if (extra.confirmed && ids.length === 1) { const f = fcOf(ids[0]); msg += ` (대설특보: ${wlabel(warnOf(ids[0]).level, "대설")}, 예상 적설 ${f && f.snow != null ? fmtCm(f.snow) + "cm" : "없음"}·강수 ${f && f.pcp != null ? fmtCm(f.pcp) + "mm" : "없음"} 고정)`; }
   }
   await loadAudit(); refresh(); toast(msg);
 }
@@ -892,6 +911,7 @@ document.addEventListener("click", e => {
   if (c("#roundDel")) return deleteRound();
   if (c("#zoneMgr")) return openZones();
   if ((x = c("[data-zset]"))) return setZone(x.dataset.zset, x.dataset.zinc === "" ? null : x.dataset.zinc === "1");
+  if ((x = c("[data-fb]"))) return openForecast(x.dataset.fb);
   if ((x = c("[data-wtab]"))) { S.wtab = x.dataset.wtab; return renderWarnNow(); }
   if (c("#zaddBtn")) { const v = ($("zadd") || {}).value; return v ? setZone(v, true) : toast("더할 구역을 고르세요", true); }
   if (c("#onlyActive")) { S.onlyActive = !S.onlyActive; return renderBranch(); }

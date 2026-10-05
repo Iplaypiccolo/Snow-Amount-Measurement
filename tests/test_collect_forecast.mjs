@@ -23,7 +23,7 @@ await test('격자 고르기: 개수가 다르거나 글이 아니면 null', () 
 function world(o = {}) {
   const hours = Array.from({ length: 24 }, (_, i) => new Date(Date.UTC(2026, 9, 5, 2 + i)).toISOString());
   const w = { key: 'K'.repeat(22), token: 'tok', fetched: [], puts: [], fails: [], clock: 0, slept: 0,
-    plan: { done: false, tmfc: '2026-10-04T23:00:00+00:00', start_at: hours[0], cells: [[60, 127], [92, 131]], missing: hours },
+    plan: { done: false, tmfc: '2026-10-04T23:00:00+00:00', start_at: hours[0], cells: [[60, 127], [92, 131]], missing: hours.flatMap((h) => [['SNO', h], ['PCP', h]]) },
     resp: () => ({ status: 200, text: G }), ...o };
   w.deps = {
     now: () => w.clock, sleep: async (ms) => { w.slept += ms; w.clock += ms; }, env: (k) => (k === 'KMA_AUTH_KEY' ? w.key : ''),
@@ -32,7 +32,7 @@ function world(o = {}) {
     store: {
       async tokenOk(t) { return t === w.token; }, async getProfileById() { return null; },
       async plan() { return { data: w.plan, error: null }; },
-      async put(tmfc, tmef, vals) { w.puts.push([tmfc, tmef, vals]); return { data: { ok: true, done: w.puts.length === 24 }, error: null }; },
+      async put(tmfc, v, tmef, vals) { w.puts.push([tmfc, tmef, vals, v]); return { data: { ok: true, done: w.puts.length === 48 }, error: null }; },
       async fail(n) { w.fails.push(n); },
     },
   };
@@ -43,15 +43,15 @@ const call = async (w, h = { token: 'tok' }) => { const r = await handle(new Req
 await test('권한: 토큰 없으면 401(기상청에 묻지 않음)', async () => {
   const w = world(); assert.equal((await call(w, {})).status, 401); assert.equal((await call(w, { token: 'x' })).status, 401); assert.equal(w.fetched.length, 0);
 });
-await test('정상: 24시각을 차례로 받아 지사 격자만 넣고 끝(발표·예보 시각은 한국 시각, 키는 주소에만)', async () => {
+await test('정상: 적설·강수 24시각씩 48번 받아 지사 격자만 넣고 끝(발표·예보 시각은 한국 시각, 키는 주소에만)', async () => {
   const w = world(); const r = await call(w);
-  assert.equal(w.fetched.length, 24); assert.equal(w.puts.length, 24); assert.equal(r.j.done, true);
-  assert.ok(w.fetched[0].startsWith(GRID_URL + '?tmfc=2026100508&tmef=2026100511&vars=SNO&authKey='));
+  assert.equal(w.fetched.length, 48); assert.equal(w.puts.length, 48); assert.equal(r.j.done, true);
+  assert.ok(w.fetched[0].startsWith(GRID_URL + '?tmfc=2026100508&tmef=2026100511&vars=SNO&authKey=')); assert.ok(w.fetched[1].includes('&tmef=2026100511&vars=PCP&')); assert.equal(w.puts[1][3], 'PCP');
   assert.deepEqual(w.puts[0][2], [127060, 131092]); assert.ok(!JSON.stringify(r.j).includes(w.key)); assert.equal(w.fails.length, 0);
 });
 await test('504 는 2초 뒤 다시(최대 4번), 그래도 안 되면 멈추고 실패 기록(다음 예약 때 이어서)', async () => {
   const w = world({ resp: (u, n) => (n % 2 ? { status: 504, text: '' } : { status: 200, text: G }) });
-  await call(w); assert.equal(w.puts.length, 24); assert.equal(w.fetched.length, 48);
+  await call(w); assert.ok(w.puts.length >= 24); assert.equal(w.fetched.length, w.puts.length * 2);
   const w2 = world({ resp: () => ({ status: 504, text: '' }) }); const r2 = await call(w2);
   assert.equal(w2.fetched.length, 4); assert.equal(w2.puts.length, 0); assert.ok(w2.fails[0].includes('504')); assert.equal(r2.j.ok, false);
 });

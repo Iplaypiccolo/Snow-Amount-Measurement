@@ -21,7 +21,7 @@ const deps = {
     async tokenOk(t: string) { const { data } = await admin.rpc('collector_token_ok', { t }); return data === true; },
     async getProfileById(id: string) { const { data } = await admin.from('profiles').select('id,role,disabled').eq('id', id).maybeSingle(); return data; },
     async plan() { const { data, error } = await admin.rpc('forecast_plan'); if (error) console.error('forecast_plan', error.message); return { data, error }; },
-    async put(p_tmfc: string, p_tmef: string, p_vals: number[]) { const { data, error } = await admin.rpc('forecast_put', { p_tmfc, p_tmef, p_vals }); if (error) console.error('forecast_put', error.message); return { data, error }; },
+    async put(p_tmfc: string, p_var: string, p_tmef: string, p_vals: number[]) { const { data, error } = await admin.rpc('forecast_put', { p_tmfc, p_var, p_tmef, p_vals }); if (error) console.error('forecast_put', error.message); return { data, error }; },
     async fail(p_note: string) { const { error } = await admin.rpc('forecast_fail', { p_note }); if (error) console.error('forecast_fail', error.message); },
   },
 };

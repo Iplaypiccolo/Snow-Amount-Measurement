@@ -66,6 +66,19 @@ class Mock:
         # 대설 특보(마이그레이션 23): warning_status 결과. 확정한 B019 는 확정할 때 경보로 고정돼 있고 지금은 주의보
         self.warn_status = {"ok": True, "base": "202612150700", "fetched_at": "2026-12-14T22:00:00Z", "note": None,
                             "branches": {"B019": {"level": "주의", "zones": [["L1041100", "충주", "주의"]]}, "B011": {"level": "예비", "zones": [["L1021300", "횡성", "예비"]]}}}
+        # 예상 적설·강수(마이그레이션 27·28): 격자 = data/grid_assign.json 기본 편입, 값 = 격자 번호로 만든 가짜 값(한 시간 전 발표)
+        import json as _json, os as _os
+        _ga = _json.load(open(_os.path.join(_os.path.dirname(__file__), "..", "data", "grid_assign.json"), encoding="utf-8"))
+        _iss = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+        self.fc_issued = _iss.isoformat(); self.fc_start = (_iss + _dt.timedelta(hours=2)).isoformat(); self.fc_end = (_iss + _dt.timedelta(hours=26)).isoformat()
+        self.fc_cells = [[c[0], c[1], sorted(c[2]), round(((c[0] + c[1]) % 7) * 0.5, 1), round(((c[0] * c[1]) % 9) * 1.5, 1)] for c in _ga["cells"] if c[2]]
+        _best = {}
+        for nx, ny, bs, s, p in self.fc_cells:
+            for b in bs:
+                o = _best.setdefault(b, {"branch_id": b, "issued_at": self.fc_issued, "max_snow_24h": -1, "max_pcp_24h": -1, "worst_nx": nx, "worst_ny": ny, "detail": {"start_at": self.fc_start, "end_at": self.fc_end}})
+                if s > o["max_snow_24h"]: o.update(max_snow_24h=s, worst_nx=nx, worst_ny=ny)
+                if p > o["max_pcp_24h"]: o["max_pcp_24h"] = p; o["detail"].update(pcp_nx=nx, pcp_ny=ny)
+        self.branch_forecast = list(_best.values()); self.fc_calls = []
         self.branches = [{"id": b, "name": d.replace("지사", ""), "hq_id": h} for _, d, b, h in names]
         self.hqs = [{"id": "H01", "name": "수도권", "sort": 1}, {"id": "H02", "name": "서울경기", "sort": 2}, {"id": "H03", "name": "강원", "sort": 3}, {"id": "H04", "name": "충북", "sort": 4}, {"id": "H07", "name": "광주전남", "sort": 7}]
         self.users["stranger"] = {"id": "id-stranger", "username": "stranger", "password": "Stranger#Pass-123", "profile": None}
@@ -205,6 +218,12 @@ class Mock:
                 return route.fulfill(status=200, headers={**CORS, "content-type": "application/json"}, body=snow_snapshot_text())
             if tbl == "snow_uploads": return send(200, [{"at": "2026-10-04T01:00:00Z", "date_from": "2025-12-01", "date_to": "2025-12-02", "stations": 2, "rows_written": 2, "ok": True, "note": "txt by admin-01"}] if self.can(u, "snow.upload") else [])
             if tbl == "save_jurisdiction" and "/rpc/" in path: return self.save_rpc(u, body, send)
+            if tbl == "branch_forecast": return send(200, self.branch_forecast if self.usable(u) else [])
+            if tbl == "forecast_grid" and "/rpc/" in path:
+                if not self.usable(u): return send(401, {"message": "login"})
+                ids = set((body or {}).get("p_branches") or []); self.fc_calls.append(sorted(ids))
+                return send(200, {"tmfc": self.fc_issued, "start_at": self.fc_start, "end_at": self.fc_end,
+                                  "cells": [[nx, ny, [b for b in bs if b in ids], s, p] for nx, ny, bs, s, p in self.fc_cells if ids & set(bs)]})
             if tbl == "warning_status" and "/rpc/" in path:
                 self.eq_calls.append((tbl, body)); return send(200, self.warn_status) if self.usable(u) else send(401, {"message": "login"})
             if tbl in ("save_fleet", "save_requests") and "/rpc/" in path:

@@ -49,6 +49,8 @@
     s.src = 'app.js?v=' + Date.now();
     s.onload = function(){
       initApp(); if(window.JurisdictionUI){ JurisdictionUI.init(); }
+      if(window.ForecastUI){ ForecastUI.init(); }
+      var fc = /^#fc=(B\d{3})$/.exec(location.hash); if (fc) window.SSOpenForecast(fc[1]);      // 장비 지원에서 따로 열린 경우(#fc=지사번호)
       var can = function(p){ return !!(window.SS_CAN && window.SS_CAN(p)); };
       if (can('snow.upload')) { var sal = document.getElementById('snowAdminLink'); if (sal) sal.hidden = false; }   // 적설 자료 올리기: 권한 있는 계정에만 링크(올리기는 서버가 다시 검사)
       // 지사가 올린 구간 변경 요청이 있으면 알림창·탭 표시 (요청을 승인할 수 있는 juris.edit 권한)
@@ -90,5 +92,11 @@
     try{ history.replaceState(null, '', name === 'equip' ? '#equip' : location.pathname + location.search); }catch(e){}
   }
   btns.forEach(function(b){ b.addEventListener('click', function(){ show(b.dataset.page); }); });
+  // 장비 지원(안쪽 화면)의 예상 적설·강수를 누르면: 강설량 측정 → 기관별 24시간 예보 → 그 지사
+  window.SSOpenForecast = function(id){
+    show('snow');
+    if(window.ForecastUI){ ForecastUI.openBranch(id); }
+    var t = document.querySelector('.tab-btn[data-tab=forecast]'); if(t){ t.click(); }
+  };
   if(location.hash === '#equip'){ show('equip'); }
 })();

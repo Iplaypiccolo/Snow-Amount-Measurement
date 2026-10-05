@@ -519,3 +519,9 @@ table.matrix { font-size: 15px; min-width: 900px; }
 .fcv.some { color: var(--plow); }
 .fcv.hi { color: var(--stop); }
 .thsub { display: block; font-size: 10.5px; font-weight: 500; color: var(--ink-soft); }
+
+/* ---------- 강설 [적설 | 강수] (누르면 기관별 24시간 예보) ---------- */
+#branchTable th.fch { white-space: nowrap; }
+.fcbase { display: block; font-size: 10.5px; font-weight: 600; color: var(--plow); }
+.fcv { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.fcv.wet { color: #2f7d4f; }

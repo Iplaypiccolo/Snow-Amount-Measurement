@@ -39,6 +39,7 @@ SUITES = [
     ('관할 화면', 'tests/test_jurisdiction_ui.py', 'ui'),
     ('구간 변경 요청 화면', 'tests/test_jurisdiction_requests.py', 'ui'),
     ('격자 편입 화면', 'tests/test_grid_ui.py', 'ui'),
+    ('기관별 24시간 예보 화면', 'tests/test_forecast_ui.py', 'ui'),
     ('장비 지원 화면', 'tests/test_equipment.py', 'ui'),
 ]
 RESULT_RE = re.compile(r'(\d+)\s*/\s*(\d+)\s*통과')

@@ -44,6 +44,16 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-10-05 · 커밋 (이 기록 커밋 하나) · 강설 [적설·강수] · 기관별 24시간 예보 탭 · 격자 편입 변경을 서버 계산에 반영
+- 사용자 요청: 적설과 강수 둘 다(강설 제목 + 몇 시 기준), 강설량 측정에 기관별 24시간 예보 탭(전체 = 노선, 본부 = 격자, 지사 = 격자별 값), 장비 지원에서 값을 누르면 그 지사로.
+- 발견·고침: 서버가 지사 격자를 기본 편입(grid_assign)만 쓰고 '예보 격자 편입' 탭에서 저장한 변경(grid_events)을 빼고 계산하고 있었음 → `private.grid_effective()`(변경을 순서대로 적용, 나중 변경이 이김, 민자 제외) 로 바꿈. 지금 1,059줄 · 924칸.
+- 서버: 마이그레이션 28 — `forecast_hours.var`(SNO·PCP), 한 번 모으기 = 48개, `forecast_cells.pcp_24h`, `branch_forecast.max_pcp_24h`(+detail 강수 격자), `round_requests.fc_pcp` 고정, 지도용 `forecast_grid(지사 목록)`(로그인 사용자). Edge Function `collect-forecast` v2.
+- 실서버 확인: 10/5 14시 발표분 48번 53초, 924칸·지사 59곳(지금은 맑아 모두 0).
+- 화면: 장비 지원 '강설(○시 발표 기준) [적설|강수]', 값 누르면 `SSOpenForecast`(바깥 화면) 또는 `../#fc=지사번호`. 강설량 측정 새 탭 `forecast/ui.js`·`style.css`.
+- 시험: 운영 DB `forecast_test.sql` 25/25(되돌림), 받기 함수 9/9, 장비 화면 38/38, 새 탭 3/3.
+
+— ✍ Claude Code 작성
+
 ### 2026-10-05 · 커밋 (이 기록 커밋 하나) · 예상 적설 = 기상청 단기예보 24시간 신적설(지사 격자 최댓값)
 - 사용자 결정: 예보를 받은 시각부터 24시간, 지사 입력 대신 기상청 값(지사 입력은 나중에).
 - 서버: 마이그레이션 27 — `forecast_runs`·`forecast_hours`(서버 전용), `forecast_plan`·`forecast_put`·`forecast_fail`(service_role), 확정 고정 `round_requests.fc_snow·fc_tmfc·fc_at`(특보 트리거에 더함), `kick_forecast`(특보와 같은 조건, 다 받은 발표분은 안 부름), pg_cron `collect-forecast` 발표 시각 15·25·35·45분, 기준일자를 만들면 바로.

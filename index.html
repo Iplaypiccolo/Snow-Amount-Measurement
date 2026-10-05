@@ -339,6 +339,7 @@
 </style>
   <link rel="stylesheet" href="jurisdiction/style.css?v=f7e0be81">
   <link rel="stylesheet" href="grid/style.css?v=00f95ce1">
+  <link rel="stylesheet" href="forecast/style.css?v=c1b4b596">
   <link rel="stylesheet" href="auth/gate.css?v=e6315775">
 </head>
 <body>
@@ -366,6 +367,7 @@
     <button class="tab-btn" data-tab="map">관측소 지도</button>
     <button class="tab-btn" data-tab="sources">데이터 출처</button>
     <button class="tab-btn" data-tab="jurisdiction">기관별 관할 고속도로</button>
+    <button class="tab-btn" data-tab="forecast">기관별 24시간 예보</button>
     <button class="tab-btn" data-tab="grid" id="tabGridBtn" style="display:none">예보 격자 편입</button>
   </div>
 
@@ -406,6 +408,8 @@
   <div id="view-jurisdiction" class="view" style="display:none;"></div>
 
   <div id="view-grid" class="view" style="display:none;"></div>
+
+  <div id="view-forecast" class="view" style="display:none;"></div>
 
   <div id="view-sources" class="view sources-view" style="display:none;">
     <div class="sources-content">
@@ -510,10 +514,11 @@
 <script src="jurisdiction/ui.js?v=186ed323"></script>
 <script src="grid/core.js?v=e04501e0"></script>
 <script src="grid/ui.js?v=acff9651"></script>
+<script src="forecast/ui.js?v=33adcb57"></script>
 <script src="auth/auth.js?v=671ac2b8"></script>
 <script src="auth/events.js?v=0c959479"></script>
 <script src="auth/gate.js?v=52137608"></script>
 <script src="auth/snow.js?v=4531601c"></script>
-<script src="boot.js?v=7e19e70c"></script>
+<script src="boot.js?v=672875ed"></script>
 </body>
 </html>
