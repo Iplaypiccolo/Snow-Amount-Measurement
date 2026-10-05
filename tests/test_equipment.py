@@ -174,19 +174,19 @@ def t_permissions_equip_own(p):
 def t_branch_permissions(p):
     tab(p, "branch"); b = bid(p, "대관령"); p.click(f"[data-unconfirm={b}]"); p.wait_for_timeout(300)     # 확정된 줄은 잠기므로(2026-10-05) 먼저 취소
     as_user(p, "br1"); tab(p, "branch")
-    ins = set(x.get_attribute("data-rq") for x in p.locator("#branchTable [data-rq]").all())
+    ins = set(x.get_attribute("data-rq") for x in p.locator("#branchTable [data-rq]:not([disabled])").all())
     check(ins == {b}, f"대관령 행만 입력: {ins}")
     check(p.locator(f"[data-rq={b}][data-f=assigned_truck]").count() == 0 and p.locator("[data-confirm], [data-unconfirm]").count() == 0, "편성·확정은 못 고침")
     check(p.locator("#roundMake").count() == 0, "기준일자 만들기 없음")
     as_user(p, "hq-gw"); tab(p, "branch"); p.click("#onlyActive"); p.wait_for_timeout(150)
-    ins = set(x.get_attribute("data-rq") for x in p.locator("#branchTable [data-rq]").all())
+    ins = set(x.get_attribute("data-rq") for x in p.locator("#branchTable [data-rq]:not([disabled])").all())
     check(ins == set(ev(p, "S.branches.filter(b => b.hq_id === S.hqs.find(h => h.name === '강원').id && !(S.reqs[b.id] || {}).confirmed).map(b => b.id)")), f"강원본부 지사들만(확정된 양양은 잠김): {ins}")
     as_user(p, "viewer"); tab(p, "branch")
     check(p.locator("#branchTable [data-rq], #branchTable [data-arr]").count() == 0 and not p.locator("#save-branch").is_visible() and not p.locator("#save-fleet").is_visible(), "보기 전용")
 
 def t_branch_save_confirm_and_arrive(p):
     tab(p, "branch"); ch, dg = bid(p, "춘천"), bid(p, "대관령")
-    check(p.locator(f"[data-arr={dg}]").count() == 0, "확정된 대관령은 도착 요청도 잠김"); p.click(f"[data-unconfirm={dg}]"); p.wait_for_timeout(300)
+    check(p.locator(f"[data-arr={dg}]:not([disabled])").count() == 0, "확정된 대관령은 도착 요청도 비활성"); p.click(f"[data-unconfirm={dg}]"); p.wait_for_timeout(300)
     h = p.locator(f"[data-arr={dg}][data-part=h] option").all_inner_texts(); m = p.locator(f"[data-arr={dg}][data-part=m] option").all_inner_texts()
     check(h == [f"{i:02d}" for i in range(24)] and m == ["00", "10", "20", "30", "40", "50"], f"시 00~23, 분 10분 단위: {h} {m}")
     p.select_option(f"[data-arr={dg}][data-part=h]", "05"); p.wait_for_timeout(150); p.select_option(f"[data-arr={dg}][data-part=m]", "30"); p.wait_for_timeout(150)
@@ -368,8 +368,9 @@ def t_bulk_confirm_and_no_holdings(p):
     heads = p.locator("#branchTable thead").inner_text(); check("보유" not in heads and "최종" not in heads and "일괄 확정" in heads, heads)
     ch = bid(p, "춘천"); check(p.locator(f"[data-confirm={ch}]").count() == 1, "춘천 확정 전")
     p.click("#confirmAll"); p.wait_for_timeout(300)
-    check("1개 지사를 확정했습니다" in toast(p) and ev(p, f"S.reqs['{ch}'].confirmed") is True, toast(p))
-    p.click("#confirmAll"); p.wait_for_timeout(200); check("확정할 지사가 없습니다" in toast(p), toast(p))
+    n = ev(p, "S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private).length") - 3       # 샘플에서 이미 확정된 3곳(대관령·양양·엄정)을 뺀 나머지 모두(요청 없는 지사도, 2026-10-05)
+    check(f"{n}개 지사를 확정했습니다" in toast(p) and ev(p, f"S.reqs['{ch}'].confirmed") is True, toast(p))
+    p.click("#confirmAll"); p.wait_for_timeout(200); check("이미 확정됐습니다" in toast(p), toast(p))
     as_user(p, "br1"); tab(p, "branch"); check(p.locator("#confirmAll").count() == 0, "지사는 일괄 확정 없음")
 
 def t_filters_fit_any_width(p):
@@ -521,16 +522,16 @@ def t_weather_manual(p):
     check(row.locator(f"td[data-fcell='{cj}']").inner_text() == "7.5" and row.locator("input").count() == 0 and row.locator("[data-fb]").count() == 0, "다른 지사 계정: 숫자만(입력·이동 없음)")
     check(row.locator(f"td[data-tcell='{cj}']").inner_text() == "-8.5" and row.locator(f"td[data-tacell='{cj}']").inner_text() == "12/25 06시", "직접 넣은 최저기온·시각")
     check(row.locator("td[data-wcell] .wb").inner_text() == "대설주의보" and "12/24 15:30" in row.locator("td[data-wfc]").inner_text() and "12/24 18:00" in row.locator("td[data-wef]").inner_text(), row.inner_text())
-    check(p.locator(f"tr[data-b='{bid(p, '양양')}'] input").count() == 0, "확정된 자기 지사(양양)는 잠김")
+    check(p.locator(f"tr[data-b='{bid(p, '양양')}']").locator("input:not([disabled]), select:not([disabled])").count() == 0, "확정된 자기 지사(양양)는 비활성")
 
 def t_confirmed_row_locked(p):
     """확정한 지사 줄은 [취소]하기 전까지 요청·편성·도착 요청·기상현황 직접입력을 못 고침(관리자도, 서버도 막음)"""
     tab(p, "branch"); dg, cj = bid(p, "대관령"), bid(p, "춘천")
     row = lambda b: p.locator(f"tr[data-b='{b}']")
-    check(row(dg).locator("input, select").count() == 0 and row(dg).locator("[data-unconfirm]").count() == 1, "확정된 대관령: 입력칸 없음, [취소]만")
+    check(row(dg).locator("input:not([disabled]), select:not([disabled])").count() == 0 and row(dg).locator("input[disabled]").count() >= 5 and row(dg).locator("[data-unconfirm]").count() == 1, "확정된 대관령: 입력칸은 비활성(회색), [취소]만")
     check(row(cj).locator("input[data-f=req_truck]").count() == 1 and row(cj).locator("input[data-f=wx_manual]").count() == 1, "확정 전 춘천: 입력 가능")
     p.click(f"[data-confirm='{cj}']"); p.wait_for_timeout(300)
-    check(row(cj).locator("input, select").count() == 0, "확정하면 춘천도 잠김")
+    check(row(cj).locator("input:not([disabled]), select:not([disabled])").count() == 0 and "locked" in row(cj).get_attribute("class"), "확정하면 춘천도 바로 비활성")
     r = ev(p, f"Api.saveRequests(S.round, [{{ branch_id: '{dg}', req_truck: 9 }}])")
     check(r["ok"] is False and "확정을 취소한 뒤" in r["message"], f"확정 줄 저장은 서버에서도 거절: {r}")
     r = ev(p, f"Api.saveRequests(S.round, [{{ branch_id: '{dg}', confirmed: false, req_truck: 9 }}])")
@@ -538,9 +539,32 @@ def t_confirmed_row_locked(p):
     p.click(f"[data-unconfirm='{cj}']"); p.wait_for_timeout(300)
     check(row(cj).locator("input[data-f=req_truck]").count() == 1 and row(cj).locator("input[data-f=assigned_truck]").count() == 1, "취소하면 다시 고칠 수 있음")
     as_user(p, "br2"); tab(p, "branch"); yy = bid(p, "양양")
-    check(row(yy).locator("input, select").count() == 0, "지사 계정: 확정된 자기 지사 줄도 잠김")
+    check(row(yy).locator("input:not([disabled]), select:not([disabled])").count() == 0 and row(yy).locator("input[data-f=wx_manual][disabled]").count() == 1, "지사 계정: 확정된 자기 지사 줄도 비활성(체크칸 포함)")
+    # 다른 화면(관리자)에서 그사이 확정 → 이 화면은 아직 모름 → 저장하면 '이미 확정' 안내 + 최신으로 다시 읽음
+    as_user(p, "admin1"); tab(p, "branch"); wj = bid(p, "춘천")         # 위에서 확정을 취소해 지금은 확정 전
+    p.fill(f"[data-rq={wj}][data-f=req_truck]", "3"); p.press(f"[data-rq={wj}][data-f=req_truck]", "Tab"); p.wait_for_timeout(150)
+    ev(p, f"Api.saveRequests(S.round, [{{ branch_id: '{wj}', confirmed: true }}])")
+    save_branch(p)
+    check("이미 확정되어 고칠 수 없습니다" in toast(p) and "춘천" in toast(p) and "저장하지 못했습니다" not in toast(p), "확정되어 고칠 수 없다는 안내: " + toast(p))
+    check(row(wj).locator("input:not([disabled]), select:not([disabled])").count() == 0 and ev(p, f"S.rdraft.has('{wj}')") is False, "다시 읽어 그 줄은 비활성, 고친 값은 버림")
 
-TESTS = [t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+def t_confirm_all_by_hq(p):
+    """본부 줄의 [일괄 확정] = 그 본부 지사 모두(요청을 저장하지 않은 지사도). 맨 위 [일괄 확정]도 저장 여부와 관계없이 모두"""
+    tab(p, "branch"); p.click("#onlyActive"); p.wait_for_timeout(150)            # 요청 없는 지사도 보이게
+    gw = ev(p, "S.hqs.find(h => h.name === '강원').id"); cb = ev(p, "S.hqs.find(h => h.name === '충북').id")
+    hq = p.locator(f"#branchTable tr.hq[data-hq='{gw}']")
+    check(hq.locator("[data-confirm-hq]").inner_text() == "일괄 확정" and hq.locator("[data-s=confirmed]").count() == 0, "본부 줄: 확정 개수 대신 [일괄 확정]")
+    ids = ev(p, f"S.order.filter(b => b.hq_id === '{gw}').map(b => b.id)")
+    hq.locator("[data-confirm-hq]").click(); p.wait_for_timeout(400)
+    check(all(ev(p, f"!!(S.reqs['{i}'] || {{}}).confirmed") for i in ids), "강원 지사 모두 확정(요청 없던 지사도)")
+    check("강원 본부" in toast(p) and "확정했습니다" in toast(p), toast(p))
+    check(p.locator(f"#branchTable tr.hq[data-hq='{gw}']").inner_text().count("모두 확정") == 1, "다 확정되면 '모두 확정'")
+    check(ev(p, f"S.order.some(b => b.hq_id === '{cb}' && !(S.reqs[b.id] || {{}}).confirmed)"), "다른 본부(충북)는 그대로")
+    p.click("#confirmAll"); p.wait_for_timeout(500)
+    check(ev(p, "S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private).every(b => (S.reqs[b.id] || {}).confirmed)"), "맨 위 [일괄 확정] = 저장 안 한 지사까지 모두")
+    p.click("#confirmAll"); p.wait_for_timeout(200); check("이미 확정" in toast(p), "더 확정할 지사가 없으면 안내: " + toast(p))
+
+TESTS = [t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,

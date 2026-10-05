@@ -161,7 +161,7 @@ const Api = (() => {
         if (rows.some(r => !ok(r)) || (!can("req.confirm") && rows.some(r => "assigned_truck" in r || "assigned_blower" in r || "confirmed" in r))) return done({ ok: false, message: ERR["42501"] });
         // 서버 트리거 흉내(마이그레이션 35): 확정한 줄은 확정 열 말고는 못 바꿈(취소하면서 바꾸는 것도)
         const locked = r => { const c = db.requests.find(x => x.round_id === +round && x.branch_id === r.branch_id); return c && c.confirmed && Object.keys(r).some(k => k !== "branch_id" && k !== "confirmed" && JSON.stringify(r[k] ?? null) !== JSON.stringify(c[k] ?? null)); };
-        if (rows.some(locked)) return done({ ok: false, message: ERR["55000"] });
+        if (rows.some(locked)) return done({ ok: false, message: ERR["55000"], code: "55000" });
         rows.forEach(p => {
           let cur = db.requests.find(x => x.round_id === +round && x.branch_id === p.branch_id), from = {}, to = {};
           if (!cur) { cur = { round_id: +round, branch_id: p.branch_id, snow_cm: null, warning: false, req_truck: 0, req_blower: 0, assigned_truck: 0, assigned_blower: 0, arrive_at: null, reason: null, confirmed: false,

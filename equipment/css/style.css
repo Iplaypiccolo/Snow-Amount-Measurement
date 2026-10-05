@@ -499,6 +499,9 @@ table.matrix { font-size: 15px; min-width: 900px; }
 #branchTable th.wxh { font-size: 12px; line-height: 1.25; }
 #branchTable td.wxm { text-align: center; }
 #branchTable td.wxm input { width: 18px; height: 18px; cursor: pointer; }
+#branchTable td.wxm input:disabled { cursor: not-allowed; }
+/* 확정한 줄: 입력칸은 회색으로 비활성(취소하기 전까지) */
+#branchTable tr.locked input.ci:disabled, #branchTable tr.locked select.ci:disabled { opacity: 1; background: var(--line, #e6e3da); color: var(--muted, #6b6455); cursor: not-allowed; }
 #branchTable td.wxe { background: color-mix(in srgb, var(--plow) 7%, transparent); }
 #branchTable .wxn { width: 62px; }
 #branchTable .wxt { width: 82px; font-variant-numeric: tabular-nums; }
