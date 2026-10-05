@@ -36,11 +36,14 @@ const Api = (() => {
       return SSAuth.rest(`vehicle_routes?select=date,vehicle_id,stops,revised,times&vehicle_id=eq.${encodeURIComponent(vid)}&order=date.desc&limit=400`).then(r => r.ok ? { ok: true, rows: r.json } : fail(r)).catch(NET);
     },
     requests(round) {
-      return SSAuth.rest(`round_requests?select=round_id,branch_id,snow_cm,warning,req_truck,req_blower,assigned_truck,assigned_blower,arrive_at,reason,confirmed,warn_level,warn_zones,warn_base,warn_at,warn_note&round_id=eq.${+round}`)
+      return SSAuth.rest(`round_requests?select=round_id,branch_id,snow_cm,warning,req_truck,req_blower,assigned_truck,assigned_blower,arrive_at,reason,confirmed,warn_level,warn_zones,warn_base,warn_at,warn_note,fc_snow,fc_tmfc,fc_at&round_id=eq.${+round}`)
         .then(r => r.ok ? { ok: true, rows: r.json } : fail(r, "요청을 불러오지 못했습니다.")).catch(NET);
     },
     warnings() {
       return SSAuth.authed("/rest/v1/rpc/warning_status", { method: "POST", body: {} }).then(r => r.ok ? { ok: true, status: r.json } : fail(r, "특보를 불러오지 못했습니다.")).catch(NET);
+    },
+    forecast() {         // 지사별 예상 적설(59줄)
+      return SSAuth.rest("branch_forecast?select=branch_id,issued_at,max_snow_24h,worst_nx,worst_ny,detail").then(r => r.ok ? { ok: true, rows: r.json } : fail(r, "예상 적설을 불러오지 못했습니다.")).catch(NET);
     },
     zoneData() {
       return Promise.all([SSAuth.authed("/rest/v1/rpc/branch_zone_list", { method: "POST", body: {} }), SSAuth.rest("branch_zone_overrides?select=branch_id,zone_code,include"),
@@ -113,6 +116,7 @@ const Api = (() => {
       requests(round) { return done({ ok: true, rows: clone(db.requests.filter(r => r.round_id === +round)) }); },
       audit() { return done({ ok: true, rows: can("log.view") ? clone(db.audit) : [] }); },
       warnings() { return done({ ok: true, status: clone(warnStatus()) }); },
+      forecast() { return done({ ok: true, rows: clone(db.forecast) }); },
       zoneData() {
         if (!actor) return done({ ok: false, message: ERR["42501"] });
         const list = {};
@@ -160,7 +164,8 @@ const Api = (() => {
           const was = cur.confirmed;
           Object.keys(p).filter(k => k !== "branch_id").forEach(k => { from[k] = cur[k]; to[k] = p[k]; cur[k] = p[k]; });
           if (cur.confirmed && !was) { const w = warnStatus().branches[cur.branch_id]; Object.assign(cur, { warn_level: w ? w.level : null, warn_zones: w ? w.zones : [], warn_base: db.warnBase, warn_at: new Date().toISOString(), warn_note: null }); to.warn_level = cur.warn_level; }   // 서버 트리거 흉내: 확정 순간 특보 고정
-          if (!cur.confirmed) Object.assign(cur, { warn_level: null, warn_zones: null, warn_base: null, warn_at: null, warn_note: null });
+          if (cur.confirmed && !was) { const f = db.forecast.find(x => x.branch_id === cur.branch_id); Object.assign(cur, { fc_snow: f ? f.max_snow_24h : null, fc_tmfc: f ? f.issued_at : null, fc_at: new Date().toISOString() }); }
+          if (!cur.confirmed) Object.assign(cur, { warn_level: null, warn_zones: null, warn_base: null, warn_at: null, warn_note: null, fc_snow: null, fc_tmfc: null, fc_at: null });
           log("수정", "round_requests", `round_requests:${round},${p.branch_id}`, from, to);
         });
         return done({ ok: true });

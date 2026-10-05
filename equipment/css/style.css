@@ -513,3 +513,9 @@ table.matrix { font-size: 15px; min-width: 900px; }
 .wlist td.l:first-child, .wlist th.l:first-child { white-space: nowrap; }
 .wlist th, .wlist td { padding: 5px 4px; }
 .wlist td:last-child { font-size: 12px; min-width: 48px; }
+
+/* ---------- 예상 적설(기상청 단기예보) ---------- */
+.fcv { font-weight: 700; cursor: help; white-space: nowrap; }
+.fcv.some { color: var(--plow); }
+.fcv.hi { color: var(--stop); }
+.thsub { display: block; font-size: 10.5px; font-weight: 500; color: var(--ink-soft); }

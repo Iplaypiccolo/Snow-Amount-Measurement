@@ -69,10 +69,10 @@ function makeSample(today) {
   const rk = name => `round_requests:2,${B(name)}`;
   const audit = [
     A(-1, 16, 20, "exdaegwallyeong", "203.0.113.42", "수정", "round_requests", rk("대관령"), { req_truck: 2 }, { req_truck: 4 }),
-    A(0, 0, 5, "exyangyang", "203.0.113.21", "수정", "round_requests", rk("양양"), { snow_cm: 10 }, { snow_cm: 12 }),
-    A(0, 0, 10, "exyangyang", "203.0.113.21", "수정", "round_requests", rk("양양"), { snow_cm: 12 }, { snow_cm: 13 }),
-    A(0, 0, 20, "admin-02", "203.0.113.11", "수정", "round_requests", rk("양양"), { snow_cm: 13 }, { snow_cm: 14 }),
-    A(0, 0, 30, "admin-01", "203.0.113.10", "수정", "round_requests", rk("양양"), { snow_cm: 14 }, { snow_cm: 15 }),
+    A(0, 0, 5, "exyangyang", "203.0.113.21", "수정", "round_requests", rk("양양"), { req_blower: 10 }, { req_blower: 12 }),
+    A(0, 0, 10, "exyangyang", "203.0.113.21", "수정", "round_requests", rk("양양"), { req_blower: 12 }, { req_blower: 13 }),
+    A(0, 0, 20, "admin-02", "203.0.113.11", "수정", "round_requests", rk("양양"), { req_blower: 13 }, { req_blower: 14 }),
+    A(0, 0, 30, "admin-01", "203.0.113.10", "수정", "round_requests", rk("양양"), { req_blower: 14 }, { req_blower: 15 }),
     A(0, 0, 31, "admin-02", "203.0.113.11", "수정", "round_requests", rk("대관령"), { assigned_truck: 4 }, { assigned_truck: 6 }),
     A(0, 0, 40, "exseoulgigyae", "203.0.113.35", "수정", "vehicles", "vehicles:V001", { status: "" }, { status: "O" }),
     A(0, 0, 41, "exseoulgigyae", "203.0.113.35", "추가", "vehicle_routes", `vehicle_routes:${day(0)},V001`, null, { date: day(0), vehicle_id: "V001", stops: [B("양양")] }),
@@ -93,6 +93,11 @@ function makeSample(today) {
   const warnFc = kst(0, "04:00"), warnEf = kst(0, "06:00"), warnEfPre = kst(0, "17:58");      // 발표 04:00, 발효 06:00, 예비특보 발효 = 오늘 오후(12~18시)
   // 이미 확정한 지사는 확정할 때의 특보가 고정돼 있음(대관령 = 주의보로 고정, 양양 = 특보 없음으로 고정, 엄정 = 자료 없음으로 특보 없음)
   const fix = (name, level, zs, note) => Object.assign(requests.find(r => r.round_id === 2 && r.branch_id === B(name)), { warn_level: level, warn_zones: zs, warn_base: warnBase, warn_at: at(0, 6), warn_note: note || null });
+  // 예상 적설(샘플): 2시간 전 발표 단기예보, 다음 정시부터 24시간 신적설 합의 지사 최댓값. 확정한 지사는 확정 때 값 고정
+  const hr = Math.floor(Date.now() / 3600e3) * 3600e3, fcTm = new Date(hr - 2 * 3600e3).toISOString(), fcStart = new Date(hr + 3600e3).toISOString(), fcEnd = new Date(hr + 25 * 3600e3).toISOString();   // 2시간 전 발표, 다음 정시부터 24시간
+  const forecast = [["대관령", 14.2, 92, 131], ["양양", 9.0, 93, 137], ["춘천", 3.5, 73, 134], ["엄정", 0, 76, 114], ["강릉", 11.3, 92, 133]]
+    .map(([n, v, nx, ny]) => ({ branch_id: B(n), issued_at: fcTm, max_snow_24h: v, worst_nx: nx, worst_ny: ny, detail: { start_at: fcStart, end_at: fcEnd } }));
+  [["대관령", 12.1], ["양양", 8.0], ["엄정", 0]].forEach(([n, v]) => Object.assign(requests.find(r => r.round_id === 2 && r.branch_id === B(n)), { fc_snow: v, fc_tmfc: kst(0, "05:00"), fc_at: at(0, 6) }));
   fix("대관령", "주의", [["L1022520", "강릉산지", "주의", "대설", kst(-1, "22:00"), kst(0, "01:00")]]); fix("양양", null, []); fix("엄정", null, [], "기상청 자료를 30분 넘게 받지 못함");
-  return { hqs, branches, holdings, vehicles, routes, rounds, requests, audit, orgs: ["서울경기", "충북", "전북", "대구경북"], zones, zoneAuto, zoneOver: [], warnActive, warnBase, warnFc, warnEf, warnEfPre };
+  return { hqs, branches, holdings, vehicles, routes, rounds, requests, audit, orgs: ["서울경기", "충북", "전북", "대구경북"], zones, zoneAuto, zoneOver: [], warnActive, warnBase, warnFc, warnEf, warnEfPre, forecast };
 }

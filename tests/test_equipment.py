@@ -217,8 +217,8 @@ def t_history_tooltip_per_cell(p):
     cell.hover(); p.wait_for_timeout(150); t = p.locator("#tip").inner_text()
     check("이 칸의 오늘 수정 기록" in t and t.count("→") == 2 and "양양 → 대관령" in t, t)
     tab(p, "branch"); y = bid(p, "양양")
-    p.hover(f"[data-rq={y}][data-f=snow_cm]"); p.wait_for_timeout(150); t = p.locator("#tip").inner_text()
-    check(t.count("→") == 3 and "14cm → 15cm" in t and "10cm" not in t, f"최근 3건만: {t}")
+    p.hover(f"[data-rq={y}][data-f=req_blower]"); p.wait_for_timeout(150); t = p.locator("#tip").inner_text()
+    check(t.count("→") == 3 and "14 → 15" in t and "10 → 12" not in t, f"최근 3건만: {t}")
     check(p.locator(f"[data-rq={y}][data-f=req_truck]").get_attribute("data-hv") is None, "다른 열에는 없음")
     as_user(p, "br1"); tab(p, "fleet"); check(p.locator("[data-hv]").count() == 0, "log.view 권한이 없으면 기록 표시 없음")
 
@@ -293,7 +293,7 @@ def t_typing_then_clicking_next_input_keeps_both(p):
     p.click(f"[data-arr={b}][data-part=d]"); p.keyboard.type("10042026"); p.wait_for_timeout(200)
     p.select_option(f"[data-arr={b}][data-part=h]", "16"); p.wait_for_timeout(150)
     p.click(f"[data-rq={b}][data-f=req_truck]"); p.keyboard.press("Control+A"); p.keyboard.type("2")
-    p.click(f"[data-rq={b}][data-f=reason]"); p.keyboard.type("시험"); p.click(f"[data-rq={b}][data-f=snow_cm]"); p.wait_for_timeout(200)
+    p.click(f"[data-rq={b}][data-f=reason]"); p.keyboard.type("시험"); p.click(f"[data-rq={b}][data-f=req_blower]"); p.wait_for_timeout(200)
     d = ev(p, f"S.rdraft.get('{b}')")
     check(d.get("req_blower") == 1 and d.get("req_truck") == 2 and d.get("reason") == "시험" and (d.get("arrive_at") or "").endswith("T16:00"), d)
     hq = p.locator("#branchTable tr.hq").first.locator("[data-s=req_blower]").inner_text(); check(hq == "1", f"본부 합계 즉시 반영: {hq}")
@@ -419,7 +419,7 @@ def t_warning_auto_badge(p):
     tab(p, "move"); card = p.locator(".dest", has_text="대관령")
     check(card.locator(".tag.wb").inner_text() == "대설주의보", "이동 현황 카드도 고정값")
     tab(p, "branch"); p.click(f"[data-confirm='{bid(p, '춘천')}']"); p.wait_for_timeout(300)
-    check("예비특보 고정" in toast(p) and badge(p, "춘천").inner_text().replace("\n", "") == "예비특보고정", toast(p))
+    check("대설특보: 예비특보," in toast(p) and "고정" in toast(p) and badge(p, "춘천").inner_text().replace("\n", "") == "예비특보고정", toast(p))
     p.click(f"[data-unconfirm='{bid(p, '대관령')}']"); p.wait_for_timeout(300)
     check(badge(p, "대관령").inner_text() == "대설경보" and "w3" in badge(p, "대관령").get_attribute("class"), "확정을 풀면 다시 지금 값(경보, 빨강) — 강풍 등 다른 특보는 지사 칸에 안 나옴")
     check(p.locator(f"tr[data-b='{bid(p, '대관령')}'] [data-wef]").inner_text().endswith("06:00"), "경보 발효 시각")
@@ -450,13 +450,27 @@ def t_zone_manager(p):
     check("특보구역" in p.locator("#panel-log").inner_text(), "수정 기록에 특보구역")
     as_user(p, "hq-gw"); tab(p, "branch"); check(p.locator("#zoneMgr").count() == 0, "본부는 관리 버튼 없음")
 
+def t_snow_forecast(p):
+    """예상 적설 = 기상청 단기예보 24시간 신적설 합의 지사 최댓값(입력칸 없음), 확정하면 고정, 이동 현황 카드도 같은 값"""
+    tab(p, "branch")
+    check(p.locator("[data-f=snow_cm]").count() == 0 and "24시간" in p.locator("#branchTable thead").inner_text(), "지사 입력칸 없음, 제목에 24시간")
+    fc = lambda n: p.locator(f"td[data-fcell='{bid(p, n)}']").inner_text().replace(chr(10), "")
+    check(fc("춘천") == "3.5" and fc("대관령") == "12.1고정" and fc("양양") == "8.0고정", f"확정 전 = 지금 예보, 확정 = 고정값: {fc('춘천')} {fc('대관령')} {fc('양양')}")
+    p.hover(f"td[data-fcell='{bid(p, '춘천')}'] [data-fb]"); p.wait_for_timeout(100); tp = p.locator("#tip").inner_text()
+    check("단기예보" in tp and "24시간 신적설 합" in tp and "격자 73, 134" in tp, tp)
+    p.click(f"[data-confirm='{bid(p, '춘천')}']"); p.wait_for_timeout(300)
+    check("예상 적설 3.5cm 고정" in toast(p) and fc("춘천") == "3.5고정", toast(p))
+    p.click(f"[data-unconfirm='{bid(p, '대관령')}']"); p.wait_for_timeout(300)
+    check(fc("대관령") == "14.2", "확정을 풀면 지금 예보: " + fc("대관령"))
+    tab(p, "move"); check("예상 적설 14.2cm" in p.locator(".dest", has_text="대관령").inner_text(), "이동 현황 카드")
+
 TESTS = [t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
          t_typing_then_clicking_next_input_keeps_both, t_round_delete, t_pending_branches_shown_grey, t_ui_version_reload_once,
          t_route_kind_and_eta, t_equip_can_edit_eta, t_bulk_confirm_and_no_holdings, t_filters_fit_any_width, t_date_in_title, t_branch_header_stays_on_top,
-         t_warning_auto_badge, t_zone_manager]
+         t_warning_auto_badge, t_zone_manager, t_snow_forecast]
 
 # ---------------------------------------------------------------- 서버 모드(가짜 Supabase, tests/_sb_mock.py) — 실제 로그인 권한·저장 함수 호출
 sys.path.insert(0, str(Path(__file__).resolve().parent))
