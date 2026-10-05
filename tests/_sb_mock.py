@@ -277,6 +277,16 @@ class Mock:
                     for r in body["p_routes"]:
                         self.routes = [x for x in self.routes if not (x["date"] == r["date"] and x["vehicle_id"] == r["vehicle_id"])] + ([r] if r["stops"] else [])
                     return send(200, {"vehicles": len(body["p_vehicles"]), "routes_saved": len(body["p_routes"]), "routes_deleted": 0})
+                # save_requests: 실제로 반영(서버 트리거 흉내 — 확정한 줄은 확정 열 말고는 못 바꿈 55000, 확정·편성은 req.confirm)
+                rid = body["p_round"]; LOCK = ("req_truck", "req_blower", "assigned_truck", "assigned_blower", "arrive_at", "reason", "wx_manual", "wx_snow", "wx_pcp", "wx_tmin", "wx_tmin_at", "wx_level", "wx_fc", "wx_ef")
+                for r in body["p_rows"]:
+                    cur = next((x for x in self.round_reqs if x["round_id"] == rid and x["branch_id"] == r["branch_id"]), None)
+                    if cur and cur.get("confirmed") and any(k in LOCK and r[k] != cur.get(k) for k in r): return send(400, {"code": "55000", "message": "confirmed row is locked"})
+                    if not self.can(u, "req.confirm") and any(k in r for k in ("assigned_truck", "assigned_blower", "confirmed")): return send(403, {"code": "42501", "message": "assignment needs req.confirm"})
+                for r in body["p_rows"]:
+                    cur = next((x for x in self.round_reqs if x["round_id"] == rid and x["branch_id"] == r["branch_id"]), None)
+                    if not cur: cur = {"round_id": rid, "branch_id": r["branch_id"], "req_truck": 0, "req_blower": 0, "assigned_truck": 0, "assigned_blower": 0, "confirmed": False}; self.round_reqs.append(cur)
+                    cur.update({k: v for k, v in r.items() if k != "branch_id"})
                 return send(200, {"rows": len(body["p_rows"])})
             if tbl in ("vehicles", "vehicle_routes", "support_rounds", "round_requests") and req.method == "GET":
                 if not self.usable(u): return send(200, [])

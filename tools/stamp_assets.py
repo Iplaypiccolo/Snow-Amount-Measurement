@@ -6,6 +6,8 @@
     한동안 예전 파일(또는 예전·새 파일이 섞인 상태)로 동작할 수 있습니다.
 하는 일: index.html · admin/index.html · equipment/index.html 의 이 사이트 js·css 주소 뒤에 `?v=<파일 내용 지문 8자리>` 를 붙입니다.
     파일 내용이 바뀔 때만 꼬리표가 바뀌므로, 바뀐 파일만 새로 받고 나머지는 캐시를 그대로 씁니다.
+    첫 화면 안에 띄우는 장비 지원 화면(iframe data-src="equipment/index.html")에도 꼬리표를 붙입니다(2026-10-05) —
+    안쪽 화면 주소가 늘 같으면 브라우저가 예전 장비 지원 화면을 계속 쓰고, Ctrl+F5 로도 안쪽 화면은 새로 받지 않을 수 있어서.
 
 사용(저장소 맨 위에서):
     python tools/stamp_assets.py          # 꼬리표 갱신 (js·css 를 고쳤으면 커밋 전에 실행)
@@ -15,8 +17,9 @@ import hashlib, re, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PAGES = ['index.html', 'admin/index.html', 'equipment/index.html']
+PAGES = ['equipment/index.html', 'admin/index.html', 'index.html']     # 장비 지원을 먼저(첫 화면이 그 꼬리표를 씀)
 PAT = re.compile(r'(<script src="|<link rel="stylesheet" href=")(?!https?:|//)([^"?]+\.(?:js|css))(?:\?v=[0-9a-f]*)?(")')
+FRAME = re.compile(r'(<iframe [^>]*data-src=")(?!https?:|//)([^"?]+\.html)(?:\?v=[0-9a-f]*)?(")')
 
 
 def stamp(page, check=False):
@@ -29,7 +32,7 @@ def stamp(page, check=False):
             missing.append(m.group(2)); return m.group(0)
         h = hashlib.md5(f.read_bytes().replace(b'\r\n', b'\n')).hexdigest()[:8]   # 줄바꿈(CRLF/LF) 차이로 꼬리표가 바뀌지 않게
         return f'{m.group(1)}{m.group(2)}?v={h}{m.group(3)}'
-    new = PAT.sub(rep, html)
+    new = FRAME.sub(rep, PAT.sub(rep, html))
     if missing: raise SystemExit(f'{page}: 없는 파일 {missing}')
     if new != html and not check: p.write_bytes(new.encode('utf-8'))
     return new != html

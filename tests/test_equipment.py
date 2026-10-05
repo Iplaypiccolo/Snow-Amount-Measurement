@@ -620,7 +620,32 @@ def t_server_warning(b):
     check("기준" in p.locator("#wBaseHead").inner_text(), "서버 모드: 대설특보 기준 시각 " + p.locator("#wBaseHead").inner_text())
     p.close()
 
-SERVER_TESTS = [t_server_equip_confirm, t_server_branch_save, t_server_warning]
+def t_server_lock_and_confirm_all(b):
+    """서버 모드(로그인 화면): 확정하면 그 줄 비활성, 본부 [일괄 확정]은 요청 없는 지사까지, 지사 화면이 모른 채 저장하면 '이미 확정' 안내"""
+    m = Mock(); m.users["exchungju"]["profile"]["must_change"] = False
+    m.round_reqs[0]["confirmed"] = False
+    p = server_page(b, m, "admin-01"); tab(p, "branch"); p.click("#onlyActive"); p.wait_for_timeout(200)
+    row = p.locator("tr[data-b='B019']"); en = "input:not([disabled]), select:not([disabled])"
+    check(row.locator(en).count() > 3, "확정 전: 입력 가능")
+    p.click("[data-confirm='B019']"); p.wait_for_timeout(500)
+    check(row.locator(en).count() == 0 and row.locator("[data-unconfirm]").count() == 1, "확정하면 그 줄 비활성")
+    check(p.locator(f"#branchTable tr.hq[data-hq='{ev(p, "S.branches.find(x => x.id === 'B019').hq_id")}']").inner_text().count("모두 확정") == 1, "충북(충주 하나)은 모두 확정")
+    hq = ev(p, "S.hqs.find(h => h.name === '강원').id"); ids = ev(p, f"S.order.filter(x => x.hq_id === '{hq}').map(x => x.id)")
+    p.click(f"[data-confirm-hq='{hq}']"); p.wait_for_timeout(500)
+    saved = {r["branch_id"] for r in m.round_reqs if r.get("confirmed")}
+    check(set(ids) <= saved and "확정했습니다" in toast(p), f"본부 일괄 확정 = 요청 없던 지사까지 서버에 저장: {sorted(set(ids) - saved)}")
+    p.close()
+    # 지사 화면: 관리자가 확정하기 전에 열어 둔 화면(아직 확정 전으로 보임)에서 고치고 저장
+    m2 = Mock(); m2.users["exchungju"]["profile"]["must_change"] = False; m2.round_reqs[0]["confirmed"] = False
+    p = server_page(b, m2, "exchungju"); tab(p, "branch")
+    p.fill("[data-rq=B019][data-f=req_truck]", "7"); p.press("[data-rq=B019][data-f=req_truck]", "Tab"); p.wait_for_timeout(150)
+    m2.round_reqs[0]["confirmed"] = True                                       # 그사이 관리자가 확정
+    save_branch(p)
+    check("이미 확정되어 고칠 수 없습니다" in toast(p) and "저장하지 못했습니다" not in toast(p), "안내: " + toast(p))
+    check(p.locator("tr[data-b='B019']").locator("input:not([disabled]), select:not([disabled])").count() == 0, "다시 읽어 그 줄 비활성")
+    p.close()
+
+SERVER_TESTS = [t_server_equip_confirm, t_server_branch_save, t_server_warning, t_server_lock_and_confirm_all]
 
 if __name__ == "__main__":
     only = sys.argv[1:]

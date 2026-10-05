@@ -3,14 +3,15 @@
    - 기상청 단기예보(5km 격자)의 24시간 예상 적설(cm)·강수량(mm) 합과 최저기온(℃, 그 시각)을 지사 관할 노선도 위에 보여 줍니다.
      값은 서버가 3시간마다 모은 격자별 값(forecast_cells)입니다.
    - 단계: 전체 = 고속도로 노선만(본부 색) / 본부 = 그 본부 지사들의 격자(지사 색) / 지사 = 그 지사 격자마다 적설·강수·최저기온,
-     격자에 마우스를 올리면 24시간 추이(시간별 적설·강수 막대 + 기온 선). 추이는 지사를 열 때만 서버에서 받음
+     격자에 마우스를 올리면 24시간 추이(적설·강수 막대, 기온 선 — 따로 세 그림). 격자를 누르면 그 그림이 지도 오른쪽 위에 고정되고
+     그림에 마우스를 올리면 세로·가로 보조선과 "몇 시 · 값". 지도 아무 데나 누르면 닫힘. 추이는 지사를 열 때만 서버에서 받음
    - 장비 지원의 지사별 요청·편성에서 예상 적설·강수를 누르면 이 탭의 그 지사로 바로 옵니다(window.ForecastUI.openBranch).
    - 서버 읽기: branch_forecast(지사 59줄) 한 번 + 본부를 열 때 forecast_grid(그 본부 지사들의 격자, 수 KB) + 지사를 열 때 그 지사 추이(약 10KB)
    ============================================================ */
 (function () {
   'use strict';
   var G = window.GridCore, JC = window.JurisCore;
-  var S = { inited: false, map: null, lines: null, cells: null, hq: 'ALL', focus: null, state: null, bf: {}, grid: {}, series: {}, meta: null, loading: false, pendingFocus: null };
+  var S = { inited: false, map: null, lines: null, cells: null, hq: 'ALL', focus: null, state: null, bf: {}, grid: {}, series: {}, pin: null, pinAt: 0, meta: null, loading: false, pendingFocus: null };
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -39,7 +40,7 @@
         '<div id="fc-meta" class="fc-meta"></div>' +
         '<div id="fc-tree" class="jr-tree"></div>' +
       '</div>' +
-      '<div class="jr-mapbox"><div id="fmap"></div>' +
+      '<div class="jr-mapbox"><div id="fmap"></div><div id="fc-pin" class="fc-pin" hidden></div>' +
         '<div class="jr-legend fc-legend" id="fc-legend"></div>' +
       '</div></div>';
   }
@@ -71,29 +72,69 @@
       m._start = r.json.start_at; S.series[id] = m; return m;
     }).catch(function () { return null; });
   }
-  // 24시간 추이 그림: 시간별 적설(파랑)·강수(초록) 막대 + 기온(빨강) 선
-  function trendSvg(sr, start) {
-    if (!sr || !sr.t) return '';
-    var W = 240, H = 96, L0 = 26, R0 = 6, T0 = 8, B0 = 18, n = sr.t.length, cw = (W - L0 - R0) / n;
-    var bars = Math.max(1, Math.max.apply(null, (sr.s || []).concat(sr.p || []).map(function (v) { return v || 0; })));
-    var ts = sr.t.filter(function (v) { return v != null; }), tmin = Math.min.apply(null, ts), tmax = Math.max.apply(null, ts);
-    if (!ts.length) { tmin = 0; tmax = 1; } if (tmax - tmin < 4) { var mid = (tmax + tmin) / 2; tmin = mid - 2; tmax = mid + 2; }
-    var y = function (v) { return T0 + (H - T0 - B0) * (1 - (v - tmin) / (tmax - tmin)); }, hb = function (v) { return (H - T0 - B0) * (v || 0) / bars; };
-    var g = '';
-    for (var i = 0; i < n; i++) {
-      var x = L0 + i * cw;
-      if (sr.s && sr.s[i]) g += '<rect x="' + (x + 0.5).toFixed(1) + '" y="' + (H - B0 - hb(sr.s[i])).toFixed(1) + '" width="' + (cw / 2 - 0.5).toFixed(1) + '" height="' + hb(sr.s[i]).toFixed(1) + '" fill="#2e5fb8"/>';
-      if (sr.p && sr.p[i]) g += '<rect x="' + (x + cw / 2).toFixed(1) + '" y="' + (H - B0 - hb(sr.p[i])).toFixed(1) + '" width="' + (cw / 2 - 0.5).toFixed(1) + '" height="' + hb(sr.p[i]).toFixed(1) + '" fill="#2f9d5f"/>';
-    }
-    var pts = []; sr.t.forEach(function (v, i) { if (v != null) pts.push((L0 + (i + 0.5) * cw).toFixed(1) + ',' + y(v).toFixed(1)); });
-    var st0 = start ? new Date(start) : null, lab = function (k) { return st0 ? p2((st0.getHours() + k) % 24) + '시' : ''; };
-    return '<svg class="fc-trend" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '">' +
-      '<line x1="' + L0 + '" y1="' + (H - B0) + '" x2="' + (W - R0) + '" y2="' + (H - B0) + '" stroke="#999" stroke-width="0.6"/>' + g +
-      '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#c0392b" stroke-width="1.6"/>' +
-      '<text x="' + (L0 - 3) + '" y="' + (y(tmax) + 3).toFixed(1) + '" text-anchor="end">' + tmp(tmax) + '°</text>' +
-      '<text x="' + (L0 - 3) + '" y="' + (y(tmin) + 3).toFixed(1) + '" text-anchor="end">' + tmp(tmin) + '°</text>' +
-      [0, 6, 12, 18].map(function (k) { return '<text x="' + (L0 + k * cw).toFixed(1) + '" y="' + (H - 5) + '">' + lab(k) + '</text>'; }).join('') + '</svg>';
+  // 24시간 추이 그림 — 적설·강수·기온을 따로(위에서부터 적설 → 강수 → 기온). k = 's' | 'p' | 't', big = 고정 창(마우스로 값 보기)
+  var CH = { s: { name: '적설', unit: 'cm', color: '#2e5fb8' }, p: { name: '강수', unit: 'mm', color: '#2f9d5f' }, t: { name: '기온', unit: '℃', color: '#c0392b' } };
+  function hourLabel(start, i) { var d = start ? new Date(Date.parse(start) + i * 3600e3) : null; return d && !isNaN(d) ? p2(d.getHours()) + '시' : ''; }
+  function chartGeom(k, vals, big) {
+    var W = big ? 330 : 236, H = big ? 104 : 64, L0 = 30, R0 = 8, T0 = big ? 22 : 16, B0 = 16, n = vals.length || 24, cw = (W - L0 - R0) / n;
+    var xs = vals.filter(function (v) { return v != null; }), lo, hi;
+    if (k === 't') { lo = xs.length ? Math.min.apply(null, xs) : 0; hi = xs.length ? Math.max.apply(null, xs) : 1; if (hi - lo < 4) { var mid = (hi + lo) / 2; lo = mid - 2; hi = mid + 2; } }
+    else { lo = 0; hi = Math.max(1, xs.length ? Math.max.apply(null, xs) : 0); }
+    return { W: W, H: H, L0: L0, R0: R0, T0: T0, B0: B0, n: n, cw: cw, lo: lo, hi: hi,
+      y: function (v) { return T0 + (H - T0 - B0) * (1 - (v - lo) / (hi - lo)); } };
   }
+  function chartSvg(k, vals, start, big) {
+    vals = vals || []; var c = CH[k], g = chartGeom(k, vals, big), body = '';
+    var xs = vals.filter(function (v) { return v != null; });
+    var head = k === 't' ? (xs.length ? '최저 ' + tmp(Math.min.apply(null, xs)) + '℃ (' + hourLabel(start, vals.indexOf(Math.min.apply(null, xs))) + ')' : '자료 없음')
+      : '합 ' + num(xs.reduce(function (a, v) { return a + v; }, 0)) + c.unit;
+    if (k === 't') {
+      var pts = []; vals.forEach(function (v, i) { if (v != null) pts.push((g.L0 + (i + 0.5) * g.cw).toFixed(1) + ',' + g.y(v).toFixed(1)); });
+      body = '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + c.color + '" stroke-width="1.8"/>';
+    } else {
+      vals.forEach(function (v, i) { if (!v) return; var y = g.y(v); body += '<rect x="' + (g.L0 + i * g.cw + 1).toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + Math.max(1, g.cw - 2).toFixed(1) + '" height="' + (g.H - g.B0 - y).toFixed(1) + '" fill="' + c.color + '"/>'; });
+    }
+    return '<svg class="fc-trend fc-ch-' + k + '" width="' + g.W + '" height="' + g.H + '" viewBox="0 0 ' + g.W + ' ' + g.H + '" data-k="' + k + '" data-vals="' + esc(JSON.stringify(vals)) + '" data-start="' + esc(start || '') + '"' + (big ? ' data-big="1"' : '') + '>' +
+      '<text class="ttl" x="' + g.L0 + '" y="' + (g.T0 - 6) + '" fill="' + c.color + '">' + c.name + '(' + c.unit + ') · ' + esc(head) + '</text>' +
+      '<line x1="' + g.L0 + '" y1="' + (g.H - g.B0) + '" x2="' + (g.W - g.R0) + '" y2="' + (g.H - g.B0) + '" stroke="#999" stroke-width="0.6"/>' + body +
+      '<text x="' + (g.L0 - 3) + '" y="' + (g.T0 + 4) + '" text-anchor="end">' + (k === 't' ? tmp(g.hi) : num(g.hi)) + '</text>' +
+      '<text x="' + (g.L0 - 3) + '" y="' + (g.H - g.B0) + '" text-anchor="end">' + (k === 't' ? tmp(g.lo) : '0') + '</text>' +
+      [0, 6, 12, 18].map(function (h) { return '<text x="' + (g.L0 + h * g.cw).toFixed(1) + '" y="' + (g.H - 3) + '">' + hourLabel(start, h) + '</text>'; }).join('') +
+      (big ? '<g class="xh" style="display:none"><line class="xv" stroke="#333" stroke-dasharray="3 2" stroke-width="0.8"/><line class="xz" stroke="#333" stroke-dasharray="3 2" stroke-width="0.8"/><circle class="xp" r="3" fill="' + c.color + '"/><text class="xt" text-anchor="end"></text></g>' : '') +
+      '</svg>';
+  }
+  function trendBox(sr, start, big) {
+    if (!sr) return '';
+    return '<div class="fc-trend-box' + (big ? ' big' : '') + '">' + ['s', 'p', 't'].map(function (k) { return chartSvg(k, sr[k], start, big); }).join('') + '</div>';
+  }
+  // 고정 창의 그림에 마우스: 그 시각의 세로·가로 보조선과 "몇 시 · 값"
+  function chartHover(svg, e) {
+    var k = svg.dataset.k, vals = JSON.parse(svg.dataset.vals || '[]'), g = chartGeom(k, vals, true), xh = svg.querySelector('.xh'); if (!xh) return;
+    var r = svg.getBoundingClientRect(), x = (e.clientX - r.left) * g.W / r.width;
+    var i = Math.max(0, Math.min(g.n - 1, Math.floor((x - g.L0) / g.cw))), v = vals[i], cx = g.L0 + (i + 0.5) * g.cw;
+    var yv = v == null ? null : (k === 't' ? g.y(v) : g.y(v || 0));
+    var set = function (el, a) { Object.keys(a).forEach(function (n) { el.setAttribute(n, a[n]); }); };
+    set(xh.querySelector('.xv'), { x1: cx, x2: cx, y1: g.T0, y2: g.H - g.B0 });
+    var xz = xh.querySelector('.xz'), xp = xh.querySelector('.xp');
+    if (yv == null) { xz.style.display = 'none'; xp.style.display = 'none'; }
+    else { xz.style.display = ''; xp.style.display = ''; set(xz, { x1: g.L0, x2: g.W - g.R0, y1: yv, y2: yv }); set(xp, { cx: cx, cy: yv }); }
+    var t = xh.querySelector('.xt'); set(t, { x: g.W - g.R0, y: g.T0 - 6 });
+    t.textContent = hourLabel(svg.dataset.start, i) + ' · ' + (v == null ? '자료 없음' : (k === 't' ? tmp(v) : num(v)) + CH[k].unit);
+    xh.style.display = '';
+  }
+  // 격자를 누르면 그 격자의 그림을 지도 오른쪽 위에 고정(지도 아무 데나 누르면 닫힘)
+  function renderPin() {
+    var box = $('fc-pin'); if (!box) return;
+    var sr = S.pin && S.focus && S.series[S.focus] ? S.series[S.focus][S.pin] : null;
+    if (!sr) { box.hidden = true; box.innerHTML = ''; return; }
+    var k = S.pin.split(','), g = S.grid[S.hq], c = g && g.cells ? g.cells.filter(function (x) { return x[0] === +k[0] && x[1] === +k[1]; })[0] : null;
+    box.innerHTML = '<div class="fc-pin-head"><b>격자 ' + esc(S.pin) + '</b> ' + (c ? esc((c[2] || []).map(bname).join(', ')) : '') +
+      '<button type="button" class="fc-pin-x" aria-label="닫기">×</button></div>' + trendBox(sr, S.series[S.focus]._start, true) +
+      '<div class="fc-pin-note">그림에 마우스를 올리면 시각별 값</div>';
+    box.hidden = false;
+  }
+  function pinCell(key) { S.pin = key; S.pinAt = Date.now(); renderPin(); drawCells(); }
+  function unpin() { if (!S.pin) return; S.pin = null; renderPin(); drawCells(); }
 
   /* ---------- 지도 ---------- */
   function lineColor(owner) {
@@ -119,13 +160,17 @@
       var mine = S.focus ? bs.indexOf(S.focus) >= 0 : true;
       if (S.focus && !mine) return;                                  // 지사를 고르면 그 지사 격자만
       var col = S.focus ? snowColor(snow) : JC.colorOf(st(), bs[0], S.hq);
-      var poly = L.polygon(G.cellCorners(nx, ny), { weight: S.focus ? 1.5 : 1, color: S.focus ? '#33424f' : col, fillColor: col, fillOpacity: S.focus ? 0.7 : 0.28, opacity: 0.9 });
-      var sr = S.focus && fresh && S.series[S.focus] ? S.series[S.focus][nx + ',' + ny] : null;
+      var key = nx + ',' + ny, pinned = S.focus && S.pin === key;
+      var poly = L.polygon(G.cellCorners(nx, ny), { weight: pinned ? 4 : S.focus ? 1.5 : 1, color: pinned ? '#FFC400' : S.focus ? '#33424f' : col, fillColor: col, fillOpacity: S.focus ? 0.7 : 0.28, opacity: 0.9 });
+      var sr = S.focus && fresh && S.series[S.focus] ? S.series[S.focus][key] : null;
       poly.bindTooltip('<b>격자 ' + nx + ',' + ny + '</b><br>' + bs.map(function (b) { return esc(bname(b)); }).join(', ') +
         (S.focus ? '<br>24시간 적설 <b>' + num(snow) + 'cm</b> · 강수 <b>' + num(pcp) + 'mm</b><br>최저기온 <b>' + tmp(tmin) + '℃</b> (' + esc(hh(tat)) + ')' +
-          (sr ? '<div class="fc-trend-box">' + trendSvg(sr, S.series[S.focus]._start) + '<div class="fc-trend-key"><i class="s"></i>적설 <i class="p"></i>강수 <i class="t"></i>기온</div></div>' : '') : ''),
+          (sr ? trendBox(sr, S.series[S.focus]._start, false) + '<div class="fc-trend-key">누르면 그림 고정</div>' : '') : ''),
         { sticky: true, opacity: 1, className: 'gr-tip' + (sr ? ' fc-tip' : '') });
-      poly.on('click', function () { if (!S.focus && bs.length) focusBranch(bs[0]); });
+      poly.on('click', function () {
+        if (!S.focus) { if (bs.length) focusBranch(bs[0]); return; }
+        if (sr) { poly.closeTooltip(); pinCell(key); }                         // 지사 격자: 그 격자 그림 고정
+      });
       poly.addTo(S.cells);
       if (S.focus) {                                                 // 지사: 격자마다 값(적설 / 강수)
         L.tooltip({ permanent: true, direction: 'center', className: 'fc-label', interactive: false })
@@ -144,6 +189,7 @@
     S.map = L.map('fmap', { zoomControl: true }).setView([36.4, 127.9], 7);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(S.map);
     S.lines = L.layerGroup().addTo(S.map); S.cells = L.layerGroup().addTo(S.map);
+    S.map.on('click', function () { if (Date.now() - S.pinAt > 300) unpin(); });      // 지도 아무 데나 누르면 고정 그림 닫기(격자를 누른 그 순간은 제외)
     setTimeout(function () { S.map.invalidateSize(); }, 50);
   }
 
@@ -192,15 +238,16 @@
       : '';
     $('fc-legend').style.display = S.focus ? '' : 'none';
   }
-  function render() { drawLines(); drawCells(); renderMeta(); renderTree(); renderLegend(); }
+  function render() { drawLines(); drawCells(); renderMeta(); renderTree(); renderLegend(); renderPin(); }
 
   /* ---------- 단계 이동 ---------- */
   function setHq(hq) {
-    S.hq = hq; S.focus = null; render(); fitTo();
+    S.hq = hq; S.focus = null; S.pin = null; render(); fitTo();
     if (hq !== 'ALL' && !S.grid[hq]) loadGrid(hq).then(function () { if (S.hq === hq) { render(); fitTo(); } });
   }
   function focusBranch(id) {
     var hq = hqOf(id); if (!hq) return;
+    S.pin = null;
     if (S.focus === id) { S.focus = null; render(); fitTo(); return; }
     S.hq = hq; S.focus = id; render();
     Promise.all([loadGrid(hq), loadSeries(id)]).then(function () { if (S.focus === id) { render(); fitTo(); } });
@@ -210,7 +257,14 @@
     $('view-forecast').addEventListener('click', function (e) {
       var t = e.target, h = t.closest && t.closest('[data-fchq]'); if (h) { setHq(S.hq === h.dataset.fchq ? 'ALL' : h.dataset.fchq); return; }
       var b = t.closest && t.closest('[data-fcbr]'); if (b) { focusBranch(b.dataset.fcbr); return; }
-      var c = t.closest && t.closest('[data-cell]'); if (c && S.map) { var k = c.dataset.cell.split(','); S.map.setView(G.cellCenter(+k[0], +k[1]), Math.max(S.map.getZoom(), 11)); }
+      if (t.closest && t.closest('.fc-pin-x')) { unpin(); return; }
+      var c = t.closest && t.closest('[data-cell]'); if (c && S.map) { var k = c.dataset.cell.split(','); S.map.setView(G.cellCenter(+k[0], +k[1]), Math.max(S.map.getZoom(), 11)); if (S.focus) pinCell(c.dataset.cell); }
+    });
+    // 고정 그림: 마우스 위치의 시각·값(보조선)
+    $('view-forecast').addEventListener('mousemove', function (e) { var svg = e.target.closest && e.target.closest('#fc-pin svg[data-big]'); if (svg) chartHover(svg, e); });
+    $('view-forecast').addEventListener('mouseout', function (e) {
+      var svg = e.target.closest && e.target.closest('#fc-pin svg[data-big]'); if (!svg || (e.relatedTarget && svg.contains(e.relatedTarget))) return;
+      var xh = svg.querySelector('.xh'); if (xh) xh.style.display = 'none';
     });
   }
 
@@ -223,7 +277,7 @@
   function show() {
     if (!S.inited) return;
     S.state = JC.resolve(window.JURIS.doc, window.JURIS.session || window.JURIS.committed || []);    // 관할을 바꿨으면 반영
-    ensureMap(); S.grid = {}; S.series = {};
+    ensureMap(); S.grid = {}; S.series = {}; S.pin = null;
     loadOverview().then(function () {
       var id = S.pendingFocus; S.pendingFocus = null;
       if (id && st().branches[id]) { S.hq = 'ALL'; S.focus = null; focusBranch(id); } else { render(); fitTo(); }

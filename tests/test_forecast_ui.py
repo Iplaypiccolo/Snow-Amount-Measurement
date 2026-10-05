@@ -95,7 +95,31 @@ def t_first_tab_and_order(b):
     p2, _ = open_page(b, user="exchungju"); p2.wait_for_timeout(500)
     check(not p2.locator(".tab-btn[data-tab=grid]").is_visible() and p2.locator("#view-forecast").is_visible(), "권한 없으면 격자 편입 탭 없음, 첫 탭은 같음")
 
-TESTS = [t_first_tab_and_order, t_levels, t_open_from_equipment, t_branch_user_can_view]
+def t_pin_chart(b):
+    """격자 그림(2026-10-05): 적설 → 강수 → 기온 세 그림을 따로. 격자를 누르면 고정, 그림에 마우스를 올리면 보조선과 '몇 시 · 값', 지도 아무 데나 누르면 닫힘"""
+    p, m = open_page(b); p.click(".tab-btn[data-tab=forecast]"); p.wait_for_timeout(600)
+    d = bid(p, "대관령"); p.click("#fc-tree [data-fchq='강원']"); p.wait_for_timeout(500); p.click(f"#fc-tree [data-fcbr='{d}']"); p.wait_for_timeout(900)
+    tip = J(p, f"(() => {{ const l = {S}.cells.getLayers().find(l => l.getLatLngs && l.getTooltip()); return l.getTooltip().getContent() }})()")
+    order = [tip.find("fc-ch-" + k) for k in "spt"]
+    check(all(i > 0 for i in order) and order == sorted(order), f"마우스 말풍선: 적설·강수·기온 세 그림이 이 순서로 따로 {order}")
+    check(not p.locator("#fc-pin").is_visible(), "처음엔 고정 그림 없음")
+    key = J(p, f"(() => {{ const l = {S}.cells.getLayers().find(l => l.getLatLngs && l.getTooltip()); l.fire('click'); return {S}.pin }})()"); p.wait_for_timeout(300)
+    pin = p.locator("#fc-pin")
+    check(pin.is_visible() and key and key in pin.inner_text(), f"격자를 누르면 그 격자 그림 고정: {key}")
+    check([x.get_attribute("data-k") for x in pin.locator("svg").all()] == ["s", "p", "t"], "고정 그림도 적설 → 강수 → 기온")
+    sv = pin.locator("svg[data-k=t]"); bb = sv.bounding_box()
+    p.mouse.move(bb["x"] + bb["width"] * 0.5, bb["y"] + bb["height"] * 0.5); p.wait_for_timeout(150)
+    check(sv.locator(".xh").is_visible() and sv.locator(".xv").get_attribute("x1") and "시 · " in sv.locator(".xt").text_content() and "℃" in sv.locator(".xt").text_content(),
+          "마우스: 세로·가로 보조선 + 몇 시 · 값: " + (sv.locator(".xt").text_content() or ""))
+    p.mouse.move(bb["x"] + bb["width"] * 0.9, bb["y"] + bb["height"] * 0.5); p.wait_for_timeout(100)
+    later = sv.locator(".xt").text_content(); check(later and later != "", "마우스를 옮기면 그 시각 값으로")
+    check(J(p, f"(() => {{ const l = {S}.cells.getLayers().find(l => l.getLatLngs && l.options.weight === 4); return !!l }})()"), "고정한 격자는 굵은 테두리")
+    p.wait_for_timeout(350); J(p, f"(() => {{ {S}.map.fire('click', {{ latlng: {S}.map.getCenter() }}); return null }})()"); p.wait_for_timeout(200)
+    check(not p.locator("#fc-pin").is_visible() and J(p, f"{S}.pin") is None, "지도 아무 데나 누르면 닫힘")
+    p.locator(".fc-detail tbody tr").first.click(); p.wait_for_timeout(300)
+    check(p.locator("#fc-pin").is_visible(), "옆 표의 격자 줄을 눌러도 고정"); p.click(".fc-pin-x"); p.wait_for_timeout(150); check(not p.locator("#fc-pin").is_visible(), "× 로 닫기")
+
+TESTS = [t_pin_chart, t_first_tab_and_order, t_levels, t_open_from_equipment, t_branch_user_can_view]
 
 if __name__ == "__main__":
     only = sys.argv[1:]
