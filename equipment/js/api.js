@@ -36,7 +36,7 @@ const Api = (() => {
       return SSAuth.rest(`vehicle_routes?select=date,vehicle_id,stops,revised,times&vehicle_id=eq.${encodeURIComponent(vid)}&order=date.desc&limit=400`).then(r => r.ok ? { ok: true, rows: r.json } : fail(r)).catch(NET);
     },
     requests(round) {
-      return SSAuth.rest(`round_requests?select=round_id,branch_id,snow_cm,warning,req_truck,req_blower,assigned_truck,assigned_blower,arrive_at,reason,confirmed,warn_level,warn_zones,warn_base,warn_at,warn_note,fc_snow,fc_pcp,fc_tmfc,fc_at&round_id=eq.${+round}`)
+      return SSAuth.rest(`round_requests?select=round_id,branch_id,snow_cm,warning,req_truck,req_blower,assigned_truck,assigned_blower,arrive_at,reason,confirmed,warn_level,warn_zones,warn_base,warn_at,warn_note,fc_snow,fc_pcp,fc_tmfc,fc_at,wx_manual,wx_snow,wx_pcp,wx_level,wx_fc,wx_ef&round_id=eq.${+round}`)
         .then(r => r.ok ? { ok: true, rows: r.json } : fail(r, "요청을 불러오지 못했습니다.")).catch(NET);
     },
     warnings() {
@@ -160,7 +160,8 @@ const Api = (() => {
         if (rows.some(r => !ok(r)) || (!can("req.confirm") && rows.some(r => "assigned_truck" in r || "assigned_blower" in r || "confirmed" in r))) return done({ ok: false, message: ERR["42501"] });
         rows.forEach(p => {
           let cur = db.requests.find(x => x.round_id === +round && x.branch_id === p.branch_id), from = {}, to = {};
-          if (!cur) { cur = { round_id: +round, branch_id: p.branch_id, snow_cm: null, warning: false, req_truck: 0, req_blower: 0, assigned_truck: 0, assigned_blower: 0, arrive_at: null, reason: null, confirmed: false }; db.requests.push(cur); }
+          if (!cur) { cur = { round_id: +round, branch_id: p.branch_id, snow_cm: null, warning: false, req_truck: 0, req_blower: 0, assigned_truck: 0, assigned_blower: 0, arrive_at: null, reason: null, confirmed: false,
+            wx_manual: false, wx_snow: null, wx_pcp: null, wx_level: null, wx_fc: null, wx_ef: null }; db.requests.push(cur); }
           const was = cur.confirmed;
           Object.keys(p).filter(k => k !== "branch_id").forEach(k => { from[k] = cur[k]; to[k] = p[k]; cur[k] = p[k]; });
           if (cur.confirmed && !was) { const w = warnStatus().branches[cur.branch_id]; Object.assign(cur, { warn_level: w ? w.level : null, warn_zones: w ? w.zones : [], warn_base: db.warnBase, warn_at: new Date().toISOString(), warn_note: null }); to.warn_level = cur.warn_level; }   // 서버 트리거 흉내: 확정 순간 특보 고정

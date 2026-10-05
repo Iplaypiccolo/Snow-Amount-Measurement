@@ -493,6 +493,17 @@ table.matrix { font-size: 15px; min-width: 900px; }
 .wb.w2 { color: var(--w2); background: var(--w2-bg); border-color: color-mix(in srgb, var(--w2) 35%, transparent); }
 .wb.w3 { color: var(--w3); background: var(--w3-bg); }
 .wb .wfix { font-style: normal; font-size: 10.5px; font-weight: 600; opacity: .75; }
+/* 확정한 지사의 적설·강수·특보 칸 = 빨간 네모 */
+#branchTable td.fixd { box-shadow: inset 0 0 0 2px #d42a2a; }
+/* 기상현황 직접입력: 체크칸, 켠 줄의 입력칸(밑줄·이동 없음) */
+#branchTable th.wxh { font-size: 12px; line-height: 1.25; }
+#branchTable td.wxm { text-align: center; }
+#branchTable td.wxm input { width: 18px; height: 18px; cursor: pointer; }
+#branchTable td.wxe { background: color-mix(in srgb, var(--plow) 7%, transparent); }
+#branchTable .wxn { width: 62px; }
+#branchTable .wxt { width: 82px; font-variant-numeric: tabular-nums; }
+#branchTable td.wxe select { max-width: 104px; }
+.fcm { font-weight: 700; }
 .wb:focus-visible { outline: 2px solid var(--plow); outline-offset: 2px; }
 .zlist { list-style: none; margin: 6px 0 12px; padding: 0; }
 .zlist li { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); }

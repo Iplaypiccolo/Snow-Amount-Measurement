@@ -403,15 +403,16 @@ def t_branch_header_stays_on_top(p):
 
 def badge(p, name): return p.locator(f"td[data-wcell='{bid(p, name)}'] .wb")
 def t_warning_auto_badge(p):
-    """대설 특보 칸은 자동 표시(체크칸 없음): 확정 전 = 지금 특보, 확정한 지사 = 확정할 때 고정한 값. 색은 단계별, 마우스를 올리면 구역 이름"""
+    """대설 특보 칸은 자동 표시(체크칸 없음): 확정 전 = 지금 특보, 확정한 지사 = 확정할 때 값(칸은 빨간 네모, '고정' 글자 없음). 색은 단계별"""
     tab(p, "branch")
     head = p.locator("#branchTable thead").inner_text()
     check(p.locator("[data-f=warning]").count() == 0 and "대설특보 발표" in head and all(x in head for x in ("종류", "발표", "발효")), "대설특보 발표 아래 종류·발표·발효: " + head)
     row = p.locator(f"tr[data-b='{bid(p, '춘천')}']")
     check(row.locator("[data-wfc]").inner_text().endswith("04:00") and "오후(12~18시)" in row.locator("[data-wef]").inner_text(), "예비특보 발표 시각·발효(약속 시각 → 오후): " + row.inner_text())
     check(badge(p, "춘천").inner_text() == "예비특보" and "w1" in badge(p, "춘천").get_attribute("class"), "확정 전 춘천 = 지금 예비특보(노랑)")
-    check(badge(p, "대관령").inner_text().replace("\n", "") == "대설주의보고정" and "w2" in badge(p, "대관령").get_attribute("class"), "대관령 = 확정 때 주의보로 고정(지금은 경보)")
-    check(badge(p, "양양").inner_text().replace("\n", "") == "특보 없음고정", badge(p, "양양").inner_text())
+    check(badge(p, "대관령").inner_text() == "대설주의보" and "w2" in badge(p, "대관령").get_attribute("class"), "대관령 = 확정 때 주의보(지금은 경보)")
+    check(badge(p, "양양").inner_text() == "특보 없음" and "fixd" in (p.locator(f"td[data-wcell='{bid(p, '양양')}']").get_attribute("class") or "") and not "fixd" in (p.locator(f"td[data-wcell='{bid(p, '춘천')}']").get_attribute("class") or ""), "확정한 지사 특보 칸 = 빨간 네모")
+    check(p.locator("#branchTable .wfix").count() == 0 and "고정" not in p.locator("#branchTable").inner_text(), "'고정' 글자 없음")
     badge(p, "춘천").hover(); p.wait_for_timeout(100)
     check(p.locator("#tip").is_hidden(), "지사 칸에 마우스를 올려도 설명 없음(2026-10-05)")
     wb = p.locator("#wBaseHead"); check(wb.inner_text().endswith("기준") and ev(p, "getComputedStyle(document.getElementById('wBaseHead')).borderBottomStyle") == "dashed", "대설특보 발표 아래 ○ 기준(점선): " + wb.inner_text())
@@ -421,7 +422,7 @@ def t_warning_auto_badge(p):
     tab(p, "move"); card = p.locator(".dest", has_text="대관령")
     check(card.locator(".tag.wb").inner_text() == "대설주의보", "이동 현황 카드도 고정값")
     tab(p, "branch"); p.click(f"[data-confirm='{bid(p, '춘천')}']"); p.wait_for_timeout(300)
-    check("대설특보: 예비특보," in toast(p) and "고정" in toast(p) and badge(p, "춘천").inner_text().replace("\n", "") == "예비특보고정", toast(p))
+    check("대설특보: 예비특보," in toast(p) and "고정" not in toast(p) and badge(p, "춘천").inner_text() == "예비특보" and "fixd" in (p.locator(f"td[data-wcell='{bid(p, '춘천')}']").get_attribute("class") or ""), toast(p))
     p.click(f"[data-unconfirm='{bid(p, '대관령')}']"); p.wait_for_timeout(300)
     check(badge(p, "대관령").inner_text() == "대설경보" and "w3" in badge(p, "대관령").get_attribute("class"), "확정을 풀면 다시 지금 값(경보, 빨강) — 강풍 등 다른 특보는 지사 칸에 안 나옴")
     check(p.locator(f"tr[data-b='{bid(p, '대관령')}'] [data-wef]").inner_text().endswith("06:00"), "경보 발효 시각")
@@ -458,16 +459,17 @@ def t_private_hq_hidden_in_branch_tab(p):
     check(p.locator(f"#branchTable tr[data-b='{bid(p, '민자')}']").count() == 0, "민자 지사 줄 없음")
 
 def t_snow_forecast(p):
-    """강설 [적설 | 강수] = 기상청 단기예보 24시간 합의 지사 최댓값(입력칸 없음), 제목 옆 발표 기준, 확정하면 고정, 누르면 기관별 24시간 예보로"""
+    """24시 강설 [적설 | 강수] = 기상청 단기예보 24시간 합의 지사 최댓값, 제목 옆 발표 기준, 확정하면 그 값(빨간 네모), 누르면 기관별 24시간 예보로"""
     tab(p, "branch"); head = p.locator("#branchTable thead").inner_text()
-    check(p.locator("[data-f=snow_cm]").count() == 0 and "강설" in head and "적설" in head and "강수" in head and "발표 기준" in head, "강설 아래 적설·강수, 발표 기준: " + head)
+    check(p.locator("[data-f=snow_cm]").count() == 0 and "24시 강설" in head and "적설" in head and "강수" in head and "발표 기준" in head, "24시 강설 아래 적설·강수, 발표 기준: " + head)
     check(p.locator(f"td[data-pcell='{bid(p, '춘천')}']").inner_text() == "6.2", "춘천 강수 6.2mm")
     fc = lambda n: p.locator(f"td[data-fcell='{bid(p, n)}']").inner_text().replace(chr(10), "")
-    check(fc("춘천") == "3.5" and fc("대관령") == "12.1고정" and fc("양양") == "8.0고정", f"확정 전 = 지금 예보, 확정 = 고정값: {fc('춘천')} {fc('대관령')} {fc('양양')}")
+    check(fc("춘천") == "3.5" and fc("대관령") == "12.1" and fc("양양") == "8.0", f"확정 전 = 지금 예보, 확정 = 확정 때 값: {fc('춘천')} {fc('대관령')} {fc('양양')}")
+    check("fixd" in (p.locator(f"td[data-fcell='{bid(p, '대관령')}']").get_attribute("class") or "") and "fixd" in (p.locator(f"td[data-pcell='{bid(p, '대관령')}']").get_attribute("class") or "") and not "fixd" in (p.locator(f"td[data-fcell='{bid(p, '춘천')}']").get_attribute("class") or ""), "확정한 지사 적설·강수 칸 = 빨간 네모")
     p.hover(f"td[data-fcell='{bid(p, '춘천')}'] [data-fb]"); p.wait_for_timeout(100)
     check(p.locator("#tip").is_hidden(), "적설·강수 칸에 마우스를 올려도 설명 없음(누르면 이동은 그대로)")
     p.click(f"[data-confirm='{bid(p, '춘천')}']"); p.wait_for_timeout(300)
-    check("예상 적설 3.5cm·강수 6.2mm 고정" in toast(p) and fc("춘천") == "3.5고정", toast(p))
+    check("적설 3.5cm·강수 6.2mm)" in toast(p) and fc("춘천") == "3.5" and "fixd" in (p.locator(f"td[data-fcell='{bid(p, '춘천')}']").get_attribute("class") or ""), toast(p))
     p.click(f"[data-unconfirm='{bid(p, '대관령')}']"); p.wait_for_timeout(300)
     check(fc("대관령") == "14.2", "확정을 풀면 지금 예보: " + fc("대관령"))
     tab(p, "move"); check("예상 적설 14.2cm · 강수 18.5mm" in p.locator(".dest", has_text="대관령").inner_text(), "이동 현황 카드")
@@ -475,7 +477,39 @@ def t_snow_forecast(p):
     p.click(f"td[data-pcell='{bid(p, '양양')}'] [data-fb]"); p.wait_for_timeout(100)
     check(ev(p, "window.__opened") == [f"../#fc={bid(p, '양양')}", "_top"], f"누르면 기관별 24시간 예보의 그 지사로: {ev(p, 'window.__opened')}")
 
-TESTS = [t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+def t_weather_manual(p):
+    """기상현황 직접입력(2026-10-05): 체크하면 적설·강수 숫자, 특보 종류 선택, 발표·발효 월일시분 8자리. 밑줄·예보 이동 없음. 확정하면 빨간 네모"""
+    tab(p, "branch")
+    th = [x.strip().replace("\n", "") for x in p.locator("#branchTable thead tr").first.locator("th").all_inner_texts()]
+    i = [k for k, x in enumerate(th) if x.startswith("대설특보 발표")][0]
+    check(th[i + 1] == "기상현황직접입력" and th[i + 2] == "지사 요청", f"대설특보 발표와 지사 요청 사이: {th}")
+    cj = bid(p, "춘천"); row = p.locator(f"tr[data-b='{cj}']")
+    check(row.locator("[data-fb]").count() == 2 and row.locator("input[data-f=wx_snow]").count() == 0, "처음엔 자동 값(누르면 예보로)")
+    row.locator("input[data-f=wx_manual]").check(); p.wait_for_timeout(200); row = p.locator(f"tr[data-b='{cj}']")
+    check(row.locator("[data-fb]").count() == 0 and row.locator(".fcv").count() == 0, "체크하면 밑줄·예보 이동 없음")
+    check(row.locator("select[data-f=wx_level] option").all_inner_texts() == ["특보 없음", "예비특보", "대설주의보", "대설경보"], "특보 종류는 선택")
+    row.locator("input[data-f=wx_snow]").fill("7.5"); row.locator("input[data-f=wx_snow]").dispatch_event("change")
+    row.locator("input[data-f=wx_pcp]").fill("10"); row.locator("input[data-f=wx_pcp]").dispatch_event("change")
+    row.locator("select[data-f=wx_level]").select_option("주의")
+    row.locator("input[data-f=wx_fc]").fill("1324"); row.locator("input[data-f=wx_fc]").dispatch_event("change"); p.wait_for_timeout(100)
+    check("월일시분 8자리" in toast(p), "잘못된 시각은 안내: " + toast(p))
+    row = p.locator(f"tr[data-b='{cj}']")
+    row.locator("input[data-f=wx_fc]").fill("12241530"); row.locator("input[data-f=wx_fc]").dispatch_event("change")
+    row.locator("input[data-f=wx_ef]").fill("12241800"); row.locator("input[data-f=wx_ef]").dispatch_event("change")
+    save_branch(p)
+    r = ev(p, f"S.reqs['{cj}']")
+    check(r["wx_manual"] is True and r["wx_snow"] == 7.5 and r["wx_pcp"] == 10 and r["wx_level"] == "주의" and ev(p, f"mdhm(S.reqs['{cj}'].wx_fc)") == "12241530" and ev(p, f"mdhm(S.reqs['{cj}'].wx_ef)") == "12241800", f"저장: {r}")
+    p.click(f"[data-confirm='{cj}']"); p.wait_for_timeout(300); row = p.locator(f"tr[data-b='{cj}']")
+    check(all("fixd" in (row.locator(f"td[{c}='{cj}']").get_attribute("class") or "") for c in ("data-fcell", "data-pcell", "data-wcell", "data-wfc", "data-wef")), "확정하면 적설·강수·특보 칸 빨간 네모")
+    check("적설 7.5cm·강수 10.0mm" in toast(p) and "대설주의보" in toast(p), "확정 안내는 직접 넣은 값: " + toast(p))
+    tab(p, "move"); card = p.locator(".dest", has_text="춘천")
+    if card.count(): check("(직접입력)" in card.inner_text() and card.locator("[data-fb]").count() == 0, "이동 현황 카드: 직접입력 표시, 누를 수 없음")
+    as_user(p, "br2"); tab(p, "branch"); row = p.locator(f"tr[data-b='{cj}']")
+    check(row.locator(f"td[data-fcell='{cj}']").inner_text() == "7.5" and row.locator("input").count() == 0 and row.locator("[data-fb]").count() == 0, "다른 지사 계정: 숫자만(입력·이동 없음)")
+    check(row.locator("td[data-wcell] .wb").inner_text() == "대설주의보" and "12/24 15:30" in row.locator("td[data-wfc]").inner_text() and "12/24 18:00" in row.locator("td[data-wef]").inner_text(), row.inner_text())
+    check(p.locator(f"tr[data-b='{bid(p, '양양')}'] input[data-f=wx_manual]").count() == 1, "자기 지사는 체크칸")
+
+TESTS = [t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
@@ -526,7 +560,7 @@ def t_server_warning(b):
     m = Mock(); m.users["exchungju"]["profile"]["must_change"] = False
     p = server_page(b, m, "exchungju"); tab(p, "branch")
     check(any(c[0] == "warning_status" for c in m.eq_calls), "특보 요약을 서버에서 읽음")
-    w = p.locator("td[data-wcell='B019'] .wb"); check(w.inner_text().replace("\n", "") == "대설경보고정", w.inner_text())
+    w = p.locator("td[data-wcell='B019'] .wb"); check(w.inner_text() == "대설경보" and "fixd" in p.locator("td[data-wcell='B019']").get_attribute("class"), w.inner_text())
     check("기준" in p.locator("#wBaseHead").inner_text(), "서버 모드: 대설특보 기준 시각 " + p.locator("#wBaseHead").inner_text())
     p.close()
 
