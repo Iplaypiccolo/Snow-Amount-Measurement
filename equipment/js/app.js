@@ -647,7 +647,7 @@ function renderBranch() {
   if (!r) { $("branchTable").innerHTML = `<tbody><tr><td class="empty">기준일자가 없습니다.</td></tr></tbody>`; return; }
   const conf = can("req.confirm");
   let h = `<thead><tr><th class="l" rowspan="2">지사</th><th colspan="2" class="fch">24시 강설 <small class="fcbase" id="fcBaseHead" data-bt="fc" tabindex="0">${esc(fcBase())}</small></th><th colspan="2" class="fch tmh">최저기온</th><th colspan="3" class="wh">대설특보 발표 <small class="fcbase" id="wBaseHead" data-bt="warn" tabindex="0">${esc(warnBase())}</small></th><th class="wxh" rowspan="2">기상현황<br>직접입력</th><th colspan="2">지사 요청</th><th colspan="2">편성</th><th>확정</th><th class="l" rowspan="2">도착 요청</th></tr>
-    <tr><th class="fch">적설<small class="thsub">cm</small></th><th class="fch">강수<small class="thsub">mm</small></th><th class="fch tmh">기온<small class="thsub">℃</small></th><th class="fch tmh">시각</th><th class="wh">종류</th><th class="wh">발표</th><th class="wh">발효</th><th>제설차</th><th>제설기</th><th>제설차</th><th>제설기</th><th>${conf ? `<button type="button" class="btn sm primary" id="confirmAll">일괄 확정</button>` : ""}</th></tr></thead><tbody>`;
+    <tr><th class="fch">적설<small class="thsub">cm</small></th><th class="fch">강수<small class="thsub">mm</small></th><th class="fch tmh">기온<small class="thsub">℃</small></th><th class="fch tmh">시각</th><th class="wh">종류</th><th class="wh">발표</th><th class="wh">발효</th><th>제설차</th><th>제설기</th><th>제설차</th><th>제설기</th><th class="cf">${conf ? bulkCell(null) : ""}</th></tr></thead><tbody>`;
   const has = b => hasReq(b.id) || S.rdraft.has(b.id);                  // 요청 있음(입력 중 포함)
   const mine = b => (m.branch_id === b.id) || (can("req.edit.hq") && !can("req.confirm") && b.hq_id === m.hq_id);
   S.hqs.forEach(hq => {
@@ -656,8 +656,7 @@ function renderBranch() {
     if (!shown.length) return;
     const closed = S.closedHq.has(hq.id), hsum = hqSums(hq.id);
     h += `<tr class="hq ${closed ? "closed" : ""}" data-hq="${hq.id}" tabindex="0"><td class="l">${esc(hq.name)}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
-      ${HQ_SUM_KEYS.map(k => k === "confirmed" && conf ? `<td class="cf">${rows.every(b => rval(b.id, "confirmed")) ? '<span class="status go">모두 확정</span>'
-        : `<button type="button" class="btn sm primary" data-confirm-hq="${hq.id}">일괄 확정</button>`}</td>` : `<td data-s="${k}">${hsum[k]}</td>`).join("")}<td></td></tr>`;
+      ${HQ_SUM_KEYS.map(k => k === "confirmed" && conf ? `<td class="cf">${bulkCell(hq.id)}</td>` : `<td data-s="${k}">${hsum[k]}</td>`).join("")}<td></td></tr>`;
     if (closed) return;
     shown.forEach(b => {
       const ed = canReq(b), t = `round_requests:${S.round},${b.id}`, on = has(b), d0 = dis(b.id);      // ed = 입력칸을 보임, 확정한 줄이면 비활성(d0)
@@ -702,6 +701,19 @@ async function saveBranchRows(ids, extra, msg) {
   await loadAudit(); refresh(); toast(msg);
 }
 const saveBranch = () => saveBranchRows([...S.rdraft.keys()], null, `저장했습니다 (${S.rdraft.size}개 지사)`);
+const scopeIds = hq => S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private && (!hq || b.hq_id === hq)).map(b => b.id);   // 일괄 확정·취소 대상(민자 제외, hq = 그 본부만)
+function bulkCell(hq) {
+  const ids = scopeIds(hq), all = ids.length && ids.every(id => rval(id, "confirmed")), any = ids.some(isConf), a = hq ? ` data-hq-scope="${esc(hq)}"` : "";
+  return `<span class="bulk">${all ? '<span class="status go">모두 확정</span>' : `<button type="button" class="btn sm primary" ${hq ? `data-confirm-hq="${esc(hq)}"` : 'id="confirmAll"'}>일괄 확정</button>`}` +
+    (any ? `<button type="button" class="btn sm" ${hq ? `data-unconfirm-hq="${esc(hq)}"` : 'id="unconfirmAll"'}>일괄 취소</button>` : "") + `</span>`;
+}
+function unconfirmAll(hq) {           // 확정된 지사를 모두 확정 취소(hq = 그 본부만)
+  if (!can("req.confirm")) return;
+  const hn = hq ? `${(S.hqById[hq] || {}).name || ""} 본부 ` : "", ids = scopeIds(hq).filter(isConf);
+  if (!ids.length) return toast(`${hn || "모든 "}지사 중 확정된 지사가 없습니다`);
+  if (!confirm(`${hn}${ids.length}개 지사의 확정을 취소할까요? 바로 저장됩니다.\n${ids.map(bn).join(", ")}\n기관별 장비 선택지에서 빠집니다(이미 넣은 경로는 그대로).`)) return;
+  saveBranchRows(ids, { confirmed: false }, `${hn}${ids.length}개 지사의 확정을 취소했습니다`);
+}
 function confirmAll(hq) {             // 아직 확정 안 된 지사를 모두 확정(요청을 저장하지 않은 지사도 — 개별 [확정]과 같음). hq = 그 본부만
   if (!can("req.confirm")) return;
   const hn = hq ? `${(S.hqById[hq] || {}).name || ""} 본부 ` : "";
@@ -975,6 +987,8 @@ document.addEventListener("click", e => {
   if (c("#roundMake")) return makeRound();
   if (c("#confirmAll")) return confirmAll();
   if ((x = c("[data-confirm-hq]"))) return confirmAll(x.dataset.confirmHq);          // 본부 줄의 [일괄 확정](줄 접기보다 먼저)
+  if (c("#unconfirmAll")) return unconfirmAll();
+  if ((x = c("[data-unconfirm-hq]"))) return unconfirmAll(x.dataset.unconfirmHq);    // 본부 줄의 [일괄 취소]
   if ((x = c("[data-confirm]"))) return confirmBranch(x.dataset.confirm, true);
   if ((x = c("[data-unconfirm]"))) return confirmBranch(x.dataset.unconfirm, false);
   if (c("#roundDel")) return deleteRound();

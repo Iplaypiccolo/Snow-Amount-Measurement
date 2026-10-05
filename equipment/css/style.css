@@ -192,6 +192,7 @@ table.branch { border-collapse: collapse; width: 100%; min-width: 820px; font-va
 .branch tr.hq td { background: var(--bg); font-weight: 700; cursor: pointer; }
 .branch tr.hq td:first-child::before { content: "▾ "; color: var(--ink-soft); }
 .branch tr.hq.closed td:first-child::before { content: "▸ "; }
+#branchTable .bulk { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
 .branch tr.locked td { background: color-mix(in srgb, var(--plow) 12%, transparent); }   /* 확정한 지사 줄만 노랑(취소하면 흰색) */
 .branch td.muted { color: var(--ink-soft); }
 .plus { color: var(--go); font-weight: 700; }

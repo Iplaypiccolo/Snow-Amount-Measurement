@@ -370,7 +370,7 @@ def t_bulk_confirm_and_no_holdings(p):
     p.click("#confirmAll"); p.wait_for_timeout(300)
     n = ev(p, "S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private).length") - 3       # 샘플에서 이미 확정된 3곳(대관령·양양·엄정)을 뺀 나머지 모두(요청 없는 지사도, 2026-10-05)
     check(f"{n}개 지사를 확정했습니다" in toast(p) and ev(p, f"S.reqs['{ch}'].confirmed") is True, toast(p))
-    p.click("#confirmAll"); p.wait_for_timeout(200); check("이미 확정됐습니다" in toast(p), toast(p))
+    check(p.locator("#confirmAll").count() == 0 and "모두 확정" in p.locator("#branchTable thead th.cf").inner_text(), "다 확정되면 [일괄 확정] 대신 '모두 확정'")
     as_user(p, "br1"); tab(p, "branch"); check(p.locator("#confirmAll").count() == 0, "지사는 일괄 확정 없음")
 
 def t_filters_fit_any_width(p):
@@ -563,10 +563,19 @@ def t_confirm_all_by_hq(p):
     check(all(ev(p, f"!!(S.reqs['{i}'] || {{}}).confirmed") for i in ids), "강원 지사 모두 확정(요청 없던 지사도)")
     check("강원 본부" in toast(p) and "확정했습니다" in toast(p), toast(p))
     check(p.locator(f"#branchTable tr.hq[data-hq='{gw}']").inner_text().count("모두 확정") == 1, "다 확정되면 '모두 확정'")
+    check(hq.locator("[data-unconfirm-hq]").inner_text() == "일괄 취소", "모두 확정 옆에 [일괄 취소]")
+    p.locator(f"#branchTable tr.hq[data-hq='{gw}'] [data-unconfirm-hq]").click(); p.wait_for_timeout(400)
+    check(not any(ev(p, f"!!(S.reqs['{i}'] || {{}}).confirmed") for i in ids) and "강원 본부" in toast(p) and "취소했습니다" in toast(p), "본부 [일괄 취소] = 그 본부 지사 확정 모두 취소: " + toast(p))
+    check(p.locator(f"#branchTable tr.hq[data-hq='{gw}'] [data-confirm-hq]").count() == 1 and p.locator(f"#branchTable tr.hq[data-hq='{gw}'] [data-unconfirm-hq]").count() == 0, "취소하면 다시 [일괄 확정]만")
+    p.locator(f"#branchTable tr.hq[data-hq='{gw}'] [data-confirm-hq]").click(); p.wait_for_timeout(400)
     check(ev(p, f"S.order.some(b => b.hq_id === '{cb}' && !(S.reqs[b.id] || {{}}).confirmed)"), "다른 본부(충북)는 그대로")
     p.click("#confirmAll"); p.wait_for_timeout(500)
     check(ev(p, "S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private).every(b => (S.reqs[b.id] || {}).confirmed)"), "맨 위 [일괄 확정] = 저장 안 한 지사까지 모두")
-    p.click("#confirmAll"); p.wait_for_timeout(200); check("이미 확정" in toast(p), "더 확정할 지사가 없으면 안내: " + toast(p))
+    head = p.locator("#branchTable thead th.cf")
+    check(p.locator("#confirmAll").count() == 0 and "모두 확정" in head.inner_text() and p.locator("#unconfirmAll").count() == 1, "제목도 모두 확정되면 '모두 확정' + [일괄 취소]")
+    p.click("#unconfirmAll"); p.wait_for_timeout(500)
+    check(ev(p, "S.order.every(b => !(S.reqs[b.id] || {}).confirmed)") and "취소했습니다" in toast(p), "제목 [일괄 취소] = 모든 지사 확정 취소: " + toast(p))
+    check(p.locator("#confirmAll").count() == 1 and p.locator("#unconfirmAll").count() == 0 and p.locator("#branchTable tr.locked").count() == 0, "취소하면 다시 [일괄 확정]만, 노란 줄 없음")
 
 def t_views_and_choices_after_confirm_all(p):
     """(2026-10-06) 일괄 확정 뒤에도: '요청 있는 지사만' = 요청 1대 이상, '편성 확정된 지사만' = 확정 + 편성 1대 이상.
