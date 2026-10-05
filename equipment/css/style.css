@@ -504,6 +504,12 @@ table.matrix { font-size: 15px; min-width: 900px; }
 #branchTable .wxt { width: 82px; font-variant-numeric: tabular-nums; }
 #branchTable td.wxe select { max-width: 104px; }
 .fcm { font-weight: 700; }
+/* 최저기온: 영하는 파랑, -10℃ 이하는 진한 파랑. 시각은 작게 */
+.fcv.cold { color: #2e5fb8; } .fcv.cold2 { color: #1b3a8a; }
+:root[data-theme="dark"] .fcv.cold { color: #8fbaff; } :root[data-theme="dark"] .fcv.cold2 { color: #b9d3ff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .fcv.cold { color: #8fbaff; } :root:not([data-theme="light"]) .fcv.cold2 { color: #b9d3ff; } }
+.fcv.at { font-weight: 600; font-size: 12px; }
+#branchTable td.tat { white-space: nowrap; }
 .wb:focus-visible { outline: 2px solid var(--plow); outline-offset: 2px; }
 .zlist { list-style: none; margin: 6px 0 12px; padding: 0; }
 .zlist li { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); }

@@ -94,14 +94,20 @@ class Mock:
         _ga = _json.load(open(_os.path.join(_os.path.dirname(__file__), "..", "data", "grid_assign.json"), encoding="utf-8"))
         _iss = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
         self.fc_issued = _iss.isoformat(); self.fc_start = (_iss + _dt.timedelta(hours=2)).isoformat(); self.fc_end = (_iss + _dt.timedelta(hours=26)).isoformat()
-        self.fc_cells = [[c[0], c[1], sorted(c[2]), round(((c[0] + c[1]) % 7) * 0.5, 1), round(((c[0] * c[1]) % 9) * 1.5, 1)] for c in _ga["cells"] if c[2]]
+        # 격자 = [nx, ny, 지사들, 적설, 강수, 최저기온, 최저 시각, 추이{s,p,t}] (마이그레이션 34)
+        def _cell(c):
+            s, p, t, k = round(((c[0] + c[1]) % 7) * 0.5, 1), round(((c[0] * c[1]) % 9) * 1.5, 1), -float((c[0] * 3 + c[1]) % 12), (c[0] % 10) + 3
+            sr = {"s": [round(s / 4, 1) if 4 <= i < 8 else 0 for i in range(24)], "p": [round(p / 6, 1) if 2 <= i < 8 else 0 for i in range(24)], "t": [t + abs(i - k) * 0.5 for i in range(24)]}
+            return [c[0], c[1], sorted(c[2]), s, p, t, (_iss + _dt.timedelta(hours=2 + k)).isoformat(), sr]
+        self.fc_cells = [_cell(c) for c in _ga["cells"] if c[2]]
         _best = {}
-        for nx, ny, bs, s, p in self.fc_cells:
+        for nx, ny, bs, s, p, t, ta, _sr in self.fc_cells:
             for b in bs:
-                o = _best.setdefault(b, {"branch_id": b, "issued_at": self.fc_issued, "max_snow_24h": -1, "max_pcp_24h": -1, "worst_nx": nx, "worst_ny": ny, "detail": {"start_at": self.fc_start, "end_at": self.fc_end}})
+                o = _best.setdefault(b, {"branch_id": b, "issued_at": self.fc_issued, "max_snow_24h": -1, "max_pcp_24h": -1, "min_tmp": 99, "min_tmp_at": None, "worst_nx": nx, "worst_ny": ny, "detail": {"start_at": self.fc_start, "end_at": self.fc_end}})
                 if s > o["max_snow_24h"]: o.update(max_snow_24h=s, worst_nx=nx, worst_ny=ny)
                 if p > o["max_pcp_24h"]: o["max_pcp_24h"] = p; o["detail"].update(pcp_nx=nx, pcp_ny=ny)
-        self.branch_forecast = list(_best.values()); self.fc_calls = []
+                if t < o["min_tmp"]: o.update(min_tmp=t, min_tmp_at=ta)
+        self.branch_forecast = list(_best.values()); self.fc_calls = []; self.fc_series_calls = []
         self.branches = [{"id": b, "name": d.replace("지사", ""), "hq_id": h} for _, d, b, h in names]
         self.hqs = [{"id": "H01", "name": "수도권", "sort": 1}, {"id": "H02", "name": "서울경기", "sort": 2}, {"id": "H03", "name": "강원", "sort": 3}, {"id": "H04", "name": "충북", "sort": 4}, {"id": "H07", "name": "광주전남", "sort": 7}]
         self.users["stranger"] = {"id": "id-stranger", "username": "stranger", "password": "Stranger#Pass-123", "profile": None}
@@ -256,9 +262,11 @@ class Mock:
             if tbl == "branch_forecast": return send(200, self.branch_forecast if self.usable(u) else [])
             if tbl == "forecast_grid" and "/rpc/" in path:
                 if not self.usable(u): return send(401, {"message": "login"})
-                ids = set((body or {}).get("p_branches") or []); self.fc_calls.append(sorted(ids))
+                ids = set((body or {}).get("p_branches") or []); ser = bool((body or {}).get("p_series"))
+                if ser and len(ids) > 1: return send(400, {"message": "series for one branch only"})
+                (self.fc_series_calls if ser else self.fc_calls).append(sorted(ids))
                 return send(200, {"tmfc": self.fc_issued, "start_at": self.fc_start, "end_at": self.fc_end,
-                                  "cells": [[nx, ny, [b for b in bs if b in ids], s, p] for nx, ny, bs, s, p in self.fc_cells if ids & set(bs)]})
+                                  "cells": [[nx, ny, [b for b in bs if b in ids], s, p, t, ta, sr if ser else None] for nx, ny, bs, s, p, t, ta, sr in self.fc_cells if ids & set(bs)]})
             if tbl == "warning_status" and "/rpc/" in path:
                 self.eq_calls.append((tbl, body)); return send(200, self.warn_status) if self.usable(u) else send(401, {"message": "login"})
             if tbl in ("save_fleet", "save_requests") and "/rpc/" in path:

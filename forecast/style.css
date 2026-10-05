@@ -3,10 +3,10 @@
 #fmap{position:absolute;inset:0;}
 .fc-meta{margin:0 14px 10px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:12.5px;line-height:1.5;}
 .fc-stale{display:block;color:#8a5a00;font-size:12px;}
-.fc-cols{display:grid;grid-template-columns:minmax(0,1fr) 64px 64px;gap:4px;padding:4px 14px;font-size:11px;color:var(--muted);font-weight:700;text-align:right;}
-.fc-row .fc-v{width:64px;text-align:right;font-family:var(--mono);font-size:12px;font-weight:700;flex:none;}
+.fc-cols{display:grid;grid-template-columns:minmax(0,1fr) 58px 58px 52px;gap:4px;padding:4px 14px;font-size:11px;color:var(--muted);font-weight:700;text-align:right;}
+.fc-row .fc-v{width:58px;text-align:right;font-family:var(--mono);font-size:12px;font-weight:700;flex:none;}
 .fc-row .fc-v i{font-style:normal;font-weight:400;font-size:10px;color:var(--muted);margin-left:1px;}
-.fc-row .fc-v.s{color:#2e5fb8;} .fc-row .fc-v.p{color:#2f7d4f;}
+.fc-row .fc-v.s{color:#2e5fb8;} .fc-row .fc-v.p{color:#2f7d4f;} .fc-row .fc-v.t{color:#b0392b;width:52px;}
 .fc-detail{padding:4px 14px 10px 30px;font-size:12px;}
 .fc-detail table{width:100%;border-collapse:collapse;}
 .fc-detail th,.fc-detail td{padding:3px 4px;text-align:right;border-bottom:1px solid #eee;font-family:var(--mono);}
@@ -17,3 +17,10 @@
 .leaflet-tooltip.fc-label::before{display:none;}
 .leaflet-tooltip.fc-label b{display:block;color:#1d4fa0;}
 .leaflet-tooltip.fc-label span{display:block;color:#2f7d4f;font-size:10px;}
+.leaflet-tooltip.fc-label em{display:block;color:#b0392b;font-size:10px;font-style:normal;}
+/* 격자 마우스: 24시간 추이 */
+.leaflet-tooltip.fc-tip{max-width:none;background:#fff;z-index:700;}
+.fc-trend-box{margin-top:4px;}
+.fc-trend text{font-size:9px;fill:#555;font-family:var(--mono);}
+.fc-trend-key{font-size:10.5px;color:#555;} .fc-trend-key i{display:inline-block;width:10px;height:6px;margin:0 2px 0 6px;vertical-align:1px;}
+.fc-trend-key i.s{background:#2e5fb8;} .fc-trend-key i.p{background:#2f9d5f;} .fc-trend-key i.t{background:#c0392b;height:2px;}
