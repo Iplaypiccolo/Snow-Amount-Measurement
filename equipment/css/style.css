@@ -487,7 +487,7 @@ table.matrix { font-size: 15px; min-width: 900px; }
 :root { --w1: #8A6A00; --w1-bg: #FFF4C2; --w2: #A34A00; --w2-bg: #FFE1C2; --w3: #FFFFFF; --w3-bg: #D62B2B; }
 :root[data-theme="dark"] { --w1: #FFE27A; --w1-bg: #3D3410; --w2: #FFB774; --w2-bg: #45290F; --w3: #FFFFFF; --w3-bg: #C02626; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --w1: #FFE27A; --w1-bg: #3D3410; --w2: #FFB774; --w2-bg: #45290F; --w3: #FFFFFF; --w3-bg: #C02626; } }
-.wb { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 700; white-space: nowrap; cursor: help; border: 1px solid transparent; }
+.wb { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 700; white-space: nowrap; border: 1px solid transparent; }
 .wb.w0 { color: var(--ink-soft); font-weight: 500; border-color: var(--line); background: transparent; }
 .wb.w1 { color: var(--w1); background: var(--w1-bg); border-color: color-mix(in srgb, var(--w1) 35%, transparent); }
 .wb.w2 { color: var(--w2); background: var(--w2-bg); border-color: color-mix(in srgb, var(--w2) 35%, transparent); }
@@ -522,6 +522,9 @@ table.matrix { font-size: 15px; min-width: 900px; }
 
 /* ---------- 강설 [적설 | 강수] (누르면 기관별 24시간 예보) ---------- */
 #branchTable th.fch { white-space: nowrap; }
-.fcbase { display: block; font-size: 10.5px; font-weight: 600; color: var(--plow); }
+/* 표 제목의 '○시 기준': 잘 보이는 파랑 + 점선(마우스를 올리면 업데이트 주기) */
+:root { --base-ink: #1d4fa0; } :root[data-theme="dark"] { --base-ink: #8fbaff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --base-ink: #8fbaff; } }
+.fcbase { display: block; width: max-content; margin: 1px auto 0; font-size: 11px; font-weight: 700; color: var(--base-ink); border-bottom: 1px dashed var(--base-ink); cursor: help; }
 .fcv { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
 .fcv.wet { color: #2f7d4f; }

@@ -190,7 +190,7 @@ class Mock:
         if path == "/auth/v1/token" and q.get("grant_type") == ["refresh_token"]:
             uid = self.tokens.get(body.get("refresh_token")); u = next((x for x in self.users.values() if x["id"] == uid), None)
             return send(200, self.issue(u)) if u else send(400, {"error_code": "refresh_token_not_found"})
-        if path == "/auth/v1/logout": return send(204)
+        if path == "/auth/v1/logout": self.logout_urls = getattr(self, "logout_urls", []) + [req.url]; return send(204)
         u = self.by_token(req)
         if path == "/auth/v1/user" and req.method == "PUT":
             if not u: return send(401, {"msg": "bad jwt"})

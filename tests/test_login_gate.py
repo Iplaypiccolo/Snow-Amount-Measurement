@@ -159,6 +159,7 @@ def t_logout_from_equip_then_login_starts_first_screen(b, ctx, m):
     p = open_site(ctx, m); typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".pagebar", state="visible")
     p.click(".page-btn[data-page=equip]"); p.wait_for_timeout(1200); check(p.url.endswith("#equip"), "장비 지원을 열면 주소에 #equip")
     p.click("#ssLogout"); p.wait_for_selector("#ssU", timeout=20000); p.wait_for_timeout(300)
+    check(any("scope=local" in u for u in getattr(m, "logout_urls", [])), "로그아웃은 이 접속만(같은 아이디의 다른 접속은 유지): " + str(getattr(m, "logout_urls", [])))
     check("#equip" not in p.url and not p.locator("#equipFrame").get_attribute("src"), "로그아웃하면 #equip 없이, 장비 지원은 아직 안 불러옴")
     typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".pagebar", state="visible"); p.wait_for_timeout(500)
     check(p.locator("#page-snow").is_visible() and p.locator(".page-btn[data-page=snow]").get_attribute("class").find("active") >= 0, "다시 로그인하면 첫 화면(강설량 측정)")

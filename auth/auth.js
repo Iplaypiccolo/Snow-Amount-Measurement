@@ -114,7 +114,7 @@
   }
   function logout() {
     var s = readSession(); writeSession(null);       // 아이디 저장은 그대로 둠
-    return s ? raw('/auth/v1/logout', { method: 'POST', token: s.access_token }).catch(function () {}) : Promise.resolve();
+    return s ? raw('/auth/v1/logout?scope=local', { method: 'POST', token: s.access_token }).catch(function () {}) : Promise.resolve();   // 이 접속만(같은 아이디의 다른 접속은 유지)
   }
   function hasSession() { return !!readSession(); }
   // 권한 확인: 관리자는 모든 권한, 나머지는 계정에 켜 둔 권한(perms)만. 화면 표시용이고, 실제 막는 것은 서버 규칙(RLS)이다.
