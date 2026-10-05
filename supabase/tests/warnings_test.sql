@@ -1,5 +1,5 @@
 -- ============================================================
--- 특보 연동(마이그레이션 23·24·25) 시험 — 받아 넣기·종류 스위치·받을 필요 판단·지사별 최고 단계·특보구역 더하기/빼기·확정할 때 고정·권한 — SQL Editor 에 통째로 붙여넣고 실행
+-- 특보 연동(마이그레이션 23~26) 시험 — 받아 넣기·종류 스위치·받을 필요 판단·지사별 최고 단계·특보구역 더하기/빼기·확정할 때 고정·권한 — SQL Editor 에 통째로 붙여넣고 실행
 -- 마지막에 일부러 오류를 내서 시험 자료를 전부 되돌립니다(지금 특보·수집 상태도 원래대로). "전체 N, 실패 0" 이어야 합니다.
 -- ============================================================
 create temp table _t (n serial, name text, got text, want text, ok boolean);
@@ -59,7 +59,8 @@ begin
   update public.settings set value = '{"kinds":"all"}' where key = 'warnings';                 -- 모든 종류(확인용)
   perform pg_temp.chk('서버: 모든 종류로 다시 넣기','service_role',null,format('select public.ingest_warnings(%L)', rows3),'ok:1');
   j := pg_temp.st(b);
-  perform pg_temp.yes('모든 종류: 강풍경보가 대설주의보보다 높아 맨 위, 구역 줄 2(대설·강풍)', j -> 'branches' -> 'B001' ->> 'level' = '경보' and j -> 'branches' -> 'B001' ->> 'kind' = '강풍' and jsonb_array_length(j -> 'branches' -> 'B001' -> 'zones') = 2 and (j ->> 'all')::boolean, j::text);
+  perform pg_temp.yes('모든 종류를 저장해도 지사 표시는 대설만(마이그레이션 26): 주의보, 구역 줄 1, 강풍은 저장만', j -> 'branches' -> 'B001' ->> 'level' = '주의' and j -> 'branches' -> 'B001' ->> 'kind' = '대설' and jsonb_array_length(j -> 'branches' -> 'B001' -> 'zones') = 1 and exists (select 1 from public.warnings_active where kind = '강풍' and zone_code = 'L9900001'), j::text);
+  perform pg_temp.yes('구역 줄에 발표·발효 시각', j -> 'branches' -> 'B001' -> 'zones' -> 0 ->> 4 like '2099-11-30%' or j -> 'branches' -> 'B001' -> 'zones' -> 0 ->> 4 like '2099-12-01%', j::text);
   update public.settings set value = '{"kinds":["대설"]}' where key = 'warnings';
   perform pg_temp.chk('서버: 대설만으로 되돌려 넣기','service_role',null,format('select public.ingest_warnings(%L)', rows3),'ok:1');
   perform pg_temp.yes('대설만으로 돌리면 강풍은 지난 특보에 안 남기고 지움', not exists (select 1 from public.warnings_active where kind = '강풍' and zone_code like 'L99%') and not exists (select 1 from public.warnings_history where zone_code like 'L99%'));

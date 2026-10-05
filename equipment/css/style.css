@@ -500,3 +500,16 @@ table.matrix { font-size: 15px; min-width: 900px; }
 .zadd { display: flex; gap: 6px; flex-wrap: wrap; }
 .zadd select { min-width: 200px; max-width: 100%; }
 #zlist { margin-top: 12px; }
+
+/* ---------- 대설특보 발표 [종류 | 발표 | 발효], 지금 받은 특보 종류별 탭 ---------- */
+#branchTable td.wt { font-size: 12.5px; white-space: nowrap; color: var(--ink-soft); }
+.wtabs { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 10px; }
+.wtrow { display: flex; gap: 6px; flex-wrap: wrap; }
+.wtab b { font-weight: 800; margin-left: 2px; }
+.wlist { width: 100%; border-collapse: collapse; font-size: 13px; }
+.wlist th, .wlist td { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; }
+.wlist th { font-size: 12px; color: var(--ink-soft); font-weight: 600; }
+.wlist .l { text-align: left; white-space: normal; }
+.wlist td.l:first-child, .wlist th.l:first-child { white-space: nowrap; }
+.wlist th, .wlist td { padding: 5px 4px; }
+.wlist td:last-child { font-size: 12px; min-width: 48px; }

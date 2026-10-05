@@ -96,11 +96,11 @@ const Api = (() => {
     function warnStatus() {
       const branches = {};
       db.branches.forEach(b => {
-        const zs = zonesOf(b.id).filter(z => db.warnActive[z]).map(z => { const [lv, k] = db.warnActive[z].split(":"); return [z, zname(z), lv, k || "대설"]; })
-          .sort((x, y) => RANK[y[2]] - RANK[x[2]] || (x[3] !== "대설") - (y[3] !== "대설") || x[1].localeCompare(y[1]));
-        if (zs.length) branches[b.id] = { level: zs[0][2], kind: zs[0][3], zones: zs };
+        const zs = zonesOf(b.id).filter(z => db.warnActive[z] && !db.warnActive[z].includes(":")).map(z => { const lv = db.warnActive[z]; return [z, zname(z), lv, "대설", db.warnFc, lv === "예비" ? db.warnEfPre : db.warnEf]; })
+          .sort((x, y) => RANK[y[2]] - RANK[x[2]] || x[1].localeCompare(y[1]));      // 지사별은 대설만(서버와 같음)
+        if (zs.length) branches[b.id] = { level: zs[0][2], kind: "대설", zones: zs };
       });
-      return { ok: true, paused: false, all: true, base: db.warnBase, fetched_at: new Date().toISOString(), branches, note: null };
+      return { ok: true, paused: false, all: false, base: db.warnBase, fetched_at: new Date().toISOString(), branches, note: null };
     }
     return {
       setActor(a) { actor = a; },
@@ -118,7 +118,7 @@ const Api = (() => {
         const list = {};
         Object.entries(db.zoneAuto).forEach(([b, zs]) => { list[b] = zs.filter(z => !db.zoneOver.some(o => o.branch_id === b && o.zone_code === z)).map(z => [z, zname(z), "auto"]); });
         db.zoneOver.filter(o => o.include).forEach(o => (list[o.branch_id] = list[o.branch_id] || []).push([o.zone_code, zname(o.zone_code), "manual"]));
-        const rows = Object.entries(db.warnActive).map(([zone, v]) => { const [level, kind] = v.split(":"); return { zone, name: zname(zone), kind: kind || "대설", level, branches: db.branches.filter(b => zonesOf(b.id).includes(zone)).map(b => b.id) }; })
+        const rows = Object.entries(db.warnActive).map(([zone, v]) => { const [level, kind] = v.split(":"); return { zone, name: zname(zone), kind: kind || "대설", level, tm_fc: db.warnFc, tm_ef: level === "예비" ? db.warnEfPre : db.warnEf, branches: db.branches.filter(b => zonesOf(b.id).includes(zone)).map(b => b.id) }; })
           .sort((x, y) => RANK[y.level] - RANK[x.level] || x.kind.localeCompare(y.kind));
         return done({ ok: true, list, overrides: clone(db.zoneOver), zones: clone(db.zones), active: { state: { fetched_at: new Date().toISOString(), ok: true }, needed: true, all: true, rows } });
       },

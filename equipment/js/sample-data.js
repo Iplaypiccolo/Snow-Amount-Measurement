@@ -87,10 +87,12 @@ function makeSample(today) {
     ["L1041200", "음성", "00000013", "L1040000"]].map(([zone_code, name, sp, up_code]) => ({ zone_code, name, sp, up_code }));
   const zoneAuto = { [B("대관령")]: ["L1022410", "L1022420", "L1022510", "L1022520", "L1021300"], [B("양양")]: ["L1022310", "L1022320", "L1022910", "L1022920"],
     [B("춘천")]: ["L1021400", "L1022710", "L1022720"], [B("엄정")]: ["L1041100", "L1041200"] };
-  const warnActive = { "L1022420": "경보", "L1022520": "주의", "L1022320": "주의", "L1022920": "예비", "L1022710": "예비", "L1021300": "주의:강풍" };   // 단계[:종류] (종류 없으면 대설)
+  const warnActive = { "L1022420": "경보", "L1022520": "주의", "L1022320": "주의", "L1022920": "예비", "L1022710": "예비", "L1021300": "주의:강풍", "L1022310": "주의:건조", "L1022910": "경보:건조", "L1041100": "예비:호우", "L1041200": "주의:한파" };   // 단계[:종류] (종류 없으면 대설)
   const warnBase = day(0).replace(/-/g, "") + "0700";
+  const kst = (k, hm) => new Date(`${day(k)}T${hm}:00+09:00`).toISOString();
+  const warnFc = kst(0, "04:00"), warnEf = kst(0, "06:00"), warnEfPre = kst(0, "17:58");      // 발표 04:00, 발효 06:00, 예비특보 발효 = 오늘 오후(12~18시)
   // 이미 확정한 지사는 확정할 때의 특보가 고정돼 있음(대관령 = 주의보로 고정, 양양 = 특보 없음으로 고정, 엄정 = 자료 없음으로 특보 없음)
   const fix = (name, level, zs, note) => Object.assign(requests.find(r => r.round_id === 2 && r.branch_id === B(name)), { warn_level: level, warn_zones: zs, warn_base: warnBase, warn_at: at(0, 6), warn_note: note || null });
-  fix("대관령", "주의", [["L1022520", "강릉산지", "주의", "대설"]]); fix("양양", null, []); fix("엄정", null, [], "기상청 자료를 30분 넘게 받지 못함");
-  return { hqs, branches, holdings, vehicles, routes, rounds, requests, audit, orgs: ["서울경기", "충북", "전북", "대구경북"], zones, zoneAuto, zoneOver: [], warnActive, warnBase };
+  fix("대관령", "주의", [["L1022520", "강릉산지", "주의", "대설", kst(-1, "22:00"), kst(0, "01:00")]]); fix("양양", null, []); fix("엄정", null, [], "기상청 자료를 30분 넘게 받지 못함");
+  return { hqs, branches, holdings, vehicles, routes, rounds, requests, audit, orgs: ["서울경기", "충북", "전북", "대구경북"], zones, zoneAuto, zoneOver: [], warnActive, warnBase, warnFc, warnEf, warnEfPre };
 }
