@@ -60,7 +60,7 @@ const S = {
   routes: new Map(), loaded: null, reqs: {}, audit: [],
   draft: new Map(), vdraft: new Map(), rdraft: new Map(), revisedMode: false,   // revisedMode: 표 위 [최초 지원]/[수정본] — 고르는 지사 목록과 저장 구분          // 아직 확정·저장하지 않은 변경(경로 / 장비 / 지사 요청)
   date: todayISO(), day1: todayISO(), cols: 4, round: null,
-  org: "전체", type: "전체", fleetOrg: "전체", onlyActive: true, closedHq: new Set(), extraStop: new Set(),
+  org: "전체", type: "전체", fleetOrg: "전체", bview: "req", closedHq: new Set(), extraStop: new Set(),   // bview: 지사별 요청·편성 보기 = req(요청 있는 지사만) / fixed(편성 확정된 지사만) / all
   logUser: "전체", logKind: "전체", logToday: false,
   warn: null, zdata: null, wtab: null, fc: {}                                      // warn: 지금 대설 특보(서버 요약) / zdata: 특보구역 관리 창 자료
 };
@@ -93,7 +93,10 @@ const rbase = (b, f) => { const r = S.reqs[b]; return r ? r[f] : REQ_DEF[f]; };
 const rval = (b, f) => { const d = S.rdraft.get(b); return d && f in d ? d[f] : rbase(b, f); };
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const isManual = bid => !!rval(bid, "wx_manual");                       // 기상현황 직접입력을 켠 지사
-const isConf = bid => !!(S.reqs[bid] && S.reqs[bid].confirmed);          // 저장된 확정(빨간 네모)
+const isConf = bid => !!(S.reqs[bid] && S.reqs[bid].confirmed);          // 저장된 확정(줄 바탕 노랑)
+// 요청 있음 = 요청 제설차·제설기가 1대 이상(일괄 확정으로 줄만 생긴 지사는 아님). 편성 확정 = 확정했고 편성 대수가 1대 이상(저장된 것 기준)
+const hasReq = bid => (+rval(bid, "req_truck") || 0) + (+rval(bid, "req_blower") || 0) > 0;
+const isFixed = bid => isConf(bid) && (+rbase(bid, "assigned_truck") || 0) + (+rbase(bid, "assigned_blower") || 0) > 0;
 const canEdit = b => canReq(b) && !isConf(b.id);                         // 확정한 줄은 [취소]하기 전까지 아무도 못 고침(서버도 막음, 마이그레이션 35)
 const dis = bid => isConf(bid) ? " disabled" : "";                       // 확정한 줄의 입력칸 = 비활성(보이기만)
 /* ---------- 특보 — 지사 관할 특보구역 중 가장 높은 단계. 확정한 지사는 확정 순간 값(서버가 고정), 자료가 없으면 특보 없음 ---------- */
@@ -442,12 +445,11 @@ function renderDest() {
 /* ============================================================
    [5] 기관별 장비 — 도공번호·지원 여부·날짜별 경로. [확정]을 눌러야 서버에 날짜별로 저장
    ============================================================ */
-function routeChoices() {      // 고를 수 있는 피지원 지사 = 고른 기준일자에서 편성이 확정된 지사(저장된 것 기준)
-  const conf = new Set(Object.values(S.reqs).filter(r => r.confirmed).map(r => r.branch_id));
-  return S.order.filter(b => conf.has(b.id));
-}
-// 요청은 저장됐지만 아직 확정 안 된 지사: 목록에 회색(고를 수 없음)으로 보여서 "왜 없지?"를 바로 알게 함
-const pendingChoices = () => S.order.filter(b => S.reqs[b.id] && !S.reqs[b.id].confirmed);
+// [최초 지원]에서 고를 수 있는 피지원 지사 = 고른 기준일자에서 편성 확정된 지사(확정 + 편성 1대 이상, 저장된 것 기준).
+// 일괄 확정으로 편성 0대인 지사까지 확정돼도 여기에는 안 나옴. 모든 지사는 [수정본]에서만
+const routeChoices = () => S.order.filter(b => isFixed(b.id));
+// 요청은 있지만 아직 편성 확정 전인 지사: 목록에 회색(고를 수 없음)으로 보여서 "왜 없지?"를 바로 알게 함
+const pendingChoices = () => S.order.filter(b => hasReq(b.id) && !isFixed(b.id));
 const fleetRows = () => S.vehicles.filter(v => S.fleetOrg === "전체" || v.org === S.fleetOrg);
 const canRoute = () => can("equip.edit.all");                      // 날짜별 경로·장비 삭제·지원일 1·초기화 = 관리자(모든 장비 권한)만
 const canAddVeh = () => can("equip.edit.all") || can("equip.edit.own"); // 장비 추가: 관리자(모든 기관) / 지원장비(자기 기관)
@@ -527,11 +529,11 @@ function slotCell(v, d, ed, confirmed) {
     const timeEd = canVeh(v);
     return `<div class="slot${changed ? " changed" : ""}"${hvA(t)}>${stops.map((x, j) => `<div class="sl-x slot-x"><span class="sl-n">${esc(bn(x))}</span>${timeEd ? tIn(rec.times[j], j, false, false) : rec.times[j] ? ` <small>${esc(rec.times[j])}</small>` : ""}</div>`).join("")}${rev}</div>`;
   }
-  // 표 위 [최초 지원] = 이 기준일자에 확정된 지사만 / [수정본] = 모든 지사 (한 번에 적용)
+  // 표 위 [최초 지원] = 이 기준일자에 편성 확정된 지사만 / [수정본] = 모든 지사 (한 번에 적용)
   const choices = S.revisedMode ? S.order : confirmed, off = vval(v, "status") !== "O", ids = new Set(choices.map(b => b.id)), pend = S.revisedMode ? [] : pendingChoices();
   const opts = cur => `<option value="">지사 선택</option>` + S.hqs.map(h => { const l = choices.filter(b => b.hq_id === h.id); return l.length ? `<optgroup label="${esc(h.name)}">${l.map(b => `<option value="${b.id}" ${cur === b.id ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</optgroup>` : ""; }).join("") +
-    (cur && !ids.has(cur) ? `<option value="${esc(cur)}" selected>${esc(bn(cur))} (미확정)</option>` : "") +
-    (pend.length ? `<optgroup label="확정 전(요청만) — 고를 수 없음">${pend.map(b => `<option disabled>${esc(b.name)}</option>`).join("")}</optgroup>` : "") + `<option value="__del">지우기</option>`;
+    (cur && !ids.has(cur) ? `<option value="${esc(cur)}" selected>${esc(bn(cur))} (편성 확정 전)</option>` : "") +
+    (pend.length ? `<optgroup label="편성 확정 전(요청만) — 고를 수 없음">${pend.map(b => `<option disabled>${esc(b.name)}</option>`).join("")}</optgroup>` : "") + `<option value="__del">지우기</option>`;
   const sel = (cur, j, extra) => `<select class="ci" data-rv="${vid}" data-rd="${d}" data-fk="${extra ? "rn" : "r"}:${d}:${vid}:${j}" ${off ? "disabled" : ""} aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))} 피지원 지사 ${j + 1}">${opts(cur)}</select>` +
     tIn(extra ? "" : rec.times[j], j, extra, off);
   const extra = S.extraStop.has(k), list = stops.length ? stops : [""];
@@ -638,18 +640,19 @@ function renderBranch() {
   $("branchRound").innerHTML = roundSel("roundSelBranch") +
     (can("req.confirm") && r ? `<button type="button" class="btn danger" id="roundDel">기준일자 삭제</button>` : "") +
     (can("req.confirm") ? `<span class="sep"></span><label class="ctl">새 기준일자 <input class="ci" type="date" id="newRoundDate" value="${esc(todayISO())}"></label><button type="button" class="btn" id="roundMake">만들기</button>` : "");
-  $("branchCtl").innerHTML = r ? `<div class="tb-row"><span class="tb-label">보기</span><button type="button" class="chip" id="onlyActive" aria-pressed="${S.onlyActive}">요청 있는 지사만</button>` +
+  $("branchCtl").innerHTML = r ? `<div class="tb-row"><span class="tb-label">보기</span><button type="button" class="chip" id="onlyActive" aria-pressed="${S.bview === "req"}">요청 있는 지사만</button>` +
+    `<button type="button" class="chip" id="onlyFixed" aria-pressed="${S.bview === "fixed"}">편성 확정된 지사만</button>` +
     `<span class="tb-right"></span>` +
     (S.me.role === "admin" ? `<button type="button" class="btn sm" id="zoneMgr">특보구역 관리</button>` : "") + `</div>` : "";
   if (!r) { $("branchTable").innerHTML = `<tbody><tr><td class="empty">기준일자가 없습니다.</td></tr></tbody>`; return; }
   const conf = can("req.confirm");
   let h = `<thead><tr><th class="l" rowspan="2">지사</th><th colspan="2" class="fch">24시 강설 <small class="fcbase" id="fcBaseHead" data-bt="fc" tabindex="0">${esc(fcBase())}</small></th><th colspan="2" class="fch tmh">최저기온</th><th colspan="3" class="wh">대설특보 발표 <small class="fcbase" id="wBaseHead" data-bt="warn" tabindex="0">${esc(warnBase())}</small></th><th class="wxh" rowspan="2">기상현황<br>직접입력</th><th colspan="2">지사 요청</th><th colspan="2">편성</th><th>확정</th><th class="l" rowspan="2">도착 요청</th></tr>
     <tr><th class="fch">적설<small class="thsub">cm</small></th><th class="fch">강수<small class="thsub">mm</small></th><th class="fch tmh">기온<small class="thsub">℃</small></th><th class="fch tmh">시각</th><th class="wh">종류</th><th class="wh">발표</th><th class="wh">발효</th><th>제설차</th><th>제설기</th><th>제설차</th><th>제설기</th><th>${conf ? `<button type="button" class="btn sm primary" id="confirmAll">일괄 확정</button>` : ""}</th></tr></thead><tbody>`;
-  const has = b => !!S.reqs[b.id] || S.rdraft.has(b.id);
+  const has = b => hasReq(b.id) || S.rdraft.has(b.id);                  // 요청 있음(입력 중 포함)
   const mine = b => (m.branch_id === b.id) || (can("req.edit.hq") && !can("req.confirm") && b.hq_id === m.hq_id);
   S.hqs.forEach(hq => {
     if (hq.is_private) return;                                   // 민자는 지사별 요청·편성에 나오지 않음
-    const rows = S.order.filter(b => b.hq_id === hq.id), shown = rows.filter(b => !S.onlyActive || has(b) || mine(b));
+    const rows = S.order.filter(b => b.hq_id === hq.id), shown = rows.filter(b => S.bview === "all" || mine(b) || (S.bview === "req" ? has(b) : isFixed(b.id)));
     if (!shown.length) return;
     const closed = S.closedHq.has(hq.id), hsum = hqSums(hq.id);
     h += `<tr class="hq ${closed ? "closed" : ""}" data-hq="${hq.id}" tabindex="0"><td class="l">${esc(hq.name)}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
@@ -980,7 +983,8 @@ document.addEventListener("click", e => {
   if ((x = c("[data-fb]"))) return openForecast(x.dataset.fb);
   if ((x = c("[data-wtab]"))) { S.wtab = x.dataset.wtab; return renderWarnNow(); }
   if (c("#zaddBtn")) { const v = ($("zadd") || {}).value; return v ? setZone(v, true) : toast("더할 구역을 고르세요", true); }
-  if (c("#onlyActive")) { S.onlyActive = !S.onlyActive; return renderBranch(); }
+  if (c("#onlyActive")) { S.bview = S.bview === "req" ? "all" : "req"; return renderBranch(); }      // 두 보기 중 하나만, 다시 누르면 모든 지사
+  if (c("#onlyFixed")) { S.bview = S.bview === "fixed" ? "all" : "fixed"; return renderBranch(); }
   if ((x = c("[data-fo]"))) { S.fleetOrg = x.dataset.fo; return renderFleet(); }
   if ((x = c("[data-org]"))) { S.org = x.dataset.org; renderFilters(); return renderDest(); }
   if ((x = c("[data-type]")) && x.classList.contains("chip")) { S.type = x.dataset.type; renderFilters(); return renderDest(); }

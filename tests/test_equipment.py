@@ -346,7 +346,7 @@ def t_route_kind_and_eta(p):
     check(ev(p, f"JSON.stringify(recOf('{d3}', 'V002'))") == '{"stops":["%s"],"revised":true,"times":["07:35"]}' % bid(p, "인천"), ev(p, f"JSON.stringify(recOf('{d3}', 'V002'))"))
     confirm_fleet(p); check("확정했습니다" in toast(p), toast(p))
     p.check("#modeInit"); p.wait_for_timeout(150)
-    check("인천 (미확정)" in p.locator(rsel("V002", d3)).inner_text() and "수정본" in p.locator(f"td[data-cell='{d3}|V002']").inner_text(), "최초 지원 목록에서는 미확정 표시, 칸에 수정본 표지")
+    check("인천 (편성 확정 전)" in p.locator(rsel("V002", d3)).inner_text() and "수정본" in p.locator(f"td[data-cell='{d3}|V002']").inner_text(), "최초 지원 목록에서는 미확정 표시, 칸에 수정본 표지")
     tab(p, "move"); go_date(p, d3)
     row = p.locator(".vrow[data-vid=V002]").first.inner_text(); check("07:35 도착 예상" in row and "수정본" in row, row)
     check("07:35" in p.locator(".dest", has_text="인천").locator(".dest-time").inner_text(), "카드 큰 시각 = 도착 예상")
@@ -568,7 +568,32 @@ def t_confirm_all_by_hq(p):
     check(ev(p, "S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private).every(b => (S.reqs[b.id] || {}).confirmed)"), "맨 위 [일괄 확정] = 저장 안 한 지사까지 모두")
     p.click("#confirmAll"); p.wait_for_timeout(200); check("이미 확정" in toast(p), "더 확정할 지사가 없으면 안내: " + toast(p))
 
-TESTS = [t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+def t_views_and_choices_after_confirm_all(p):
+    """(2026-10-06) 일괄 확정 뒤에도: '요청 있는 지사만' = 요청 1대 이상, '편성 확정된 지사만' = 확정 + 편성 1대 이상.
+    기관별 장비 [최초 지원] 선택지 = 편성 확정된 지사만(일괄 확정으로 편성 0대인 지사는 안 나옴), 모든 지사는 [수정본]에서만"""
+    tab(p, "branch"); p.click("#onlyActive"); p.wait_for_timeout(150)          # 모든 지사 보기 → 일괄 확정
+    p.click("#confirmAll"); p.wait_for_timeout(500)
+    shown = lambda: [x.get_attribute("data-b") for x in p.locator("#branchTable tr[data-b]").all()]
+    total = ev(p, "S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private).length")
+    check(len(shown()) == total, f"모든 지사: {len(shown())}/{total}")
+    p.click("#onlyActive"); p.wait_for_timeout(150)
+    want = ev(p, "S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private && hasReq(b.id)).map(b => b.id)")
+    check(set(shown()) == set(want) and 0 < len(want) < total, f"일괄 확정 뒤에도 '요청 있는 지사만'이 걸러짐: {len(shown())}/{total}")
+    p.click("#onlyFixed"); p.wait_for_timeout(150)
+    fixed = ev(p, "S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private && isFixed(b.id)).map(b => b.id)")
+    check(set(shown()) == set(fixed) and 0 < len(fixed) < total and p.locator("#onlyFixed").get_attribute("aria-pressed") == "true" and p.locator("#onlyActive").get_attribute("aria-pressed") == "false",
+          f"'편성 확정된 지사만' = 확정 + 편성 1대 이상: {[bn for bn in fixed]}")
+    check(all(ev(p, f"isConf('{x}') && (S.reqs['{x}'].assigned_truck + S.reqs['{x}'].assigned_blower) > 0") for x in shown()), "보이는 줄은 모두 편성 확정")
+    p.click("#onlyFixed"); p.wait_for_timeout(150); check(len(shown()) == total, "다시 누르면 모든 지사")
+    tab(p, "fleet"); d0 = day(p, 0)
+    opts = [o for o in p.locator(rsel("V004", d0) + " option:not([disabled])").all_inner_texts() if o not in ("지사 선택", "지우기")]
+    names = ev(p, "routeChoices().map(b => b.name)")
+    check(sorted(opts) == sorted(names) and len(names) == len(fixed) and len(names) < total, f"최초 지원 = 편성 확정된 지사만: {opts}")
+    p.click("#modeRev"); p.wait_for_timeout(200)
+    opts2 = [o for o in p.locator(rsel("V004", d0) + " option:not([disabled])").all_inner_texts() if o not in ("지사 선택", "지우기")]
+    check(len(opts2) >= total - 1, f"수정본 = 모든 지사: {len(opts2)}")
+
+TESTS = [t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
