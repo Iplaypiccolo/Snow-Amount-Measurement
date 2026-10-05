@@ -94,6 +94,7 @@ const rval = (b, f) => { const d = S.rdraft.get(b); return d && f in d ? d[f] : 
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const isManual = bid => !!rval(bid, "wx_manual");                       // 기상현황 직접입력을 켠 지사
 const isConf = bid => !!(S.reqs[bid] && S.reqs[bid].confirmed);          // 저장된 확정(빨간 네모)
+const canEdit = b => canReq(b) && !isConf(b.id);                         // 확정한 줄은 [취소]하기 전까지 아무도 못 고침(서버도 막음, 마이그레이션 35)
 /* ---------- 특보 — 지사 관할 특보구역 중 가장 높은 단계. 확정한 지사는 확정 순간 값(서버가 고정), 자료가 없으면 특보 없음 ---------- */
 const WLV = { "예비": ["w1", "예비특보"], "주의": ["w2", "대설주의보"], "경보": ["w3", "대설경보"] };
 // 단계 + 종류 → 이름(대설은 예전 그대로: 예비특보·대설주의보·대설경보 / 다른 종류: 강풍 예비특보·강풍주의보·강풍경보)
@@ -136,7 +137,7 @@ const fx = bid => isConf(bid) ? " fixd" : "";                             // 확
 // 지사 줄의 [종류 | 발표 | 발효] 세 칸. 직접입력이면 종류 = 선택, 발표·발효 = 월일시분 8자리
 function warnCells(bid) {
   const w = warnOf(bid), dash = '<span class="muted">-</span>', b = S.brById[bid];
-  if (w.manual && b && canReq(b)) {
+  if (w.manual && b && canEdit(b)) {
     const lv = rval(bid, "wx_level") || "", inp = f => `<input class="ci wxt" type="text" inputmode="numeric" maxlength="8" placeholder="월일시분" data-rq="${esc(bid)}" data-f="${f}" data-fk="q:${esc(bid)}:${f}" value="${esc(mdhm(rval(bid, f)))}" aria-label="${esc(b.name)} 특보 ${f === "wx_fc" ? "발표" : "발효"}(월일시분)">`;
     return `<td class="wxe${fx(bid)}" data-wcell="${esc(bid)}"><select class="ci" data-rq="${esc(bid)}" data-f="wx_level" data-fk="q:${esc(bid)}:wx_level" aria-label="${esc(b.name)} 특보 종류">` +
       [["", "특보 없음"], ["예비", "예비특보"], ["주의", "대설주의보"], ["경보", "대설경보"]].map(([v, l]) => `<option value="${v}"${v === lv ? " selected" : ""}>${l}</option>`).join("") + `</select></td>` +
@@ -168,7 +169,7 @@ function fcInner(bid, k = "snow") {
   const f = fcOf(bid), v = f && !f.none ? f[k] : null;
   if (f && f.manual) {
     const b = S.brById[bid], fld = WX_FIELD[k];
-    if (b && canReq(b)) {
+    if (b && canEdit(b)) {
       if (k === "tmin_at") return `<input class="ci wxt" type="text" inputmode="numeric" maxlength="8" placeholder="월일시분" data-rq="${esc(bid)}" data-f="${fld}" data-fk="q:${esc(bid)}:${fld}" value="${esc(mdhm(v))}" aria-label="${esc(b.name)} 최저기온 시각(월일시분)">`;
       const rng = k === "tmin" ? 'min="-60" max="50"' : 'min="0" max="999"';
       return `<input class="ci num wxn" type="number" inputmode="decimal" step="0.1" ${rng} data-rq="${esc(bid)}" data-f="${fld}" data-fk="q:${esc(bid)}:${fld}" value="${esc(v ?? "")}" aria-label="${esc(b.name)} ${{ snow: "적설(cm)", pcp: "강수(mm)", tmin: "최저기온(℃)" }[k]}">`;
@@ -644,7 +645,7 @@ function renderBranch() {
       ${HQ_SUM_KEYS.map(k => `<td data-s="${k}">${hsum[k]}</td>`).join("")}<td></td></tr>`;
     if (closed) return;
     shown.forEach(b => {
-      const ed = canReq(b), t = `round_requests:${S.round},${b.id}`, on = has(b);
+      const ed = canEdit(b), t = `round_requests:${S.round},${b.id}`, on = has(b);
       const num = (f, lab, editable) => editable ? `<input class="ci num" type="number" inputmode="numeric" min="0" max="999" data-rq="${b.id}" data-f="${f}" data-fk="q:${b.id}:${f}" value="${esc(rval(b.id, f) ?? 0)}" aria-label="${esc(b.name)} ${lab}"${hvA(t, f)}>`
         : (on ? H(t, f, esc(rval(b.id, f) ?? 0)) : "-");
       const ok = rval(b.id, "confirmed");
@@ -686,13 +687,13 @@ function confirmAll() {              // 요청(저장됐거나 입력 중)이 �
   if (!can("req.confirm")) return;
   const ids = S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private && (S.reqs[b.id] || S.rdraft.has(b.id)) && !rval(b.id, "confirmed")).map(b => b.id);
   if (!ids.length) return toast("확정할 지사가 없습니다(요청이 있고 확정 전인 지사만 일괄 확정합니다)");
-  if (!confirm(`${ids.length}개 지사를 확정할까요? 바로 저장됩니다.\n${ids.map(bn).join(", ")}\n이 지사 줄에서 고친 값도 함께 저장됩니다.`)) return;
+  if (!confirm(`${ids.length}개 지사를 확정할까요? 바로 저장됩니다.\n${ids.map(bn).join(", ")}\n이 지사 줄에서 고친 값도 함께 저장되고, 확정하면 [취소]하기 전까지 고칠 수 없습니다.`)) return;
   saveBranchRows(ids, { confirmed: true }, `${ids.length}개 지사를 확정했습니다`);
 }
 function confirmBranch(id, on) {
   const b = S.brById[id]; if (!b || !can("req.confirm")) return;
   const more = S.rdraft.has(id) ? "\n이 지사 줄에서 고친 값도 함께 저장됩니다." : "";
-  if (!confirm(on ? `${b.name} 지사의 편성을 확정할까요? 바로 저장되고, 기관별 장비에서 이 지사를 고를 수 있습니다.${more}` : `${b.name} 지사의 확정을 취소할까요? 기관별 장비 선택지에서 빠집니다(이미 넣은 경로는 그대로).${more}`)) return;
+  if (!confirm(on ? `${b.name} 지사의 편성을 확정할까요? 바로 저장되고, 기관별 장비에서 이 지사를 고를 수 있습니다.\n확정하면 [취소]하기 전까지 이 줄은 고칠 수 없습니다.${more}` : `${b.name} 지사의 확정을 취소할까요? 기관별 장비 선택지에서 빠집니다(이미 넣은 경로는 그대로).${more}`)) return;
   saveBranchRows([id], { confirmed: on }, on ? `${b.name} 지사를 확정했습니다` : `${b.name} 지사 확정을 취소했습니다`);
 }
 async function makeRound() {
@@ -911,12 +912,12 @@ document.addEventListener("change", async e => {
     setVeh(v.id, "plate", val); const tr = t.closest("tr"); if (tr) tr.classList.toggle("changed", S.vdraft.has(v.id)); return afterAnyChange();
   }
   if (t.dataset.arr) {                      // 도착 요청: 날짜 + 시(00~23) + 분(10분 단위)
-    const b = S.brById[t.dataset.arr]; if (!b || !canReq(b)) return refresh();
+    const b = S.brById[t.dataset.arr]; if (!b || !canEdit(b)) return refresh();
     const get = p => (document.querySelector(`[data-arr="${b.id}"][data-part="${p}"]`) || {}).value || "";
     const d = get("d"); setReq(b.id, "arrive_at", d ? `${d}T${get("h") || "00"}:${get("m") || "00"}` : null); return afterReq(b.id);
   }
   if (t.dataset.rq) {
-    const b = S.brById[t.dataset.rq], f = t.dataset.f; if (!b || !canReq(b) || (["assigned_truck", "assigned_blower", "confirmed"].includes(f) && !can("req.confirm"))) return refresh();
+    const b = S.brById[t.dataset.rq], f = t.dataset.f; if (!b || !canEdit(b) || (["assigned_truck", "assigned_blower", "confirmed"].includes(f) && !can("req.confirm"))) return refresh();
     let v;
     if (f === "wx_fc" || f === "wx_ef" || f === "wx_tmin_at") {   // 월일시분 8자리 → 시각. 비우면 지움
       const raw = t.value.replace(/\D/g, "");

@@ -172,29 +172,32 @@ def t_permissions_equip_own(p):
     check(p.locator("#eqTable select, #eqTable input, #vehAdd, #fleetReset").count() == 0 and not p.locator("#save-fleet").is_visible(), "지사는 기관별 장비에서 아무것도 못 고침")
 
 def t_branch_permissions(p):
-    as_user(p, "br1"); tab(p, "branch"); b = bid(p, "대관령")
+    tab(p, "branch"); b = bid(p, "대관령"); p.click(f"[data-unconfirm={b}]"); p.wait_for_timeout(300)     # 확정된 줄은 잠기므로(2026-10-05) 먼저 취소
+    as_user(p, "br1"); tab(p, "branch")
     ins = set(x.get_attribute("data-rq") for x in p.locator("#branchTable [data-rq]").all())
     check(ins == {b}, f"대관령 행만 입력: {ins}")
     check(p.locator(f"[data-rq={b}][data-f=assigned_truck]").count() == 0 and p.locator("[data-confirm], [data-unconfirm]").count() == 0, "편성·확정은 못 고침")
     check(p.locator("#roundMake").count() == 0, "기준일자 만들기 없음")
     as_user(p, "hq-gw"); tab(p, "branch"); p.click("#onlyActive"); p.wait_for_timeout(150)
     ins = set(x.get_attribute("data-rq") for x in p.locator("#branchTable [data-rq]").all())
-    check(ins == set(ev(p, "S.branches.filter(b => b.hq_id === S.hqs.find(h => h.name === '강원').id).map(b => b.id)")), f"강원본부 지사들만: {ins}")
+    check(ins == set(ev(p, "S.branches.filter(b => b.hq_id === S.hqs.find(h => h.name === '강원').id && !(S.reqs[b.id] || {}).confirmed).map(b => b.id)")), f"강원본부 지사들만(확정된 양양은 잠김): {ins}")
     as_user(p, "viewer"); tab(p, "branch")
     check(p.locator("#branchTable [data-rq], #branchTable [data-arr]").count() == 0 and not p.locator("#save-branch").is_visible() and not p.locator("#save-fleet").is_visible(), "보기 전용")
 
 def t_branch_save_confirm_and_arrive(p):
     tab(p, "branch"); ch, dg = bid(p, "춘천"), bid(p, "대관령")
+    check(p.locator(f"[data-arr={dg}]").count() == 0, "확정된 대관령은 도착 요청도 잠김"); p.click(f"[data-unconfirm={dg}]"); p.wait_for_timeout(300)
     h = p.locator(f"[data-arr={dg}][data-part=h] option").all_inner_texts(); m = p.locator(f"[data-arr={dg}][data-part=m] option").all_inner_texts()
     check(h == [f"{i:02d}" for i in range(24)] and m == ["00", "10", "20", "30", "40", "50"], f"시 00~23, 분 10분 단위: {h} {m}")
     p.select_option(f"[data-arr={dg}][data-part=h]", "05"); p.wait_for_timeout(150); p.select_option(f"[data-arr={dg}][data-part=m]", "30"); p.wait_for_timeout(150)
     p.fill(f"[data-rq={ch}][data-f=req_blower]", "3"); p.press(f"[data-rq={ch}][data-f=req_blower]", "Tab"); p.wait_for_timeout(150)
     check("2개 지사" in p.locator("#save-branch .save-state").inner_text(), p.locator("#save-branch .save-state").inner_text())
-    check(p.locator(f"[data-confirm={ch}]").inner_text() == "확정" and p.locator(f"[data-unconfirm={dg}]").count() == 1, "확정 버튼 / 확정됨 + 취소")
+    check(p.locator(f"[data-confirm={ch}]").inner_text() == "확정" and p.locator(f"[data-confirm={dg}]").count() == 1, "확정 버튼")
     p.click(f"[data-confirm={ch}]"); p.wait_for_timeout(300)                  # 확정 = 그 지사 줄을 바로 저장(고친 요청 대수도 함께)
     check("확정했습니다" in toast(p) and ev(p, f"S.reqs['{ch}'].confirmed") is True and ev(p, f"S.reqs['{ch}'].req_blower") == 3 and "1개 지사" in p.locator("#save-branch .save-state").inner_text(), "확정 버튼")
     save_branch(p); check("저장했습니다" in toast(p), toast(p))
     check(ev(p, f"S.reqs['{dg}'].arrive_at") == day(p, 0) + "T05:30" and ev(p, f"S.reqs['{ch}'].confirmed") is True and ev(p, f"S.reqs['{ch}'].req_blower") == 3, "저장값")
+    p.click(f"[data-confirm={dg}]"); p.wait_for_timeout(300); check(p.locator(f"[data-unconfirm={dg}]").count() == 1, "대관령 다시 확정됨 + 취소")
     tab(p, "fleet"); opts = p.locator(rsel("V004", day(p, 0)) + " option").all_inner_texts()
     check("춘천" in opts, f"확정한 지사가 경로 선택지에 생김: {opts}")
     tab(p, "move"); check("05:30" in p.locator("#destList").inner_text(), "도착 요청 시각 반영")
@@ -217,9 +220,9 @@ def t_history_tooltip_per_cell(p):
     cell.hover(); p.wait_for_timeout(150); t = p.locator("#tip").inner_text()
     check("이 칸의 오늘 수정 기록" in t and t.count("→") == 2 and "양양 → 대관령" in t, t)
     tab(p, "branch"); y = bid(p, "양양")
-    p.hover(f"[data-rq={y}][data-f=req_blower]"); p.wait_for_timeout(150); t = p.locator("#tip").inner_text()
+    p.hover(f"tr[data-b='{y}'] [data-hf=req_blower]"); p.wait_for_timeout(150); t = p.locator("#tip").inner_text()     # 확정된 양양은 잠겨 입력칸 대신 글자
     check(t.count("→") == 3 and "14 → 15" in t and "10 → 12" not in t, f"최근 3건만: {t}")
-    check(p.locator(f"[data-rq={y}][data-f=req_truck]").get_attribute("data-hv") is None, "다른 열에는 없음")
+    check(p.locator(f"tr[data-b='{y}'] [data-hf=req_truck]").count() == 0, "다른 열에는 없음")
     as_user(p, "br1"); tab(p, "fleet"); check(p.locator("[data-hv]").count() == 0, "log.view 권한이 없으면 기록 표시 없음")
 
 def t_log_tab(p):
@@ -273,8 +276,8 @@ def t_unsaved_guard_on_user_switch(p):
     as_user(p, "admin1"); tab(p, "fleet"); check(p.locator(rsel("V004", day(p, 0))).is_disabled(), "지원 여부가 '지원'이 아니면 경로 칸 잠금")
 
 def t_xss_text_is_escaped(p):
-    as_user(p, "br1"); tab(p, "branch"); b = bid(p, "대관령")       # 사유 칸은 표에서 빠졌지만(2026-10-05) 예전에 넣은 사유는 이동 현황 카드에 보임
-    ev(p, f"(async () => {{ await Api.saveRequests(S.round, [{{ branch_id: '{b}', reason: '<img src=x onerror=window.__x=1>' }}]); await loadReqs(); refresh(); return null }})()"); p.wait_for_timeout(200)
+    tab(p, "branch"); b = bid(p, "대관령")       # 사유 칸은 표에서 빠졌지만(2026-10-05) 예전에 넣은 사유는 이동 현황 카드에 보임. 확정된 줄은 잠겨 취소 → 저장 → 다시 확정
+    ev(p, f"(async () => {{ for (const r of [{{ confirmed: false }}, {{ reason: '<img src=x onerror=window.__x=1>' }}, {{ confirmed: true }}]) await Api.saveRequests(S.round, [{{ branch_id: '{b}', ...r }}]); await loadReqs(); refresh(); return null }})()"); p.wait_for_timeout(200)
     check(ev(p, "window.__x") is None, "스크립트가 실행됨")
     as_user(p, "admin1"); tab(p, "move"); tab(p, "log")
     check(p.locator("#branchTable img, #eqTable img, #destList img, #logTable img").count() == 0, "이미지 태그가 만들어짐")
@@ -518,9 +521,26 @@ def t_weather_manual(p):
     check(row.locator(f"td[data-fcell='{cj}']").inner_text() == "7.5" and row.locator("input").count() == 0 and row.locator("[data-fb]").count() == 0, "다른 지사 계정: 숫자만(입력·이동 없음)")
     check(row.locator(f"td[data-tcell='{cj}']").inner_text() == "-8.5" and row.locator(f"td[data-tacell='{cj}']").inner_text() == "12/25 06시", "직접 넣은 최저기온·시각")
     check(row.locator("td[data-wcell] .wb").inner_text() == "대설주의보" and "12/24 15:30" in row.locator("td[data-wfc]").inner_text() and "12/24 18:00" in row.locator("td[data-wef]").inner_text(), row.inner_text())
-    check(p.locator(f"tr[data-b='{bid(p, '양양')}'] input[data-f=wx_manual]").count() == 1, "자기 지사는 체크칸")
+    check(p.locator(f"tr[data-b='{bid(p, '양양')}'] input").count() == 0, "확정된 자기 지사(양양)는 잠김")
 
-TESTS = [t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+def t_confirmed_row_locked(p):
+    """확정한 지사 줄은 [취소]하기 전까지 요청·편성·도착 요청·기상현황 직접입력을 못 고침(관리자도, 서버도 막음)"""
+    tab(p, "branch"); dg, cj = bid(p, "대관령"), bid(p, "춘천")
+    row = lambda b: p.locator(f"tr[data-b='{b}']")
+    check(row(dg).locator("input, select").count() == 0 and row(dg).locator("[data-unconfirm]").count() == 1, "확정된 대관령: 입력칸 없음, [취소]만")
+    check(row(cj).locator("input[data-f=req_truck]").count() == 1 and row(cj).locator("input[data-f=wx_manual]").count() == 1, "확정 전 춘천: 입력 가능")
+    p.click(f"[data-confirm='{cj}']"); p.wait_for_timeout(300)
+    check(row(cj).locator("input, select").count() == 0, "확정하면 춘천도 잠김")
+    r = ev(p, f"Api.saveRequests(S.round, [{{ branch_id: '{dg}', req_truck: 9 }}])")
+    check(r["ok"] is False and "확정을 취소한 뒤" in r["message"], f"확정 줄 저장은 서버에서도 거절: {r}")
+    r = ev(p, f"Api.saveRequests(S.round, [{{ branch_id: '{dg}', confirmed: false, req_truck: 9 }}])")
+    check(r["ok"] is False, "취소하면서 값 바꾸기도 거절")
+    p.click(f"[data-unconfirm='{cj}']"); p.wait_for_timeout(300)
+    check(row(cj).locator("input[data-f=req_truck]").count() == 1 and row(cj).locator("input[data-f=assigned_truck]").count() == 1, "취소하면 다시 고칠 수 있음")
+    as_user(p, "br2"); tab(p, "branch"); yy = bid(p, "양양")
+    check(row(yy).locator("input, select").count() == 0, "지사 계정: 확정된 자기 지사 줄도 잠김")
+
+TESTS = [t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
@@ -556,6 +576,7 @@ def t_server_equip_confirm(b):
 def t_server_branch_save(b):
     """지사 계정: 자기 지사 행만, [저장]은 save_requests 에 바뀐 열만(도착 시각은 ISO)"""
     m = Mock(); m.users["exchungju"]["profile"]["must_change"] = False
+    m.round_reqs[0]["confirmed"] = False                                   # 확정된 줄은 잠기므로(2026-10-05) 확정 전 줄로
     p = server_page(b, m, "exchungju"); tab(p, "branch")
     check(set(x.get_attribute("data-rq") for x in p.locator("#branchTable [data-rq]").all()) == {"B019"}, "자기 지사만")
     p.fill("[data-rq=B019][data-f=req_truck]", "5"); p.press("[data-rq=B019][data-f=req_truck]", "Tab"); p.wait_for_timeout(150)

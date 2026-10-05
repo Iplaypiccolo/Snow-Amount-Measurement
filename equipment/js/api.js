@@ -12,7 +12,8 @@
 const Api = (() => {
   const SAMPLE = new URLSearchParams(location.search).has("sample");
   const ERR = { "42501": "권한이 없습니다(다른 기관·지사 자료이거나 권한이 바뀌었습니다).", "23505": "이미 있는 값입니다(도공번호·기준일자 중복).",
-    "23514": "값의 형식이 올바르지 않습니다.", "23503": "없는 지사·장비·기준일자입니다.", "22023": "저장할 내용이 없습니다.", "54000": "한 번에 너무 많이 저장하려고 합니다." };
+    "23514": "값의 형식이 올바르지 않습니다.", "23503": "없는 지사·장비·기준일자입니다.", "22023": "저장할 내용이 없습니다.", "54000": "한 번에 너무 많이 저장하려고 합니다.",
+    "55000": "확정한 지사는 확정을 취소한 뒤에 고칠 수 있습니다." };
   const fail = (r, fallback) => ({ ok: false, message: (r && r.json && ERR[r.json.code]) || fallback || "저장하지 못했습니다. 잠시 후 다시 시도해 주세요.", code: r && r.json && r.json.code });
   const NET = () => ({ ok: false, message: (window.SSAuth && SSAuth.NET_MSG) || "서버에 연결할 수 없습니다." });
   const EQUIP_TABS = "vehicles,vehicle_routes,round_requests,support_rounds,branch_zone_overrides";
@@ -158,6 +159,9 @@ const Api = (() => {
         const br = id => db.branches.find(b => b.id === id);
         const ok = r => can("req.confirm") || (can("req.edit.own") && actor.branch_id === r.branch_id) || (can("req.edit.hq") && br(r.branch_id) && br(r.branch_id).hq_id === actor.hq_id);
         if (rows.some(r => !ok(r)) || (!can("req.confirm") && rows.some(r => "assigned_truck" in r || "assigned_blower" in r || "confirmed" in r))) return done({ ok: false, message: ERR["42501"] });
+        // 서버 트리거 흉내(마이그레이션 35): 확정한 줄은 확정 열 말고는 못 바꿈(취소하면서 바꾸는 것도)
+        const locked = r => { const c = db.requests.find(x => x.round_id === +round && x.branch_id === r.branch_id); return c && c.confirmed && Object.keys(r).some(k => k !== "branch_id" && k !== "confirmed" && JSON.stringify(r[k] ?? null) !== JSON.stringify(c[k] ?? null)); };
+        if (rows.some(locked)) return done({ ok: false, message: ERR["55000"] });
         rows.forEach(p => {
           let cur = db.requests.find(x => x.round_id === +round && x.branch_id === p.branch_id), from = {}, to = {};
           if (!cur) { cur = { round_id: +round, branch_id: p.branch_id, snow_cm: null, warning: false, req_truck: 0, req_blower: 0, assigned_truck: 0, assigned_blower: 0, arrive_at: null, reason: null, confirmed: false,
