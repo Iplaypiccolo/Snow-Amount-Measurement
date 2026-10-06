@@ -6,12 +6,13 @@
      격자에 마우스를 올리면 24시간 추이(적설·강수 막대, 기온 선 — 따로 세 그림). 격자를 누르면 그 그림이 지도 오른쪽 위에 고정되고
      그림에 마우스를 올리면 세로·가로 보조선과 "몇 시 · 값". 지도 아무 데나 누르면 닫힘. 추이는 지사를 열 때만 서버에서 받음
    - 장비 지원의 지사별 요청·편성에서 예상 적설·강수를 누르면 이 탭의 그 지사로 바로 옵니다(window.ForecastUI.openBranch).
+   - 격자는 번호 대신 지명(시군구 읍면동, data/grid_names.json — tools/build_grid_names.py 가 만듦)으로 보이고 번호는 작게 곁들임
    - 서버 읽기: branch_forecast(지사 59줄) 한 번 + 본부를 열 때 forecast_grid(그 본부 지사들의 격자, 수 KB) + 지사를 열 때 그 지사 추이(약 10KB)
    ============================================================ */
 (function () {
   'use strict';
   var G = window.GridCore, JC = window.JurisCore;
-  var S = { inited: false, map: null, lines: null, cells: null, hq: 'ALL', focus: null, state: null, bf: {}, grid: {}, series: {}, pin: null, pinAt: 0, meta: null, loading: false, pendingFocus: null };
+  var S = { inited: false, map: null, lines: null, cells: null, hq: 'ALL', focus: null, state: null, bf: {}, grid: {}, series: {}, pin: null, pinAt: 0, names: null, meta: null, loading: false, pendingFocus: null };
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -29,6 +30,14 @@
   function bname(id) { var b = st().branches[id]; return b ? b.name : id; }
   function hqOf(id) { var b = st().branches[id]; return b ? b.hq : null; }
   function branchesOf(hq) { return st().order.filter(function (id) { return st().branches[id].hq === hq; }); }
+  // 격자 지명(없으면 '격자 번호'). 번호는 작게 곁들일 때 cellNo
+  function cellName(nx, ny) { var n = S.names && S.names[nx + ',' + ny]; return n || '격자 ' + nx + ',' + ny; }
+  function cellNo(nx, ny) { return S.names && S.names[nx + ',' + ny] ? ' <small class="fc-no">' + nx + ',' + ny + '</small>' : ''; }
+  function loadNames() {
+    if (S.names) return Promise.resolve(S.names);
+    return fetch('data/grid_names.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; })
+      .then(function (m) { S.names = m || {}; return S.names; });
+  }
   function bval(id) { var f = S.bf[id]; if (!f || Date.now() - Date.parse(f.issued_at) > STALE) return null; return f; }
 
   /* ---------- 뼈대 ---------- */
@@ -128,7 +137,7 @@
     var sr = S.pin && S.focus && S.series[S.focus] ? S.series[S.focus][S.pin] : null;
     if (!sr) { box.hidden = true; box.innerHTML = ''; return; }
     var k = S.pin.split(','), g = S.grid[S.hq], c = g && g.cells ? g.cells.filter(function (x) { return x[0] === +k[0] && x[1] === +k[1]; })[0] : null;
-    box.innerHTML = '<div class="fc-pin-head"><b>격자 ' + esc(S.pin) + '</b> ' + (c ? esc((c[2] || []).map(bname).join(', ')) : '') +
+    box.innerHTML = '<div class="fc-pin-head"><b>' + esc(cellName(+k[0], +k[1])) + '</b>' + cellNo(+k[0], +k[1]) + ' <span class="fc-pin-br">' + (c ? esc((c[2] || []).map(bname).join(', ')) : '') + '</span>' +
       '<button type="button" class="fc-pin-x" aria-label="닫기">×</button></div>' + trendBox(sr, S.series[S.focus]._start, true) +
       '<div class="fc-pin-note">그림에 마우스를 올리면 시각별 값</div>';
     box.hidden = false;
@@ -163,7 +172,7 @@
       var key = nx + ',' + ny, pinned = S.focus && S.pin === key;
       var poly = L.polygon(G.cellCorners(nx, ny), { weight: pinned ? 4 : S.focus ? 1.5 : 1, color: pinned ? '#FFC400' : S.focus ? '#33424f' : col, fillColor: col, fillOpacity: S.focus ? 0.7 : 0.28, opacity: 0.9 });
       var sr = S.focus && fresh && S.series[S.focus] ? S.series[S.focus][key] : null;
-      poly.bindTooltip('<b>격자 ' + nx + ',' + ny + '</b><br>' + bs.map(function (b) { return esc(bname(b)); }).join(', ') +
+      poly.bindTooltip('<b>' + esc(cellName(nx, ny)) + '</b>' + cellNo(nx, ny) + '<br>' + bs.map(function (b) { return esc(bname(b)); }).join(', ') +
         (S.focus ? '<br>24시간 적설 <b>' + num(snow) + 'cm</b> · 강수 <b>' + num(pcp) + 'mm</b><br>최저기온 <b>' + tmp(tmin) + '℃</b> (' + esc(hh(tat)) + ')' +
           (sr ? trendBox(sr, S.series[S.focus]._start, false) + '<div class="fc-trend-key">누르면 그림 고정</div>' : '') : ''),
         { sticky: true, opacity: 1, className: 'gr-tip' + (sr ? ' fc-tip' : '') });
@@ -229,8 +238,8 @@
     var rows = g.cells.filter(function (c) { return (c[2] || []).indexOf(id) >= 0; })
       .map(function (c) { return { nx: c[0], ny: c[1], s: fresh ? c[3] : null, p: fresh ? c[4] : null, t: fresh ? c[5] : null, ta: fresh ? c[6] : null }; })
       .sort(function (a, b) { return (b.s || 0) - (a.s || 0) || (b.p || 0) - (a.p || 0); });
-    return '<div class="fc-detail"><table><thead><tr><th>격자</th><th>적설(cm)</th><th>강수(mm)</th><th>최저(℃)</th><th>시각</th></tr></thead><tbody>' +
-      rows.map(function (r) { return '<tr data-cell="' + r.nx + ',' + r.ny + '"><td>' + r.nx + ',' + r.ny + '</td><td>' + num(r.s) + '</td><td>' + num(r.p) + '</td><td>' + tmp(r.t) + '</td><td>' + esc(hh(r.ta)) + '</td></tr>'; }).join('') +
+    return '<div class="fc-detail"><table><thead><tr><th>지명</th><th>적설(cm)</th><th>강수(mm)</th><th>최저(℃)</th><th>시각</th></tr></thead><tbody>' +
+      rows.map(function (r) { return '<tr data-cell="' + r.nx + ',' + r.ny + '"><td>' + esc(cellName(r.nx, r.ny)) + cellNo(r.nx, r.ny) + '</td><td>' + num(r.s) + '</td><td>' + num(r.p) + '</td><td>' + tmp(r.t) + '</td><td>' + esc(hh(r.ta)) + '</td></tr>'; }).join('') +
       '</tbody></table></div>';
   }
   function renderLegend() {
@@ -278,7 +287,7 @@
     if (!S.inited) return;
     S.state = JC.resolve(window.JURIS.doc, window.JURIS.session || window.JURIS.committed || []);    // 관할을 바꿨으면 반영
     ensureMap(); S.grid = {}; S.series = {}; S.pin = null;
-    loadOverview().then(function () {
+    Promise.all([loadOverview(), loadNames()]).then(function () {
       var id = S.pendingFocus; S.pendingFocus = null;
       if (id && st().branches[id]) { S.hq = 'ALL'; S.focus = null; focusBranch(id); } else { render(); fitTo(); }
     });

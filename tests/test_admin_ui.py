@@ -316,6 +316,8 @@ def t_perm_tab(b, m):
     check(items["exchungju"]["perms"] == ["juris.request", "grid.edit", "req.edit.own"] and "sort" not in items["exchungju"], items["exchungju"])
     check(items["equip-01"]["perms"] == [], items["equip-01"])
     check(m.users["exincheon"]["profile"]["perms"] == ["juris.request", "snow.upload", "req.edit.own"], m.users["exincheon"]["profile"]["perms"])
+    try: p.wait_for_function("document.querySelectorAll('tr.dirty').length === 0 && document.getElementById('psave').disabled", timeout=5000)   # 저장 뒤 목록을 다시 읽는 동안 기다림(가끔 늦음)
+    except Exception: pass
     check(p.locator("tr.dirty").count() == 0 and p.locator("#psave").is_disabled(), "저장하면 표시가 사라짐")
     # 위치: 지원장비 묶음에 하나 더 넣고 순서 바꾸기
     m.add("exchungbukgigyae", "충북 지원장비", "equip", None, "x", org="충북", sort=20); m.users["equip-01"]["profile"]["sort"] = 10

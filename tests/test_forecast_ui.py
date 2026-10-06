@@ -57,6 +57,11 @@ def t_levels(b):
     bf0 = [x for x in m.branch_forecast if x["branch_id"] == d][0]
     check(bf0["min_tmp"] == cold[5] and f"{cold[5]:g}" in p.locator(f"#fc-tree [data-fcbr='{d}']").inner_text(), "지사 줄 최저기온 = 가장 추운 격자")
     check("최저(℃)" in p.locator(".fc-detail thead").inner_text() and "시각" in p.locator(".fc-detail thead").inner_text(), "옆 표에 최저기온·시각")
+    names = J(p, f"{S}.names") or {}; first = p.locator(".fc-detail tbody tr").first; key = first.get_attribute("data-cell")
+    check(len(names) > 2000 and p.locator(".fc-detail thead th").first.inner_text() == "지명" and first.locator("td").first.inner_text().startswith(names[key]) and key in first.locator("td").first.inner_text(),
+          f"격자는 지명(data/grid_names.json) + 작은 번호: {first.locator('td').first.inner_text()}")
+    tipname = J(p, f"(() => {{ const l = {S}.cells.getLayers().find(l => l.getLatLngs && l.getTooltip()); return l.getTooltip().getContent() }})()")
+    check(any(("<b>" + v + "</b>") in tipname for v in set(names.values())), "마우스 말풍선 제목도 지명")
     poly = J(p, f"(() => {{ const ls = {S}.cells.getLayers().filter(l => l.getTooltip && l.getTooltip() && !l.options.permanent && l.getLatLngs); const t = ls[0].getTooltip().getContent(); return t }})()")
     check("<svg" in poly and "최저기온" in poly and "fc-trend" in poly, "격자에 마우스 = 24시간 추이 그림: " + poly[:120])
     rows = p.locator(".fc-detail tbody tr"); check(rows.count() == n, "옆 표에 격자 목록")

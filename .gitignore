@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 .DS_Store
 .test-logs/
+tools/.grid_names_cache.json
