@@ -183,7 +183,7 @@ function fcInner(bid, k = "snow") {
   if (f && f.manual) {
     const b = S.brById[bid], fld = WX_FIELD[k];
     if (b && canReq(b)) {
-      if (k === "tmin_at") return `<input class="ci wxt" type="text" inputmode="numeric" maxlength="8" placeholder="월일시분" data-rq="${esc(bid)}" data-f="${fld}" data-fk="q:${esc(bid)}:${fld}" value="${esc(mdhm(v))}" aria-label="${esc(b.name)} 최저기온 시각(월일시분)"${dis(bid)}>`;
+      if (k === "tmin_at") return `<button type="button" class="ci tpick${v ? "" : " empty"}" data-tpick="${esc(bid)}" aria-label="${esc(b.name)} 최저기온 시각 고르기"${dis(bid)}>${v ? esc(fmtAt(v)) : "시각 선택"}</button>`;   // 누르면 달력 + 시
       const rng = k === "tmin" ? 'min="-60" max="50"' : 'min="0" max="999"';
       return `<input class="ci num wxn" type="number" inputmode="decimal" step="0.1" ${rng} data-rq="${esc(bid)}" data-f="${fld}" data-fk="q:${esc(bid)}:${fld}" value="${esc(v ?? "")}" aria-label="${esc(b.name)} ${{ snow: "적설(cm)", pcp: "강수(mm)", tmin: "최저기온(℃)" }[k]}"${dis(bid)}>`;
     }
@@ -876,6 +876,7 @@ async function setZone(code, include) {   // include: true 더함 / false 자동
 }
 function closeSheet() { sheet.hidden = true; backdrop.hidden = true; hideTip(); if (lastFocus) lastFocus.focus(); lastFocus = null; }
 backdrop.onclick = closeSheet;
+document.addEventListener("keydown", e => { if (e.key === "Escape" && TP.bid) tpClose(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !sheet.hidden) closeSheet(); });
 
 /* ============================================================
@@ -975,9 +976,52 @@ document.addEventListener("change", async e => {
     setReq(b.id, f, v); return afterReq(b.id);
   }
 });
+/* ---------- 최저기온 시각 고르기(기상현황 직접입력): 달력 + 시(분은 00) ---------- */
+const TP = { bid: null, y: 0, m: 0, day: null, hh: "06" };
+function tpOpen(btn) {
+  const bid = btn.dataset.tpick, b = S.brById[bid]; if (!b || !canEdit(b)) return;
+  const v = rval(bid, "wx_tmin_at"), d = v ? new Date(v) : null, base = d && !isNaN(d) ? d : new Date(((curRound() || {}).start_date || todayISO()) + "T00:00");
+  Object.assign(TP, { bid, y: base.getFullYear(), m: base.getMonth(), day: d && !isNaN(d) ? localInput(v).slice(0, 10) : null, hh: d && !isNaN(d) ? p2(d.getHours()) : TP.hh });
+  let pop = $("tpop"); if (!pop) { pop = document.createElement("div"); pop.id = "tpop"; pop.className = "tpop"; pop.setAttribute("role", "dialog"); document.body.appendChild(pop); }
+  tpRender();
+  const r = btn.getBoundingClientRect(), w = 248, h = pop.offsetHeight || 300;
+  pop.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left)) + "px";
+  pop.style.top = (r.bottom + h + 8 > innerHeight ? Math.max(8, r.top - h - 4) : r.bottom + 4) + "px";
+}
+function tpClose() { const pop = $("tpop"); if (pop) pop.hidden = true; TP.bid = null; }
+function tpRender() {
+  const pop = $("tpop"), first = new Date(TP.y, TP.m, 1), n = new Date(TP.y, TP.m + 1, 0).getDate(), lead = first.getDay();
+  const ymd = d => `${TP.y}-${p2(TP.m + 1)}-${p2(d)}`, rd = (curRound() || {}).start_date;
+  let cells = ""; for (let k = 0; k < lead; k++) cells += "<span></span>";
+  for (let d = 1; d <= n; d++) { const id = ymd(d); cells += `<button type="button" data-tp-day="${id}" class="${id === TP.day ? "on" : ""}${id === rd ? " rd" : ""}${(lead + d - 1) % 7 === 0 ? " sun" : ""}">${d}</button>`; }
+  pop.innerHTML = `<div class="tp-head"><button type="button" data-tp-nav="-1" aria-label="이전 달">‹</button><b>${TP.y}년 ${TP.m + 1}월</b><button type="button" data-tp-nav="1" aria-label="다음 달">›</button></div>` +
+    `<div class="tp-week">${[..."일월화수목금토"].map(w => `<span>${w}</span>`).join("")}</div><div class="tp-days">${cells}</div>` +
+    `<div class="tp-hour"><label>시 <select class="ci" data-tp-hour aria-label="시">${HOURS.map(x => `<option${x === TP.hh ? " selected" : ""}>${x}</option>`).join("")}</select> : 00</label>` +
+    `<span class="tp-sel">${TP.day ? `${+TP.day.slice(5, 7)}/${+TP.day.slice(8)} ${TP.hh}시` : "날짜를 고르세요"}</span></div>` +
+    `<div class="tp-btns"><button type="button" class="btn sm" data-tp-clear>지우기</button><button type="button" class="btn sm" data-tp-cancel>닫기</button><button type="button" class="btn sm primary" data-tp-ok${TP.day ? "" : " disabled"}>확인</button></div>`;
+  pop.hidden = false;
+}
+function tpSet(val) {
+  const bid = TP.bid; if (!bid) return; tpClose();
+  setReq(bid, "wx_tmin_at", val);
+  const td = document.querySelector(`#branchTable td[data-tacell="${bid}"]`); if (td) td.innerHTML = fcInner(bid, "tmin_at");
+  afterReq(bid);
+}
+document.addEventListener("change", e => { if (e.target.matches && e.target.matches("[data-tp-hour]")) { TP.hh = e.target.value; tpRender(); } });
+addEventListener("scroll", e => { if (TP.bid && !(e.target.closest && e.target.closest("#tpop"))) tpClose(); }, true);
 document.addEventListener("click", e => {
   const c = sel => e.target.closest && e.target.closest(sel);
   let x;
+  if (c("#tpop")) {                          // 달력 안
+    if ((x = c("[data-tp-nav]"))) { const d = new Date(TP.y, TP.m + +x.dataset.tpNav, 1); TP.y = d.getFullYear(); TP.m = d.getMonth(); return tpRender(); }
+    if ((x = c("[data-tp-day]"))) { TP.day = x.dataset.tpDay; return tpRender(); }
+    if (c("[data-tp-ok]")) return TP.day ? tpSet(new Date(`${TP.day}T${TP.hh}:00`).toISOString()) : null;
+    if (c("[data-tp-clear]")) return tpSet(null);
+    if (c("[data-tp-cancel]")) return tpClose();
+    return;
+  }
+  if ((x = c("[data-tpick]"))) return TP.bid === x.dataset.tpick ? tpClose() : tpOpen(x);
+  if (TP.bid) tpClose();                     // 바깥을 누르면 닫힘
   if ((x = c("[data-stop-add]"))) { S.extraStop.add(x.dataset.stopAdd); const [d, vid] = x.dataset.stopAdd.split("|"); patchCell(vid, d); const n = [...document.querySelectorAll("[data-fk]")].find(i => i.dataset.fk.startsWith(`rn:${d}:${vid}:`)); if (n) n.focus(); return; }
   if ((x = c("[data-save]"))) return x.dataset.save === "fleet" ? confirmFleet() : saveBranch();
   if ((x = c("[data-revert]"))) { if (!confirm("확정·저장하지 않은 변경을 모두 취소할까요?")) return; if (x.dataset.revert === "fleet") { S.draft.clear(); S.vdraft.clear(); S.extraStop.clear(); } else S.rdraft.clear(); return refresh(); }
