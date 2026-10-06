@@ -421,7 +421,7 @@ def t_warning_auto_badge(p):
     check(p.locator("#tip").is_hidden(), "지사 칸에 마우스를 올려도 설명 없음(2026-10-05)")
     wb = p.locator("#wBaseHead"); check(wb.inner_text().endswith("기준") and ev(p, "getComputedStyle(document.getElementById('wBaseHead')).borderBottomStyle") == "dashed", "대설특보 발표 아래 ○ 기준(점선): " + wb.inner_text())
     wb.hover(); p.wait_for_timeout(100); check("10분마다 업데이트" in p.locator("#tip").inner_text(), "기준에 마우스를 올리면 업데이트 주기: " + p.locator("#tip").inner_text())
-    p.hover("#fcBaseHead"); p.wait_for_timeout(100); check("3시간마다 업데이트" in p.locator("#tip").inner_text(), p.locator("#tip").inner_text())
+    p.hover("#fcBaseHead"); p.wait_for_timeout(100); check("매시 정각 업데이트" in p.locator("#tip").inner_text(), p.locator("#tip").inner_text())
     col = ev(p, "getComputedStyle(document.getElementById('fcBaseHead')).color"); check(col == "rgb(29, 79, 160)", f"기준 글자는 잘 보이는 파랑(노랑 아님): {col}")
     tab(p, "move"); card = p.locator(".dest", has_text="대관령")
     check(card.locator(".tag.wb").inner_text() == "대설주의보", "이동 현황 카드도 고정값")

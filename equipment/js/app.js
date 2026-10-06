@@ -348,7 +348,7 @@ function placeTip(el) {
   tip.style.top = top + "px"; tip.style.left = Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8)) + "px";
 }
 // 표 제목의 '○시 기준'(점선)에 마우스를 올리면 얼마마다 새로 받는지
-const BASE_TIP = { fc: "3시간마다 업데이트 — 단기예보 발표(02·05·08·11·14·17·20·23시) 15분 뒤", warn: "10분마다 업데이트 — 매시 01·11·21·31·41·51분" };
+const BASE_TIP = { fc: "매시 정각 업데이트 — 다음 정시부터 24시간으로 다시 계산(예보 자료는 단기예보 발표 02·05·08·11·14·17·20·23시 15분 뒤 새로 받음)", warn: "10분마다 업데이트 — 매시 01·11·21·31·41·51분" };
 function showBaseTip(el) { tip.innerHTML = `<b>${esc(BASE_TIP[el.dataset.bt] || "")}</b>`; placeTip(el); }
 const hideTip = () => { tip.hidden = true; };
 ["mouseover", "focusin"].forEach(ev => document.addEventListener(ev, e => { if (!e.target.closest) return; const bt = e.target.closest("[data-bt]"); if (bt) return showBaseTip(bt); const el = e.target.closest("[data-hv]"); if (el) showTip(el); }));

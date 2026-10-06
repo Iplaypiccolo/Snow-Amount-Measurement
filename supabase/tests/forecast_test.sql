@@ -16,7 +16,7 @@ declare got text := pg_temp.run_as(rl, uid, stmt); begin insert into _t(name, go
 create or replace function pg_temp.yes(name text, cond boolean, info text default '') returns void language plpgsql as $f$
 begin insert into _t(name, got, want, ok) values (name, case when cond then 'true' else 'false ' || info end, 'true', coalesce(cond, false)); end $f$;
 do $t$
-declare a uuid := gen_random_uuid(); p jsonb; fg jsonb; vr text; nc int; k int; i int; hi int; h timestamptz; st0 timestamptz; v real[]; cx int; cy int; rid bigint; fails int; total int;
+declare a uuid := gen_random_uuid(); p jsonb; fg jsonb; vr text; nc int; k int; i int; hi int; h timestamptz; st0 timestamptz; ok1 boolean; v real[]; cx int; cy int; rid bigint; fails int; total int;
 begin
   insert into auth.users (id, aud, role, email) values (a,'authenticated','authenticated','fa@t.test');
   insert into public.profiles (id,username,display_name,role,perms,must_change) values (a,'ft-adm','관리자','admin','{}',false);
@@ -28,7 +28,7 @@ begin
 
   set local role service_role; p := public.forecast_plan(); reset role;
   select count(distinct (nx, ny)) into nc from private.grid_effective(); st0 := (p ->> 'start_at')::timestamptz;   -- 다음 계획(done)에는 start_at 이 없어 따로 둠
-  perform pg_temp.yes('계획: 가장 최근 발표분, 다음 정시부터 24시각 × 적설·강수·기온, 지사 격자 전부', not (p ->> 'done')::boolean and jsonb_array_length(p -> 'missing') = 72 and jsonb_array_length(p -> 'cells') = nc
+  perform pg_temp.yes('계획: 가장 최근 발표분, 다음 정시부터 27시각 × 적설·강수·기온, 지사 격자 전부', not (p ->> 'done')::boolean and jsonb_array_length(p -> 'missing') = 81 and jsonb_array_length(p -> 'cells') = nc
     and (p ->> 'tmfc')::timestamptz = private.fc_latest_tmfc() and (p ->> 'start_at')::timestamptz = date_trunc('hour', now()) + interval '1 hour', p::text);
   -- B001 의 첫 격자만 매시간 1.5cm·강수 2mm, 기온은 시작 7시간 뒤와 15시간 뒤 -6℃(같으면 이른 시각), 나머지 3℃. 다른 격자는 0·0·10℃, 바다(-99)인 격자 하나
   select g.nx, g.ny into cx, cy from private.grid_effective() g where g.branch_id = 'B001' order by g.ny, g.nx limit 1;
@@ -40,9 +40,19 @@ begin
     v[k] := case when vr = 'SNO' then 1.5 when vr = 'PCP' then 2 when hi in (7, 15) then -6 else 3 end; v[1] := case when k = 1 then v[k] else -99 end;
     set local role service_role; perform public.forecast_put((p ->> 'tmfc')::timestamptz, vr, h, v); reset role;
     i := i + 1;
-    if i = 71 then perform pg_temp.yes('71개째까지는 아직 끝나지 않음', (select done_at is null from public.forecast_runs where tmfc = (p ->> 'tmfc')::timestamptz) and not exists (select 1 from public.branch_forecast where branch_id = 'B001' and max_snow_24h = 36)); end if;   -- 같은 발표분의 실제 결과가 이미 있을 수 있어 값으로 봄
+    if i = 80 then perform pg_temp.yes('80개째까지는 아직 끝나지 않음', (select done_at is null from public.forecast_runs where tmfc = (p ->> 'tmfc')::timestamptz) and not exists (select 1 from public.branch_forecast where branch_id = 'B001' and max_snow_24h = 36)); end if;   -- 같은 발표분의 실제 결과가 이미 있을 수 있어 값으로 봄
   end loop;
-  perform pg_temp.yes('72개 다 모이면 끝: B001 적설 36.0cm(1.5×24)·강수 48.0mm(2×24), 가장 많은 격자', (select max_snow_24h = 36 and max_pcp_24h = 48 and worst_nx = cx and worst_ny = cy and issued_at = (p ->> 'tmfc')::timestamptz from public.branch_forecast where branch_id = 'B001'));
+  perform pg_temp.yes('81개 다 모이면 끝(지금 창 = 다음 정시부터 24시간): B001 적설 36.0cm(1.5×24)·강수 48.0mm(2×24), 가장 많은 격자', (select max_snow_24h = 36 and max_pcp_24h = 48 and worst_nx = cx and worst_ny = cy and issued_at = (p ->> 'tmfc')::timestamptz from public.branch_forecast where branch_id = 'B001'));
+  perform pg_temp.yes('지사 창 = 다음 정시부터 24시간', (select (detail ->> 'start_at')::timestamptz = date_trunc('hour', now()) + interval '1 hour' and (detail ->> 'end_at')::timestamptz = date_trunc('hour', now()) + interval '25 hours' from public.branch_forecast where branch_id = 'B001'));
+  -- 매시 창 옮기기: 창 시작을 한 시간 뒤로 → 받은 27시간 안이면 다시 계산(마지막 시각 값 = 3cm 로 바꿔 합이 달라지는지 봄)
+  update public.forecast_hours set vals[k] = 3 where tmfc = (p ->> 'tmfc')::timestamptz and var = 'SNO' and tmef = st0 + interval '24 hours';
+  ok1 := private.fc_apply((p ->> 'tmfc')::timestamptz, st0 + interval '1 hour');      -- 계산과 확인을 따로(한 문장 안에서는 바뀐 값이 안 보임)
+  perform pg_temp.yes('창 한 시간 뒤 = 받은 범위 안이면 다시 계산(36 - 1.5 + 3 = 37.5)', ok1
+    and (select max_snow_24h = 37.5 and (detail ->> 'start_at')::timestamptz = st0 + interval '1 hour' from public.branch_forecast where branch_id = 'B001'));
+  ok1 := private.fc_apply((p ->> 'tmfc')::timestamptz, st0 + interval '4 hours');
+  perform pg_temp.yes('받은 범위(27시간)를 넘는 창은 계산하지 않음(마지막 창 그대로)', not ok1
+    and (select max_snow_24h = 37.5 from public.branch_forecast where branch_id = 'B001'));
+  perform private.fc_apply((p ->> 'tmfc')::timestamptz, st0);                                  -- 아래 확정 시험은 처음 창(36)으로
   perform pg_temp.yes('바다(-99)는 0 으로', (select count(*) = 0 from public.branch_forecast where max_snow_24h < 0));
   perform pg_temp.yes('지사 모두(격자 편입 변경 반영)', (select count(*) from public.branch_forecast) = (select count(distinct branch_id) from private.grid_effective()));
   perform pg_temp.yes('격자별 24시간 합(지도용)', (select snow_24h = 36 and pcp_24h = 48 from public.forecast_cells where nx = cx and ny = cy) and (select count(*) from public.forecast_cells) = nc);
