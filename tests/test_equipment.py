@@ -257,12 +257,13 @@ def t_vehicle_add_delete(p):
     p.click(f"[data-vdel={vid}]"); p.wait_for_timeout(250); check(p.locator(f"[data-vp={vid}]").count() == 0, "장비 삭제")
 
 def t_dest_layout_and_jump(p):
-    """이동 현황 세부내역: 장비 줄에서 지원기관·수정본·지원 칸 삭제, 본부를 좌·우로 나란히, 표의 숫자를 누르면 그 줄로 이동"""
+    """이동 현황 세부내역: 장비 줄에서 지원기관·수정본·지원 칸 삭제, 본부 하나가 한 줄(안에서 지사 카드 좌·우 2열), 표의 숫자를 누르면 그 줄로 이동"""
     go_date(p, day(p, 0))
-    cols = ev(p, "getComputedStyle(document.getElementById('destList')).gridTemplateColumns.split(' ').length")
-    blocks = p.locator("#destList .hq-block"); check(blocks.count() == 2 and cols == 2, f"본부 묶음 2개, 2열: {blocks.count()} {cols}")
-    b0, b1 = blocks.nth(0).bounding_box(), blocks.nth(1).bounding_box()
-    check(b1["x"] > b0["x"] + b0["width"] * 0.9 and abs(b1["y"] - b0["y"]) < 40, f"본부가 좌·우로 나란히: {b0} {b1}")
+    blocks = p.locator("#destList .hq-block"); check(blocks.count() == 2, f"본부 묶음 2개: {blocks.count()}")
+    b0, b1 = blocks.nth(0).bounding_box(), blocks.nth(1).bounding_box(); mw = ev(p, "document.querySelector('main').clientWidth")
+    check(b0["width"] > mw * 0.9 and b1["width"] > mw * 0.9 and b1["y"] >= b0["y"] + b0["height"] - 2, f"본부 하나가 한 줄을 모두 쓰고 위아래로: {b0} {b1}")
+    cs = blocks.nth(0).locator(".hq-cards .dest"); check(cs.count() >= 2, "본부 안에 지사 카드 2개 이상(샘플)")
+    c0, c1 = cs.nth(0).bounding_box(), cs.nth(1).bounding_box(); check(c1["x"] > c0["x"] + c0["width"] * 0.9 and abs(c1["y"] - c0["y"]) < 40, f"본부 안의 지사 카드는 좌·우 2열: {c0} {c1}")
     row = p.locator("#destList .vrow").first; txt = row.inner_text()
     check("출발" not in txt and "수정본" not in txt and "최초" not in txt and row.locator(".status, .vfrom").count() == 0, f"장비 줄에 지원기관·수정본·지원 없음: {txt!r}")
     check(blocks.nth(0).locator(".dest").first.bounding_box()["width"] < ev(p, "document.querySelector('main').clientWidth") * 0.55, "카드 폭 절반 가량")
@@ -424,13 +425,14 @@ def t_route_kind_and_eta(p):
     check(ev(p, f"JSON.stringify(recOf('{d3}', 'V002'))") == '{"stops":["%s"],"revised":true,"times":["07:35"]}' % bid(p, "인천"), ev(p, f"JSON.stringify(recOf('{d3}', 'V002'))"))
     confirm_fleet(p); check("확정했습니다" in toast(p), toast(p))
     p.check("#modeInit"); p.wait_for_timeout(150)
-    check("인천 (편성 확정 전)" in p.locator(rsel("V002", d3)).inner_text() and "수정본" in p.locator(f"td[data-cell='{d3}|V002']").inner_text(), "최초 지원 목록에서는 미확정 표시, 칸에 수정본 표지")
+    check("인천 (편성 확정 전)" in p.locator(rsel("V002", d3)).inner_text() and "수정본" not in p.locator(f"td[data-cell='{d3}|V002']").inner_text(), "최초 지원 목록에서는 미확정 표시, 칸에 수정본 표지")
     tab(p, "move"); go_date(p, d3)
     row = p.locator(".vrow[data-vid=V002]").first.inner_text(); check("07:35 도착 예상" in row and "수정본" not in row, row)
     check("07:35" in p.locator(".dest", has_text="인천").locator(".dest-time").inner_text(), "카드 큰 시각 = 도착 예상")
     p.click(".vrow[data-vid=V002]"); p.wait_for_selector("ol.vhist li")
     sh = p.locator("#sheet").inner_text(); check("도착 예상" in sh and "07:35" in sh and "도착 요청" not in sh and "지원기관" in sh, sh)
     check("인천 07:35" in p.locator("ol.vhist").inner_text(), "날짜별 기록에도 시각")
+    check("수정본" not in p.locator("#sheet").inner_text() and "최초" not in p.locator("#sheet").inner_text(), "장비 상세에는 수정본/최초 구분이 없음")
     p.click("#sheetClose")
 
 def t_equip_can_edit_eta(p):

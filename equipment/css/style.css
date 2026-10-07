@@ -578,12 +578,12 @@ table.matrix { font-size: 15px; min-width: 900px; }
 .blw input { width: 18px; height: 18px; accent-color: var(--plow); margin: 0; }
 .tag.blw-tag { border-style: solid; }
 
-/* 이동 현황 세부내역: 본부마다 한 덩어리, 화면이 넓으면 좌·우 두 줄(본부 순서대로 왼쪽→오른쪽, 다음 줄) */
-#destList { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 22px; align-items: start; }
-#destList .empty-state { grid-column: 1 / -1; }
+/* 이동 현황 세부내역: 본부 하나가 한 줄을 모두 쓰고, 그 안의 지사 카드는 좌·우 2열(좁은 화면은 1열) */
+#destList .empty-state { grid-column: auto; }
 #destList .hq-head { margin-top: 6px; }
+.hq-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 22px; align-items: start; }
 #destList .dest { margin-bottom: 12px; scroll-margin-top: 14px; }
-@media (max-width: 1000px) { #destList { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1000px) { .hq-cards { grid-template-columns: minmax(0, 1fr); } }
 .dest.hl-card { box-shadow: 0 0 0 2px var(--plow); transition: box-shadow .3s; }
 .vrow.hl { background: color-mix(in srgb, var(--plow) 20%, transparent); }
 /* 이동 현황 표의 누를 수 있는 숫자 */
