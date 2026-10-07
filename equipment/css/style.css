@@ -255,7 +255,7 @@ input.dt { width: 176px; }
 input.rs { width: 130px; }
 input[type="checkbox"].ci { width: 20px; height: 20px; min-height: 0; padding: 0; accent-color: var(--plow); }
 
-/* 수정기록이 있는 값 표시 (관리자에게만) */
+/* 수정기록이 있는 값 표시 (관리자에게만). 지금은 app.js 의 HIST_TIP=false 라 켜지지 않음 — 다시 쓸 때를 위해 남김 */
 [data-hv] { border-bottom: 1px dotted var(--ink-soft); cursor: help; }
 input[data-hv], select[data-hv] { border-bottom: 1px dotted var(--ink-soft); }
 .tip {
@@ -569,3 +569,10 @@ table.matrix { font-size: 15px; min-width: 900px; }
 .tp-hour select { width: 64px; }
 .tp-sel { font-weight: 700; font-size: 12.5px; }
 .tp-btns { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
+
+/* 기관별 장비 표의 블로워(소·대) 체크 / 이동 현황의 블로워 표시 */
+.blw { display: inline-flex; gap: 10px; align-items: center; white-space: nowrap; }
+.blw label { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; cursor: pointer; }
+.blw label.off { color: var(--ink-soft); cursor: default; opacity: .55; }
+.blw input { width: 18px; height: 18px; accent-color: var(--plow); margin: 0; }
+.tag.blw-tag { border-style: solid; }

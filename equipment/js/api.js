@@ -23,7 +23,7 @@ const Api = (() => {
     load() {
       const R = SSAuth.rest;
       return Promise.all([SSAuth.restore(), R("hqs?select=id,name,sort,is_private&order=sort"), R("branches?select=id,name,hq_id,status&order=id"),
-        R("vehicles?select=id,org,type,plate,status,sort,active&order=sort,id"), R("support_rounds?select=id,name,start_date&order=start_date.desc"), R("equip_orgs?select=name")])
+        R("vehicles?select=id,org,type,plate,status,sort,active,blower_s,blower_l&order=sort,id"), R("support_rounds?select=id,name,start_date&order=start_date.desc"), R("equip_orgs?select=name")])
         .then(([me, h, b, v, s, o]) => {
           if (!me.ok) return { ok: false, message: me.message || "로그인이 필요합니다.", login: true };
           if (![h, b, v, s].every(r => r.ok)) return { ok: false, message: "자료를 불러오지 못했습니다." };
@@ -76,7 +76,7 @@ const Api = (() => {
         .then(r => r.ok && r.json && r.json.length ? { ok: true } : fail(r, "기준일자를 지우지 못했습니다(권한이 없을 수 있습니다).")).catch(NET);
     },
     addVehicle(v) {
-      return SSAuth.authed("/rest/v1/vehicles?select=id,org,type,plate,status,sort,active", { method: "POST", body: v, headers: { Prefer: "return=representation" } })
+      return SSAuth.authed("/rest/v1/vehicles?select=id,org,type,plate,status,sort,active,blower_s,blower_l", { method: "POST", body: v, headers: { Prefer: "return=representation" } })
         .then(r => r.ok && r.json && r.json[0] ? { ok: true, vehicle: r.json[0] } : fail(r, "장비를 추가하지 못했습니다.")).catch(NET);
     },
     deleteVehicle(id) {
@@ -140,7 +140,8 @@ const Api = (() => {
         const timeOnlyOk = r => vehOk(r.vehicle_id) && db.routes.some(x => x.date === r.date && x.vehicle_id === r.vehicle_id && JSON.stringify(x.stops) === JSON.stringify(r.stops));
         if (vehicles.some(v => !vehOk(v.id)) || (!can("equip.edit.all") && routes.some(r => !timeOnlyOk(r)))) return done({ ok: false, message: ERR["42501"] });
         if (!can("equip.edit.all")) routes = routes.map(r => { const x = db.routes.find(y => y.date === r.date && y.vehicle_id === r.vehicle_id); return { ...r, revised: !!x.revised }; });
-        if (!can("equip.edit.all") && vehicles.some(v => Object.keys(v).some(k => !["id", "plate", "status"].includes(k)))) return done({ ok: false, message: ERR["42501"] });
+        if (!can("equip.edit.all") && vehicles.some(v => Object.keys(v).some(k => !["id", "plate", "status", "blower_s", "blower_l"].includes(k)))) return done({ ok: false, message: ERR["42501"] });
+        if (vehicles.some(p => (p.blower_s || p.blower_l) && (db.vehicles.find(x => x.id === p.id) || {}).type !== "제설기")) return done({ ok: false, message: ERR["23514"] || "값이 규칙에 맞지 않습니다." });
         const plates = new Map(db.vehicles.map(v => [v.id, v.plate])); vehicles.forEach(v => { if ("plate" in v) plates.set(v.id, v.plate); });
         if (new Set(plates.values()).size !== plates.size) return done({ ok: false, message: ERR["23505"] });
         vehicles.forEach(p => { const v = db.vehicles.find(x => x.id === p.id), from = {}, to = {}; Object.keys(p).filter(k => k !== "id" && v[k] !== p[k]).forEach(k => { from[k] = v[k]; to[k] = p[k]; v[k] = p[k]; }); if (Object.keys(to).length) log("수정", "vehicles", "vehicles:" + v.id, from, to); });
@@ -194,7 +195,7 @@ const Api = (() => {
         const nv = { status: "", active: true, ...v }; db.vehicles.push(nv); log("추가", "vehicles", "vehicles:" + v.id, null, nv); return done({ ok: true, vehicle: clone(nv) });
       },
       deleteVehicle(id) {
-        if (!vehOk(id)) return done({ ok: false, message: ERR["42501"] });      // 관리자 또는 자기 기관 장비
+        if (!can("equip.edit.all")) return done({ ok: false, message: ERR["42501"] });      // 장비 삭제는 관리자만
         db.vehicles = db.vehicles.filter(x => x.id !== id); db.routes = db.routes.filter(x => x.vehicle_id !== id); log("삭제", "vehicles", "vehicles:" + id, { id }, null); return done({ ok: true });
       }
     };

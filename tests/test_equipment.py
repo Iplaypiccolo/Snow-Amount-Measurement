@@ -162,8 +162,8 @@ def t_permissions_equip_own(p):
     check(p.locator("[data-vs=V013]").count() == 1 and p.locator("[data-vp=V013]").count() == 1 and p.locator("[data-vs=V001]").count() == 0, "충북 장비의 도공번호·지원 여부만")
     check(p.locator("select[data-rv]").count() == 0, "경로 칸은 보기만")
     check(p.locator("#day1In").count() == 0 and p.locator("#fleetReset").count() == 0, "지원일 1·초기화 없음")
-    dels = set(x.get_attribute("data-vdel") for x in p.locator("[data-vdel]").all())
-    check(dels == set(ev(p, "S.vehicles.filter(v => v.org === '충북').map(v => v.id)")), f"삭제는 자기 기관 장비만: {sorted(dels)}")
+    check(p.locator("[data-vdel]").count() == 0 and "삭제" not in p.locator("#eqTable thead").inner_text(), "장비 삭제 버튼은 지원장비 계정에 없음(관리자만)")
+    check(p.locator("[data-vb=V013]").count() == 2 and p.locator("[data-vb=V013][data-bf=blower_s]").is_enabled() == (ev(p, "vehById('V013').type") == "제설기"), "블로워 칸: 제설기일 때만 켜짐")
     check(p.locator("#nvOrg option").all_inner_texts() == ["충북"], "장비 추가는 자기 기관만")
     p.fill("#nvPlate", "950"); p.click("#vehAdd"); p.wait_for_timeout(250); check("추가했습니다" in toast(p), toast(p))
     p.select_option("[data-vs=V013]", "M"); p.wait_for_timeout(150); confirm_fleet(p); check("확정했습니다" in toast(p) and ev(p, "vehById('V013').status") == "M", toast(p))
@@ -171,7 +171,7 @@ def t_permissions_equip_own(p):
     ev(p, f"S.draft.set(rk('{day(p, 3)}', 'V014'), {{ stops: ['{bid(p, '양양')}'], revised: false, times: [null] }}), updateSavebars()"); confirm_fleet(p)   # 화면을 우회해 경로를 보내도 서버가 막음
     check("권한이 없습니다" in toast(p), toast(p))
     as_user(p, "br1"); tab(p, "fleet")
-    check(p.locator("#eqTable select, #eqTable input, #vehAdd, #fleetReset").count() == 0 and not p.locator("#save-fleet").is_visible(), "지사는 기관별 장비에서 아무것도 못 고침")
+    check(p.locator("#eqTable select, #eqTable input:enabled, #vehAdd, #fleetReset").count() == 0 and not p.locator("#save-fleet").is_visible(), "지사는 기관별 장비에서 아무것도 못 고침")
 
 def t_branch_permissions(p):
     tab(p, "branch"); b = bid(p, "대관령"); p.click(f"[data-unconfirm={b}]"); p.wait_for_timeout(300)     # 확정된 줄은 잠기므로(2026-10-05) 먼저 취소
@@ -214,8 +214,11 @@ def t_round_create(p):
     tab(p, "branch"); p.fill("#newRoundDate", d); p.click("#roundMake"); p.wait_for_timeout(200); check("이미 있습니다" in toast(p), "같은 날짜 거절")
 
 def t_history_tooltip_per_cell(p):
-    """말풍선은 그 칸(그 날짜·그 장비 / 그 지사·그 열)의 오늘 수정 기록만"""
+    """수정 기록 말풍선: 지금은 꺼 둠(HIST_TIP=false → 밑줄·말풍선 없음). 켜면(HIST_TIP=true) 그 칸(그 날짜·그 장비 / 그 지사·그 열)의 오늘 수정 기록만"""
     tab(p, "fleet"); d0 = day(p, 0)
+    check(ev(p, "HIST_TIP") is False and p.locator("[data-hv]").count() == 0, "기본값: 기록 밑줄·말풍선 꺼짐")
+    tab(p, "branch"); check(p.locator("[data-hv]").count() == 0, "지사별 요청·편성에도 없음")
+    tab(p, "fleet"); ev(p, "(HIST_TIP = true, refresh())"); d0 = day(p, 0)
     cell = p.locator(rsel("V001", d0)).locator("xpath=ancestor::div[contains(concat(' ',@class,' '),' slot ')]")
     check(cell.get_attribute("data-hv") == f"vehicle_routes:{d0},V001", "오늘 고친 칸에 기록 표시")
     check(p.locator(rsel("V001", day(p, 1))).locator("xpath=ancestor::div[contains(concat(' ',@class,' '),' slot ')]").get_attribute("data-hv") is None, "고치지 않은 칸에는 없음")
@@ -226,6 +229,7 @@ def t_history_tooltip_per_cell(p):
     check(t.count("→") == 3 and "14 → 15" in t and "10 → 12" not in t, f"최근 3건만: {t}")
     check(p.locator(f"tr[data-b='{y}'] [data-hf=req_truck]").count() == 0, "다른 열에는 없음")
     as_user(p, "br1"); tab(p, "fleet"); check(p.locator("[data-hv]").count() == 0, "log.view 권한이 없으면 기록 표시 없음")
+    ev(p, "(HIST_TIP = false, refresh())")
 
 def t_log_tab(p):
     tab(p, "log"); check(p.locator("#logTable tbody tr").count() == 9, p.locator("#logTable tbody tr").count())
@@ -251,6 +255,38 @@ def t_vehicle_add_delete(p):
     vid = ev(p, "(S.vehicles.find(v => v.plate === '전북998') || {}).id"); check("추가했습니다" in toast(p) and vid == "V044", f"장비 추가: {vid}")
     check(p.locator(f"[data-vp={vid}]").input_value() == "998" and p.locator(f"[data-vs={vid}]").input_value() == "", "새 장비 줄(지원 여부 미정)")
     p.click(f"[data-vdel={vid}]"); p.wait_for_timeout(250); check(p.locator(f"[data-vp={vid}]").count() == 0, "장비 삭제")
+
+def t_fleet_sort_blower_delete(p):
+    """기관별 장비: 기관(서울경기-충북-전북-대구경북)→종류(제설차-제설기-이동정비차) 정렬 · 블로워(소·대) · 삭제는 관리자만 · 이동 현황에 블로워 표시"""
+    tab(p, "fleet")
+    def order(): return ev(p, "[...document.querySelectorAll('#eqTable tbody tr[data-vrow]')].map(tr => { const v = vehById(tr.dataset.vrow); return [S.orgs.indexOf(v.org), TYPES.indexOf(v.type), v.plate] })")
+    def sorted_ok(o): return all((o[i][0], o[i][1]) <= (o[i + 1][0], o[i + 1][1]) for i in range(len(o) - 1))
+    o = order(); check(len(o) > 10 and sorted_ok(o), "기본 표가 기관 → 종류 순서")
+    for org, typ, n in [("대구경북", "이동정비차", "880"), ("서울경기", "제설기", "881"), ("충북", "제설차", "882"), ("서울경기", "제설차", "883")]:   # 일부러 뒤죽박죽으로 추가
+        p.select_option("#nvOrg", org); p.select_option("#nvType", typ); p.fill("#nvPlate", n); p.click("#vehAdd"); p.wait_for_timeout(250); check("추가했습니다" in toast(p), toast(p))
+    o = order(); check(sorted_ok(o), "추가한 장비도 추가 순서가 아니라 기관 → 종류 순서로 자리잡음")
+    plates = ev(p, "[...document.querySelectorAll('#eqTable tbody tr[data-vrow]')].map(tr => vehById(tr.dataset.vrow).plate)")
+    check(plates.index("서울경기883") < plates.index("서울경기881") and plates.index("서울경기881") < plates.index("충북882") and plates.index("충북882") < plates.index("대구경북880"), f"서울경기 제설차 < 서울경기 제설기 < 충북 < 대구경북: {plates}")
+    check("기관" not in p.locator("#eqTable thead").inner_text().replace("지원 여부", "") and "블로워" in p.locator("#eqTable thead").inner_text(), "기관 열이 블로워 열로")
+    veh = {t: ev(p, f"(S.vehicles.find(v => v.type === '{t}') || {{}}).id") for t in ["제설차", "제설기", "이동정비차"]}
+    for t_, vid in veh.items():
+        en = p.locator(f"[data-vb={vid}][data-bf=blower_s]").is_enabled(); check(en == (t_ == "제설기"), f"{t_}: 블로워 칸 {'켜짐' if en else '꺼짐'}")
+    vid = veh["제설기"]
+    check(not p.locator(f"[data-vb={vid}][data-bf=blower_s]").is_checked() and not p.locator(f"[data-vb={vid}][data-bf=blower_l]").is_checked(), "처음엔 둘 다 꺼짐(둘 다 안 달 수 있음)")
+    p.check(f"[data-vb={vid}][data-bf=blower_s]"); p.wait_for_timeout(100); check(ev(p, f"S.vdraft.get('{vid}').blower_s") is True, "소 체크 = 확정 전 변경")
+    p.check(f"[data-vb={vid}][data-bf=blower_l]"); p.wait_for_timeout(100); confirm_fleet(p)
+    check(ev(p, f"[vehById('{vid}').blower_s, vehById('{vid}').blower_l]") == [True, True] and "확정했습니다" in toast(p), "소·대 모두 확정 저장: " + toast(p))
+    p.uncheck(f"[data-vb={vid}][data-bf=blower_s]"); p.wait_for_timeout(100); confirm_fleet(p)
+    check(ev(p, f"[vehById('{vid}').blower_s, vehById('{vid}').blower_l]") == [False, True], "소만 끄기 가능")
+    # 이동 현황: 블로워가 달린 제설기에 '블로워 대'
+    mv = ev(p, "(() => { const v = S.vehicles.find(v => v.type === '제설기' && S.routes.size && [...S.routes.keys()].some(k => k.endsWith('|' + v.id))); return v ? [v.id, [...S.routes.keys()].find(k => k.endsWith('|' + v.id)).split('|')[0]] : null })()")
+    check(mv is not None, "경로가 있는 제설기가 있음")
+    ev(p, f"(vehById('{mv[0]}').blower_s = false, vehById('{mv[0]}').blower_l = true, 0)"); tab(p, "move"); go_date(p, mv[1])
+    row = p.locator(f"#destList [data-vid={mv[0]}]").first
+    check(row.count() == 1 and "블로워 대" in row.inner_text(), "이동 현황 장비 줄에 블로워 표시: " + row.inner_text())
+    row.click(); p.wait_for_timeout(200); check("블로워 대" in p.locator("#sheetTitle").inner_text(), "장비 상세에도 표시"); p.click("#sheetClose")
+    # 삭제는 관리자만(관리자에게는 있음)
+    tab(p, "fleet"); check(p.locator("[data-vdel]").count() == ev(p, "S.vehicles.length"), "관리자에게는 모든 줄에 삭제")
 
 def t_fleet_header_stays_on_top(p):
     """기관별 장비 표를 스크롤해도 제목 줄이 맨 위에 불투명하게 고정(입력칸·첫 열이 제목 위로 올라오지 않음)"""
@@ -618,7 +654,7 @@ def t_views_and_choices_after_confirm_all(p):
 
 TESTS = [t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
-         t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_fleet_header_stays_on_top, t_theme_toggle,
+         t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
          t_typing_then_clicking_next_input_keeps_both, t_round_delete, t_pending_branches_shown_grey, t_ui_version_reload_once,
          t_route_kind_and_eta, t_equip_can_edit_eta, t_bulk_confirm_and_no_holdings, t_filters_fit_any_width, t_date_in_title, t_branch_header_stays_on_top,
