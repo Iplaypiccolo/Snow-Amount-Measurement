@@ -18,20 +18,26 @@
 .leaflet-tooltip.fc-label b{display:block;color:#1d4fa0;}
 .leaflet-tooltip.fc-label span{display:block;color:#2f7d4f;font-size:10px;}
 .leaflet-tooltip.fc-label em{display:block;color:#b0392b;font-size:10px;font-style:normal;}
-/* 격자 마우스: 24시간 추이 */
+/* 격자 마우스·고정: 24시간 추이 표(그림 대신). 마우스 말풍선 283px(=236×1.2), 고정 창 396px(=330×1.2) */
 .leaflet-tooltip.fc-tip{max-width:none;background:#fff;z-index:700;}
-.fc-trend-box{margin-top:4px;display:flex;flex-direction:column;gap:2px;}
-.fc-trend{display:block;}
-.fc-trend text{font-size:9px;fill:#555;font-family:var(--mono);}
-.fc-trend text.ttl{font-size:10px;font-weight:700;font-family:inherit;}
-.fc-trend .xt{font-size:10.5px;font-weight:700;fill:#222;font-family:inherit;}
+.fc-trend-box{margin-top:4px;display:flex;flex-direction:column;gap:6px;width:283px;}
+.fc-trend-box.big{width:396px;}
+.fc-tt{width:100%;border-collapse:collapse;table-layout:fixed;font-family:var(--mono);font-size:11px;}
+.fc-tt th,.fc-tt td{border:1px solid #e1ddd0;padding:2px 1px;text-align:center;white-space:nowrap;overflow:hidden;}
+.fc-tt thead th{background:#f4f1e8;font-weight:700;color:#444;line-height:1.1;}
+.fc-tt thead th small{display:block;font-weight:400;font-size:8.5px;color:#888;}
+.fc-tt th.lb{width:52px;text-align:left;padding-left:3px;font-family:inherit;font-weight:700;font-size:10.5px;background:#faf8f1;}
+.fc-tt th.lb small{font-weight:400;font-size:9px;color:#888;margin-left:2px;}
+.fc-tt th.s{color:#2e5fb8;} .fc-tt th.p{color:#2f7d4f;} .fc-tt th.t{color:#b0392b;}
+.fc-tt td.v{font-weight:700;} .fc-tt td.z{color:#aaa;} .fc-tt td.neg{color:#1d5fb0;}
+.fc-tt-cap{font-size:10px;color:#777;margin-top:-3px;}
+.fc-tt-sum{font-size:11px;color:#333;} .fc-tt-sum b{font-family:var(--mono);}
 .fc-trend-key{font-size:10.5px;color:#777;margin-top:2px;}
 /* 격자를 눌러 고정한 그림(지도 오른쪽 위) */
 .fc-pin{position:absolute;top:10px;right:10px;z-index:800;background:#fff;border:1px solid #33424f;border-radius:8px;padding:8px 10px;box-shadow:0 4px 14px rgba(0,0,0,.18);}
 .fc-pin[hidden]{display:none;}
 .fc-pin-head{display:flex;align-items:center;gap:6px;font-size:12.5px;margin-bottom:2px;}
 .fc-pin-x{margin-left:auto;border:0;background:none;font-size:18px;line-height:1;cursor:pointer;color:#555;padding:0 2px;}
-.fc-pin svg{cursor:crosshair;}
 .fc-pin-note{font-size:10.5px;color:#777;margin-top:2px;}
 .fc-no{color:#888;font-weight:400;font-size:10px;margin-left:3px;font-family:var(--mono);}
 .fc-pin-br{color:#555;font-size:11.5px;}

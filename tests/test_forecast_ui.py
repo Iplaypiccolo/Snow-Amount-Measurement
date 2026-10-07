@@ -63,7 +63,7 @@ def t_levels(b):
     tipname = J(p, f"(() => {{ const l = {S}.cells.getLayers().find(l => l.getLatLngs && l.getTooltip()); return l.getTooltip().getContent() }})()")
     check(any(("<b>" + v + "</b>") in tipname for v in set(names.values())), "마우스 말풍선 제목도 지명")
     poly = J(p, f"(() => {{ const ls = {S}.cells.getLayers().filter(l => l.getTooltip && l.getTooltip() && !l.options.permanent && l.getLatLngs); const t = ls[0].getTooltip().getContent(); return t }})()")
-    check("<svg" in poly and "최저기온" in poly and "fc-trend" in poly, "격자에 마우스 = 24시간 추이 그림: " + poly[:120])
+    check("<table" in poly and "fc-t3" in poly and "<svg" not in poly and "최저기온" in poly, "격자에 마우스 = 3시간 단위 표(그림 없음): " + poly[:120])
     rows = p.locator(".fc-detail tbody tr"); check(rows.count() == n, "옆 표에 격자 목록")
     top = max((c for c in m.fc_cells if d in c[2]), key=lambda c: c[3])
     check(rows.first.locator("td").nth(1).inner_text() == f"{top[3]:.1f}", "적설 많은 격자부터")
@@ -105,19 +105,27 @@ def t_pin_chart(b):
     p, m = open_page(b); p.click(".tab-btn[data-tab=forecast]"); p.wait_for_timeout(600)
     d = bid(p, "대관령"); p.click("#fc-tree [data-fchq='강원']"); p.wait_for_timeout(500); p.click(f"#fc-tree [data-fcbr='{d}']"); p.wait_for_timeout(900)
     tip = J(p, f"(() => {{ const l = {S}.cells.getLayers().find(l => l.getLatLngs && l.getTooltip()); return l.getTooltip().getContent() }})()")
-    order = [tip.find("fc-ch-" + k) for k in "spt"]
-    check(all(i > 0 for i in order) and order == sorted(order), f"마우스 말풍선: 적설·강수·기온 세 그림이 이 순서로 따로 {order}")
+    check("<svg" not in tip and tip.count("fc-t3") == 1, "마우스 말풍선: 그래프 없이 3시간 표 하나")
+    tp = p.locator(".leaflet-tooltip.fc-tip")
+    sr = J(p, f"(() => {{ const l = {S}.cells.getLayers().find(l => l.getLatLngs && l.getTooltip()); l.openTooltip(); return 1 }})()"); p.wait_for_timeout(200)
+    t3 = tp.locator("table.fc-t3")
+    heads = [h.strip() for h in t3.locator("thead th:not(.lb)").all_inner_texts()]
+    hrs = [h.split("\n")[0] for h in heads]
+    check(len(hrs) == 8 and all(int(hrs[i]) == (int(hrs[0]) + 3 * i) % 24 for i in range(8)), f"3시간 표 머리글 = 3시간 간격 8칸 {hrs}")
+    rows = [r.locator("th.lb").inner_text() for r in t3.locator("tbody tr").all()]
+    check([x.startswith(y) for x, y in zip(rows, ["신적설", "강수", "최저기온"])] == [True] * 3 and len(rows) == 3, f"행: {rows}")
+    vals = [float(x) for x in t3.locator("tbody tr").first.locator("td").all_inner_texts() if x not in ("-", "0")]
+    tot = float(tp.locator(".fc-tt-sum b").first.inner_text())
+    check(abs(sum(vals) - tot) < 0.35, f"3시간 합들의 합 = 24시간 합 ({sum(vals):.1f} ≈ {tot})")
+    box = tp.locator(".fc-trend-box").bounding_box(); check(box and 270 <= box["width"] <= 296, f"말풍선 표 폭 약 20% 확대(283px): {box and box['width']}")
     check(not p.locator("#fc-pin").is_visible(), "처음엔 고정 그림 없음")
     key = J(p, f"(() => {{ const l = {S}.cells.getLayers().find(l => l.getLatLngs && l.getTooltip()); l.fire('click'); return {S}.pin }})()"); p.wait_for_timeout(300)
     pin = p.locator("#fc-pin")
     check(pin.is_visible() and key and key in pin.inner_text(), f"격자를 누르면 그 격자 그림 고정: {key}")
-    check([x.get_attribute("data-k") for x in pin.locator("svg").all()] == ["s", "p", "t"], "고정 그림도 적설 → 강수 → 기온")
-    sv = pin.locator("svg[data-k=t]"); bb = sv.bounding_box()
-    p.mouse.move(bb["x"] + bb["width"] * 0.5, bb["y"] + bb["height"] * 0.5); p.wait_for_timeout(150)
-    check(sv.locator(".xh").is_visible() and sv.locator(".xv").get_attribute("x1") and "시 · " in sv.locator(".xt").text_content() and "℃" in sv.locator(".xt").text_content(),
-          "마우스: 세로·가로 보조선 + 몇 시 · 값: " + (sv.locator(".xt").text_content() or ""))
-    p.mouse.move(bb["x"] + bb["width"] * 0.9, bb["y"] + bb["height"] * 0.5); p.wait_for_timeout(100)
-    later = sv.locator(".xt").text_content(); check(later and later != "", "마우스를 옮기면 그 시각 값으로")
+    check(pin.locator("svg").count() == 0 and pin.locator("table.fc-t1").count() == 2, "고정 창: 그래프 없이 1시간 표 두 개(12시간씩)")
+    h1 = [x.split("\n")[0] for x in pin.locator("table.fc-t1").first.locator("thead th:not(.lb)").all_inner_texts()]
+    check(len(h1) == 12 and all(int(h1[i]) == (int(h1[0]) + i) % 24 for i in range(12)), f"1시간 표 머리글 12칸 {h1}")
+    pb = pin.locator(".fc-trend-box").bounding_box(); check(pb and 385 <= pb["width"] <= 407, f"고정 창 표 폭 약 20% 확대(396px): {pb and pb['width']}")
     check(J(p, f"(() => {{ const l = {S}.cells.getLayers().find(l => l.getLatLngs && l.options.weight === 4); return !!l }})()"), "고정한 격자는 굵은 테두리")
     p.wait_for_timeout(350); J(p, f"(() => {{ {S}.map.fire('click', {{ latlng: {S}.map.getCenter() }}); return null }})()"); p.wait_for_timeout(200)
     check(not p.locator("#fc-pin").is_visible() and J(p, f"{S}.pin") is None, "지도 아무 데나 누르면 닫힘")

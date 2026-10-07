@@ -81,55 +81,36 @@
       m._start = r.json.start_at; S.series[id] = m; return m;
     }).catch(function () { return null; });
   }
-  // 24시간 추이 그림 — 적설·강수·기온을 따로(위에서부터 적설 → 강수 → 기온). k = 's' | 'p' | 't', big = 고정 창(마우스로 값 보기)
-  var CH = { s: { name: '적설', unit: 'cm', color: '#2e5fb8' }, p: { name: '강수', unit: 'mm', color: '#2f9d5f' }, t: { name: '기온', unit: '℃', color: '#c0392b' } };
-  function hourLabel(start, i) { var d = start ? new Date(Date.parse(start) + i * 3600e3) : null; return d && !isNaN(d) ? p2(d.getHours()) + '시' : ''; }
-  function chartGeom(k, vals, big) {
-    var W = big ? 330 : 236, H = big ? 104 : 64, L0 = 30, R0 = 8, T0 = big ? 22 : 16, B0 = 16, n = vals.length || 24, cw = (W - L0 - R0) / n;
-    var xs = vals.filter(function (v) { return v != null; }), lo, hi;
-    if (k === 't') { lo = xs.length ? Math.min.apply(null, xs) : 0; hi = xs.length ? Math.max.apply(null, xs) : 1; if (hi - lo < 4) { var mid = (hi + lo) / 2; lo = mid - 2; hi = mid + 2; } }
-    else { lo = 0; hi = Math.max(1, xs.length ? Math.max.apply(null, xs) : 0); }
-    return { W: W, H: H, L0: L0, R0: R0, T0: T0, B0: B0, n: n, cw: cw, lo: lo, hi: hi,
-      y: function (v) { return T0 + (H - T0 - B0) * (1 - (v - lo) / (hi - lo)); } };
-  }
-  function chartSvg(k, vals, start, big) {
-    vals = vals || []; var c = CH[k], g = chartGeom(k, vals, big), body = '';
-    var xs = vals.filter(function (v) { return v != null; });
-    var head = k === 't' ? (xs.length ? '최저 ' + tmp(Math.min.apply(null, xs)) + '℃ (' + hourLabel(start, vals.indexOf(Math.min.apply(null, xs))) + ')' : '자료 없음')
-      : '합 ' + num(xs.reduce(function (a, v) { return a + v; }, 0)) + c.unit;
-    if (k === 't') {
-      var pts = []; vals.forEach(function (v, i) { if (v != null) pts.push((g.L0 + (i + 0.5) * g.cw).toFixed(1) + ',' + g.y(v).toFixed(1)); });
-      body = '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + c.color + '" stroke-width="1.8"/>';
-    } else {
-      vals.forEach(function (v, i) { if (!v) return; var y = g.y(v); body += '<rect x="' + (g.L0 + i * g.cw + 1).toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + Math.max(1, g.cw - 2).toFixed(1) + '" height="' + (g.H - g.B0 - y).toFixed(1) + '" fill="' + c.color + '"/>'; });
+  // 24시간 추이 표(그림 대신) — 값 24개(start 의 정시부터 1시간씩)를 시각별 표로. s = 적설(cm), p = 강수(mm), t = 기온(℃)
+  //  · 마우스 말풍선: 3시간 단위(칸 = 그 시각부터 3시간의 합, 기온은 그 3시간의 최저)  · 눌러 고정한 창: 1시간 단위(12시간씩 두 줄)
+  var CH = { s: { name: '적설', unit: 'cm' }, p: { name: '강수', unit: 'mm' }, t: { name: '기온', unit: '℃' } };
+  function hourAt(start, i) { var d = start ? new Date(Date.parse(start) + i * 3600e3) : null; return d && !isNaN(d) ? d : null; }
+  function hourLabel(start, i) { var d = hourAt(start, i); return d ? p2(d.getHours()) + '시' : ''; }
+  function sumOf(a) { var x = a.filter(function (v) { return v != null; }); return x.length ? x.reduce(function (m, v) { return m + v; }, 0) : null; }
+  function minOf(a) { var x = a.filter(function (v) { return v != null; }); return x.length ? Math.min.apply(null, x) : null; }
+  function cellNum(v) { return v == null ? '<td class="z">-</td>' : v === 0 ? '<td class="z">0</td>' : '<td class="v">' + num(v) + '</td>'; }
+  function cellTmp(v) { return v == null ? '<td class="z">-</td>' : '<td class="v' + (v < 0 ? ' neg' : '') + '">' + tmp(v) + '</td>'; }
+  // from~to(번호) 구간을 step 시간씩 묶어 표 하나 — step 3 이면 합·최저, step 1 이면 그 시각 값
+  function tableBlock(sr, start, from, to, step) {
+    var head = '', rs = '', rp = '', rt = '';
+    for (var i = from; i < to; i += step) {
+      var d = hourAt(start, i), part = function (k) { return (sr[k] || []).slice(i, Math.min(i + step, to)); };
+      head += '<th>' + (d ? p2(d.getHours()) : '') + ((i === from || (d && d.getHours() === 0)) && d ? '<small>' + (d.getMonth() + 1) + '/' + d.getDate() + '</small>' : '') + '</th>';
+      rs += cellNum(sumOf(part('s'))); rp += cellNum(sumOf(part('p'))); rt += cellTmp(minOf(part('t')));
     }
-    return '<svg class="fc-trend fc-ch-' + k + '" width="' + g.W + '" height="' + g.H + '" viewBox="0 0 ' + g.W + ' ' + g.H + '" data-k="' + k + '" data-vals="' + esc(JSON.stringify(vals)) + '" data-start="' + esc(start || '') + '"' + (big ? ' data-big="1"' : '') + '>' +
-      '<text class="ttl" x="' + g.L0 + '" y="' + (g.T0 - 6) + '" fill="' + c.color + '">' + c.name + '(' + c.unit + ') · ' + esc(head) + '</text>' +
-      '<line x1="' + g.L0 + '" y1="' + (g.H - g.B0) + '" x2="' + (g.W - g.R0) + '" y2="' + (g.H - g.B0) + '" stroke="#999" stroke-width="0.6"/>' + body +
-      '<text x="' + (g.L0 - 3) + '" y="' + (g.T0 + 4) + '" text-anchor="end">' + (k === 't' ? tmp(g.hi) : num(g.hi)) + '</text>' +
-      '<text x="' + (g.L0 - 3) + '" y="' + (g.H - g.B0) + '" text-anchor="end">' + (k === 't' ? tmp(g.lo) : '0') + '</text>' +
-      [0, 6, 12, 18].map(function (h) { return '<text x="' + (g.L0 + h * g.cw).toFixed(1) + '" y="' + (g.H - 3) + '">' + hourLabel(start, h) + '</text>'; }).join('') +
-      (big ? '<g class="xh" style="display:none"><line class="xv" stroke="#333" stroke-dasharray="3 2" stroke-width="0.8"/><line class="xz" stroke="#333" stroke-dasharray="3 2" stroke-width="0.8"/><circle class="xp" r="3" fill="' + c.color + '"/><text class="xt" text-anchor="end"></text></g>' : '') +
-      '</svg>';
+    var u = step === 1 ? '' : (step + '시간 ');
+    return '<table class="fc-tt fc-t' + step + '"><thead><tr><th class="lb">시</th>' + head + '</tr></thead><tbody>' +
+      '<tr><th class="lb s">신적설<small>cm</small></th>' + rs + '</tr><tr><th class="lb p">강수<small>mm</small></th>' + rp + '</tr>' +
+      '<tr><th class="lb t">' + (step === 1 ? '기온' : '최저기온') + '<small>℃</small></th>' + rt + '</tr></tbody></table>';
   }
+  function totalLine(sr) {
+    return '<div class="fc-tt-sum">24시간 합 · 적설 <b>' + num(sumOf(sr.s || [])) + '</b>cm · 강수 <b>' + num(sumOf(sr.p || [])) + '</b>mm · 최저 <b>' + tmp(minOf(sr.t || [])) + '</b>℃</div>';
+  }
+  // big = false: 마우스 말풍선(3시간 단위 한 표), true: 고정 창(1시간 단위, 12시간씩 두 표)
   function trendBox(sr, start, big) {
     if (!sr) return '';
-    return '<div class="fc-trend-box' + (big ? ' big' : '') + '">' + ['s', 'p', 't'].map(function (k) { return chartSvg(k, sr[k], start, big); }).join('') + '</div>';
-  }
-  // 고정 창의 그림에 마우스: 그 시각의 세로·가로 보조선과 "몇 시 · 값"
-  function chartHover(svg, e) {
-    var k = svg.dataset.k, vals = JSON.parse(svg.dataset.vals || '[]'), g = chartGeom(k, vals, true), xh = svg.querySelector('.xh'); if (!xh) return;
-    var r = svg.getBoundingClientRect(), x = (e.clientX - r.left) * g.W / r.width;
-    var i = Math.max(0, Math.min(g.n - 1, Math.floor((x - g.L0) / g.cw))), v = vals[i], cx = g.L0 + (i + 0.5) * g.cw;
-    var yv = v == null ? null : (k === 't' ? g.y(v) : g.y(v || 0));
-    var set = function (el, a) { Object.keys(a).forEach(function (n) { el.setAttribute(n, a[n]); }); };
-    set(xh.querySelector('.xv'), { x1: cx, x2: cx, y1: g.T0, y2: g.H - g.B0 });
-    var xz = xh.querySelector('.xz'), xp = xh.querySelector('.xp');
-    if (yv == null) { xz.style.display = 'none'; xp.style.display = 'none'; }
-    else { xz.style.display = ''; xp.style.display = ''; set(xz, { x1: g.L0, x2: g.W - g.R0, y1: yv, y2: yv }); set(xp, { cx: cx, cy: yv }); }
-    var t = xh.querySelector('.xt'); set(t, { x: g.W - g.R0, y: g.T0 - 6 });
-    t.textContent = hourLabel(svg.dataset.start, i) + ' · ' + (v == null ? '자료 없음' : (k === 't' ? tmp(v) : num(v)) + CH[k].unit);
-    xh.style.display = '';
+    if (!big) return '<div class="fc-trend-box">' + tableBlock(sr, start, 0, 24, 3) + '<div class="fc-tt-cap">칸 = 그 시각부터 3시간 합 (기온은 최저)</div>' + totalLine(sr) + '</div>';
+    return '<div class="fc-trend-box big">' + tableBlock(sr, start, 0, 12, 1) + tableBlock(sr, start, 12, 24, 1) + totalLine(sr) + '</div>';
   }
   // 격자를 누르면 그 격자의 그림을 지도 오른쪽 위에 고정(지도 아무 데나 누르면 닫힘)
   function renderPin() {
@@ -139,7 +120,7 @@
     var k = S.pin.split(','), g = S.grid[S.hq], c = g && g.cells ? g.cells.filter(function (x) { return x[0] === +k[0] && x[1] === +k[1]; })[0] : null;
     box.innerHTML = '<div class="fc-pin-head"><b>' + esc(cellName(+k[0], +k[1])) + '</b>' + cellNo(+k[0], +k[1]) + ' <span class="fc-pin-br">' + (c ? esc((c[2] || []).map(bname).join(', ')) : '') + '</span>' +
       '<button type="button" class="fc-pin-x" aria-label="닫기">×</button></div>' + trendBox(sr, S.series[S.focus]._start, true) +
-      '<div class="fc-pin-note">그림에 마우스를 올리면 시각별 값</div>';
+      '<div class="fc-pin-note">1시간 단위 표 · 지도 아무 데나 누르면 닫힘</div>';
     box.hidden = false;
   }
   function pinCell(key) { S.pin = key; S.pinAt = Date.now(); renderPin(); drawCells(); }
@@ -174,7 +155,7 @@
       var sr = S.focus && fresh && S.series[S.focus] ? S.series[S.focus][key] : null;
       poly.bindTooltip('<b>' + esc(cellName(nx, ny)) + '</b>' + cellNo(nx, ny) + '<br>' + bs.map(function (b) { return esc(bname(b)); }).join(', ') +
         (S.focus ? '<br>24시간 적설 <b>' + num(snow) + 'cm</b> · 강수 <b>' + num(pcp) + 'mm</b><br>최저기온 <b>' + tmp(tmin) + '℃</b> (' + esc(hh(tat)) + ')' +
-          (sr ? trendBox(sr, S.series[S.focus]._start, false) + '<div class="fc-trend-key">누르면 그림 고정</div>' : '') : ''),
+          (sr ? trendBox(sr, S.series[S.focus]._start, false) + '<div class="fc-trend-key">누르면 1시간 단위 표 고정</div>' : '') : ''),
         { sticky: true, opacity: 1, className: 'gr-tip' + (sr ? ' fc-tip' : '') });
       poly.on('click', function () {
         if (!S.focus) { if (bs.length) focusBranch(bs[0]); return; }
@@ -268,12 +249,6 @@
       var b = t.closest && t.closest('[data-fcbr]'); if (b) { focusBranch(b.dataset.fcbr); return; }
       if (t.closest && t.closest('.fc-pin-x')) { unpin(); return; }
       var c = t.closest && t.closest('[data-cell]'); if (c && S.map) { var k = c.dataset.cell.split(','); S.map.setView(G.cellCenter(+k[0], +k[1]), Math.max(S.map.getZoom(), 11)); if (S.focus) pinCell(c.dataset.cell); }
-    });
-    // 고정 그림: 마우스 위치의 시각·값(보조선)
-    $('view-forecast').addEventListener('mousemove', function (e) { var svg = e.target.closest && e.target.closest('#fc-pin svg[data-big]'); if (svg) chartHover(svg, e); });
-    $('view-forecast').addEventListener('mouseout', function (e) {
-      var svg = e.target.closest && e.target.closest('#fc-pin svg[data-big]'); if (!svg || (e.relatedTarget && svg.contains(e.relatedTarget))) return;
-      var xh = svg.querySelector('.xh'); if (xh) xh.style.display = 'none';
     });
   }
 
