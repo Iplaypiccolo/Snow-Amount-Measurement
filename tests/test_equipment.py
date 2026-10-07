@@ -63,11 +63,13 @@ def t_move_hierarchy(p):
     head = p.locator("#matrix thead").inner_text(); check("제설차" in head and "제설기" in head and "이동정비차" not in head and "차 " not in p.locator("#matrix").inner_text(), "제설차·제설기로 정확히, 이동정비차 없음")
     hq = [x.strip() for x in p.locator("#matrix tbody tr.hqrow").first.locator("td").all_inner_texts()]
     want = ev(p, "(() => { const ids = new Set(S.branches.filter(b => S.hqById[b.hq_id].name === '강원').map(b => b.id)); const m = movesOn(todayISO()).filter(x => x.stops.some(s => ids.has(s))); return ['제설차','제설기'].map(t => String(m.filter(x => x.v.type === t).length)); })()")
-    check(hq[-2:] == want, f"강원 합계(제설차·제설기, 이동정비차 제외): {hq[-2:]} vs {want}")
+    check(hq[:2] == want, f"강원 합계(맨 앞 열, 제설차·제설기, 이동정비차 제외): {hq[:2]} vs {want}")
+    hd = [h.strip() for h in p.locator("#matrix thead tr").first.locator("th").all_inner_texts()]
+    check(hd[0].startswith("본부") and hd[1] == "합계" and hd[2].startswith("서울경기"), f"합계 열이 지사 이름과 첫 지원기관 사이: {hd[:3]}")
     check(p.locator("#moveTitle").inner_text().endswith("장비 지원 현황") and p.locator("#perm-move").count() == 0 and "어느 기관에서" not in p.locator("body").inner_text(), "제목·안내 정리")
     go_date(p, day(p, 2))            # 모레: V001(제설차)이 대관령 → 양양 두 곳
-    t = p.locator("#matrix tbody tr.hqrow").first.locator("td").nth(-2).inner_text().strip()
-    b = [x.locator("td").nth(-2).inner_text().strip() for x in p.locator("#matrix tbody tr.brrow").all()]
+    t = p.locator("#matrix tbody tr.hqrow").first.locator("td").nth(0).inner_text().strip()
+    b = [x.locator("td").nth(0).inner_text().strip() for x in p.locator("#matrix tbody tr.brrow").all()]
     check(int(t) == int(b[0]) + int(b[1]) - 1, f"두 곳을 들른 장비는 본부 합계에서 1대로: {t} vs {b}")
     go_date(p, day(p, -7))
     check(rows(p) == ["강원\n본부", "└춘천", "충북\n본부", "└엄정"], rows(p))

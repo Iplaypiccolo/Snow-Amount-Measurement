@@ -373,7 +373,8 @@ function runOf(vid, date) {     // 그날을 포함해 하루씩 이어지는 �
 }
 function renderMatrix() {
   // 세로 = 본부 → 지사(그날 지원받는 지사만), 가로 = 지원기관마다 제설차·제설기. 본부 줄·합계는 장비 1대를 한 번만 셈(여러 지사를 들러도)
-  const moves = movesOn(S.date), src = SOURCE_ORGS(), cols = [...src, null], used = new Set(moves.flatMap(m => m.stops));
+  const moves = movesOn(S.date), src = SOURCE_ORGS(), cols = [null, ...src],   // 합계 열을 맨 앞(지사 이름 바로 옆)에
+     used = new Set(moves.flatMap(m => m.stops));
   const cnt = (org, ids, type) => moves.filter(m => (org == null || m.v.org === org) && m.v.type === type && (!ids || m.stops.some(s => ids.has(s)))).length;
   const cells = ids => cols.map(o => MOVE_TYPES.map((t, k) => { const n = o === "지역본부" ? 0 : cnt(o, ids, t);
     return `<td class="${k ? "c2" : "c1"}${o == null ? " tot" : ""}${n ? "" : " zero"}">${n || "·"}</td>`; }).join("")).join("");
