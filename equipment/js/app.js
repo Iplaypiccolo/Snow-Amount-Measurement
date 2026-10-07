@@ -432,9 +432,8 @@ function renderDest() {
       cards.push(`<article class="dest"><div class="dest-head">
         <h3 class="dest-name">${esc(b.name)}<span>${esc(h.name)}본부</span></h3>
         <div class="dest-time"><strong>${etas.length ? esc(fmtMD(S.date) + " " + etas[0]) : "미정"}</strong><small>도착 예상${etas.length > 1 ? " (가장 이른 장비, 장비마다 다름)" : ""}</small></div>
-        <div class="dest-meta"><span class="tag req">도착 요청 ${H(t, "arrive_at", esc(fmtTime(arr)))}</span>${snow != null ? (fc.manual ? `<span class="tag snow">적설 ${esc(fmtCm(snow))}cm · 강수 ${esc(fmtCm(fc.pcp))}mm${fc.tmin != null ? ` · 최저 ${esc(fmtTmp(fc.tmin))}℃` : ""} (직접입력)</span>` : `<span class="tag snow" data-fb="${esc(b.id)}" tabindex="0">예상 적설 ${esc(fmtCm(snow))}cm · 강수 ${esc(fmtCm(fc.pcp))}mm${fc.tmin != null ? ` · 최저 ${esc(fmtTmp(fc.tmin))}℃` : ""}</span>`) : ""}${warnOf(b.id).level ? `<span class="tag wb ${WLV[warnOf(b.id).level][0]}" data-wb="${esc(b.id)}">${esc(wlabel(warnOf(b.id).level, "대설"))}</span>` : ""}
-          ${why ? `<span class="tag">사유: ${H(t, "reason", esc(why))}</span>` : ""}
-          <span class="tag api">날씨 연동 예정</span></div></div>
+        <div class="dest-meta"><span class="tag req">도착 요청 ${esc(fmtTime(arr))}</span>${snow != null ? (fc.manual ? `<span class="tag snow">적설 ${esc(fmtCm(snow))}cm · 강수 ${esc(fmtCm(fc.pcp))}mm${fc.tmin != null ? ` · 최저 ${esc(fmtTmp(fc.tmin))}℃` : ""} (직접입력)</span>` : `<span class="tag snow" data-fb="${esc(b.id)}" tabindex="0">예상 적설 ${esc(fmtCm(snow))}cm · 강수 ${esc(fmtCm(fc.pcp))}mm${fc.tmin != null ? ` · 최저 ${esc(fmtTmp(fc.tmin))}℃` : ""}</span>`) : ""}${warnOf(b.id).level ? `<span class="tag wb ${WLV[warnOf(b.id).level][0]}" data-wb="${esc(b.id)}">${esc(wlabel(warnOf(b.id).level, "대설"))}</span>` : ""}
+          ${why ? `<span class="tag">사유: ${H(t, "reason", esc(why))}</span>` : ""}</div></div>
         ${list.length ? list.map(m => vehicleRow(m.v, m.stops, m.rec, b.id)).join("") : `<div class="empty-state" style="border:0">조건에 맞는 장비가 없습니다.</div>`}</article>`);
     });
     if (cards.length) out.push(`<h3 class="hq-head">${esc(h.name)}본부</h3>` + cards.join(""));
