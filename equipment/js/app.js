@@ -382,22 +382,37 @@ function renderMatrix() {
   const moves = movesOn(S.date), src = SOURCE_ORGS(), cols = [null, ...src],   // 합계 열을 맨 앞(지사 이름 바로 옆)에
      used = new Set(moves.flatMap(m => m.stops));
   const cnt = (org, ids, type) => moves.filter(m => (org == null || m.v.org === org) && m.v.type === type && (!ids || m.stops.some(s => ids.has(s)))).length;
-  const cells = ids => cols.map(o => MOVE_TYPES.map((t, k) => { const n = o === "지역본부" ? 0 : cnt(o, ids, t);
-    return `<td class="${k ? "c2" : "c1"}${o == null ? " tot" : ""}${n ? "" : " zero"}">${n || "·"}</td>`; }).join("")).join("");
+  // 숫자를 누르면 아래 세부내역의 그 지사(본부)·지원기관·장비 종류 줄로 이동(jumpToDetail). sc = 줄 범위(본부 data-mh / 지사 data-mb / 합계 없음)
+  const cells = (ids, sc = "") => cols.map(o => MOVE_TYPES.map((t, k) => { const n = o === "지역본부" ? 0 : cnt(o, ids, t);
+    return `<td class="${k ? "c2" : "c1"}${o == null ? " tot" : ""}${n ? "" : " zero"}">${n ? `<button type="button" class="mnum" ${sc} data-mo="${o == null ? "" : esc(o)}" data-mt="${t}" title="아래 세부내역으로 이동">${n}</button>` : "·"}</td>`; }).join("")).join("");
   let body = "";
   S.hqs.forEach(h => {
     const brs = S.order.filter(b => b.hq_id === h.id && used.has(b.id)); if (!brs.length) return;
-    body += `<tr class="hqrow"><th scope="row">${esc(h.name)}<span class="sub">본부</span></th>${cells(new Set(brs.map(b => b.id)))}</tr>`;
-    brs.forEach(b => { body += `<tr class="brrow"><th scope="row"><span class="ind" aria-hidden="true">└</span>${esc(b.name)}</th>${cells(new Set([b.id]))}</tr>`; });
+    body += `<tr class="hqrow"><th scope="row">${esc(h.name)}<span class="sub">본부</span></th>${cells(new Set(brs.map(b => b.id)), `data-mh="${esc(h.id)}"`)}</tr>`;
+    brs.forEach(b => { body += `<tr class="brrow"><th scope="row"><span class="ind" aria-hidden="true">└</span>${esc(b.name)}</th>${cells(new Set([b.id]), `data-mb="${esc(b.id)}"`)}</tr>`; });
   });
   $("matrix").innerHTML = `<thead><tr><th class="l" scope="col" rowspan="2">본부 · 피지원 지사</th>${cols.map(o => `<th scope="colgroup" colspan="2" class="orgh${o == null ? " tot" : ""}">${o == null ? "합계" : esc(o)}${o === "지역본부" ? '<span class="sub">연동 예정</span>' : ""}</th>`).join("")}</tr>` +
     `<tr>${cols.map(o => MOVE_TYPES.map((t, k) => `<th scope="col" class="${k ? "c2" : "c1"}${o == null ? " tot" : ""}">${t}</th>`).join("")).join("")}</tr></thead>` +
     `<tbody>${body || `<tr><td class="empty" colspan="${cols.length * 2 + 1}">${esc(fmtMD(S.date))}에 이동하는 장비가 없습니다.</td></tr>`}</tbody>` +
-    `<tfoot><tr><th scope="row">합계</th>${cells(null)}</tr></tfoot>`;
+    `<tfoot><tr><th scope="row">합계</th>${cells(null, 'data-mall="1"')}</tr></tfoot>`;
   stickHead($("matrix"));
   const tr = moves.filter(m => m.v.type === "제설차").length, bl = moves.filter(m => m.v.type === "제설기").length;
   $("dateText").textContent = fmtMD(S.date); $("dateInput").value = S.date;      // 제목의 큰 날짜(누르면 달력)
   $("summaryNote").innerHTML = `<b>제설차 ${tr}대</b> · <b>제설기 ${bl}대</b>` + (moves.some(m => m.stops.length > 1) ? "" : "");
+}
+// 이동 현황 표의 숫자 → 아래 세부내역에서 그 줄(지사 카드·본부 묶음·해당 지원기관·장비 종류)로 스크롤하고 잠깐 색으로 표시
+let flashTimer;
+function jumpToDetail(d) {
+  const find = () => d.mb ? document.querySelector(`#destList [data-bid="${CSS.escape(d.mb)}"]`) : d.mh ? document.querySelector(`#destList [data-hqb="${CSS.escape(d.mh)}"]`) : $("destList");
+  const pick = () => { const sc = find(); return { sc, rows: sc ? [...sc.querySelectorAll(".vrow")].filter(r => (!d.mo || r.dataset.vo === d.mo) && (!d.mt || r.dataset.vt === d.mt)) : [] }; };
+  let { sc: scope, rows } = pick();
+  if (!rows.length && (S.org !== "전체" || S.type !== "전체")) { S.org = "전체"; S.type = "전체"; renderFilters(); renderDest(); ({ sc: scope, rows } = pick()); }   // 아래 필터 때문에 가려졌으면 필터를 풀고 다시
+  if (!scope) return;
+  const card = d.mb ? scope : (rows[0] || scope).closest(".dest") || scope;
+  document.querySelectorAll("#destList .hl, #destList .hl-card").forEach(el => el.classList.remove("hl", "hl-card"));
+  rows.forEach(r => r.classList.add("hl")); card.classList.add("hl-card");
+  card.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  clearTimeout(flashTimer); flashTimer = setTimeout(() => document.querySelectorAll("#destList .hl, #destList .hl-card").forEach(el => el.classList.remove("hl", "hl-card")), 2600);
 }
 function renderFilters() {
   const f = $("filters"); f.className = "filters two";
@@ -420,11 +435,11 @@ addEventListener("resize", fitFilters);
 if (window.ResizeObserver) new ResizeObserver(() => fitFilters()).observe($("filters"));   // 탭을 옮겨 다시 보일 때·iframe 크기가 바뀔 때도
 const matches = v => (S.org === "전체" || v.org === S.org) && (S.type === "전체" || v.type === S.type);
 function vehicleRow(v, stops, rec, bid) {
-  const st = vval(v, "status"), [cls, label] = STATUS[st] || STATUS[""], run = runOf(v.id, S.date);
+  const run = runOf(v.id, S.date);
   const eta = rec && bid ? rec.times[rec.stops.indexOf(bid)] : null;   // 이 장비가 이 지사에 도착할 예상 시각(기관별 장비에서 입력)
   const dayTag = run.n > 1 ? `<span class="tag day">${run.k}일차 / ${run.n}일</span>` : "";
-  return `<button type="button" class="vrow" data-vid="${esc(v.id)}"><span class="plate">${esc(vval(v, "plate"))}</span><span class="vtype">${esc(v.type)}</span><span class="vfrom">${esc(v.org)}</span>
-    <span class="status-wrap">${hasBlower(v) ? `<span class="tag blw-tag">블로워 ${esc(blowerText(v))}</span>` : ""}${eta ? `<span class="tag eta">${esc(eta)} 도착 예상</span>` : ""}${rec && rec.revised ? '<span class="tag rev">수정본</span>' : ""}${dayTag}<span class="status ${cls}">${label}</span>${stops.length > 1 ? `<span class="tag" title="${esc(stops.map(bn).join(" → "))}">${stops.length}곳 경유</span>` : ""}</span></button>`;
+  return `<button type="button" class="vrow" data-vid="${esc(v.id)}" data-vo="${esc(v.org)}" data-vt="${esc(v.type)}"><span class="plate">${esc(vval(v, "plate"))}</span><span class="vtype">${esc(v.type)}</span>
+    <span class="status-wrap">${hasBlower(v) ? `<span class="tag blw-tag">블로워 ${esc(blowerText(v))}</span>` : ""}${eta ? `<span class="tag eta">${esc(eta)} 도착 예상</span>` : ""}${dayTag}${stops.length > 1 ? `<span class="tag" title="${esc(stops.map(bn).join(" → "))}">${stops.length}곳 경유</span>` : ""}</span></button>`;
 }
 function renderDest() {
   const moves = movesOn(S.date), filtered = S.org !== "전체" || S.type !== "전체", out = [];
@@ -436,14 +451,14 @@ function renderDest() {
       if (!list.length && (filtered || !arriveToday)) return;       // 그날 이동도, 확정된 도착 요청도 없는 지사는 숨김
       const t = `round_requests:${S.round},${b.id}`, fc = fcOf(b.id), snow = fc && !fc.none ? fc.snow : null, why = rval(b.id, "reason");
       const etas = [...new Set(list.map(m => m.rec.times[m.rec.stops.indexOf(b.id)]).filter(Boolean))].sort();
-      cards.push(`<article class="dest"><div class="dest-head">
+      cards.push(`<article class="dest" data-bid="${esc(b.id)}"><div class="dest-head">
         <h3 class="dest-name">${esc(b.name)}<span>${esc(h.name)}본부</span></h3>
         <div class="dest-time"><strong>${etas.length ? esc(fmtMD(S.date) + " " + etas[0]) : "미정"}</strong><small>도착 예상${etas.length > 1 ? " (가장 이른 장비, 장비마다 다름)" : ""}</small></div>
-        <div class="dest-meta"><span class="tag req">도착 요청 ${esc(fmtTime(arr))}</span>${snow != null ? (fc.manual ? `<span class="tag snow">적설 ${esc(fmtCm(snow))}cm · 강수 ${esc(fmtCm(fc.pcp))}mm${fc.tmin != null ? ` · 최저 ${esc(fmtTmp(fc.tmin))}℃` : ""} (직접입력)</span>` : `<span class="tag snow" data-fb="${esc(b.id)}" tabindex="0">예상 적설 ${esc(fmtCm(snow))}cm · 강수 ${esc(fmtCm(fc.pcp))}mm${fc.tmin != null ? ` · 최저 ${esc(fmtTmp(fc.tmin))}℃` : ""}</span>`) : ""}${warnOf(b.id).level ? `<span class="tag wb ${WLV[warnOf(b.id).level][0]}" data-wb="${esc(b.id)}">${esc(wlabel(warnOf(b.id).level, "대설"))}</span>` : ""}
+        <div class="dest-meta">${list.length ? "" : `<span class="tag req">도착 요청 ${esc(fmtTime(arr))}</span>`}${snow != null ? (fc.manual ? `<span class="tag snow">적설 ${esc(fmtCm(snow))}cm · 강수 ${esc(fmtCm(fc.pcp))}mm${fc.tmin != null ? ` · 최저 ${esc(fmtTmp(fc.tmin))}℃` : ""} (직접입력)</span>` : `<span class="tag snow" data-fb="${esc(b.id)}" tabindex="0">예상 적설 ${esc(fmtCm(snow))}cm · 강수 ${esc(fmtCm(fc.pcp))}mm${fc.tmin != null ? ` · 최저 ${esc(fmtTmp(fc.tmin))}℃` : ""}</span>`) : ""}${warnOf(b.id).level ? `<span class="tag wb ${WLV[warnOf(b.id).level][0]}" data-wb="${esc(b.id)}">${esc(wlabel(warnOf(b.id).level, "대설"))}</span>` : ""}
           ${why ? `<span class="tag">사유: ${H(t, "reason", esc(why))}</span>` : ""}</div></div>
         ${list.length ? list.map(m => vehicleRow(m.v, m.stops, m.rec, b.id)).join("") : `<div class="empty-state" style="border:0">조건에 맞는 장비가 없습니다.</div>`}</article>`);
     });
-    if (cards.length) out.push(`<h3 class="hq-head">${esc(h.name)}본부</h3>` + cards.join(""));
+    if (cards.length) out.push(`<section class="hq-block" data-hqb="${esc(h.id)}"><h3 class="hq-head">${esc(h.name)}본부</h3>` + cards.join("") + `</section>`);   // 본부마다 한 덩어리 — 화면이 넓으면 좌·우로 나란히
   });
   $("destList").innerHTML = out.length ? out.join("") : `<div class="empty-state">${esc(fmtMD(S.date))}에 이동하는 장비가 없습니다.</div>`;
 }
@@ -1029,6 +1044,7 @@ addEventListener("scroll", e => { if (TP.bid && !(e.target.closest && e.target.c
 document.addEventListener("click", e => {
   const c = sel => e.target.closest && e.target.closest(sel);
   let x;
+  if ((x = c(".mnum"))) return jumpToDetail(x.dataset);
   if (c("#tpop")) {                          // 달력 안
     if ((x = c("[data-tp-nav]"))) { const d = new Date(TP.y, TP.m + +x.dataset.tpNav, 1); TP.y = d.getFullYear(); TP.m = d.getMonth(); return tpRender(); }
     if ((x = c("[data-tp-day]"))) { TP.day = x.dataset.tpDay; return tpRender(); }

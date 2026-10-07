@@ -81,7 +81,7 @@ def t_dest_order_and_day_tag(p):
     check(p.locator(".frow .flabel").all_inner_texts() == ["지원기관", "장비"] and p.locator("[data-type='이동정비차']").count() == 0, "필터: 지원기관·장비 두 줄, 이동정비차 없음")
     check("이동정비차" not in p.locator("#destList").inner_text() and "편성 제설차" not in p.locator("#destList").inner_text(), "장비 세부에 이동정비차·편성 대수 없음")
     card = p.locator("#destList .dest").first
-    check("도착 예상" in card.locator(".dest-time").inner_text() and "21:30" in card.locator(".dest-time").inner_text() and "도착 요청" in card.locator(".tag.req").inner_text(), "큰 시각 = 도착 예상, 도착 요청은 아래 표지")
+    check("도착 예상" in card.locator(".dest-time").inner_text() and "21:30" in card.locator(".dest-time").inner_text() and card.locator(".tag.req").count() == 0, "큰 시각 = 도착 예상, 장비가 있는 카드에는 도착 요청 표지 없음")
     names = p.locator("#destList .dest-name").evaluate_all("hs => hs.map(h => h.childNodes[0].textContent.trim())"); check(names == ["대관령", "양양", "엄정"], names)
     v1 = p.locator(".vrow[data-vid=V001]").first.inner_text(); check("1일차 / 5일" in v1, v1)
     go_date(p, day(p, 1)); check("2일차 / 5일" in p.locator(".vrow[data-vid=V001]").first.inner_text(), "다음 날 2일차")
@@ -202,7 +202,7 @@ def t_branch_save_confirm_and_arrive(p):
     p.click(f"[data-confirm={dg}]"); p.wait_for_timeout(300); check(p.locator(f"[data-unconfirm={dg}]").count() == 1, "대관령 다시 확정됨 + 취소")
     tab(p, "fleet"); opts = p.locator(rsel("V004", day(p, 0)) + " option").all_inner_texts()
     check("춘천" in opts, f"확정한 지사가 경로 선택지에 생김: {opts}")
-    tab(p, "move"); check("05:30" in p.locator("#destList").inner_text(), "도착 요청 시각 반영")
+    tab(p, "move"); check("도착 요청" not in p.locator("#destList .dest").first.inner_text(), "이동 현황 장비 카드에는 도착 요청 시각을 보이지 않음")
 
 def t_round_create(p):
     tab(p, "branch"); d = day(p, 3)
@@ -255,6 +255,34 @@ def t_vehicle_add_delete(p):
     vid = ev(p, "(S.vehicles.find(v => v.plate === '전북998') || {}).id"); check("추가했습니다" in toast(p) and vid == "V044", f"장비 추가: {vid}")
     check(p.locator(f"[data-vp={vid}]").input_value() == "998" and p.locator(f"[data-vs={vid}]").input_value() == "", "새 장비 줄(지원 여부 미정)")
     p.click(f"[data-vdel={vid}]"); p.wait_for_timeout(250); check(p.locator(f"[data-vp={vid}]").count() == 0, "장비 삭제")
+
+def t_dest_layout_and_jump(p):
+    """이동 현황 세부내역: 장비 줄에서 지원기관·수정본·지원 칸 삭제, 본부를 좌·우로 나란히, 표의 숫자를 누르면 그 줄로 이동"""
+    go_date(p, day(p, 0))
+    cols = ev(p, "getComputedStyle(document.getElementById('destList')).gridTemplateColumns.split(' ').length")
+    blocks = p.locator("#destList .hq-block"); check(blocks.count() == 2 and cols == 2, f"본부 묶음 2개, 2열: {blocks.count()} {cols}")
+    b0, b1 = blocks.nth(0).bounding_box(), blocks.nth(1).bounding_box()
+    check(b1["x"] > b0["x"] + b0["width"] * 0.9 and abs(b1["y"] - b0["y"]) < 40, f"본부가 좌·우로 나란히: {b0} {b1}")
+    row = p.locator("#destList .vrow").first; txt = row.inner_text()
+    check("출발" not in txt and "수정본" not in txt and "최초" not in txt and row.locator(".status, .vfrom").count() == 0, f"장비 줄에 지원기관·수정본·지원 없음: {txt!r}")
+    check(blocks.nth(0).locator(".dest").first.bounding_box()["width"] < ev(p, "document.querySelector('main').clientWidth") * 0.55, "카드 폭 절반 가량")
+    # 숫자 → 지사 카드
+    br = p.locator("#matrix tbody tr.brrow").first; bn_ = br.locator(".mnum").first; bid_ = bn_.get_attribute("data-mb")
+    check(bid_ and p.locator(f"#destList .dest[data-bid={bid_}]").count() == 1, "지사 줄 숫자에 지사 번호")
+    bn_.click(); p.wait_for_timeout(900)
+    check(p.locator(f"#destList .dest[data-bid={bid_}].hl-card").count() == 1 and p.locator("#destList .vrow.hl").count() >= 1, "지사 숫자 → 그 카드 표시")
+    vb = p.locator(f"#destList .dest[data-bid={bid_}]").bounding_box(); check(vb and -2 <= vb["y"] < 1000, f"카드가 화면 안으로 스크롤: {vb}")
+    # 합계 줄 숫자 → 종류가 같은 모든 줄
+    tot = p.locator("#matrix tfoot .mnum").first; p.wait_for_timeout(100); tot.click(); p.wait_for_timeout(500)
+    typ = tot.get_attribute("data-mt")
+    check(p.locator("#destList .vrow.hl").count() == p.locator(f"#destList .vrow[data-vt={typ}]").count() > 0, f"합계 숫자 → 같은 종류({typ}) 모든 줄")
+    # 본부 줄 숫자 → 그 본부 안만
+    hqn = p.locator("#matrix tbody tr.hqrow").first.locator(".mnum").first; hid = hqn.get_attribute("data-mh"); hqn.click(); p.wait_for_timeout(500)
+    inside = p.locator(f"#destList [data-hqb={hid}] .vrow.hl").count(); check(inside >= 1 and p.locator("#destList .vrow.hl").count() == inside, "본부 숫자 → 그 본부 줄만")
+    p.wait_for_timeout(2900); check(p.locator("#destList .hl, #destList .hl-card").count() == 0, "표시는 잠깐 뒤 사라짐")
+    # 필터로 가려진 줄이어도 누르면 필터를 풀고 이동
+    p.click("[data-type='제설기']"); p.wait_for_timeout(100); p.locator("#matrix tbody tr.brrow").first.locator(".mnum").first.click(); p.wait_for_timeout(500)
+    check(ev(p, "S.type") == "전체" and p.locator("#destList .hl-card").count() == 1, "필터를 풀고 이동")
 
 def t_fleet_sort_blower_delete(p):
     """기관별 장비: 기관(서울경기-충북-전북-대구경북)→종류(제설차-제설기-이동정비차) 정렬 · 블로워(소·대) · 삭제는 관리자만 · 이동 현황에 블로워 표시"""
@@ -386,7 +414,7 @@ def t_route_kind_and_eta(p):
     p.check("#modeInit"); p.wait_for_timeout(150)
     check("인천 (편성 확정 전)" in p.locator(rsel("V002", d3)).inner_text() and "수정본" in p.locator(f"td[data-cell='{d3}|V002']").inner_text(), "최초 지원 목록에서는 미확정 표시, 칸에 수정본 표지")
     tab(p, "move"); go_date(p, d3)
-    row = p.locator(".vrow[data-vid=V002]").first.inner_text(); check("07:35 도착 예상" in row and "수정본" in row, row)
+    row = p.locator(".vrow[data-vid=V002]").first.inner_text(); check("07:35 도착 예상" in row and "수정본" not in row, row)
     check("07:35" in p.locator(".dest", has_text="인천").locator(".dest-time").inner_text(), "카드 큰 시각 = 도착 예상")
     p.click(".vrow[data-vid=V002]"); p.wait_for_selector("ol.vhist li")
     sh = p.locator("#sheet").inner_text(); check("도착 예상" in sh and "07:35" in sh and "도착 요청" not in sh and "지원기관" in sh, sh)
@@ -654,7 +682,7 @@ def t_views_and_choices_after_confirm_all(p):
 
 TESTS = [t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
-         t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
+         t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
          t_typing_then_clicking_next_input_keeps_both, t_round_delete, t_pending_branches_shown_grey, t_ui_version_reload_once,
          t_route_kind_and_eta, t_equip_can_edit_eta, t_bulk_confirm_and_no_holdings, t_filters_fit_any_width, t_date_in_title, t_branch_header_stays_on_top,

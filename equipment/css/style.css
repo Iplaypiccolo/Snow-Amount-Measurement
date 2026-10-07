@@ -117,13 +117,13 @@ table.matrix { border-collapse: collapse; width: 100%; min-width: 460px; font-va
   margin-bottom: 16px; overflow: hidden;
 }
 .dest-head {
-  display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; align-items: center;
-  padding: 16px 20px; border-bottom: 1px solid var(--line);
+  display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center;
+  padding: 11px 14px; border-bottom: 1px solid var(--line);
 }
-.dest-name { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+.dest-name { font-size: 18px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
 .dest-name span { font-size: 13px; color: var(--ink-soft); font-weight: 500; margin-left: 6px; }
 .dest-time { text-align: right; }
-.dest-time strong { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+.dest-time strong { display: block; font-size: 16px; font-variant-numeric: tabular-nums; }
 .dest-time small { color: var(--ink-soft); font-size: 12px; }
 .dest-meta { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
 .tag {
@@ -137,8 +137,8 @@ table.matrix { border-collapse: collapse; width: 100%; min-width: 460px; font-va
 
 /* 장비 한 줄 */
 .vrow {
-  display: grid; grid-template-columns: 150px 90px 110px 1fr auto; gap: 12px; align-items: center;
-  padding: 11px 20px; border-bottom: 1px solid var(--line); width: 100%;
+  display: grid; grid-template-columns: 124px 74px 1fr; gap: 8px; align-items: center;
+  padding: 8px 14px; border-bottom: 1px solid var(--line); width: 100%;
   background: none; border-left: 0; border-right: 0; border-top: 0; text-align: left; cursor: pointer;
 }
 .vrow:last-child { border-bottom: 0; }
@@ -224,12 +224,10 @@ table.branch { border-collapse: collapse; width: 100%; min-width: 820px; font-va
   .search { margin-left: 0; width: 100%; }
   .dest-head { padding: 14px 16px; }
   .vrow {
-    grid-template-columns: 124px 1fr auto; grid-template-areas: "plate type status" "plate from from";
-    gap: 2px 10px; padding: 12px 16px;
+    grid-template-columns: 112px 1fr; grid-template-areas: "plate type" "tags tags";
+    gap: 4px 10px; padding: 10px 14px;
   }
   .vrow .plate { grid-area: plate; } .vrow .vtype { grid-area: type; }
-  .vrow .status { grid-area: status; justify-self: end; }
-  .vrow .vfrom { grid-area: from; font-size: 13px; }
 }
 
 /* ============ v2 추가: 역할·수정·수정기록 ============ */
@@ -329,7 +327,7 @@ table.eq { min-width: 1100px; }
 .sl-d { font-weight: 600; white-space: nowrap; } .sl-x { color: var(--ink-soft); font-size: 13px; }
 
 .status-wrap { display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
-@media (max-width: 720px) { .vrow .status-wrap { grid-area: status; justify-self: end; } }
+@media (max-width: 720px) { .vrow .status-wrap { grid-area: tags; justify-self: start; justify-content: flex-start; } }
 .slot-x { margin-top: 0; }
 
 /* ============ v3: 표 제목 고정·필터 나누기·화면 모드·지원일 자동 ============ */
@@ -576,3 +574,15 @@ table.matrix { font-size: 15px; min-width: 900px; }
 .blw label.off { color: var(--ink-soft); cursor: default; opacity: .55; }
 .blw input { width: 18px; height: 18px; accent-color: var(--plow); margin: 0; }
 .tag.blw-tag { border-style: solid; }
+
+/* 이동 현황 세부내역: 본부마다 한 덩어리, 화면이 넓으면 좌·우 두 줄(본부 순서대로 왼쪽→오른쪽, 다음 줄) */
+#destList { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 22px; align-items: start; }
+#destList .empty-state { grid-column: 1 / -1; }
+#destList .hq-head { margin-top: 6px; }
+#destList .dest { margin-bottom: 12px; scroll-margin-top: 14px; }
+@media (max-width: 1000px) { #destList { grid-template-columns: minmax(0, 1fr); } }
+.dest.hl-card { box-shadow: 0 0 0 2px var(--plow); transition: box-shadow .3s; }
+.vrow.hl { background: color-mix(in srgb, var(--plow) 20%, transparent); }
+/* 이동 현황 표의 누를 수 있는 숫자 */
+.mnum { font: inherit; font-variant-numeric: tabular-nums; color: inherit; background: none; border: 0; border-radius: 6px; padding: 2px 8px; min-width: 28px; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.mnum:hover, .mnum:focus-visible { background: color-mix(in srgb, var(--plow) 16%, transparent); text-decoration: underline solid; outline: none; }
