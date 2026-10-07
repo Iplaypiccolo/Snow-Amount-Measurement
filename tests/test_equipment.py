@@ -284,6 +284,18 @@ def t_dest_layout_and_jump(p):
     p.click("[data-type='제설기']"); p.wait_for_timeout(100); p.locator("#matrix tbody tr.brrow").first.locator(".mnum").first.click(); p.wait_for_timeout(500)
     check(ev(p, "S.type") == "전체" and p.locator("#destList .hl-card").count() == 1, "필터를 풀고 이동")
 
+def t_link_numbers_no_underline_hover_bg(p):
+    """다른 화면으로 가는 숫자(이동 현황 표 숫자·지사별 요청의 적설/강수/최저기온·카드의 예상 적설 태그)는 밑줄 없이, 마우스를 올리면 배경만 살짝 변함"""
+    st = "(sel) => { const e = document.querySelector(sel); const s = getComputedStyle(e); return [s.textDecorationLine, s.backgroundColor, s.boxShadow] }"
+    def probe(sel):
+        loc = p.locator(sel).first; before = p.evaluate(st, sel); loc.hover(); p.wait_for_timeout(250); after = p.evaluate(st, sel)
+        check(before[0] == "none" and after[0] == "none", f"{sel}: 밑줄 없음 {before[0]} {after[0]}")
+        check(before[1:] != after[1:], f"{sel}: 마우스를 올리면 배경이 변함 {before[1:]} → {after[1:]}")
+        p.mouse.move(2, 2); p.wait_for_timeout(250)
+    go_date(p, day(p, 0)); probe("#matrix tbody .mnum")
+    probe("#destList .tag.snow[data-fb]")
+    tab(p, "branch"); check(p.locator("#branchTable .fcv").count() > 0, "지사별 요청에 연동 숫자"); probe("#branchTable [data-fb].fcv")
+
 def t_fleet_sort_blower_delete(p):
     """기관별 장비: 기관(서울경기-충북-전북-대구경북)→종류(제설차-제설기-이동정비차) 정렬 · 블로워(소·대) · 삭제는 관리자만 · 이동 현황에 블로워 표시"""
     tab(p, "fleet")
@@ -682,7 +694,7 @@ def t_views_and_choices_after_confirm_all(p):
 
 TESTS = [t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
-         t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
+         t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
          t_typing_then_clicking_next_input_keeps_both, t_round_delete, t_pending_branches_shown_grey, t_ui_version_reload_once,
          t_route_kind_and_eta, t_equip_can_edit_eta, t_bulk_confirm_and_no_holdings, t_filters_fit_any_width, t_date_in_title, t_branch_header_stays_on_top,

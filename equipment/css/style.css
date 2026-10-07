@@ -543,7 +543,10 @@ table.matrix { font-size: 15px; min-width: 900px; }
 :root { --base-ink: #1d4fa0; } :root[data-theme="dark"] { --base-ink: #8fbaff; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --base-ink: #8fbaff; } }
 .fcbase { display: block; width: max-content; margin: 1px auto 0; font-size: 11px; font-weight: 700; color: var(--base-ink); border-bottom: 1px dashed var(--base-ink); cursor: help; }
-.fcv { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+/* 눌러서 다른 화면으로 가는 숫자(표의 적설·강수·최저기온 = .fcv, 이동 현황 표 숫자 = .mnum, 이동 현황 카드의 예상 적설 태그)는
+   밑줄 없이, 마우스를 올리면 배경이 살짝 변해 "누를 수 있다"를 알려 줌 */
+.fcv { cursor: pointer; border-radius: 6px; padding: 1px 6px; transition: background .12s; }
+.fcv:hover, .fcv:focus-visible { background: color-mix(in srgb, var(--plow) 16%, transparent); outline: none; }
 .fcv.wet { color: #2f7d4f; }
 .user-box[hidden] { display: none; }
 
@@ -584,5 +587,7 @@ table.matrix { font-size: 15px; min-width: 900px; }
 .dest.hl-card { box-shadow: 0 0 0 2px var(--plow); transition: box-shadow .3s; }
 .vrow.hl { background: color-mix(in srgb, var(--plow) 20%, transparent); }
 /* 이동 현황 표의 누를 수 있는 숫자 */
-.mnum { font: inherit; font-variant-numeric: tabular-nums; color: inherit; background: none; border: 0; border-radius: 6px; padding: 2px 8px; min-width: 28px; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
-.mnum:hover, .mnum:focus-visible { background: color-mix(in srgb, var(--plow) 16%, transparent); text-decoration: underline solid; outline: none; }
+.mnum { font: inherit; font-variant-numeric: tabular-nums; color: inherit; background: none; border: 0; border-radius: 6px; padding: 2px 8px; min-width: 28px; cursor: pointer; transition: background .12s; }
+.mnum:hover, .mnum:focus-visible { background: color-mix(in srgb, var(--plow) 16%, transparent); outline: none; }
+.tag.snow[data-fb] { cursor: pointer; transition: box-shadow .12s; }
+.tag.snow[data-fb]:hover, .tag.snow[data-fb]:focus-visible { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--plow) 14%, transparent); outline: none; }
