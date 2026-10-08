@@ -44,6 +44,12 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-10-08 · 커밋 (이 기록 커밋 하나) · 지원 여부 기준일자별 저장: 설계 합의 + migration 38 초안 (Claude 채팅 작업)
+- **아직 서버에 적용 안 함**(사용자 확인 대기). 합의된 규칙은 `docs/decisions.md` 2026-10-08 항목. 초안: `supabase/migrations/20261008_38_round_vehicle_status.sql`(새 표 `round_vehicle_status`, `support_rounds.days`, `vehicles.hidden_after`, 서버 함수 `create_round`·`save_fleet`(기준일자·p_status 추가), 경로 검사 트리거, 첫 기준일자 이전 경로 1줄 삭제).
+- 이후 순서: 적용(롤백 시험 → 실제) → 화면(`equipment/js/app.js`·`api.js` 샘플 모드·가짜 서버·시험) → 옛 열 `vehicles.status` 삭제. 화면 칸 구성이 바뀌면 `ui-version`·`UI_VERSION` 함께 올릴 것.
+- Claude Code 가 할 일 없음(설계 변경이라 채팅 쪽에서 진행). 이 초안을 건드리기 전에 이 항목을 읽을 것.
+— ✍ Claude 채팅 작성
+
 ### 2026-10-08 · 커밋 (이 기록 커밋 하나) · 이동 현황 표: 본부 줄 삭제 → 지사 왼쪽의 합친 칸, 줄 선 또렷하게 (Claude 채팅 작업)
 - `renderMatrix`: 본부 합계 줄(`tr.hqrow`) 삭제, 지사 줄 맨 앞에 본부 이름 칸(`th.hqc`, rowspan = 그 본부의 지사 수). 머리글·합계 칸은 2칸 합침. 본부 숫자 클릭(data-mh)은 없어짐(jumpToDetail 코드는 그대로 둠).
 - CSS(맨 끝): 모든 칸 테두리 진하게, 본부 묶음 끝·지원기관 묶음 사이 2px, 머리글·합계 위아래 굵은 선. 시험 `t_move_hierarchy`·`t_dest_layout_and_jump` 수정, 46/47(기존 실패 1건 동일). 캡처로 확인(가짜 서버 샘플), 실제 사이트는 미확인.
