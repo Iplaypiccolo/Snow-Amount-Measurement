@@ -47,7 +47,8 @@ def route(p, vid, d): return ev(p, f"routeOf('{d}', '{vid}').map(bn)")
 def rsel(vid, d, j=0): return f"select[data-fk='r:{d}:{vid}:{j}']"
 def confirm_fleet(p): p.click("#save-fleet [data-save]"); p.wait_for_timeout(300)
 def save_branch(p): p.click("#save-branch [data-save]"); p.wait_for_timeout(300)
-def rows(p): return [t.split("\t")[0].strip() for t in p.locator("#matrix tbody tr").all_inner_texts()]
+def rows(p): return [t.strip() for t in p.locator("#matrix tbody tr th[scope=row]").all_inner_texts()]
+def hqs(p): return [t.replace("\n", "") for t in p.locator("#matrix tbody th.hqc").all_inner_texts()]
 def bid(p, name): return ev(p, f"S.branches.find(b => b.name === '{name}').id")
 
 # ---------------------------------------------------------------- 테스트 목록
@@ -59,20 +60,14 @@ def t_load(p):
 
 def t_move_hierarchy(p):
     """이동 현황: 본부 → 지사 계층, 그날 지원받는 지사만, 본부 줄은 장비 1대를 한 번만 셈"""
-    check(rows(p) == ["강원\n본부", "└대관령", "└양양", "충북\n본부", "└엄정"], rows(p))
+    check(rows(p) == ["대관령", "양양", "엄정"] and hqs(p) == ["강원본부", "충북본부"] and p.locator("#matrix tbody th.hqc").first.get_attribute("rowspan") == "2" and p.locator("#matrix tbody tr.hqrow").count() == 0, (rows(p), hqs(p)))
     head = p.locator("#matrix thead").inner_text(); check("제설차" in head and "제설기" in head and "이동정비차" not in head and "차 " not in p.locator("#matrix").inner_text(), "제설차·제설기로 정확히, 이동정비차 없음")
-    hq = [x.strip() for x in p.locator("#matrix tbody tr.hqrow").first.locator("td").all_inner_texts()]
-    want = ev(p, "(() => { const ids = new Set(S.branches.filter(b => S.hqById[b.hq_id].name === '강원').map(b => b.id)); const m = movesOn(todayISO()).filter(x => x.stops.some(s => ids.has(s))); return ['제설차','제설기'].map(t => String(m.filter(x => x.v.type === t).length)); })()")
-    check(hq[:2] == want, f"강원 합계(맨 앞 열, 제설차·제설기, 이동정비차 제외): {hq[:2]} vs {want}")
     hd = [h.strip() for h in p.locator("#matrix thead tr").first.locator("th").all_inner_texts()]
     check(hd[0].startswith("본부") and hd[1] == "합계" and hd[2].startswith("서울경기"), f"합계 열이 지사 이름과 첫 지원기관 사이: {hd[:3]}")
     check(p.locator("#moveTitle").inner_text().endswith("장비 지원 현황") and p.locator("#perm-move").count() == 0 and "어느 기관에서" not in p.locator("body").inner_text(), "제목·안내 정리")
     go_date(p, day(p, 2))            # 모레: V001(제설차)이 대관령 → 양양 두 곳
-    t = p.locator("#matrix tbody tr.hqrow").first.locator("td").nth(0).inner_text().strip()
-    b = [x.locator("td").nth(0).inner_text().strip() for x in p.locator("#matrix tbody tr.brrow").all()]
-    check(int(t) == int(b[0]) + int(b[1]) - 1, f"두 곳을 들른 장비는 본부 합계에서 1대로: {t} vs {b}")
     go_date(p, day(p, -7))
-    check(rows(p) == ["강원\n본부", "└춘천", "충북\n본부", "└엄정"], rows(p))
+    check(rows(p) == ["춘천", "엄정"] and hqs(p) == ["강원본부", "충북본부"], (rows(p), hqs(p)))
     go_date(p, day(p, 30)); check("이동하는 장비가 없습니다" in p.locator("#matrix").inner_text(), "빈 날")
     check(p.locator("#destList .hq-head").count() == 0, "카드 없음")
 
@@ -277,9 +272,6 @@ def t_dest_layout_and_jump(p):
     tot = p.locator("#matrix tfoot .mnum").first; p.wait_for_timeout(100); tot.click(); p.wait_for_timeout(500)
     typ = tot.get_attribute("data-mt")
     check(p.locator("#destList .vrow.hl").count() == p.locator(f"#destList .vrow[data-vt={typ}]").count() > 0, f"합계 숫자 → 같은 종류({typ}) 모든 줄")
-    # 본부 줄 숫자 → 그 본부 안만
-    hqn = p.locator("#matrix tbody tr.hqrow").first.locator(".mnum").first; hid = hqn.get_attribute("data-mh"); hqn.click(); p.wait_for_timeout(500)
-    inside = p.locator(f"#destList [data-hqb={hid}] .vrow.hl").count(); check(inside >= 1 and p.locator("#destList .vrow.hl").count() == inside, "본부 숫자 → 그 본부 줄만")
     p.wait_for_timeout(2900); check(p.locator("#destList .hl, #destList .hl-card").count() == 0, "표시는 잠깐 뒤 사라짐")
     # 필터로 가려진 줄이어도 누르면 필터를 풀고 이동
     p.click("[data-type='제설기']"); p.wait_for_timeout(100); p.locator("#matrix tbody tr.brrow").first.locator(".mnum").first.click(); p.wait_for_timeout(500)

@@ -363,9 +363,7 @@ table.eq { min-width: 1100px; }
 
 /* ---------- 2단계(서버 연결): 계층 행·정비중·확정 전 표시·기준일자·도착 시각 ---------- */
 .status.fix { background: color-mix(in srgb, var(--plow) 18%, transparent); color: var(--ink); }
-.matrix tr.hqrow th, .matrix tr.hqrow td { background: color-mix(in srgb, var(--ink) 5%, var(--surface)); font-weight: 700; }
 .matrix tr.brrow th { font-weight: 500; padding-left: 18px; }
-.matrix tr.brrow .ind { color: var(--ink-soft); margin-right: 6px; }
 .matrix td.empty, .eq td.empty, .branch td.empty { text-align: center; color: var(--ink-soft); padding: 22px; }
 .hq-head { margin: 18px 0 6px; font-size: 14px; color: var(--ink-soft); font-weight: 700; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
 .slot.changed, .eq tr.changed td:first-child, .branch tr.changed td:first-child { box-shadow: inset 3px 0 0 var(--plow); }
@@ -431,8 +429,6 @@ table.matrix { font-size: 15px; min-width: 900px; }
 .matrix td { font-weight: 700; font-variant-numeric: tabular-nums; }
 .matrix td.zero { color: var(--line); font-weight: 400; }
 .matrix .tot { background: color-mix(in srgb, var(--plow) 10%, var(--surface)); }
-.matrix tr.hqrow th, .matrix tr.hqrow td { background: color-mix(in srgb, var(--ink) 7%, var(--surface)); font-weight: 800; }
-.matrix tr.hqrow td.tot { background: color-mix(in srgb, var(--plow) 18%, var(--surface)); }
 .matrix tr.brrow th { font-size: 15px; }
 .matrix tbody tr:hover td, .matrix tbody tr:hover th { background: color-mix(in srgb, var(--plow) 8%, var(--surface)); }
 .matrix tfoot th, .matrix tfoot td { border-top: 2px solid var(--ink); font-size: 15.5px; }
@@ -590,3 +586,14 @@ table.matrix { font-size: 15px; min-width: 900px; }
 .mnum:hover, .mnum:focus-visible { background: color-mix(in srgb, var(--plow) 16%, transparent); outline: none; }
 .tag.snow[data-fb] { cursor: pointer; transition: box-shadow .12s; }
 .tag.snow[data-fb]:hover, .tag.snow[data-fb]:focus-visible { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--plow) 14%, transparent); outline: none; }
+
+/* 이동 현황 표: 본부는 지사 이름 왼쪽의 합친 칸, 줄·칸 경계를 또렷하게 */
+.matrix { --mline: color-mix(in srgb, var(--ink) 28%, var(--surface)); }
+.matrix th, .matrix td { border: 1px solid var(--mline); }
+.matrix th.hqc { text-align: center; vertical-align: middle; background: color-mix(in srgb, var(--ink) 7%, var(--surface)); font-weight: 800; white-space: nowrap; border-right: 2px solid var(--mline); }
+.matrix tr.brrow th[scope="row"] { padding-left: 10px; font-weight: 600; }
+.matrix tr.brrow.grpend th, .matrix tr.brrow.grpend td { border-bottom: 2px solid var(--mline); }
+.matrix tbody tr:hover th.hqc { background: color-mix(in srgb, var(--ink) 7%, var(--surface)); }
+.matrix th.c2, .matrix td.c2 { border-right: 2px solid var(--mline); }
+.matrix thead th { box-shadow: inset 0 -2px 0 var(--ink); }
+.matrix tfoot th, .matrix tfoot td { box-shadow: inset 0 2px 0 var(--ink); }
