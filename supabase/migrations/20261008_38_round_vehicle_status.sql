@@ -105,7 +105,7 @@ delete from public.vehicle_routes
  where date = '2026-10-05' and vehicle_id = 'V001' and date < (select min(start_date) from public.support_rounds);
 do $$ begin
   if exists (select 1 from public.vehicle_routes where private.governing_round(date) is null) then
-    raise exception '담당 기준일자가 없는 경로가 남아 있어 중단합니다(전부 취소됨)';
+    raise exception '담당 기준일자가 없는 경로가 남아 있어 중단합니다(전부 취소됨). 기준일자(예: 10.7)를 먼저 만든 뒤 다시 실행하세요';
   end if;
 end $$;
 
@@ -150,7 +150,7 @@ begin
   perform set_config('private.carry', '1', true);          -- 자동으로 넘기는 줄은 수정 기록에서 뺌
   insert into public.round_vehicle_status (round_id, vehicle_id, status, off_from)
   select rid, v.id,
-         case when s.status = 'O' and s.off_from is not null and s.off_from <= p_date then 'X' else coalesce(s.status, '') end,
+         case when s.status = 'O' and s.off_from is not null and s.off_from <= p_date then 'X' else coalesce(s.status, case when prev is null then v.status else '' end) end,   -- 기준일자가 하나도 없을 때는 옛 열(vehicles.status)을 이어받음
          case when s.status = 'O' and s.off_from is not null and s.off_from > p_date then s.off_from end
     from public.vehicles v left join public.round_vehicle_status s on s.round_id = prev and s.vehicle_id = v.id
    where v.active and (v.hidden_after is null or p_date <= v.hidden_after);
