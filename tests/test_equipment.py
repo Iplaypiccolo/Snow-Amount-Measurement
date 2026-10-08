@@ -83,8 +83,8 @@ def t_dest_order_and_day_tag(p):
     card = p.locator("#destList .dest").first
     check("도착 예상" in card.locator(".dest-time").inner_text() and "21:30" in card.locator(".dest-time").inner_text() and card.locator(".tag.req").count() == 0, "큰 시각 = 도착 예상, 장비가 있는 카드에는 도착 요청 표지 없음")
     names = p.locator("#destList .dest-name").evaluate_all("hs => hs.map(h => h.childNodes[0].textContent.trim())"); check(names == ["대관령", "양양", "엄정"], names)
-    v1 = p.locator(".vrow[data-vid=V001]").first.inner_text(); check("1일차 / 5일" in v1, v1)
-    go_date(p, day(p, 1)); check("2일차 / 5일" in p.locator(".vrow[data-vid=V001]").first.inner_text(), "다음 날 2일차")
+    v1 = p.locator(".vrow[data-vid=V001]").first.inner_text(); check("일차" not in v1, v1)
+    go_date(p, day(p, 1)); check("일차" not in p.locator(".vrow[data-vid=V001]").first.inner_text(), "다음 날에도 일차 표시 없음")
     p.click("[data-type='제설기']"); check(all("제설기" in x for x in p.locator("#destList .vrow").all_inner_texts()), "장비 거르기")
 
 def t_route_choices_confirmed_only(p):

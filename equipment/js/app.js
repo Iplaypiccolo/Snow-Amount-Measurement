@@ -372,11 +372,6 @@ function roundSel(id) {
    ============================================================ */
 const MOVE_TYPES = ["제설차", "제설기"];          // 이동 현황은 제설차·제설기만(이동정비차는 보이지 않음)
 const movesOn = date => S.vehicles.filter(v => MOVE_TYPES.includes(v.type)).map(v => { const rec = recOf(date, v.id); return { v, rec, stops: rec.stops }; }).filter(m => m.stops.length);
-function runOf(vid, date) {     // 그날을 포함해 하루씩 이어지는 지원 기간: k일차 / n일
-  let back = 0; while (back < 30 && routeOf(addDays(date, -(back + 1)), vid).length) back++;
-  let fwd = 0; while (fwd < 30 && routeOf(addDays(date, fwd + 1), vid).length) fwd++;
-  return { k: back + 1, n: back + fwd + 1, first: addDays(date, -back) };
-}
 function renderMatrix() {
   // 세로 = 본부 → 지사(그날 지원받는 지사만), 가로 = 지원기관마다 제설차·제설기. 본부 줄·합계는 장비 1대를 한 번만 셈(여러 지사를 들러도)
   const moves = movesOn(S.date), src = SOURCE_ORGS(), cols = [null, ...src],   // 합계 열을 맨 앞(지사 이름 바로 옆)에
@@ -435,11 +430,9 @@ addEventListener("resize", fitFilters);
 if (window.ResizeObserver) new ResizeObserver(() => fitFilters()).observe($("filters"));   // 탭을 옮겨 다시 보일 때·iframe 크기가 바뀔 때도
 const matches = v => (S.org === "전체" || v.org === S.org) && (S.type === "전체" || v.type === S.type);
 function vehicleRow(v, stops, rec, bid) {
-  const run = runOf(v.id, S.date);
   const eta = rec && bid ? rec.times[rec.stops.indexOf(bid)] : null;   // 이 장비가 이 지사에 도착할 예상 시각(기관별 장비에서 입력)
-  const dayTag = run.n > 1 ? `<span class="tag day">${run.k}일차 / ${run.n}일</span>` : "";
   return `<button type="button" class="vrow" data-vid="${esc(v.id)}" data-vo="${esc(v.org)}" data-vt="${esc(v.type)}"><span class="plate">${esc(vval(v, "plate"))}</span><span class="vtype">${esc(v.type)}</span>
-    <span class="status-wrap">${hasBlower(v) ? `<span class="tag blw-tag">블로워 ${esc(blowerText(v))}</span>` : ""}${eta ? `<span class="tag eta">${esc(eta)} 도착 예상</span>` : ""}${dayTag}${stops.length > 1 ? `<span class="tag" title="${esc(stops.map(bn).join(" → "))}">${stops.length}곳 경유</span>` : ""}</span></button>`;
+    <span class="status-wrap">${hasBlower(v) ? `<span class="tag blw-tag">블로워 ${esc(blowerText(v))}</span>` : ""}${eta ? `<span class="tag eta">${esc(eta)} 도착 예상</span>` : ""}${stops.length > 1 ? `<span class="tag" title="${esc(stops.map(bn).join(" → "))}">${stops.length}곳 경유</span>` : ""}</span></button>`;
 }
 function renderDest() {
   const moves = movesOn(S.date), filtered = S.org !== "전체" || S.type !== "전체", out = [];
