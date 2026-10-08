@@ -44,6 +44,22 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-10-08 · 커밋 (이 기록 커밋 하나) · 코드 검토 + 권한 구멍 수정(migration 39: 요청 줄 이름표 잠금)
+- 사용자 요청: 전체 코드 검토(보안·구조·의도와 다른 설계·지울 것). 최신 main(채팅 쪽 37·38 포함)으로 전체 시험 302/302 통과.
+- **권한 구멍(고침)**: 확정 잠금(35)이 `round_requests` 의 이름표(round_id·branch_id)를 막지 않아, 지사 계정이 확정된 줄을 다른 기준일자로, 본부 계정이 같은 본부 다른 지사로 옮겨 '관리자 확정 없이 확정된 줄'을 만들 수 있었음(실서버 되돌리기 시험으로 확인). → **migration 39**(`20261008_39_round_requests_key_lock.sql`, 실서버 적용함): 이름표는 관리자 포함 누구도 못 바꿈(사용자 결정). 되돌리기 시험 13/13, `confirm_lock_test.sql` 에 추가.
+- **번호 주의(채팅 쪽)**: 채팅 쪽 '남은 일 — vehicles.status 삭제(migration 39)'는 이 39와 겹치므로 **40** 으로.
+- 검토에서 남긴 것(사용자 결정 대기, 고치지 않음):
+  - migration 38 이 SQL Editor 로 적용돼 서버 적용 기록(supabase_migrations)에 없음 — 다시 실행하면 6)번 정리문이 첫 기준일자 앞 경로를 지움. 다시 실행하지 말 것.
+  - 기상현황 직접입력의 특보 발표·발효는 날짜가 기준일자로 고정(전날 발표는 정확히 못 넣음, 표는 시:분만 보임).
+  - 예보 수집이 3시간 넘게 늦으면 24시간 창이 지난 시각에 멈춤(`forecast_put` 의 창 상한).
+  - '요청 있는 지사만'은 요청 대수만 봄 → 요청 0·편성/도착/직접입력만 있는 확정 전 줄은 기본 보기에서 숨음.
+  - 자동 적설 수집은 '더 큰 값만' 반영 → 기상청이 값을 낮춰 고쳐도 반영 안 됨.
+  - 정리 후보: `warnings_history`·`cell_zone` 표, 늘 true 인 `private.warn_needed()`, `round_requests.snow_cm`·`warning`, 화면의 8자리 시각 코드(`parseMdhm`·`mdhm`), `forecast/ui.js` 의 `CH`, 수동 적설 올리기(관리 콘솔 '적설 자료'·`import-snow`·`snow.upload`).
+  - CLAUDE.md 서버 요약(특보·예보·적설)이 예전 동작 그대로 — 갱신 필요.
+  - Supabase 보안 점검: '유출 비밀번호 확인' 꺼짐(대시보드 Authentication → Password security 에서 켜기), pg_net 이 public 스키마.
+- 작업 규칙 메모: 이번 세션 29~36 은 실행 SQL 을 먼저 보여 주지 않고 적용했음(CLAUDE.md 규칙 3 위반) — 39 부터는 SQL 을 보여 주고 사용자 확인 뒤 적용함.
+— ✍ Claude Code 작성
+
 ### 2026-10-08 · 커밋 b28e8ff~(이 기록 커밋) · 지원 여부 기준일자별 저장: 서버 시험 통과 + 화면 구현 (Claude 채팅 작업)
 - **서버**: migration 38(`20261008_38_round_vehicle_status.sql`) 롤백 시험 `supabase/tests/round_status_dryrun.sql` v4 를 사용자가 SQL Editor 에서 실행 → **60/60 통과**(서버 변화 없음). 그 사이 사용자가 기준일자(10.7)와 장비 6대를 직접 삭제해 서버는 빈 상태. **2026-10-08 18:54 사용자가 SQL Editor 로 실제 적용** → 조회로 확인함: 새 표·RLS 4개, `days`·`hidden_after` 열, `create_round`·새 `save_fleet`(옛 2인자 판은 없어짐), private 함수 6개, 트리거 6개, `support_rounds_ins` 정책 삭제, 권한 이름. 적용 시점 서버 자료는 기준일자·장비·경로 모두 0.
 - **화면**(`equipment/js/app.js`·`api.js`·`sample-data.js`·`css/style.css`, `UI_VERSION`/`ui-version` 2026100801):
