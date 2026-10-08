@@ -18,8 +18,12 @@
 --      숨기기·숨김 취소는 장비 지우기와 같은 권한(equip.edit.all)만.
 --  * 장비 지우기는 경로 기록이 있는 장비는 거절(숨기기를 쓰라는 뜻). 기록이 없는 장비만 지울 수 있음.
 --  * 옛 열 vehicles.status 는 당분간 남김(화면이 새 표를 읽는 것을 확인한 뒤 따로 지움).
---  * 정리: 첫 기준일자(2026-10-07)보다 앞선 경로 1줄(2026-10-05 · V001 · B001 · 01:35)을 지움 — 사용자 확인함.
---    지운 줄은 수정 기록(audit_log)에도 남음. 복구 필요 시: insert into vehicle_routes(date,vehicle_id,stops,times) values ('2026-10-05','V001','{B001}','{01:35}')
+--  * 정리: 이 SQL 을 실행하는 시점에 기준일자가 하나도 없어(사용자가 2026-10-08 16:53 에 10.7 기준일자를 삭제함) 담당 기준일자가 없는 경로 8줄(모두 시험 자료)을 지움 — 사용자 확인함(선택지 B).
+--    지운 줄은 수정 기록(audit_log)에도 남음. 복구가 필요하면(기준일자를 만든 뒤 해당 날짜가 그 기간에 들어와야 들어감):
+--      insert into public.vehicle_routes (date, vehicle_id, stops, times) values
+--        ('2026-10-05','V001','{B001}','{01:35}'), ('2026-10-07','V001','{B004}','{05:35}'), ('2026-10-07','V002','{B007}','{12:11}'),
+--        ('2026-10-07','V003','{B012}','{13:00}'), ('2026-10-07','V004','{B002}','{17:00}'), ('2026-10-07','V006','{B019}','{01:35}'),
+--        ('2026-10-08','V001','{B002}',null), ('2026-10-09','V001','{B002}',null);
 --  * 자동으로 넘기는 줄은 수정 기록에 남기지 않음(기록 양 절약) — 사람이 고친 것만 기록.
 -- ============================================================
 
@@ -100,9 +104,9 @@ select r.id, v.id, v.status from public.support_rounds r cross join public.vehic
 on conflict (round_id, vehicle_id) do nothing;
 select set_config('private.carry', '', true);
 
--- 6) 정리: 첫 기준일자보다 앞선 경로 삭제 (사용자 확인함: 2026-10-05 · V001 한 줄)
+-- 6) 정리: 기준일자가 하나도 없거나 첫 기준일자보다 앞선 경로 삭제 (사용자 확인함: 지금은 기준일자가 0개라 경로 8줄 전부)
 delete from public.vehicle_routes
- where date = '2026-10-05' and vehicle_id = 'V001' and date < (select min(start_date) from public.support_rounds);
+ where not exists (select 1 from public.support_rounds) or date < (select min(start_date) from public.support_rounds);
 do $$ begin
   if exists (select 1 from public.vehicle_routes where private.governing_round(date) is null) then
     raise exception '담당 기준일자가 없는 경로가 남아 있어 중단합니다(전부 취소됨). 기준일자(예: 10.7)를 먼저 만든 뒤 다시 실행하세요';
