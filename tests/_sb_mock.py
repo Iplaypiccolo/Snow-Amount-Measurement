@@ -84,7 +84,7 @@ class Mock:
         self.rounds = [{"id": 1, "name": self.today + " 기준", "start_date": self.today, "days": 4}]
         # 기준일자별 지원 여부(마이그레이션 38)
         self.rstatus = [{"round_id": 1, "vehicle_id": v["id"], "status": v["status"], "off_from": None, "updated_at": "2026-10-08T00:00:00Z"} for v in self.vehicles]
-        self.round_reqs = [{"round_id": 1, "branch_id": "B019", "snow_cm": 5, "warning": False, "req_truck": 2, "req_blower": 0, "assigned_truck": 1, "assigned_blower": 0,
+        self.round_reqs = [{"round_id": 1, "branch_id": "B019", "req_truck": 2, "req_blower": 0, "assigned_truck": 1, "assigned_blower": 0,
                             "arrive_at": self.today + "T13:00:00+00:00", "reason": None, "confirmed": True,
                             "warn_level": "경보", "warn_zones": [["L1041100", "충주", "경보"]], "warn_base": "202612150600", "warn_at": "2026-12-14T21:10:00Z", "warn_note": None}]
         self.eq_calls = []

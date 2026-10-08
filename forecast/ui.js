@@ -83,7 +83,6 @@
   }
   // 24시간 추이 표(그림 대신) — 값 24개(start 의 정시부터 1시간씩)를 시각별 표로. s = 적설(cm), p = 강수(mm), t = 기온(℃)
   //  · 마우스 말풍선: 3시간 단위(칸 = 그 시각부터 3시간의 합, 기온은 그 3시간의 최저)  · 눌러 고정한 창: 1시간 단위(12시간씩 두 줄)
-  var CH = { s: { name: '적설', unit: 'cm' }, p: { name: '강수', unit: 'mm' }, t: { name: '기온', unit: '℃' } };
   function hourAt(start, i) { var d = start ? new Date(Date.parse(start) + i * 3600e3) : null; return d && !isNaN(d) ? d : null; }
   function hourLabel(start, i) { var d = hourAt(start, i); return d ? p2(d.getHours()) + '시' : ''; }
   function sumOf(a) { var x = a.filter(function (v) { return v != null; }); return x.length ? x.reduce(function (m, v) { return m + v; }, 0) : null; }

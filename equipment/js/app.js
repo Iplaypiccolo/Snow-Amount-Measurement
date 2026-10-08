@@ -106,7 +106,7 @@ const effRec = (d, vid) => availOn(vid, d) ? recOf(d, vid) : EMPTY;             
 const isCont = (vid, d, stop) => { if (!stop) return false; const p = effRec(addDays(d, -1), vid).stops; return p.length > 0 && p[p.length - 1] === stop; };
 // 숨긴 장비(hidden_after): 그 날짜보다 늦게 시작하는 기준일자부터 기관별 장비 목록에서 안 보임(이전 기준일자·이동 현황 기록은 그대로)
 const shownIn = (v, r) => !v.hidden_after || (!!r && r.start_date <= v.hidden_after);
-const REQ_DEF = { snow_cm: null, warning: false, req_truck: 0, req_blower: 0, assigned_truck: 0, assigned_blower: 0, arrive_at: null, reason: null, confirmed: false,
+const REQ_DEF = { req_truck: 0, req_blower: 0, assigned_truck: 0, assigned_blower: 0, arrive_at: null, reason: null, confirmed: false,
   wx_manual: false, wx_snow: null, wx_pcp: null, wx_tmin: null, wx_tmin_at: null, wx_level: null, wx_fc: null, wx_ef: null };
 const rbase = (b, f) => { const r = S.reqs[b]; return r ? r[f] : REQ_DEF[f]; };
 const rval = (b, f) => { const d = S.rdraft.get(b); return d && f in d ? d[f] : rbase(b, f); };
@@ -145,16 +145,6 @@ function warnBadge(bid) {
   if (w.none) return `<span class="muted">-</span>`;
   const cls = (WLV[w.level] || ["w0"])[0];
   return `<span class="wb ${cls}" data-wb="${esc(bid)}">${esc(wlabel(w.level, "대설"))}</span>`;
-}
-// 직접입력 시각: 화면 "월일시분" 8자리(예 12241530) ↔ 서버 ISO. 연도는 기준일자에 가장 가까운 해
-const mdhm = iso => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? `${p2(d.getMonth() + 1)}${p2(d.getDate())}${p2(d.getHours())}${p2(d.getMinutes())}` : ""; };
-function parseMdhm(t) {
-  const m = /^(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(t); if (!m) return undefined;
-  const [mo, dd, hh, mi] = m.slice(1).map(Number); if (mo < 1 || mo > 12 || dd < 1 || dd > 31 || hh > 23 || mi > 59) return undefined;
-  const base = new Date(((curRound() || {}).start_date || todayISO()) + "T12:00");
-  const c = [-1, 0, 1].map(k => new Date(base.getFullYear() + k, mo - 1, dd, hh, mi)).filter(d => d.getMonth() === mo - 1 && d.getDate() === dd);
-  if (!c.length) return undefined;
-  return c.sort((a, b) => Math.abs(a - base) - Math.abs(b - base))[0].toISOString();
 }
 // 직접입력 대설특보 발표·발효 시각: [시 ▾]:[분 ▾] (시 00~23, 분 10분 단위). 날짜는 기준일자, 시를 '--'로 두면 비움
 function hmSelects(bid, f, label) {
@@ -1085,17 +1075,11 @@ document.addEventListener("change", async e => {
   if (t.dataset.rq) {
     const b = S.brById[t.dataset.rq], f = t.dataset.f; if (!b || !canEdit(b) || (["assigned_truck", "assigned_blower", "confirmed"].includes(f) && !can("req.confirm"))) return refresh();
     let v;
-    if (f === "wx_tmin_at") {                              // 최저기온 시각: 월일시분 8자리 → 시각. 비우면 지움
-      const raw = t.value.replace(/\D/g, "");
-      v = raw === "" ? null : parseMdhm(raw);
-      if (v === undefined) { toast("시각은 월일시분 8자리 숫자로 넣으세요 (예: 12월 24일 15시 30분 → 12241530)", true); return refresh(); }
-      setReq(b.id, f, v); return afterReq(b.id);
-    }
     if (f === "wx_manual") { setReq(b.id, f, t.checked); afterReq(b.id); return renderBranch(); }   // 켜고 끄면 그 줄 칸 모양이 바뀜
     if (f === "wx_level") { setReq(b.id, f, t.value || null); return afterReq(b.id); }
     if (f === "wx_tmin") { setReq(b.id, f, t.value === "" ? null : Math.max(-60, Math.min(50, Math.round(+t.value * 10) / 10 || 0))); return afterReq(b.id); }
-    if (f === "warning" || f === "confirmed") v = t.checked;
-    else if (f === "snow_cm" || f === "wx_snow" || f === "wx_pcp") v = t.value === "" ? null : Math.max(0, Math.min(999, Math.round(+t.value * 10) / 10 || 0));
+    if (f === "confirmed") v = t.checked;
+    else if (f === "wx_snow" || f === "wx_pcp") v = t.value === "" ? null : Math.max(0, Math.min(999, Math.round(+t.value * 10) / 10 || 0));
     else if (f === "reason") v = t.value.trim() || null;
     else v = t.value === "" ? 0 : Math.max(0, Math.min(999, Math.floor(+t.value) || 0));
     setReq(b.id, f, v); return afterReq(b.id);

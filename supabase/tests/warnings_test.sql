@@ -50,7 +50,7 @@ begin
   perform pg_temp.yes('대설만: 같은 구역의 주의보+예비특보 둘 다, 강풍은 저장 안 함', (select count(*) = 3 and count(*) filter (where kind = '강풍') = 0 from public.warnings_active where zone_code like 'L99%'));
   perform pg_temp.yes('수집 상태 = 성공·기준시각', (select ok and cursor = '209912010600' and finished_at > now() - interval '1 minute' from public.collector_state where job = 'warnings'));
   perform pg_temp.chk('서버: 같은 내용 다시 넣어도 그대로','service_role',null,format('select public.ingest_warnings(%L)', rows3),'ok:1');
-  perform pg_temp.yes('다시 넣어도 그대로·지난 특보 없음', (select count(*) = 3 from public.warnings_active where zone_code like 'L99%') and not exists (select 1 from public.warnings_history where zone_code like 'L99%'));
+  perform pg_temp.yes('다시 넣어도 그대로·지난 특보 없음', (select count(*) = 3 from public.warnings_active where zone_code like 'L99%'));
   perform pg_temp.yes('바뀐 게 없으면 수집 기록 안 남김(성공 1건만)', (select count(*) = 1 from public.collector_runs where job = 'warnings' and started_at = now()));
 
   -- 지사별 최고 단계(대설만)
@@ -63,7 +63,7 @@ begin
   perform pg_temp.yes('구역 줄에 발표·발효 시각', j -> 'branches' -> 'B001' -> 'zones' -> 0 ->> 4 like '2099-11-30%' or j -> 'branches' -> 'B001' -> 'zones' -> 0 ->> 4 like '2099-12-01%', j::text);
   update public.settings set value = '{"kinds":["대설"]}' where key = 'warnings';
   perform pg_temp.chk('서버: 대설만으로 되돌려 넣기','service_role',null,format('select public.ingest_warnings(%L)', rows3),'ok:1');
-  perform pg_temp.yes('대설만으로 돌리면 강풍은 지난 특보에 안 남기고 지움', not exists (select 1 from public.warnings_active where kind = '강풍' and zone_code like 'L99%') and not exists (select 1 from public.warnings_history where zone_code like 'L99%'));
+  perform pg_temp.yes('대설만으로 돌리면 강풍은 지난 특보에 안 남기고 지움', not exists (select 1 from public.warnings_active where kind = '강풍' and zone_code like 'L99%'));
   perform pg_temp.chk('지사: 특보구역 더하기 거절','authenticated',b,'insert into public.branch_zone_overrides (branch_id, zone_code, include) values (''B001'',''L9900002'',true)','err:42501');
   perform pg_temp.chk('관리자: B001 에 산지 구역 더함','authenticated',a,'insert into public.branch_zone_overrides (branch_id, zone_code, include) values (''B001'',''L9900002'',true)','ok:1');
   j := pg_temp.st(b);
@@ -87,7 +87,7 @@ begin
   perform pg_temp.chk('관리자: 고정값 직접 바꾸기(무시됨)','authenticated',a,format('update public.round_requests set warn_level = null, warn_zones = null where round_id = %s and branch_id = ''B001''', rid),'ok:1');
   perform pg_temp.yes('고정값 그대로', (select warn_level = '경보' and jsonb_array_length(warn_zones) = 2 from public.round_requests where round_id = rid and branch_id = 'B001'));
   perform pg_temp.chk('서버: 특보가 모두 끝남','service_role',null,'select public.ingest_warnings(''{"ok":true,"base":"209912011200","rows":[]}'')','ok:1');
-  perform pg_temp.yes('끝난 특보는 기록 없이 지움(마이그레이션 29)', not exists (select 1 from public.warnings_history where zone_code like 'L99%') and not exists (select 1 from public.warnings_active where zone_code like 'L99%'));
+  perform pg_temp.yes('끝난 특보는 기록 없이 지움(마이그레이션 29)', not exists (select 1 from public.warnings_active where zone_code like 'L99%'));
   perform pg_temp.yes('지금은 B001 특보 없음', not (pg_temp.st(b) -> 'branches' ? 'B001'));
   perform pg_temp.yes('확정한 줄은 여전히 경보', (select warn_level = '경보' from public.round_requests where round_id = rid and branch_id = 'B001'));
   perform pg_temp.chk('관리자: 확정 취소','authenticated',a,format('select public.save_requests(%s, ''[{"branch_id":"B001","confirmed":false}]'')', rid),'ok:1');

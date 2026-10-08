@@ -58,13 +58,13 @@ function makeSample(today) {
   // 기준일자별 지원 여부(마이그레이션 38). 오늘 기준일자 = 장비 표의 지원 여부, 1주 전 = 같되 그때 다녀온 V005·V024 는 지원
   const status = [...vehicles.map(v => ({ round_id: 2, vehicle_id: v.id, status: v.status, off_from: null, updated_at: new Date(Date.now() - 3600e3).toISOString() })),
     ...vehicles.map(v => ({ round_id: 1, vehicle_id: v.id, status: ["V005", "V024"].includes(v.id) ? "O" : v.status, off_from: null, updated_at: new Date(Date.now() - 7 * 864e5).toISOString() }))];
-  const R = (round, name, o) => ({ round_id: round, branch_id: B(name), snow_cm: null, warning: false, req_truck: 0, req_blower: 0, assigned_truck: 0, assigned_blower: 0, arrive_at: null, reason: null, confirmed: false, ...o });
+  const R = (round, name, o) => ({ round_id: round, branch_id: B(name), req_truck: 0, req_blower: 0, assigned_truck: 0, assigned_blower: 0, arrive_at: null, reason: null, confirmed: false, ...o });
   const at = (k, hh) => { const [y, m, d] = day(k).split("-").map(Number); return new Date(y, m - 1, d, hh, 0).toISOString(); };
   const requests = [
-    R(2, "대관령", { snow_cm: 12, req_truck: 4, req_blower: 6, assigned_truck: 6, assigned_blower: 4, arrive_at: at(0, 22), confirmed: true }),
-    R(2, "양양",   { snow_cm: 15, req_truck: 8, req_blower: 2, assigned_truck: 8, assigned_blower: 2, arrive_at: at(0, 22), confirmed: true }),
+    R(2, "대관령", { req_truck: 4, req_blower: 6, assigned_truck: 6, assigned_blower: 4, arrive_at: at(0, 22), confirmed: true }),
+    R(2, "양양",   { req_truck: 8, req_blower: 2, assigned_truck: 8, assigned_blower: 2, arrive_at: at(0, 22), confirmed: true }),
     R(2, "엄정",   { req_truck: 1, assigned_truck: 1, arrive_at: at(0, 22), reason: "눈길사고 예방", confirmed: true }),
-    R(2, "춘천",   { snow_cm: 6, req_truck: 2, arrive_at: at(1, 6) }),                                     // 요청만 하고 아직 확정 안 됨
+    R(2, "춘천",   { req_truck: 2, arrive_at: at(1, 6) }),                                     // 요청만 하고 아직 확정 안 됨
     R(1, "엄정",   { req_truck: 1, assigned_truck: 1, arrive_at: at(-7, 20), confirmed: true }),
     R(1, "춘천",   { req_truck: 1, assigned_truck: 1, arrive_at: at(-7, 20), confirmed: true })
   ];

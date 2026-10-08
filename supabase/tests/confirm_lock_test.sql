@@ -36,6 +36,7 @@ begin
   perform pg_temp.chk('지사: 확정 줄을 다른 기준일자로 옮기기 거절','authenticated',br,format('update public.round_requests set round_id = %s where round_id = %s and branch_id = ''B001''', rid + 100000, rid),'err:42501');
   perform pg_temp.chk('관리자도: 확정 줄 지사 바꾸기 거절','authenticated',a,format('update public.round_requests set branch_id = ''B002'' where round_id = %s and branch_id = ''B001''', rid),'err:42501');
   perform pg_temp.chk('같은 값으로 다시 보내기는 괜찮음','authenticated',a,format(sv, rid, '[{"branch_id":"B001","req_truck":2}]'),'ok:1');
+  perform pg_temp.chk('옛 칸(snow_cm·warning, 마이그레이션 40에서 지움)을 보내도 무시하고 저장','authenticated',a,format(sv, rid, '[{"branch_id":"B001","snow_cm":5,"warning":true}]'),'ok:1');
   perform pg_temp.yes('값 그대로', (select req_truck = 2 and assigned_truck = 2 and wx_snow = 3 and confirmed from public.round_requests where round_id = rid and branch_id = 'B001'));
   perform pg_temp.chk('관리자: 확정 취소','authenticated',a,format(sv, rid, '[{"branch_id":"B001","confirmed":false}]'),'ok:1');
   perform pg_temp.chk('취소 뒤 지사: 요청 고치기','authenticated',br,format(sv, rid, '[{"branch_id":"B001","req_truck":5}]'),'ok:1');
