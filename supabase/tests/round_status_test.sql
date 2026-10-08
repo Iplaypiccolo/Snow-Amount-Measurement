@@ -17,18 +17,18 @@ declare got text := pg_temp.run_as(rl, uid, stmt); begin insert into _t(name, go
 create or replace function pg_temp.yes(name text, cond boolean, info text default '') returns void language plpgsql as $f$
 begin insert into _t(name, got, want, ok) values (name, case when cond then 'true' else 'false ' || info end, 'true', coalesce(cond, false)); end $f$;
 do $t$
-declare a uuid := gen_random_uuid(); e uuid := gen_random_uuid(); r1 bigint; r2 bigint; r3 bigint; r4 bigint; r5 bigint; r6 bigint; r7 bigint; c bigint; nveh bigint; c0 bigint; exp5 text;
+declare a uuid := gen_random_uuid(); e uuid := gen_random_uuid(); r1 bigint; r2 bigint; r3 bigint; r4 bigint; r5 bigint; r6 bigint; r7 bigint; c bigint; nveh bigint; c0 bigint; noprev boolean;
 begin
   insert into auth.users (id, aud, role, email) values (a,'authenticated','authenticated','ra@t.test'),(e,'authenticated','authenticated','re@t.test');
   insert into public.profiles (id,username,display_name,role,branch_id,org,hq_id,perms,must_change) values
     (a,'rs-adm','관리자','admin',null,null,null,'{}',false),(e,'rs-eq','장비','equip',null,'서울경기',null,'{equip.edit.own}',false);
   insert into public.vehicles (id,org,type,plate) values ('V9001','서울경기','제설차','서울경기9901'),('V9002','충북','제설기','충북9902'),('V9003','충북','제설차','충북9903');
+  insert into public.vehicles (id,org,type,plate,status) values ('V9004','서울경기','제설차','서울경기9904','M');
 
   select count(*) into c0 from public.audit_log where tab = 'round_vehicle_status';
   -- 0. 마이그레이션 직후 상태(실제 자료)
   perform pg_temp.yes('담당 기준일자가 없는 경로가 남아 있지 않음', not exists (select 1 from public.vehicle_routes where private.governing_round(date) is null));
-  select coalesce((select s.status from public.round_vehicle_status s where s.vehicle_id = 'V005' and s.round_id = (select id from public.support_rounds order by start_date desc limit 1)),
-                  (select status from public.vehicles where id = 'V005')) into exp5;
+  select count(*) = 0 into noprev from public.support_rounds;     -- 기준일자가 하나도 없는 상태에서 처음 만드는 경우인지
 
   perform pg_temp.chk('지원장비 계정은 기준일자를 못 만든다','authenticated',e,'select public.create_round(''2099-12-01'')','err:42501');
   perform pg_temp.chk('직접 insert 는 막힘','authenticated',a,'insert into public.support_rounds (name, start_date) values (''x'', ''2099-01-01'')','err:42501');
@@ -37,7 +37,7 @@ begin
   perform pg_temp.chk('마지막 기준일자보다 앞 날짜는 거절','authenticated',a,'select public.create_round(''2020-01-01'')','err:23514');
   select count(*) into nveh from public.vehicles where active;
   perform pg_temp.yes('전체 장비가 넘어옴', (select count(*) from public.round_vehicle_status where round_id = r1) = nveh, 'rows=' || (select count(*) from public.round_vehicle_status where round_id = r1) || ' veh=' || nveh);
-  perform pg_temp.yes('정비중(V005)도 그대로 넘어옴(이전 기준일자, 없으면 옛 열 값)', (select status from public.round_vehicle_status where round_id = r1 and vehicle_id = 'V005') = exp5 and exp5 = 'M');
+  perform pg_temp.yes('정비중(V9004)도 그대로 넘어옴(기준일자가 없던 상태에서 처음 만들면 옛 열 값)', not noprev or (select status from public.round_vehicle_status where round_id = r1 and vehicle_id = 'V9004') = 'M');
   perform pg_temp.yes('자동으로 넘긴 줄은 수정 기록에 없음', (select count(*) from public.audit_log where tab = 'round_vehicle_status') = c0);
   perform pg_temp.yes('새 V9001 은 미정', (select status from public.round_vehicle_status where round_id = r1 and vehicle_id = 'V9001') = '');
 

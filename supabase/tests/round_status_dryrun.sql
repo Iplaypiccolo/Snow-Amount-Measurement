@@ -1,4 +1,4 @@
--- 파일 버전: v3 (2026-10-08 17:20) — 6) 정리에 'not exists (select 1 from public.support_rounds)' 가 있으면 최신입니다
+-- 파일 버전: v4 (2026-10-08 17:35) — 시험 앞부분이 "담당 기준일자가 없는 경로가 남아 있지 않음" 이면 최신입니다
 -- ============================================================
 -- [롤백 시험] 마이그레이션 38 + 기준일자별 지원 여부 시험을 한 번에 — SQL Editor 에 통째로 붙여넣고 실행
 -- 맨 끝에서 일부러 오류를 내므로 서버에는 아무것도 남지 않습니다(전부 되돌려짐).
@@ -26,6 +26,7 @@
 --  * 장비 지우기는 경로 기록이 있는 장비는 거절(숨기기를 쓰라는 뜻). 기록이 없는 장비만 지울 수 있음.
 --  * 옛 열 vehicles.status 는 당분간 남김(화면이 새 표를 읽는 것을 확인한 뒤 따로 지움).
 --  * 정리: 이 SQL 을 실행하는 시점에 기준일자가 하나도 없어(사용자가 2026-10-08 16:53 에 10.7 기준일자를 삭제함) 담당 기준일자가 없는 경로 8줄(모두 시험 자료)을 지움 — 사용자 확인함(선택지 B).
+--    (실제로는 적용 전에 사용자가 장비 6대와 기준일자를 직접 삭제해 경로도 이미 0줄이 됨 — 이 삭제문은 그래도 안전하게 둠)
 --    지운 줄은 수정 기록(audit_log)에도 남음. 복구가 필요하면(기준일자를 만든 뒤 해당 날짜가 그 기간에 들어와야 들어감):
 --      insert into public.vehicle_routes (date, vehicle_id, stops, times) values
 --        ('2026-10-05','V001','{B001}','{01:35}'), ('2026-10-07','V001','{B004}','{05:35}'), ('2026-10-07','V002','{B007}','{12:11}'),
@@ -293,18 +294,18 @@ declare got text := pg_temp.run_as(rl, uid, stmt); begin insert into _t(name, go
 create or replace function pg_temp.yes(name text, cond boolean, info text default '') returns void language plpgsql as $f$
 begin insert into _t(name, got, want, ok) values (name, case when cond then 'true' else 'false ' || info end, 'true', coalesce(cond, false)); end $f$;
 do $t$
-declare a uuid := gen_random_uuid(); e uuid := gen_random_uuid(); r1 bigint; r2 bigint; r3 bigint; r4 bigint; r5 bigint; r6 bigint; r7 bigint; c bigint; nveh bigint; c0 bigint; exp5 text;
+declare a uuid := gen_random_uuid(); e uuid := gen_random_uuid(); r1 bigint; r2 bigint; r3 bigint; r4 bigint; r5 bigint; r6 bigint; r7 bigint; c bigint; nveh bigint; c0 bigint; noprev boolean;
 begin
   insert into auth.users (id, aud, role, email) values (a,'authenticated','authenticated','ra@t.test'),(e,'authenticated','authenticated','re@t.test');
   insert into public.profiles (id,username,display_name,role,branch_id,org,hq_id,perms,must_change) values
     (a,'rs-adm','관리자','admin',null,null,null,'{}',false),(e,'rs-eq','장비','equip',null,'서울경기',null,'{equip.edit.own}',false);
   insert into public.vehicles (id,org,type,plate) values ('V9001','서울경기','제설차','서울경기9901'),('V9002','충북','제설기','충북9902'),('V9003','충북','제설차','충북9903');
+  insert into public.vehicles (id,org,type,plate,status) values ('V9004','서울경기','제설차','서울경기9904','M');
 
   select count(*) into c0 from public.audit_log where tab = 'round_vehicle_status';
   -- 0. 마이그레이션 직후 상태(실제 자료)
   perform pg_temp.yes('담당 기준일자가 없는 경로가 남아 있지 않음', not exists (select 1 from public.vehicle_routes where private.governing_round(date) is null));
-  select coalesce((select s.status from public.round_vehicle_status s where s.vehicle_id = 'V005' and s.round_id = (select id from public.support_rounds order by start_date desc limit 1)),
-                  (select status from public.vehicles where id = 'V005')) into exp5;
+  select count(*) = 0 into noprev from public.support_rounds;     -- 기준일자가 하나도 없는 상태에서 처음 만드는 경우인지
 
   perform pg_temp.chk('지원장비 계정은 기준일자를 못 만든다','authenticated',e,'select public.create_round(''2099-12-01'')','err:42501');
   perform pg_temp.chk('직접 insert 는 막힘','authenticated',a,'insert into public.support_rounds (name, start_date) values (''x'', ''2099-01-01'')','err:42501');
@@ -313,7 +314,7 @@ begin
   perform pg_temp.chk('마지막 기준일자보다 앞 날짜는 거절','authenticated',a,'select public.create_round(''2020-01-01'')','err:23514');
   select count(*) into nveh from public.vehicles where active;
   perform pg_temp.yes('전체 장비가 넘어옴', (select count(*) from public.round_vehicle_status where round_id = r1) = nveh, 'rows=' || (select count(*) from public.round_vehicle_status where round_id = r1) || ' veh=' || nveh);
-  perform pg_temp.yes('정비중(V005)도 그대로 넘어옴(이전 기준일자, 없으면 옛 열 값)', (select status from public.round_vehicle_status where round_id = r1 and vehicle_id = 'V005') = exp5 and exp5 = 'M');
+  perform pg_temp.yes('정비중(V9004)도 그대로 넘어옴(기준일자가 없던 상태에서 처음 만들면 옛 열 값)', not noprev or (select status from public.round_vehicle_status where round_id = r1 and vehicle_id = 'V9004') = 'M');
   perform pg_temp.yes('자동으로 넘긴 줄은 수정 기록에 없음', (select count(*) from public.audit_log where tab = 'round_vehicle_status') = c0);
   perform pg_temp.yes('새 V9001 은 미정', (select status from public.round_vehicle_status where round_id = r1 and vehicle_id = 'V9001') = '');
 
