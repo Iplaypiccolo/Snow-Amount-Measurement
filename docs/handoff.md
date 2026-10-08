@@ -45,7 +45,7 @@
 ## 기록 (최신이 맨 위)
 
 ### 2026-10-08 · 커밋 b28e8ff~(이 기록 커밋) · 지원 여부 기준일자별 저장: 서버 시험 통과 + 화면 구현 (Claude 채팅 작업)
-- **서버**: migration 38(`20261008_38_round_vehicle_status.sql`) 롤백 시험 `supabase/tests/round_status_dryrun.sql` v4 를 사용자가 SQL Editor 에서 실행 → **60/60 통과**(서버 변화 없음). 그 사이 사용자가 기준일자(10.7)와 장비 6대를 직접 삭제해 서버는 빈 상태. 실제 적용은 화면 푸시 직전에 사용자가 실행.
+- **서버**: migration 38(`20261008_38_round_vehicle_status.sql`) 롤백 시험 `supabase/tests/round_status_dryrun.sql` v4 를 사용자가 SQL Editor 에서 실행 → **60/60 통과**(서버 변화 없음). 그 사이 사용자가 기준일자(10.7)와 장비 6대를 직접 삭제해 서버는 빈 상태. **2026-10-08 18:54 사용자가 SQL Editor 로 실제 적용** → 조회로 확인함: 새 표·RLS 4개, `days`·`hidden_after` 열, `create_round`·새 `save_fleet`(옛 2인자 판은 없어짐), private 함수 6개, 트리거 6개, `support_rounds_ins` 정책 삭제, 권한 이름. 적용 시점 서버 자료는 기준일자·장비·경로 모두 0.
 - **화면**(`equipment/js/app.js`·`api.js`·`sample-data.js`·`css/style.css`, `UI_VERSION`/`ui-version` 2026100801):
   - 지원 여부 = 고른 기준일자 값(`S.rstat`·`S.sdraft`, `stOf`), 규칙 함수 `govRound`(날짜를 맡은 기준일자)·`availOn`·`effRec`(지원 불가인 날 경로는 숨김)·`isCont`(연속지원).
   - 다른 기준일자가 맡은 칸 = `lockedCell`(흐림, title 말풍선 "기준일자 ○에서 수정 · 시각"), 지원일 2부터 "지원 불가(이날부터)"(관리자 = 지사 목록, 지원장비 = `select[data-off]`), `offCell` [취소].
