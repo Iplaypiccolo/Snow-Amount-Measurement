@@ -53,7 +53,11 @@ function makeSample(today) {
   // 지난 기록: 1주 전에 엄정·춘천으로 갔던 장비(오늘 다른 곳으로 가도 그대로 남음)
   routes.push({ date: day(-7), vehicle_id: "V005", stops: [B("엄정")] }, { date: day(-6), vehicle_id: "V005", stops: [B("엄정")] }, { date: day(-7), vehicle_id: "V024", stops: [B("춘천")] });
   // 기준일자(지원 회차)와 지사 요청. confirmed = 편성 확정(확정된 지사만 경로의 피지원 기관으로 고를 수 있음)
-  const rounds = [{ id: 2, name: day(0) + " 기준", start_date: day(0) }, { id: 1, name: day(-7) + " 기준", start_date: day(-7) }];
+  // days = 기준일자 기간(일). 오늘 기준일자는 5일(V001 이 닷새 동안 다님), 1주 전 기준일자는 4일
+  const rounds = [{ id: 2, name: day(0) + " 기준", start_date: day(0), days: 5 }, { id: 1, name: day(-7) + " 기준", start_date: day(-7), days: 4 }];
+  // 기준일자별 지원 여부(마이그레이션 38). 오늘 기준일자 = 장비 표의 지원 여부, 1주 전 = 같되 그때 다녀온 V005·V024 는 지원
+  const status = [...vehicles.map(v => ({ round_id: 2, vehicle_id: v.id, status: v.status, off_from: null, updated_at: new Date(Date.now() - 3600e3).toISOString() })),
+    ...vehicles.map(v => ({ round_id: 1, vehicle_id: v.id, status: ["V005", "V024"].includes(v.id) ? "O" : v.status, off_from: null, updated_at: new Date(Date.now() - 7 * 864e5).toISOString() }))];
   const R = (round, name, o) => ({ round_id: round, branch_id: B(name), snow_cm: null, warning: false, req_truck: 0, req_blower: 0, assigned_truck: 0, assigned_blower: 0, arrive_at: null, reason: null, confirmed: false, ...o });
   const at = (k, hh) => { const [y, m, d] = day(k).split("-").map(Number); return new Date(y, m - 1, d, hh, 0).toISOString(); };
   const requests = [
@@ -101,5 +105,5 @@ function makeSample(today) {
     .map(([n, v, p, t, th, nx, ny]) => ({ branch_id: B(n), issued_at: fcTm, max_snow_24h: v, max_pcp_24h: p, min_tmp: t, min_tmp_at: new Date(hr + (1 + th) * 3600e3).toISOString(), worst_nx: nx, worst_ny: ny, detail: { start_at: fcStart, end_at: fcEnd, pcp_nx: nx, pcp_ny: ny } }));
   [["대관령", 12.1, 16.0, -10], ["양양", 8.0, 10.5, -3], ["엄정", 0, 0, 2]].forEach(([n, v, p, t]) => Object.assign(requests.find(r => r.round_id === 2 && r.branch_id === B(n)), { fc_snow: v, fc_pcp: p, fc_tmin: t, fc_tmin_at: kst(1, "06:00"), fc_tmfc: kst(0, "05:00"), fc_at: at(0, 6) }));
   fix("대관령", "주의", [["L1022520", "강릉산지", "주의", "대설", kst(-1, "22:00"), kst(0, "01:00")]]); fix("양양", null, []); fix("엄정", null, [], "기상청 자료를 30분 넘게 받지 못함");
-  return { hqs, branches, holdings, vehicles, routes, rounds, requests, audit, orgs: ["서울경기", "충북", "전북", "대구경북"], zones, zoneAuto, zoneOver: [], warnActive, warnBase, warnFc, warnEf, warnEfPre, forecast };
+  return { hqs, branches, holdings, vehicles, routes, rounds, status, requests, audit, orgs: ["서울경기", "충북", "전북", "대구경북"], zones, zoneAuto, zoneOver: [], warnActive, warnBase, warnFc, warnEf, warnEfPre, forecast };
 }

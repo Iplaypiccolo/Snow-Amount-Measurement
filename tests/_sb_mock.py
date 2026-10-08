@@ -81,7 +81,9 @@ class Mock:
         self.vehicles = [{"id": "V001", "org": "서울경기", "type": "제설차", "plate": "서울경기901", "status": "O", "sort": 10, "active": True},
                          {"id": "V002", "org": "충북", "type": "제설기", "plate": "충북901", "status": "O", "sort": 20, "active": True}]
         self.routes = [{"date": self.today, "vehicle_id": "V002", "stops": ["B019"]}]
-        self.rounds = [{"id": 1, "name": self.today + " 기준", "start_date": self.today}]
+        self.rounds = [{"id": 1, "name": self.today + " 기준", "start_date": self.today, "days": 4}]
+        # 기준일자별 지원 여부(마이그레이션 38)
+        self.rstatus = [{"round_id": 1, "vehicle_id": v["id"], "status": v["status"], "off_from": None, "updated_at": "2026-10-08T00:00:00Z"} for v in self.vehicles]
         self.round_reqs = [{"round_id": 1, "branch_id": "B019", "snow_cm": 5, "warning": False, "req_truck": 2, "req_blower": 0, "assigned_truck": 1, "assigned_blower": 0,
                             "arrive_at": self.today + "T13:00:00+00:00", "reason": None, "confirmed": True,
                             "warn_level": "경보", "warn_zones": [["L1041100", "충주", "경보"]], "warn_base": "202612150600", "warn_at": "2026-12-14T21:10:00Z", "warn_note": None}]
@@ -273,10 +275,16 @@ class Mock:
                 self.eq_calls.append((tbl, body))
                 if tbl == "save_fleet":
                     ok = lambda vid: self.can(u, "equip.edit.all") or (self.can(u, "equip.edit.own") and next((v for v in self.vehicles if v["id"] == vid), {}).get("org") == u["profile"].get("org"))
-                    if any(not ok(v["id"]) for v in body["p_vehicles"]) or (body["p_routes"] and not self.can(u, "equip.edit.all")): return send(403, {"code": "42501", "message": "routes need equip.edit.all"})
+                    st, rid = body.get("p_status") or [], body.get("p_round")
+                    if any("status" in v for v in body["p_vehicles"]) or ((body["p_routes"] or st) and not any(r["id"] == rid for r in self.rounds)): return send(400, {"code": "22023", "message": "bad input"})
+                    if any(not ok(v["id"]) for v in body["p_vehicles"]) or any(not ok(x["vehicle_id"]) for x in st) or (body["p_routes"] and not self.can(u, "equip.edit.all")): return send(403, {"code": "42501", "message": "routes need equip.edit.all"})
+                    for x in st:
+                        cur = next((y for y in self.rstatus if y["round_id"] == rid and y["vehicle_id"] == x["vehicle_id"]), None)
+                        if not cur: cur = {"round_id": rid, "vehicle_id": x["vehicle_id"]}; self.rstatus.append(cur)
+                        cur.update(status=x["status"], off_from=x.get("off_from") if x["status"] == "O" else None, updated_at="2026-10-08T01:00:00Z")
                     for r in body["p_routes"]:
                         self.routes = [x for x in self.routes if not (x["date"] == r["date"] and x["vehicle_id"] == r["vehicle_id"])] + ([r] if r["stops"] else [])
-                    return send(200, {"vehicles": len(body["p_vehicles"]), "routes_saved": len(body["p_routes"]), "routes_deleted": 0})
+                    return send(200, {"vehicles": len(body["p_vehicles"]), "status": len(st), "routes_saved": len(body["p_routes"]), "routes_deleted": 0})
                 # save_requests: 실제로 반영(서버 트리거 흉내 — 확정한 줄은 확정 열 말고는 못 바꿈 55000, 확정·편성은 req.confirm)
                 rid = body["p_round"]; LOCK = ("req_truck", "req_blower", "assigned_truck", "assigned_blower", "arrive_at", "reason", "wx_manual", "wx_snow", "wx_pcp", "wx_tmin", "wx_tmin_at", "wx_level", "wx_fc", "wx_ef")
                 for r in body["p_rows"]:
@@ -288,6 +296,26 @@ class Mock:
                     if not cur: cur = {"round_id": rid, "branch_id": r["branch_id"], "req_truck": 0, "req_blower": 0, "assigned_truck": 0, "assigned_blower": 0, "confirmed": False}; self.round_reqs.append(cur)
                     cur.update({k: v for k, v in r.items() if k != "branch_id"})
                 return send(200, {"rows": len(body["p_rows"])})
+            if tbl == "create_round" and "/rpc/" in path:          # 새 기준일자 + 전체 장비 지원 여부 이어받기(마이그레이션 38)
+                self.eq_calls.append((tbl, body)); d = body["p_date"]
+                if not self.can(u, "req.confirm"): return send(403, {"code": "42501", "message": "no"})
+                if any(r["start_date"] >= d for r in self.rounds): return send(400, {"code": "23514", "message": "round must start after the latest one"})
+                prev = max(self.rounds, key=lambda r: r["start_date"]) if self.rounds else None
+                nr = {"id": max([r["id"] for r in self.rounds] + [0]) + 1, "name": d + " 기준", "start_date": d, "days": 4}; self.rounds.append(nr)
+                for v in self.vehicles:
+                    if v.get("hidden_after") and d > v["hidden_after"]: continue
+                    p = next((x for x in self.rstatus if prev and x["round_id"] == prev["id"] and x["vehicle_id"] == v["id"]), None)
+                    self.rstatus.append({"round_id": nr["id"], "vehicle_id": v["id"], "status": p["status"] if p else "", "off_from": None, "updated_at": "2026-10-08T00:00:00Z"})
+                return send(200, dict(nr, carried=len(self.vehicles)))
+            if tbl == "round_vehicle_status" and req.method == "GET":
+                if not self.usable(u): return send(200, [])
+                return send(200, [x for x in self.rstatus if "eq.%d" % x["round_id"] in q.get("round_id", [""])])
+            if tbl == "vehicles" and req.method == "PATCH":         # 숨기기·숨김 취소(관리자만)
+                self.eq_calls.append(("vehicles.patch", body))
+                if not self.can(u, "equip.edit.all"): return send(200, [])
+                vid = q.get("id", [""])[0].replace("eq.", "", 1); v = next((x for x in self.vehicles if x["id"] == vid), None)
+                if not v: return send(200, [])
+                v.update(body); return send(200, [{"id": vid, "hidden_after": v.get("hidden_after")}])
             if tbl in ("vehicles", "vehicle_routes", "support_rounds", "round_requests") and req.method == "GET":
                 if not self.usable(u): return send(200, [])
                 if tbl == "vehicles": return send(200, self.vehicles)

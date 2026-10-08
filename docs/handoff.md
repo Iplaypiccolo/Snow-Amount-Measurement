@@ -44,6 +44,19 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-10-08 · 커밋 b28e8ff~(이 기록 커밋) · 지원 여부 기준일자별 저장: 서버 시험 통과 + 화면 구현 (Claude 채팅 작업)
+- **서버**: migration 38(`20261008_38_round_vehicle_status.sql`) 롤백 시험 `supabase/tests/round_status_dryrun.sql` v4 를 사용자가 SQL Editor 에서 실행 → **60/60 통과**(서버 변화 없음). 그 사이 사용자가 기준일자(10.7)와 장비 6대를 직접 삭제해 서버는 빈 상태. 실제 적용은 화면 푸시 직전에 사용자가 실행.
+- **화면**(`equipment/js/app.js`·`api.js`·`sample-data.js`·`css/style.css`, `UI_VERSION`/`ui-version` 2026100801):
+  - 지원 여부 = 고른 기준일자 값(`S.rstat`·`S.sdraft`, `stOf`), 규칙 함수 `govRound`(날짜를 맡은 기준일자)·`availOn`·`effRec`(지원 불가인 날 경로는 숨김)·`isCont`(연속지원).
+  - 다른 기준일자가 맡은 칸 = `lockedCell`(흐림, title 말풍선 "기준일자 ○에서 수정 · 시각"), 지원일 2부터 "지원 불가(이날부터)"(관리자 = 지사 목록, 지원장비 = `select[data-off]`), `offCell` [취소].
+  - 지원일 1 은 기준일자보다 앞 불가, 새 기준일자는 마지막보다 뒤만(`create_round` RPC), 기준일자 삭제는 마지막·기간에 경로 없을 때만.
+  - [숨기기](삭제 옆, hidden_after = 고른 기준일자 전날 → 그 기준일자부터 안 보임)·삭제 열 제목 [숨김 취소(N)] 목록. 경로 기록 있는 장비 삭제는 서버가 거절 → 안내.
+  - `save_fleet(p_vehicles, p_routes, p_round, p_status)`. 로그 탭에 '지원 여부' 표·지원 불가 시작일·숨김 표시.
+- **시험**: `tests/test_equipment.py` 49개 중 48 통과(새 `t_round_status_rules`·`t_hide_vehicle`; 실패 1 = 예전부터의 `t_typing_then_clicking_next_input_keeps_both`). 가짜 서버(`_sb_mock.py`)에 `round_vehicle_status`·`create_round`·vehicles PATCH 추가. `supabase/tests/equipment_save_test.sql` 을 새 저장 함수·확정 잠금(55000)에 맞게 고침(서버 실행은 아직).
+- **확인 못 한 것**: 실제 서버·사이트에서의 화면 동작(적용 후 확인 필요), `equipment_save_test.sql` 서버 실행.
+- **남은 일**: 적용 후 옛 열 `vehicles.status` 삭제(migration 39, 화면이 새 표를 읽는 것을 확인한 뒤).
+— ✍ Claude 채팅 작성
+
 ### 2026-10-08 · 커밋 (이 기록 커밋 하나) · 지원 여부 기준일자별 저장: 설계 합의 + migration 38 초안 (Claude 채팅 작업)
 - **아직 서버에 적용 안 함**(사용자 확인 대기). 합의된 규칙은 `docs/decisions.md` 2026-10-08 항목. 초안: `supabase/migrations/20261008_38_round_vehicle_status.sql`(새 표 `round_vehicle_status`, `support_rounds.days`, `vehicles.hidden_after`, 서버 함수 `create_round`·`save_fleet`(기준일자·p_status 추가), 경로 검사 트리거, 첫 기준일자 이전 경로 1줄 삭제).
 - 이후 순서: 적용(롤백 시험 → 실제) → 화면(`equipment/js/app.js`·`api.js` 샘플 모드·가짜 서버·시험) → 옛 열 `vehicles.status` 삭제. 화면 칸 구성이 바뀌면 `ui-version`·`UI_VERSION` 함께 올릴 것.

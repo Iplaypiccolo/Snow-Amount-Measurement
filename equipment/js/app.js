@@ -3,7 +3,7 @@
    불러오는 순서: auth/auth.js → sample-data.js → api.js → app.js
    - 자료는 서버(Supabase)에서 읽고 api.js 로 저장합니다. 주소에 ?sample=1 이면 샘플 자료로 시연합니다.
    - 권한은 계정의 세부 권한(perms)으로 판단합니다. 관리자는 모든 권한.
-       equip.edit.own  자기 출발 기관 장비 추가·도공번호·지원 여부 / equip.edit.all  모든 장비 + 날짜별 경로 + 장비 삭제 + 지원일 1 날짜 + 초기화
+       equip.edit.own  자기 출발 기관 장비 추가·도공번호·지원 여부(기준일자별) / equip.edit.all  모든 장비 + 날짜별 경로 + 장비 삭제·숨기기 + 지원일 1 날짜 + 초기화
        req.edit.own    자기 지사 요청 / req.edit.hq  자기 본부 지사들 요청 / req.confirm  편성·확정·기준일자 만들기 / log.view  수정 기록
      ⚠ 화면의 권한 검사는 보기 좋게 정리하는 용도이고, 실제로 막는 것은 서버 규칙(RLS·트리거)입니다.
    - 경로는 (날짜, 장비)마다 한 줄로 서버에 남습니다. 다른 날짜를 확정해도 지난 날짜 경로는 지워지지 않습니다.
@@ -17,7 +17,7 @@
    ============================================================ */
 // 배포 직후 브라우저에 예전 index.html(최대 10분 저장)이 남아 있으면 새 app.js 와 화면 틀이 맞지 않아 탭이 비어 보임
 // (GitHub Pages 는 ?v= 꼬리표와 관계없이 최신 파일을 줌). 판번호가 다르면 주소를 바꿔 한 번만 새로 받는다.
-const UI_VERSION = "2026100405";
+const UI_VERSION = "2026100801";
 (() => {
   const m = document.querySelector('meta[name="ui-version"]');
   if ((m && m.content) === UI_VERSION) return;
@@ -57,7 +57,8 @@ const DEMO = [
 const S = {
   me: null, real: null, uid: "admin1", preview: false,
   hqs: [], branches: [], order: [], brById: {}, hqById: {}, vehicles: [], rounds: [], orgs: [], holdings: null,
-  routes: new Map(), loaded: null, reqs: {}, audit: [],
+  routes: new Map(), rmeta: new Map(), loaded: null, reqs: {}, audit: [],
+  rstat: new Map(), stLoaded: new Set(), sdraft: new Map(), unhideOpen: false,   // rstat: "기준일자|장비" → 지원 여부 {status, off_from, updated_at} / sdraft: 고른 기준일자의 아직 확정 안 한 지원 여부(장비 → 값)
   draft: new Map(), vdraft: new Map(), rdraft: new Map(), revisedMode: false,   // revisedMode: 표 위 [최초 지원]/[수정본] — 고르는 지사 목록과 저장 구분          // 아직 확정·저장하지 않은 변경(경로 / 장비 / 지사 요청)
   date: todayISO(), day1: todayISO(), cols: 4, round: null,
   org: "전체", type: "전체", fleetOrg: "전체", bview: "req", closedHq: new Set(), extraStop: new Set(),   // bview: 지사별 요청·편성 보기 = req(요청 있는 지사만) / fixed(편성 확정된 지사만) / all
@@ -91,6 +92,20 @@ function normRec(r) {
 const recOf = (date, vid) => { const k = rk(date, vid); return S.draft.has(k) ? S.draft.get(k) : (S.routes.get(k) || EMPTY); };
 const routeOf = (date, vid) => recOf(date, vid).stops;
 const vval = (v, f) => { const d = S.vdraft.get(v.id); return d && f in d ? d[f] : v[f]; };
+/* ---------- 기준일자별 지원 여부(마이그레이션 38) ----------
+   규칙: 어떤 날짜의 지원 여부는, 그 날짜를 기간 안에 둔 기준일자 중 시작일이 가장 늦은 것(govRound)이 정한다.
+   - 경로는 (날짜, 장비) 한 줄을 모든 기준일자가 함께 씀. 지원 가능이 아닌 날의 경로는 지우지 않고 숨김(effRec) — 다시 지원 가능으로 하면 되살아남
+   - 지원 불가 시작일(off_from): 그 날짜부터 지원 불가(지원 여부가 '지원'일 때만). 기준일자의 지원 불가 = 시작일부터 불가 */
+const roundEnd = r => addDays(r.start_date, (r.days || 4) - 1);
+const govRound = d => S.rounds.find(r => r.start_date <= d && d <= roundEnd(r)) || null;      // S.rounds 는 시작일이 늦은 순
+const ST0 = { status: "", off_from: null };
+const stOf = (rid, vid) => { const b = S.rstat.get(rid + "|" + vid) || ST0, d = rid === S.round ? S.sdraft.get(vid) : null; return d ? { ...b, ...d } : b; };
+const availOn = (vid, d) => { const r = govRound(d); if (!r) return false; const x = stOf(r.id, vid); return x.status === "O" && (!x.off_from || d < x.off_from); };
+const effRec = (d, vid) => availOn(vid, d) ? recOf(d, vid) : EMPTY;                       // 화면에 보이는 경로(지원 불가인 날은 없음)
+// 연속지원: 전날 마지막으로 들른 지사 = 오늘 첫 번째 지사 → 오늘 그 지사의 도착 시각 대신 "연속지원"(사용자 결정 2026-10-08)
+const isCont = (vid, d, stop) => { if (!stop) return false; const p = effRec(addDays(d, -1), vid).stops; return p.length > 0 && p[p.length - 1] === stop; };
+// 숨긴 장비(hidden_after): 그 날짜보다 늦게 시작하는 기준일자부터 기관별 장비 목록에서 안 보임(이전 기준일자·이동 현황 기록은 그대로)
+const shownIn = (v, r) => !v.hidden_after || (!!r && r.start_date <= v.hidden_after);
 const REQ_DEF = { snow_cm: null, warning: false, req_truck: 0, req_blower: 0, assigned_truck: 0, assigned_blower: 0, arrive_at: null, reason: null, confirmed: false,
   wx_manual: false, wx_snow: null, wx_pcp: null, wx_tmin: null, wx_tmin_at: null, wx_level: null, wx_fc: null, wx_ef: null };
 const rbase = (b, f) => { const r = S.reqs[b]; return r ? r[f] : REQ_DEF[f]; };
@@ -237,12 +252,18 @@ function setVeh(vid, f, val) {
   if (same(val, v[f])) delete d[f]; else d[f] = val;
   if (Object.keys(d).length) S.vdraft.set(vid, d); else S.vdraft.delete(vid);
 }
+function setStat(vid, patch) {           // 고른 기준일자의 지원 여부(지원/지원 불가/정비중/미정)·지원 불가 시작일
+  const b = S.rstat.get(S.round + "|" + vid) || ST0, m = { status: b.status, off_from: b.off_from || null, ...(S.sdraft.get(vid) || {}), ...patch };
+  if (m.status !== "O") m.off_from = null;
+  if (m.status === b.status && (m.off_from || null) === (b.off_from || null)) S.sdraft.delete(vid); else S.sdraft.set(vid, { status: m.status, off_from: m.off_from || null });
+  [...S.draft].forEach(([k, x]) => { const [d, v] = k.split("|"); if (v === vid && x.stops.length && !availOn(vid, d)) S.draft.delete(k); });   // 지원 불가가 된 날의 고친 경로는 버림(서버가 받지 않음)
+}
 function setReq(b, f, val) {
   const d = { ...(S.rdraft.get(b) || {}) };
   if (same(val, rbase(b, f))) delete d[f]; else d[f] = val;
   if (Object.keys(d).length) S.rdraft.set(b, d); else S.rdraft.delete(b);
 }
-const fleetDirty = () => S.draft.size > 0 || S.vdraft.size > 0;
+const fleetDirty = () => S.draft.size > 0 || S.vdraft.size > 0 || S.sdraft.size > 0;
 const branchDirty = () => S.rdraft.size > 0;
 
 /* ============================================================
@@ -256,13 +277,23 @@ function windowDates() { return Array.from({ length: S.cols }, (_, i) => addDays
 async function ensureRoutes() {          // 기관별 장비 칸(지원일 1~n)과 이동 현황 날짜 앞뒤 2주를 불러 둠
   const ds = [S.day1, addDays(S.day1, S.cols - 1), addDays(S.date, -14), addDays(S.date, 14)].sort();
   let from = ds[0], to = ds[3];
-  if (S.loaded && from >= S.loaded[0] && to <= S.loaded[1]) return;
+  if (S.loaded && from >= S.loaded[0] && to <= S.loaded[1]) return ensureStatus();
   if (S.loaded) { from = from < S.loaded[0] ? from : S.loaded[0]; to = to > S.loaded[1] ? to : S.loaded[1]; }
   const r = await Api.routes(from, to);
   if (!r.ok) return toast(r.message, true);
   [...S.routes.keys()].forEach(k => { const d = k.split("|")[0]; if (d >= from && d <= to) S.routes.delete(k); });
-  r.rows.forEach(x => S.routes.set(rk(x.date, x.vehicle_id), normRec(x)));
+  r.rows.forEach(x => { S.routes.set(rk(x.date, x.vehicle_id), normRec(x)); if (x.confirmed_at) S.rmeta.set(rk(x.date, x.vehicle_id), x.confirmed_at); });
   S.loaded = [from, to];
+  await ensureStatus();
+}
+async function ensureStatus() {          // 불러 둔 날짜 범위에 걸치는 기준일자(+ 고른 기준일자)의 지원 여부
+  const [from, to] = S.loaded || [S.date, S.date];
+  const ids = S.rounds.filter(r => r.id === S.round || (r.start_date <= to && roundEnd(r) >= from)).map(r => r.id).filter(id => !S.stLoaded.has(id));
+  if (!ids.length) return;
+  const r = await Api.statuses(ids);
+  if (!r.ok) return toast(r.message, true);
+  ids.forEach(id => S.stLoaded.add(id));
+  r.rows.forEach(x => S.rstat.set(x.round_id + "|" + x.vehicle_id, { status: x.status || "", off_from: x.off_from || null, updated_at: x.updated_at || null }));
 }
 async function loadReqs() {
   S.reqs = {};
@@ -312,9 +343,9 @@ function toast(msg, isErr) {
   const el = $("toast"); el.textContent = msg; el.className = "toast" + (isErr ? " err" : ""); el.hidden = false;
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 3500);
 }
-const TAB_LABEL = { vehicles: "장비", vehicle_routes: "경로", round_requests: "지사 요청", support_rounds: "기준일자", branch_zone_overrides: "특보구역" };
+const TAB_LABEL = { vehicles: "장비", vehicle_routes: "경로", round_vehicle_status: "지원 여부", round_requests: "지사 요청", support_rounds: "기준일자", branch_zone_overrides: "특보구역" };
 const FIELD = { fc_snow: "확정 예상 적설", fc_pcp: "확정 예상 강수", wx_manual: "기상현황 직접입력", wx_snow: "직접 적설", wx_pcp: "직접 강수", wx_tmin: "직접 최저기온", wx_tmin_at: "직접 최저기온 시각", fc_tmin: "확정 최저기온", wx_level: "직접 대설특보", wx_fc: "직접 특보 발표", wx_ef: "직접 특보 발효", plate: "도공번호", status: "지원 여부", stops: "경로", revised: "구분", times: "도착 예상", snow_cm: "예상 적설", warning: "특보", req_truck: "요청 제설차", req_blower: "요청 제설기",
-  blower_s: "블로워 소", blower_l: "블로워 대", assigned_truck: "편성 제설차", assigned_blower: "편성 제설기", arrive_at: "도착 요청", reason: "사유", confirmed: "확정", start_date: "기준일자", type: "장비", org: "기관", warn_level: "확정 특보", include: "특보구역" };
+  blower_s: "블로워 소", blower_l: "블로워 대", off_from: "지원 불가 시작일", hidden_after: "숨김", days: "기간(일)", assigned_truck: "편성 제설차", assigned_blower: "편성 제설기", arrive_at: "도착 요청", reason: "사유", confirmed: "확정", start_date: "기준일자", type: "장비", org: "기관", warn_level: "확정 특보", include: "특보구역" };
 const HIDE = new Set(["fc_tmfc", "fc_at", "zone_code", "warn_zones", "warn_base", "warn_at", "warn_note", "updated_by", "updated_at", "confirmed_by", "confirmed_at", "created_by", "created_at", "round_id", "branch_id", "vehicle_id", "date", "id", "sort", "active", "name", "end_date"]);
 function fmtField(f, v) {
   if (f === "warn_level" || f === "wx_level") return v ? (WLV[v] || [0, v])[1].replace("대설", "") || v : "특보 없음";
@@ -322,11 +353,13 @@ function fmtField(f, v) {
   if ((f === "wx_fc" || f === "wx_ef") && v) return fmtHM(v);
   if (f === "wx_tmin_at" && v) return fmtWarnTime(v);
   if (f === "include") return v == null ? "자동대로" : v ? "더함" : "뺌";
-  if (v == null || v === "") return f === "stops" ? "(없음)" : "(빈칸)";
+  if (v == null || v === "") return f === "stops" ? "(없음)" : f === "hidden_after" ? "숨기지 않음" : f === "off_from" ? "(없음)" : "(빈칸)";
   if (f === "stops") return v.length ? v.map(bn).join(" → ") : "(없음)";
   if (f === "revised") return v ? "수정본" : "최초 지원";
   if (f === "times") return v.some(Boolean) ? v.map(x => x || "-").join(" → ") : "(없음)";
   if (f === "status") return (STATUS[v] || STATUS[""])[1];
+  if (f === "off_from" || f === "start_date") return fmtMD(v) + (f === "off_from" ? "부터" : "");
+  if (f === "hidden_after") return fmtMD(addDays(v, 1)) + " 기준일자부터 숨김";
   if (f === "warning") return v ? "발효" : "없음";
   if (f === "confirmed") return v ? "확정" : "미확정";
   if (f === "arrive_at") return fmtTime(localInput(v));
@@ -371,7 +404,7 @@ function roundSel(id) {
    [4] 이동 현황 (모두 보기만)
    ============================================================ */
 const MOVE_TYPES = ["제설차", "제설기"];          // 이동 현황은 제설차·제설기만(이동정비차는 보이지 않음)
-const movesOn = date => S.vehicles.filter(v => MOVE_TYPES.includes(v.type)).map(v => { const rec = recOf(date, v.id); return { v, rec, stops: rec.stops }; }).filter(m => m.stops.length);
+const movesOn = date => S.vehicles.filter(v => MOVE_TYPES.includes(v.type)).map(v => { const rec = effRec(date, v.id); return { v, rec, stops: rec.stops }; }).filter(m => m.stops.length);
 function renderMatrix() {
   // 세로 = 본부 → 지사(그날 지원받는 지사만), 가로 = 지원기관마다 제설차·제설기. 본부 줄·합계는 장비 1대를 한 번만 셈(여러 지사를 들러도)
   const moves = movesOn(S.date), src = SOURCE_ORGS(), cols = [null, ...src],   // 합계 열을 맨 앞(지사 이름 바로 옆)에
@@ -429,9 +462,10 @@ addEventListener("resize", fitFilters);
 if (window.ResizeObserver) new ResizeObserver(() => fitFilters()).observe($("filters"));   // 탭을 옮겨 다시 보일 때·iframe 크기가 바뀔 때도
 const matches = v => (S.org === "전체" || v.org === S.org) && (S.type === "전체" || v.type === S.type);
 function vehicleRow(v, stops, rec, bid) {
-  const eta = rec && bid ? rec.times[rec.stops.indexOf(bid)] : null;   // 이 장비가 이 지사에 도착할 예상 시각(기관별 장비에서 입력)
+  const cont = !!(rec && bid && rec.stops[0] === bid && isCont(v.id, S.date, bid));   // 전날부터 이어서 지원(연속지원)
+  const eta = rec && bid && !cont ? rec.times[rec.stops.indexOf(bid)] : null;   // 이 장비가 이 지사에 도착할 예상 시각(기관별 장비에서 입력)
   return `<button type="button" class="vrow" data-vid="${esc(v.id)}" data-vo="${esc(v.org)}" data-vt="${esc(v.type)}"><span class="plate">${esc(vval(v, "plate"))}</span><span class="vtype">${esc(v.type)}</span>
-    <span class="status-wrap">${hasBlower(v) ? `<span class="tag blw-tag">블로워 ${esc(blowerText(v))}</span>` : ""}${eta ? `<span class="tag eta">${esc(eta)} 도착 예상</span>` : ""}${stops.length > 1 ? `<span class="tag" title="${esc(stops.map(bn).join(" → "))}">${stops.length}곳 경유</span>` : ""}</span></button>`;
+    <span class="status-wrap">${hasBlower(v) ? `<span class="tag blw-tag">블로워 ${esc(blowerText(v))}</span>` : ""}${cont ? `<span class="tag eta">연속지원</span>` : eta ? `<span class="tag eta">${esc(eta)} 도착 예상</span>` : ""}${stops.length > 1 ? `<span class="tag" title="${esc(stops.map(bn).join(" → "))}">${stops.length}곳 경유</span>` : ""}</span></button>`;
 }
 function renderDest() {
   const moves = movesOn(S.date), filtered = S.org !== "전체" || S.type !== "전체", out = [];
@@ -442,7 +476,7 @@ function renderDest() {
       const arriveToday = arr && arr.slice(0, 10) === S.date && rval(b.id, "confirmed");
       if (!list.length && (filtered || !arriveToday)) return;       // 그날 이동도, 확정된 도착 요청도 없는 지사는 숨김
       const t = `round_requests:${S.round},${b.id}`, fc = fcOf(b.id), snow = fc && !fc.none ? fc.snow : null, why = rval(b.id, "reason");
-      const etas = [...new Set(list.map(m => m.rec.times[m.rec.stops.indexOf(b.id)]).filter(Boolean))].sort();
+      const etas = [...new Set(list.filter(m => !(m.rec.stops[0] === b.id && isCont(m.v.id, S.date, b.id))).map(m => m.rec.times[m.rec.stops.indexOf(b.id)]).filter(Boolean))].sort();   // 연속지원 장비는 도착 시각 계산에서 뺌
       cards.push(`<article class="dest" data-bid="${esc(b.id)}"><div class="dest-head">
         <h3 class="dest-name">${esc(b.name)}<span>${esc(h.name)}본부</span></h3>
         <div class="dest-time"><strong>${etas.length ? esc(fmtMD(S.date) + " " + etas[0]) : "미정"}</strong><small>도착 예상${etas.length > 1 ? " (가장 이른 장비, 장비마다 다름)" : ""}</small></div>
@@ -463,7 +497,9 @@ function renderDest() {
 const routeChoices = () => S.order.filter(b => isFixed(b.id));
 // 요청은 있지만 아직 편성 확정 전인 지사: 목록에 회색(고를 수 없음)으로 보여서 "왜 없지?"를 바로 알게 함
 const pendingChoices = () => S.order.filter(b => hasReq(b.id) && !isFixed(b.id));
-const fleetRows = () => S.vehicles.filter(v => S.fleetOrg === "전체" || v.org === S.fleetOrg);
+const fleetRows = () => S.vehicles.filter(v => (S.fleetOrg === "전체" || v.org === S.fleetOrg) && shownIn(v, curRound()));
+const nextRoundMin = () => S.rounds.length ? addDays(S.rounds[0].start_date, 1) : "2000-01-01";       // 새 기준일자는 마지막 기준일자보다 뒤
+const hiddenNow = () => S.vehicles.filter(v => v.hidden_after && !shownIn(v, curRound()));          // 지금 고른 기준일자에서 숨겨진 장비(숨김 취소 목록)
 const canRoute = () => can("equip.edit.all");                      // 날짜별 경로·장비 삭제·지원일 1·초기화 = 관리자(모든 장비 권한 equip.edit.all)만
 const canAddVeh = () => can("equip.edit.all") || can("equip.edit.own"); // 장비 추가: 관리자(모든 기관) / 지원장비(자기 기관)
 const NUM_RE = /^\d{1,5}$/;                                           // 도공번호 = 출발 기관 이름 + 숫자(예: 서울경기901). 입력은 숫자만
@@ -471,8 +507,8 @@ const plateNum = v => { const p = vval(v, "plate") || ""; return p.startsWith(v.
 function renderFleet() {
   const choices = routeChoices(), r = curRound(), all = canRoute(), pend = pendingChoices();
   banner("perm-fleet", canAnyVeh(),
-    all ? "도공번호·지원 여부·지원일별 피지원 지사(하루 여러 곳은 ＋)를 고친 뒤 아래 [확정]을 눌러야 저장됩니다. 확정한 날짜의 경로는 날짜별로 계속 남습니다."
-        : `${S.me.org || ""} 장비를 추가하고 도공번호·지원 여부를 고칠 수 있습니다(지원일별 경로는 관리자). 고친 뒤 아래 [확정]을 눌러야 저장됩니다.`,
+    all ? "도공번호·지원 여부(고른 기준일자)·지원일별 피지원 지사(하루 여러 곳은 ＋)를 고친 뒤 아래 [확정]을 눌러야 저장됩니다. 다른 기준일자가 맡은 날짜는 고칠 수 없습니다."
+        : `${S.me.org || ""} 장비를 추가하고 도공번호·지원 여부(지원일 2부터는 '지원 불가'도)를 고칠 수 있습니다(지원일별 경로는 관리자). 고친 뒤 아래 [확정]을 눌러야 저장됩니다.`,
     "보기만 가능합니다.");
   $("fleetRound").innerHTML = roundSel("roundSelFleet") + (r ? "" : `<span class="hint">기준일자가 없습니다.</span>`);
   renderOrgGrid();
@@ -487,9 +523,10 @@ function renderFleet() {
       (all ? `<span class="tb-right mode" role="group" aria-label="지원 구분"><label><input type="checkbox" id="modeInit" ${S.revisedMode ? "" : "checked"}> 최초 지원</label>` +
         `<label><input type="checkbox" id="modeRev" ${S.revisedMode ? "checked" : ""}> 수정본</label></span>` : "") + `</div>` : "");
   const dates = windowDates(), head = dates.map((d, i) => `<th class="dayh">지원일 ${i + 1}<span class="sub">` +
-    (i === 0 && all ? `<input class="ci" type="date" id="day1In" value="${esc(d)}" aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동)">` : esc(fmtMD(d))) + `</span></th>`).join("");
+    (i === 0 && all ? `<input class="ci" type="date" id="day1In" value="${esc(d)}"${r ? ` min="${esc(r.start_date)}"` : ""} aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동, 기준일자보다 앞은 안 됨)">` : esc(fmtMD(d))) + `</span></th>`).join("");
   const rows = fleetRows().map(v => fleetRowHtml(v, dates, choices, all)).join("");
-  $("eqTable").innerHTML = `<thead><tr><th>도공번호</th><th>장비</th><th>블로워</th><th>지원 여부</th>${head}${canRoute() ? "<th></th>" : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${5 + dates.length}" class="empty">장비가 없습니다.${canAddVeh() ? " 위의 [장비 추가]로 넣으세요." : ""}</td></tr>`}</tbody>`;
+  $("eqTable").innerHTML = `<thead><tr><th>도공번호</th><th>장비</th><th>블로워</th><th>지원 여부</th>${head}${canRoute() ? `<th class="unh">${unhideHead()}</th>` : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${5 + dates.length}" class="empty">장비가 없습니다.${canAddVeh() ? " 위의 [장비 추가]로 넣으세요." : ""}</td></tr>`}</tbody>`;
+  placeUnhide();
 }
 // 블로워(소·대) 체크: 제설기만 켜지고(둘 다 안 켤 수도 있음), 다른 장비·고칠 권한이 없는 줄은 꺼진 칸
 const hasBlower = v => !!(vval(v, "blower_s") || vval(v, "blower_l"));
@@ -499,23 +536,36 @@ function blowerCell(v, ed) {
   return `<span class="blw">${box("blower_s", "소")}${box("blower_l", "대")}</span>`;
 }
 function fleetRowHtml(v, dates, choices, all) {
-    const ed = canVeh(v), st = vval(v, "status"), [cls, label] = STATUS[st] || STATUS[""], tv = "vehicles:" + v.id;
-    const statusCell = ed ? `<select class="ci" data-vs="${esc(v.id)}" data-fk="vs:${esc(v.id)}" aria-label="${esc(vval(v, "plate"))} 지원 여부"${hvA(tv, "status")}>${Object.keys(STATUS).map(s => `<option value="${s}" ${st === s ? "selected" : ""}>${STATUS[s][1]}</option>`).join("")}</select>`
-      : H(tv, "status", `<span class="status ${cls}">${label}</span>`);
+    const ed = canVeh(v), r = curRound(), st = r ? stOf(r.id, v.id).status : "", [cls, label] = STATUS[st] || STATUS[""], tv = "vehicles:" + v.id;
+    // 지원 여부 = 고른 기준일자의 값(기준일자가 바뀌면 따로). 기준일자가 없으면 고칠 수 없음
+    const statusCell = ed && r ? `<select class="ci" data-vs="${esc(v.id)}" data-fk="vs:${esc(v.id)}" aria-label="${esc(vval(v, "plate"))} 지원 여부"${S.sdraft.has(v.id) ? ' data-changed="1"' : ""}>${Object.keys(STATUS).map(s => `<option value="${s}" ${st === s ? "selected" : ""}>${STATUS[s][1]}</option>`).join("")}</select>`
+      : r ? `<span class="status ${cls}">${label}</span>` : '<span class="muted">-</span>';
     const old = !plateNum(v) && vval(v, "plate");      // 예전 차량번호 형식이 남은 장비: 숫자를 새로 넣어야 함
     const plateCell = ed ? `<span class="pnum"${hvA(tv, "plate")}><span class="pfx">${esc(v.org)}</span><input class="ci" inputmode="numeric" maxlength="5" data-vp="${esc(v.id)}" data-fk="vp:${esc(v.id)}" value="${esc(plateNum(v))}" placeholder="901" aria-label="도공번호 숫자"${old ? `` : ""}></span>${old ? `<div class="muted sm">예전 번호 ${esc(old)}</div>` : ""}`
       : H(tv, "plate", `<span class="plate">${esc(vval(v, "plate"))}</span>`);
-    const changed = S.vdraft.has(v.id) ? " changed" : "";
+    const changed = S.vdraft.has(v.id) || S.sdraft.has(v.id) ? " changed" : "";
     return `<tr class="${changed}" data-vrow="${esc(v.id)}"><td>${plateCell}</td><td>${esc(v.type)}</td><td>${blowerCell(v, ed)}</td><td>${statusCell}</td>${dates.map(d => `<td data-cell="${esc(rk(d, v.id))}">${slotCell(v, d, canRoute(), choices)}</td>`).join("")}` +
-      (canRoute() ? `<td><button type="button" class="btn sm danger" data-vdel="${esc(v.id)}">삭제</button></td>` : "") + `</tr>`;
+      (canRoute() ? `<td class="vact"><button type="button" class="btn sm" data-vhide="${esc(v.id)}">숨기기</button><button type="button" class="btn sm danger" data-vdel="${esc(v.id)}">삭제</button></td>` : "") + `</tr>`;
+}
+function placeUnhide() {        // 숨김 취소 목록: 표가 가로로 스크롤되는 상자 안이라 잘리지 않게 화면 기준으로 버튼 아래에 띄움
+  const b = $("unhideBtn"), pop = document.querySelector(".unhide-pop"); if (!b || !pop) return;
+  const r = b.getBoundingClientRect(); pop.style.top = (r.bottom + 4) + "px"; pop.style.left = Math.max(8, Math.min(innerWidth - pop.offsetWidth - 8, r.right - pop.offsetWidth)) + "px";
+}
+addEventListener("scroll", () => { if (S.unhideOpen) placeUnhide(); }, true);
+// 삭제 열 제목 칸의 [숨김 취소(N)]: 누르면 지금 숨겨진 장비 목록이 열리고 하나씩 취소(관리자만, 숨긴 장비가 없으면 안 보임)
+function unhideHead() {
+  const l = hiddenNow(); if (!l.length) { S.unhideOpen = false; return ""; }
+  return `<button type="button" class="btn sm" id="unhideBtn" aria-expanded="${S.unhideOpen}">숨김 취소(${l.length})</button>` +
+    (S.unhideOpen ? `<div class="unhide-pop" role="dialog" aria-label="숨긴 장비">${l.map(v => `<div class="uh-row"><span class="plate">${esc(v.plate)}</span><span class="muted">${esc(v.type)}</span><button type="button" class="btn sm" data-unhide="${esc(v.id)}">숨김 취소</button></div>`).join("")}</div>` : "");
 }
 function renderOrgGrid() {
   $("orgGrid").innerHTML = S.orgs.map(org => {
-    const l = S.vehicles.filter(v => v.org === org), c = s => l.filter(v => vval(v, "status") === s).length, w = x => l.length ? x / l.length * 100 : 0;
+    const r = curRound(), sv = v => r ? stOf(r.id, v.id).status : "";            // 고른 기준일자의 지원 여부
+    const l = S.vehicles.filter(v => v.org === org && shownIn(v, r)), c = s => l.filter(v => sv(v) === s).length, w = x => l.length ? x / l.length * 100 : 0;
     return `<div class="org"><h3>${esc(org)}</h3>
       <div class="bar" aria-hidden="true"><i class="b-go" style="width:${w(c("O"))}%"></i><i class="b-stop" style="width:${w(c("X") + c("M"))}%"></i></div>
       <dl><dt>지원</dt><dd>${c("O")}대</dd><dt>지원 불가</dt><dd>${c("X")}대</dd><dt>정비중</dt><dd>${c("M")}대</dd><dt>미정</dt><dd>${c("")}대</dd>
-      ${TYPES.map(t => { const tl = l.filter(v => v.type === t); return `<dt>${t}</dt><dd>${tl.filter(v => vval(v, "status") === "O").length} / ${tl.length}</dd>`; }).join("")}</dl></div>`;
+      ${TYPES.map(t => { const tl = l.filter(v => v.type === t); return `<dt>${t}</dt><dd>${tl.filter(v => sv(v) === "O").length} / ${tl.length}</dd>`; }).join("")}</dl></div>`;
   }).join("");
 }
 // 바뀐 장비 한 줄 / 칸 하나만 다시 그림. 그 칸에 있던 커서는 되살림
@@ -540,20 +590,43 @@ function normTime(x) {
   else return undefined;
   return h <= 23 && m <= 59 ? p2(h) + ":" + p2(m) : undefined;
 }
+// 다른 기준일자가 맡은 날짜(또는 어느 기준일자에도 없는 날짜)의 칸: 고칠 수 없고, 마우스를 올리면 어느 기준일자에서 언제 고쳤는지
+function lockedCell(v, d, g) {
+  const rec = effRec(d, v.id), st = g ? stOf(g.id, v.id) : null;
+  const at = [S.rmeta.get(rk(d, v.id)), st && st.updated_at].filter(Boolean).sort().pop();
+  const tip = g ? `기준일자 ${fmtMD(g.start_date)}에서 수정${at ? " · " + fmtShort(at) : ""}` : "어느 기준일자 기간에도 들지 않는 날짜";
+  const body = rec.stops.length ? rec.stops.map((x, j) => `<div class="sl-x slot-x"><span class="sl-n">${esc(bn(x))}</span> <small>${j === 0 && isCont(v.id, d, x) ? "연속지원" : esc(rec.times[j] || "")}</small></div>`).join("")
+    : g && st.status ? `<span class="muted">${esc(availOn(v.id, d) ? "-" : st.status === "O" ? "지원 불가" : STATUS[st.status][1])}</span>` : '<span class="muted">-</span>';
+  return `<div class="slot locked" title="${esc(tip)}" data-lock="${esc(g ? g.start_date : "")}">${body}</div>`;
+}
+// 지원 불가 시작일(off_from) 이후 칸. 시작일 칸에서는 [취소]로 되돌림(고칠 권한이 있을 때)
+function offCell(v, d, st) {
+  const first = d === st.off_from && canVeh(v);
+  return `<div class="slot offday"><span class="status stop">지원 불가</span>${d === st.off_from ? `<small class="muted">이날부터</small>` : ""}` +
+    (first ? ` <button type="button" class="btn sm" data-offclr="${esc(v.id)}" aria-label="${esc(vval(v, "plate"))} 지원 불가 취소">취소</button>` : "") + `</div>`;
+}
 function slotCell(v, d, ed, confirmed) {
-  const rec = recOf(d, v.id), stops = rec.stops, k = rk(d, v.id), t = `vehicle_routes:${d},${v.id}`, changed = S.draft.has(k), vid = esc(v.id);
-  const tIn = (val, j, extra, dis) => `<input class="ci tm" data-rt="${vid}" data-rd="${d}" data-fk="${extra ? "tn" : "t"}:${d}:${vid}:${j}" value="${esc(val || "")}" placeholder="--:--" maxlength="5" inputmode="numeric" ${dis ? "disabled" : ""} aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))} 지사 ${j + 1} 도착 예상 시각">`;
-  if (!ed) {                     // 경로의 지사는 못 고침. 지원장비 계정은 자기 기관 장비의 도착 예상 시각만 고침
-    if (!stops.length) return `<span class="muted">-</span>`;
+  const g = govRound(d), cr = curRound();
+  if (!g || !cr || g.id !== cr.id) return lockedCell(v, d, g);          // 고른 기준일자가 맡지 않은 날짜 = 고칠 수 없음
+  const st = stOf(cr.id, v.id);
+  if (st.status === "O" && st.off_from && d >= st.off_from) return offCell(v, d, st);
+  const later = d > cr.start_date;                                     // 지원일 2부터는 '지원 불가(이날부터)'를 고를 수 있음
+  const rec = effRec(d, v.id), stops = rec.stops, k = rk(d, v.id), t = `vehicle_routes:${d},${v.id}`, changed = S.draft.has(k), vid = esc(v.id);
+  const cont = j => j === 0 && isCont(v.id, d, stops[0]);            // 전날 마지막 지사 = 오늘 첫 지사 → 시각 대신 "연속지원"(입력해 둔 시각은 그대로 남음)
+  const tIn = (val, j, extra, dis) => !extra && cont(j) ? `<span class="cont">연속지원</span>` : `<input class="ci tm" data-rt="${vid}" data-rd="${d}" data-fk="${extra ? "tn" : "t"}:${d}:${vid}:${j}" value="${esc(val || "")}" placeholder="--:--" maxlength="5" inputmode="numeric" ${dis ? "disabled" : ""} aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))} 지사 ${j + 1} 도착 예상 시각">`;
+  const offSel = later && canVeh(v) && st.status === "O" ? `<select class="ci offsel" data-off="${vid}" data-rd="${d}" data-fk="off:${d}:${vid}" aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))} 지원 여부"><option value="">지원</option><option value="1">지원 불가(이날부터)</option></select>` : "";
+  if (!ed) {                     // 경로의 지사는 못 고침. 지원장비 계정은 자기 기관 장비의 도착 예상 시각과 지원 불가(지원일 2부터)만
     const timeEd = canVeh(v);
-    return `<div class="slot${changed ? " changed" : ""}"${hvA(t)}>${stops.map((x, j) => `<div class="sl-x slot-x"><span class="sl-n">${esc(bn(x))}</span>${timeEd ? tIn(rec.times[j], j, false, false) : rec.times[j] ? ` <small>${esc(rec.times[j])}</small>` : ""}</div>`).join("")}</div>`;
+    if (!stops.length) return offSel ? `<div class="slot">${offSel}</div>` : `<span class="muted">-</span>`;
+    return `<div class="slot${changed ? " changed" : ""}"${hvA(t)}>${stops.map((x, j) => `<div class="sl-x slot-x"><span class="sl-n">${esc(bn(x))}</span>${timeEd ? tIn(rec.times[j], j, false, false) : cont(j) ? ` <small>연속지원</small>` : rec.times[j] ? ` <small>${esc(rec.times[j])}</small>` : ""}</div>`).join("")}${offSel}</div>`;
   }
   // 표 위 [최초 지원] = 이 기준일자에 편성 확정된 지사만 / [수정본] = 모든 지사 (한 번에 적용)
-  const choices = S.revisedMode ? S.order : confirmed, off = vval(v, "status") !== "O", ids = new Set(choices.map(b => b.id)), pend = S.revisedMode ? [] : pendingChoices();
-  const opts = cur => `<option value="">지사 선택</option>` + S.hqs.map(h => { const l = choices.filter(b => b.hq_id === h.id); return l.length ? `<optgroup label="${esc(h.name)}">${l.map(b => `<option value="${b.id}" ${cur === b.id ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</optgroup>` : ""; }).join("") +
+  const choices = S.revisedMode ? S.order : confirmed, off = st.status !== "O", ids = new Set(choices.map(b => b.id)), pend = S.revisedMode ? [] : pendingChoices();
+  const opts = (cur, j) => `<option value="">지사 선택</option>` + S.hqs.map(h => { const l = choices.filter(b => b.hq_id === h.id); return l.length ? `<optgroup label="${esc(h.name)}">${l.map(b => `<option value="${b.id}" ${cur === b.id ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</optgroup>` : ""; }).join("") +
     (cur && !ids.has(cur) ? `<option value="${esc(cur)}" selected>${esc(bn(cur))} (편성 확정 전)</option>` : "") +
-    (pend.length ? `<optgroup label="편성 확정 전(요청만) — 고를 수 없음">${pend.map(b => `<option disabled>${esc(b.name)}</option>`).join("")}</optgroup>` : "") + `<option value="__del">지우기</option>`;
-  const sel = (cur, j, extra) => `<select class="ci" data-rv="${vid}" data-rd="${d}" data-fk="${extra ? "rn" : "r"}:${d}:${vid}:${j}" ${off ? "disabled" : ""} aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))} 피지원 지사 ${j + 1}">${opts(cur)}</select>` +
+    (pend.length ? `<optgroup label="편성 확정 전(요청만) — 고를 수 없음">${pend.map(b => `<option disabled>${esc(b.name)}</option>`).join("")}</optgroup>` : "") +
+    (later && j === 0 ? `<option value="__off">지원 불가(이날부터)</option>` : "") + `<option value="__del">지우기</option>`;
+  const sel = (cur, j, extra) => `<select class="ci" data-rv="${vid}" data-rd="${d}" data-fk="${extra ? "rn" : "r"}:${d}:${vid}:${j}" ${off ? "disabled" : ""} aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))} 피지원 지사 ${j + 1}">${opts(cur, extra ? 1 : j)}</select>` +
     tIn(extra ? "" : rec.times[j], j, extra, off);
   const extra = S.extraStop.has(k), list = stops.length ? stops : [""];
   const plus = `<button type="button" class="btn sm" data-stop-add="${esc(k)}" ${off || !stops.length ? "disabled" : ""} aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))}에 들르는 지사 추가">＋</button>`;
@@ -564,30 +637,35 @@ function readCell(vid, d, timeOnly) {
   const td = document.querySelector(`#eqTable td[data-cell="${CSS.escape(rk(d, vid))}"]`), rec = recOf(d, vid), stops = [], times = [];
   if (td) td.querySelectorAll(".slot-x").forEach((row, j) => { const s = row.querySelector("select[data-rv]"), tm = row.querySelector("input[data-rt]");
     const stop = s ? s.value : rec.stops[j];
-    if (stop && stop !== "__del") { stops.push(stop); times.push(tm ? normTime(tm.value) || null : rec.times[j] || null); } });
+    if (stop && stop !== "__del" && stop !== "__off") { stops.push(stop); times.push(tm ? normTime(tm.value) || null : rec.times[j] || null); } });
   return { stops, times, revised: timeOnly ? rec.revised : S.revisedMode };
 }
 async function confirmFleet() {
   if (S.preview) return toast("미리보기에서는 확정할 수 없습니다. '내 아이디'로 돌아오세요.", true);
   const vehicles = [...S.vdraft].map(([id, f]) => ({ id, ...f })), routes = [...S.draft].map(([k, x]) => { const [date, vehicle_id] = k.split("|");
     return { date, vehicle_id, stops: x.stops, revised: x.revised, times: x.times.some(Boolean) ? x.times : null }; });
-  if (!vehicles.length && !routes.length) return;
-  if (!confirm(`경로 ${routes.length}칸${vehicles.length ? `, 장비 ${vehicles.length}대(도공번호·지원 여부)` : ""} 변경을 확정할까요?\n확정한 날짜의 경로는 서버에 날짜별로 남고, 나중에 다른 날짜를 확정해도 지워지지 않습니다.`)) return;
+  const status = [...S.sdraft].map(([vehicle_id, x]) => ({ vehicle_id, status: x.status, off_from: x.off_from || null }));
+  if (!vehicles.length && !routes.length && !status.length) return;
+  if ((routes.length || status.length) && !S.round) return toast("기준일자가 없어 지원 여부·경로를 확정할 수 없습니다. 지사별 요청·편성에서 기준일자를 먼저 만드세요.", true);
+  const what = [routes.length ? `경로 ${routes.length}칸` : "", status.length ? `지원 여부 ${status.length}대` : "", vehicles.length ? `장비 ${vehicles.length}대(도공번호·블로워)` : ""].filter(Boolean).join(", ");
+  if (!confirm(`${what} 변경을 확정할까요?\n지원 여부는 기준일자 ${fmtMD(curRound().start_date)} 것으로 저장되고, 경로는 날짜별로 남습니다.`)) return;
   busy("fleet", true);
-  const r = await Api.saveFleet(vehicles, routes);
+  const r = await Api.saveFleet(vehicles, routes, S.round, status);
   busy("fleet", false);
   if (!r.ok) return toast(r.message, true);
+  const now = new Date().toISOString();
   vehicles.forEach(p => Object.assign(vehById(p.id), p)); sortVehicles();
-  routes.forEach(x => { const k = rk(x.date, x.vehicle_id); if (x.stops.length) S.routes.set(k, normRec(x)); else S.routes.delete(k); });
-  S.draft.clear(); S.vdraft.clear(); S.extraStop.clear();
+  status.forEach(x => S.rstat.set(S.round + "|" + x.vehicle_id, { status: x.status, off_from: x.off_from, updated_at: now }));
+  routes.forEach(x => { const k = rk(x.date, x.vehicle_id); if (x.stops.length) { S.routes.set(k, normRec(x)); S.rmeta.set(k, now); } else S.routes.delete(k); });
+  S.draft.clear(); S.vdraft.clear(); S.sdraft.clear(); S.extraStop.clear();
   await loadAudit(); refresh();
-  toast(`확정했습니다 (경로 ${routes.length}칸${vehicles.length ? ` · 장비 ${vehicles.length}대` : ""})`);
+  toast(`확정했습니다 (${what})`);
 }
-function resetFleet() {
-  const vs = fleetRows().filter(canVeh), ds = windowDates();
-  if (!vs.length || !canRoute()) return;
-  if (!confirm(`보이는 장비 ${vs.length}대의 지원일 ${fmtMD(ds[0])} ~ ${fmtMD(ds[ds.length - 1])} 경로와 지원 여부를 모두 비울까요?\n[확정]을 눌러야 서버에 반영되고, 그 전에는 [되돌리기]로 돌아갈 수 있습니다.`)) return;
-  vs.forEach(v => { ds.forEach(d => setRoute(d, v.id, EMPTY)); setVeh(v.id, "status", ""); });
+function resetFleet() {          // 보이는 장비의 지원 여부(고른 기준일자)와, 고른 기준일자가 맡은 날짜의 경로를 비움(확정 전 되돌리기 가능)
+  const vs = fleetRows().filter(canVeh), cr = curRound(), ds = windowDates().filter(d => cr && (govRound(d) || {}).id === cr.id);
+  if (!vs.length || !canRoute() || !cr) return;
+  if (!confirm(`보이는 장비 ${vs.length}대의 지원 여부와 ${ds.length ? `지원일 ${fmtMD(ds[0])} ~ ${fmtMD(ds[ds.length - 1])} 경로를` : "경로를"} 모두 비울까요?\n[확정]을 눌러야 서버에 반영되고, 그 전에는 [되돌리기]로 돌아갈 수 있습니다.`)) return;
+  vs.forEach(v => { ds.forEach(d => setRoute(d, v.id, EMPTY)); setStat(v.id, { status: "" }); });
   S.extraStop.clear(); refresh(); toast("입력을 비웠습니다. [확정]을 눌러야 저장됩니다.");
 }
 async function addVehicle() {
@@ -603,14 +681,28 @@ async function addVehicle() {
   S.vehicles.push(r.vehicle); sortVehicles(); await loadAudit(); refresh(); toast(`장비를 추가했습니다 (${plate})`);
 }
 async function deleteVehicle(id) {
-  const v = vehById(id); if (!v || !canRoute()) return;       // 장비 삭제는 관리자(equip.edit.all)만
+  const v = vehById(id); if (!v || !canRoute()) return;       // 장비 삭제는 관리자(equip.edit.all)만. 경로 기록이 있는 장비는 서버가 거절(숨기기를 써야 함)
   if (S.preview) return toast("미리보기에서는 장비를 지울 수 없습니다.", true);
-  if (!confirm(`${v.plate} (${v.org} ${v.type})를 지울까요?\n이 장비의 날짜별 경로 기록도 함께 지워집니다. 잠시 쓰지 않는 장비라면 지원 여부를 '지원 불가'·'정비중'으로 두세요.`)) return;
+  if (!confirm(`${v.plate} (${v.org} ${v.type})를 지울까요?`)) return;
   const r = await Api.deleteVehicle(id);
   if (!r.ok) return toast(r.message, true);
-  S.vehicles = S.vehicles.filter(x => x.id !== id); S.vdraft.delete(id);
+  S.vehicles = S.vehicles.filter(x => x.id !== id); S.vdraft.delete(id); S.sdraft.delete(id);
   [...S.draft.keys()].filter(k => k.endsWith("|" + id)).forEach(k => S.draft.delete(k)); [...S.routes.keys()].filter(k => k.endsWith("|" + id)).forEach(k => S.routes.delete(k));
+  [...S.rstat.keys()].filter(k => k.endsWith("|" + id)).forEach(k => S.rstat.delete(k));
   await loadAudit(); refresh(); toast("장비를 지웠습니다");
+}
+// 숨기기: 고른 기준일자부터 기관별 장비 목록에서 안 보임(hidden_after = 그 전날). 이전 기준일자·이동 현황 기록은 그대로. 관리자만
+async function hideVehicle(id, show) {
+  const v = vehById(id); if (!v || !canRoute()) return;
+  if (S.preview) return toast("미리보기에서는 바꿀 수 없습니다.", true);
+  const after = show ? null : addDays((curRound() || {}).start_date || todayISO(), -1);
+  if (!show && !confirm(`${v.plate} 장비를 숨길까요?`)) return;
+  const r = await Api.hideVehicle(id, after);
+  if (!r.ok) return toast(r.message, true);
+  v.hidden_after = after;
+  if (!show) { S.vdraft.delete(id); S.sdraft.delete(id); [...S.draft.keys()].filter(k => k.endsWith("|" + id)).forEach(k => S.draft.delete(k)); }
+  if (!hiddenNow().length) S.unhideOpen = false;
+  await loadAudit(); refresh(); toast(show ? `${v.plate} 숨김을 취소했습니다` : `${v.plate} 장비를 숨겼습니다`);
 }
 
 /* ============================================================
@@ -658,7 +750,7 @@ function renderBranch() {
     "보기만 가능합니다.");
   $("branchRound").innerHTML = roundSel("roundSelBranch") +
     (can("req.confirm") && r ? `<button type="button" class="btn danger" id="roundDel">기준일자 삭제</button>` : "") +
-    (can("req.confirm") ? `<span class="sep"></span><label class="ctl">새 기준일자 <input class="ci" type="date" id="newRoundDate" value="${esc(todayISO())}"></label><button type="button" class="btn" id="roundMake">만들기</button>` : "");
+    (can("req.confirm") ? `<span class="sep"></span><label class="ctl">새 기준일자 <input class="ci" type="date" id="newRoundDate" value="${esc(nextRoundMin() > todayISO() ? nextRoundMin() : todayISO())}" min="${esc(nextRoundMin())}"></label><button type="button" class="btn" id="roundMake">만들기</button>` : "");
   $("branchCtl").innerHTML = r ? `<div class="tb-row"><span class="tb-label">보기</span><button type="button" class="chip" id="onlyActive" aria-pressed="${S.bview === "req"}">요청 있는 지사만</button>` +
     `<button type="button" class="chip" id="onlyFixed" aria-pressed="${S.bview === "fixed"}">편성 확정된 지사만</button>` +
     `<span class="tb-right"></span>` +
@@ -751,8 +843,8 @@ async function makeRound() {
   const d = $("newRoundDate").value;
   if (!d) return toast("기준일자 날짜를 고르세요", true);
   if (S.preview) return toast("미리보기에서는 만들 수 없습니다.", true);
-  if (S.rounds.some(r => r.start_date === d)) return toast("같은 기준일자가 이미 있습니다", true);
-  if (!confirm(`${d} 기준일자를 만들까요?`)) return;
+  if (S.rounds.some(r => r.start_date >= d)) return toast("새 기준일자는 마지막 기준일자보다 뒤 날짜여야 합니다", true);
+  if (!confirm(`${d} 기준일자를 만들까요?\n장비 지원 여부는 이전 기준일자의 것을 그대로 이어받습니다(나중에 고칠 수 있음).`)) return;
   const r = await Api.createRound(d);
   if (!r.ok) return toast(r.message, true);
   S.rounds.push(r.round); S.rounds.sort((a, b) => b.start_date.localeCompare(a.start_date));
@@ -762,15 +854,17 @@ async function deleteRound() {
   const r = curRound(); if (!r) return;
   if (S.preview) return toast("미리보기에서는 지울 수 없습니다.", true);
   const n = Object.keys(S.reqs).length;
-  if (!confirm(`기준일자 ${r.start_date}를 지울까요?\n이 기준일자의 지사 요청·편성 ${n}건도 함께 지워집니다(지운 내용은 수정 기록에 남음).\n기관별 장비의 날짜별 경로 기록은 지워지지 않습니다.`)) return;
+  if (S.rounds[0] && S.rounds[0].id !== r.id) return toast("가장 마지막 기준일자만 지울 수 있습니다", true);
+  if ([...S.routes.keys()].some(k => { const d = k.split("|")[0]; return d >= r.start_date && d <= roundEnd(r); })) return toast("이 기준일자 기간에 경로가 있어 지울 수 없습니다. 경로를 먼저 비우세요.", true);
+  if (!confirm(`기준일자 ${r.start_date}를 지울까요?\n이 기준일자의 지사 요청·편성 ${n}건과 장비 지원 여부도 함께 지워집니다(지운 내용은 수정 기록에 남음).`)) return;
   const res = await Api.deleteRound(r.id);
   if (!res.ok) return toast(res.message, true);
-  S.rounds = S.rounds.filter(x => x.id !== r.id);
+  S.rounds = S.rounds.filter(x => x.id !== r.id); S.stLoaded.delete(r.id); [...S.rstat.keys()].filter(k => k.startsWith(r.id + "|")).forEach(k => S.rstat.delete(k));
   await loadAudit(); await switchRound(pickRound(), true); toast("기준일자를 지웠습니다");
 }
 async function switchRound(id, force) {
-  if (!force && branchDirty() && !confirm("지사별 요청·편성에 저장하지 않은 변경이 있습니다. 버리고 기준일자를 바꿀까요?")) { refresh(); return; }
-  S.rdraft.clear(); S.round = +id || null;
+  if (!force && (branchDirty() || fleetDirty()) && !confirm("확정·저장하지 않은 변경이 있습니다. 버리고 기준일자를 바꿀까요?")) { refresh(); return; }
+  S.rdraft.clear(); S.draft.clear(); S.vdraft.clear(); S.sdraft.clear(); S.extraStop.clear(); S.unhideOpen = false; S.round = +id || null;   // 지원 여부·경로 변경은 기준일자마다 따로라 버림
   const r = curRound(); if (r) S.day1 = r.start_date;               // 기준일자를 고르면 지원일 1도 그 날짜로
   await Promise.all([loadReqs(), ensureRoutes(), loadWarn()]); refresh();
 }
@@ -782,6 +876,7 @@ function describeTarget(a) {
   const [tab, rest = ""] = (a.target || "").split(":"), p = rest.split(",");
   if (tab === "vehicle_routes") return `${plateOf(p[1])} · ${fmtMD(p[0])}`;
   if (tab === "vehicles") return plateOf(p[0]);
+  if (tab === "round_vehicle_status") { const r = S.rounds.find(x => x.id === +p[0]); return `${plateOf(p[1])} · 기준일자 ${r ? fmtMD(r.start_date) : p[0]}`; }
   if (tab === "round_requests") { const r = S.rounds.find(x => x.id === +p[0]); return `${bn(p[1])} · 기준일자 ${r ? fmtMD(r.start_date) : p[0]}`; }
   if (tab === "branch_zone_overrides") return `${bn(p[0])} · 특보구역 ${p[1]}`;
   if (tab === "support_rounds") { const r = S.rounds.find(x => x.id === +p[0]); return `기준일자 ${r ? r.start_date : p[0]}`; }
@@ -816,12 +911,12 @@ const sheet = $("sheet"), backdrop = $("backdrop");
 let lastFocus = null;
 async function openSheet(vid) {
   const v = vehById(vid); if (!v) return;
-  const [cls, label] = STATUS[vval(v, "status")] || STATUS[""], rec = recOf(S.date, v.id), cur = rec.stops;
+  const g = govRound(S.date), st = g ? stOf(g.id, v.id).status : "", [cls, label] = STATUS[st] || STATUS[""], rec = effRec(S.date, v.id), cur = rec.stops;   // 지원 여부 = 그 날짜를 맡은 기준일자의 값
   sheet.innerHTML = `<button type="button" class="sheet-close" id="sheetClose">닫기</button><span class="plate" style="font-size:18px">${esc(vval(v, "plate"))}</span>
-    <h2 id="sheetTitle">${esc(v.org)} ${esc(v.type)}${hasBlower(v) ? ` · 블로워 ${esc(blowerText(v))}` : ""}</h2>${H("vehicles:" + v.id, "status", `<span class="status ${cls}">${label}</span>`)}
+    <h2 id="sheetTitle">${esc(v.org)} ${esc(v.type)}${hasBlower(v) ? ` · 블로워 ${esc(blowerText(v))}` : ""}</h2>${g ? `<span class="status ${cls}">${label}</span>` : ""}
     <section><h3>${esc(fmtMD(S.date))} 이동</h3><dl class="kv"><dt>지원기관</dt><dd>${esc(v.org)} 기계화부</dd>
       <dt>들르는 지사</dt><dd>${cur.length ? cur.map(x => esc(bn(x))).join(" → ") + "" : "-"}</dd>
-      <dt>도착 예상</dt><dd>${cur.length ? cur.map((x, j) => `${esc(bn(x))} ${esc(rec.times[j] ? fmtMD(S.date) + " " + rec.times[j] : "미정")}`).join("<br>") : "-"}</dd></dl></section>
+      <dt>도착 예상</dt><dd>${cur.length ? cur.map((x, j) => `${esc(bn(x))} ${esc(j === 0 && isCont(v.id, S.date, x) ? "연속지원" : rec.times[j] ? fmtMD(S.date) + " " + rec.times[j] : "미정")}`).join("<br>") : "-"}</dd></dl></section>
     <section><h3>날짜별 경로 기록</h3><div id="vhist" class="muted">불러오는 중…</div></section>`;
   sheet.hidden = false; backdrop.hidden = false;
   if (!lastFocus) lastFocus = document.activeElement;
@@ -907,7 +1002,7 @@ function updateSavebars() {
   fb.hidden = !canAnyVeh(); bb.hidden = !canAnyReq() || !S.round;
   const fd = fleetDirty(), bd = branchDirty();
   fb.classList.toggle("dirty", fd); bb.classList.toggle("dirty", bd);
-  fb.querySelector(".save-state").textContent = fd ? `확정하지 않은 변경: 경로 ${S.draft.size}칸${S.vdraft.size ? ` · 장비 ${S.vdraft.size}대` : ""}` + (S.preview ? " (미리보기 — 확정 불가)" : "") : "변경 사항 없음";
+  fb.querySelector(".save-state").textContent = fd ? `확정하지 않은 변경: 경로 ${S.draft.size}칸${S.sdraft.size ? ` · 지원 여부 ${S.sdraft.size}대` : ""}${S.vdraft.size ? ` · 장비 ${S.vdraft.size}대` : ""}` + (S.preview ? " (미리보기 — 확정 불가)" : "") : "변경 사항 없음";
   bb.querySelector(".save-state").textContent = bd ? `저장하지 않은 변경: ${S.rdraft.size}개 지사` + (S.preview ? " (미리보기 — 저장 불가)" : "") : "변경 사항 없음";
   fb.querySelector("[data-revert]").disabled = !fd; fb.querySelector("[data-save]").disabled = !fd || S.preview;
   bb.querySelector("[data-revert]").disabled = !bd; bb.querySelector("[data-save]").disabled = !bd || S.preview;
@@ -932,12 +1027,17 @@ document.addEventListener("change", async e => {
   const t = e.target;
   if (t.id === "userSel") return switchUser(t.value);
   if (t.dataset.round !== undefined) return switchRound(t.value);
-  if (t.id === "day1In") { if (!t.value) return; S.day1 = t.value; S.extraStop.clear(); await ensureRoutes(); return refresh(); }
+  if (t.id === "day1In") {                  // 지원일 1: 기준일자보다 앞 날짜는 안 됨
+    if (!t.value) return; const r = curRound();
+    if (r && t.value < r.start_date) { toast(`지원일은 기준일자(${fmtMD(r.start_date)})부터 고를 수 있습니다`, true); S.day1 = r.start_date; } else S.day1 = t.value;
+    S.extraStop.clear(); await ensureRoutes(); return refresh();
+  }
   if (t.id === "colsSel") { S.cols = Math.min(10, Math.max(2, +t.value)); await ensureRoutes(); return refresh(); }
   if (t.id === "logUser") { S.logUser = t.value; return renderLog(); }
   if (t.id === "zbr") return renderZones();
   if (t.dataset.rv) {                       // 경로 칸(관리자): 그 (날짜, 장비)의 지사 목록을 다시 모음
     const vid = t.dataset.rv, d = t.dataset.rd, v = vehById(vid); if (!v || !canRoute()) return refresh();
+    if (t.value === "__off") { setStat(vid, { off_from: d }); return patchVehicle(vid); }          // 지원 불가(이날부터): 이날·뒷날 칸이 지원 불가로
     S.extraStop.delete(rk(d, vid)); setRoute(d, vid, readCell(vid, d)); return patchCell(vid, d);
   }
   if (t.dataset.rt) {                       // 도착 예상 시각(관리자, 또는 지원장비 = 자기 기관 장비의 정해진 경로)
@@ -949,11 +1049,13 @@ document.addEventListener("change", async e => {
   if (t.id === "modeInit" || t.id === "modeRev") {     // [최초 지원]/[수정본]: 둘 중 하나, 표 전체에 한 번에 적용
     S.revisedMode = t.id === "modeRev" ? t.checked : !t.checked; return renderFleet();
   }
-  if (t.dataset.vs) {                       // 지원 여부: 지원이 아니면 오늘 이후 칸의 경로를 비움(확정 전 되돌리기 가능)
-    const v = vehById(t.dataset.vs); if (!v || !canVeh(v)) return refresh();
-    setVeh(v.id, "status", t.value);
-    if (t.value !== "O" && canRoute()) { const cut = windowDates().filter(d => d >= todayISO() && routeOf(d, v.id).length); cut.forEach(d => setRoute(d, v.id, EMPTY)); if (cut.length) toast(`${STATUS[t.value][1]}(으)로 바꿔 ${cut.length}일치 경로를 비웠습니다. [확정] 전에는 되돌릴 수 있습니다.`); }
-    return patchVehicle(v.id);
+  if (t.dataset.vs) {                       // 지원 여부(고른 기준일자): 지원이 아니면 그 기준일자가 맡은 날의 경로는 숨겨짐(지우지 않음 — 다시 지원으로 하면 보임)
+    const v = vehById(t.dataset.vs); if (!v || !canVeh(v) || !S.round) return refresh();
+    setStat(v.id, { status: t.value }); return patchVehicle(v.id);
+  }
+  if (t.dataset.off) {                      // 지원일 2부터의 '지원 불가(이날부터)'(지원장비 계정도)
+    const v = vehById(t.dataset.off); if (!v || !canVeh(v) || !S.round) return refresh();
+    if (t.value) setStat(v.id, { off_from: t.dataset.rd }); return patchVehicle(v.id);
   }
   if (t.dataset.vb) {                       // 블로워 소·대: 제설기만, 둘 다 꺼도 됨
     const v = vehById(t.dataset.vb); if (!v || !canVeh(v) || v.type !== "제설기") return refresh();
@@ -1048,10 +1150,14 @@ document.addEventListener("click", e => {
   if (TP.bid) tpClose();                     // 바깥을 누르면 닫힘
   if ((x = c("[data-stop-add]"))) { S.extraStop.add(x.dataset.stopAdd); const [d, vid] = x.dataset.stopAdd.split("|"); patchCell(vid, d); const n = [...document.querySelectorAll("[data-fk]")].find(i => i.dataset.fk.startsWith(`rn:${d}:${vid}:`)); if (n) n.focus(); return; }
   if ((x = c("[data-save]"))) return x.dataset.save === "fleet" ? confirmFleet() : saveBranch();
-  if ((x = c("[data-revert]"))) { if (!confirm("확정·저장하지 않은 변경을 모두 취소할까요?")) return; if (x.dataset.revert === "fleet") { S.draft.clear(); S.vdraft.clear(); S.extraStop.clear(); } else S.rdraft.clear(); return refresh(); }
+  if ((x = c("[data-revert]"))) { if (!confirm("확정·저장하지 않은 변경을 모두 취소할까요?")) return; if (x.dataset.revert === "fleet") { S.draft.clear(); S.vdraft.clear(); S.sdraft.clear(); S.extraStop.clear(); } else S.rdraft.clear(); return refresh(); }
   if (c("#fleetReset")) return resetFleet();
   if (c("#vehAdd")) return addVehicle();
   if ((x = c("[data-vdel]"))) return deleteVehicle(x.dataset.vdel);
+  if ((x = c("[data-vhide]"))) return hideVehicle(x.dataset.vhide, false);
+  if ((x = c("[data-unhide]"))) return hideVehicle(x.dataset.unhide, true);
+  if (c("#unhideBtn")) { S.unhideOpen = !S.unhideOpen; return renderFleet(); }
+  if ((x = c("[data-offclr]"))) { const v = vehById(x.dataset.offclr); if (v && canVeh(v)) { setStat(v.id, { off_from: null }); patchVehicle(v.id); } return; }
   if (c("#roundMake")) return makeRound();
   if (c("#confirmAll")) return confirmAll();
   if ((x = c("[data-confirm-hq]"))) return confirmAll(x.dataset.confirmHq);          // 본부 줄의 [일괄 확정](줄 접기보다 먼저)
@@ -1107,7 +1213,7 @@ function buildUserSel() {
 }
 async function switchUser(uid) {
   if ((fleetDirty() || branchDirty()) && !confirm("확정·저장하지 않은 변경이 있습니다. 버리고 아이디를 바꿀까요?")) { $("userSel").value = S.uid; return; }
-  S.draft.clear(); S.vdraft.clear(); S.rdraft.clear(); S.extraStop.clear();
+  S.draft.clear(); S.vdraft.clear(); S.sdraft.clear(); S.rdraft.clear(); S.extraStop.clear();
   S.uid = uid; S.me = uid === "__me" ? S.real : identityOf(DEMO.find(d => d.id === uid));
   S.preview = !!S.real && uid !== "__me";
   Api.setActor(S.me); if (!sheet.hidden) closeSheet();
