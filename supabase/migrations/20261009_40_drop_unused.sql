@@ -8,7 +8,7 @@
 --    (save_requests 는 snow_cm·warning 을 보내도 그냥 무시 — 예전 화면이 캐시에 남아 있어도 저장은 됨)
 --  * 지난 수정 기록(변경 이력)에 남은 snow_cm·warning 항목은 건드리지 않음(화면은 '예상 적설'·'특보'로 계속 보임).
 --  * 남기는 것: private.warn_needed() — 늘 true 지만 특보·예보 수집 7곳이 쓰는 '켜고 끄는 스위치'라 그대로 둠.
---    vehicles.status — 채팅 쪽이 남은 일로 잡아 둔 것(번호는 41 로).
+--    vehicles.status — 채팅 쪽이 남은 일로 잡아 둔 것(번호는 42 로 — 41 은 예보 수집 시간).
 -- ============================================================
 create or replace function private.round_requests_guard() returns trigger
 language plpgsql set search_path = ''
