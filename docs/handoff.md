@@ -44,6 +44,10 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-10-10 · 커밋 (이 기록 커밋 하나) · 이동 현황 기준 시각: '(지난 날짜 — 이동 모두 반영)' 문구 뺌
+- 사용자 요청. `equipment/js/app.js` refTimeText: 지난 날짜는 '기준 시각 …'만, 앞 날짜의 '(앞 날짜 — 이동 반영 전)'은 그대로. 계산(지난 날짜는 이동 모두 반영)은 바뀌지 않음. 시험 `t_moves_between_branches` 에 지난 날짜 확인 추가.
+— ✍ Claude Code 작성
+
 ### 2026-10-10 · 커밋 (이 기록 커밋 하나) · 화면 틀 다시: 위쪽 메뉴 + Pretendard + Taste Skill 점검 반영
 - 사용자 요청: Taste Skill(github.com/Leonxlnx/taste-skill, MIT)의 redesign 규칙으로 다시. **설치하지 않고**(npx 는 외부 프로그램 실행이라 안 씀) SKILL.md 내용만 읽고 적용. 사용자 결정: 메뉴는 **위쪽으로 다시**(스킬: '대시보드 왼쪽 메뉴는 흔한 AI 티'), 글꼴은 **Pretendard**.
 - 바로 앞 기록(왼쪽 메뉴)을 대체: `.sidenav` → `header.topnav`. 1줄 = 로고 · 페이지 전환(`.page-btn` 강설량 측정/장비 지원, 알약 모양 전환) · 화면 밝기(`#snTheme`, 장비 화면일 때) · 사용자(`#ssUser`). 2줄 = 지금 페이지의 메뉴만(`.sn-group[data-group]`, `.tab-btn`/`.eq-btn` 그대로, 밑줄로 선택 표시). 휴대폰은 2줄을 옆으로 밀어 봄(☰ 없앰). 장비 iframe 연동(`SSEqTabChanged`, `html.embedded`)은 그대로.

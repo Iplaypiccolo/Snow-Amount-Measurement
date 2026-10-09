@@ -761,6 +761,7 @@ def t_moves_between_branches(p):
     t = p.locator(f".dest[data-bid='{dg}']").locator(".dest-time").inner_text()
     check(ev(p, "fmtMD(todayISO())") + "" in t and "부터" in t and "연속지원 중" in t and "미정" not in t, "연속지원 시작: " + t)
     check(ev(p, f"JSON.stringify(contSince('V001', addDays(todayISO(), 1), '{dg}'))") == ev(p, "JSON.stringify({date: todayISO(), time: '21:30'})"), "V001 은 오늘 21:30 부터")
+    go_date(p, day(p, -1)); check("지난 날짜" not in p.locator("#refTime").inner_text() and "반영" not in p.locator("#refTime").inner_text() and "기준 시각" in p.locator("#refTime").inner_text(), "지난 날짜도 기준 시각만(안내 문구 뺌, 2026-10-10)")
 
 def t_hide_vehicle(p):
     """숨기기(삭제 옆): 고른 기준일자부터 목록에서 빠지고, 삭제 열 제목 칸의 [숨김 취소(N)]로 되돌림. 경로 기록이 있는 장비는 삭제 거절"""

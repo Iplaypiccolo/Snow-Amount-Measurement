@@ -417,10 +417,10 @@ function contSince(vid, d, bid) {
   }
   return { date: k, time: null };
 }
-// 표 위의 기준 시각. 지난 날짜·앞 날짜는 이동을 어떻게 반영했는지 함께
+// 표 위의 기준 시각. 앞 날짜는 이동 반영 전임을 함께(지난 날짜 안내는 사용자 요청으로 뺌, 2026-10-10)
 function refTimeText() {
   const today = todayISO(), base = `기준 시각 ${fmtMD(today)} ${nowHM()}`;
-  return S.date < today ? base + " (지난 날짜 — 이동 모두 반영)" : S.date > today ? base + " (앞 날짜 — 이동 반영 전)" : base;
+  return S.date > today ? base + " (앞 날짜 — 이동 반영 전)" : base;
 }
 function renderMatrix() {
   // 세로 = 본부 → 지사(그날 지원받는 지사만), 가로 = 지원기관마다 제설차·제설기. 본부 줄·합계는 장비 1대를 한 번만 셈(여러 지사를 들러도)
