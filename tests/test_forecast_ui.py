@@ -148,6 +148,10 @@ def t_top_menu(b):
     check(fr.locator("#panel-move").is_visible() and not fr.locator("#panel-branch").is_visible(), "이동 현황으로 바뀜")
     p.click(".page-btn[data-page=snow]"); p.wait_for_timeout(300); p.click(".tab-btn[data-tab=snowtable]"); p.wait_for_timeout(400)
     check(p.locator("#page-snow").is_visible() and not p.locator("#page-equip").is_visible() and p.locator("#view-snowtable").is_visible(), "강설량 측정으로 돌아와 메뉴 고르기")
+    an = "getComputedStyle(document.getElementById('view-snowtable')).animationName"
+    check(p.evaluate(an) == "ssFade", "움직임 4: 화면 바꿀 때 0.15초 나타나기")
+    p.emulate_media(reduced_motion="reduce"); p.wait_for_timeout(100)
+    check(p.evaluate(an) == "none", "컴퓨터의 '동작 줄이기'를 켜면 움직임 없음"); p.emulate_media(reduced_motion="no-preference")
     p.set_viewport_size({"width": 390, "height": 844}); p.wait_for_timeout(300)
     box = p.locator(".tn-tabs").bounding_box()
     check(p.locator(".tab-btn[data-tab=forecast]").is_visible() and box and box["width"] <= 390 and p.evaluate("document.documentElement.scrollWidth <= 392"), "휴대폰 폭: 메뉴 줄은 옆으로 밀어 보기, 화면은 가로로 넘치지 않음")

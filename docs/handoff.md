@@ -44,6 +44,13 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-10-10 · 커밋 (이 기록 커밋 하나) · 움직임 다이얼 4 적용(Taste Skill MOTION_INTENSITY)
+- 사용자 결정: Claude Design 캔버스의 '움직임 5 vs 8' 눌러 보기 시안(Motion5/8.dc.html)을 보고 **4**로. 다이얼 나머지는 정하지 않음(지금 화면은 대략 VARIANCE 3 · DENSITY 7~8).
+- 넣은 것(모두 0.15~0.2초, 기다리게 하지 않음): 화면·탭 바꿀 때 나타나기(`.view`·`#page-equip`·장비 `.panel` fade), 알림(장비 `.toast`·`.jr-toast`) 살짝 올라오기, 확인창·알림창·고정 창·날짜 고르기 창(`.jr-dialog`·`.jr-notice-card`·`.fc-pin`·`.tpop`) 작게 커지며, 버튼 색 전환·눌림 1px, **확정한 지사 줄만** 0.9초 진한 노랑(`flashRows`, 취소는 바로 흰색 — 시험이 바로 색을 봄).
+- 넣지 않은 것: 줄이 차례로 나타나기·튀는 효과·마우스 올리면 들리기(8 수준). 표·지도·숫자는 움직이지 않음.
+- 컴퓨터 '동작 줄이기'(prefers-reduced-motion) 켜면 모든 움직임 끔. 시험 `t_top_menu` 에 확인 추가.
+— ✍ Claude Code 작성
+
 ### 2026-10-10 · 커밋 (이 기록 커밋 하나) · 이동 현황 기준 시각: '(지난 날짜 — 이동 모두 반영)' 문구 뺌
 - 사용자 요청. `equipment/js/app.js` refTimeText: 지난 날짜는 '기준 시각 …'만, 앞 날짜의 '(앞 날짜 — 이동 반영 전)'은 그대로. 계산(지난 날짜는 이동 모두 반영)은 바뀌지 않음. 시험 `t_moves_between_branches` 에 지난 날짜 확인 추가.
 — ✍ Claude Code 작성

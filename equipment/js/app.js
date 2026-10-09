@@ -838,7 +838,11 @@ async function saveBranchRows(ids, extra, msg) {
     await loadReqs();
     if (extra.confirmed && ids.length === 1) { const f = fcOf(ids[0]); msg += ` (대설특보: ${wlabel(warnOf(ids[0]).level, "대설")}, 적설 ${f && f.snow != null ? fmtCm(f.snow) + "cm" : "없음"}·강수 ${f && f.pcp != null ? fmtCm(f.pcp) + "mm" : "없음"}·최저 ${f && f.tmin != null ? fmtTmp(f.tmin) + "℃" : "없음"})`; }
   }
-  await loadAudit(); refresh(); toast(msg);
+  await loadAudit(); refresh(); toast(msg); if (extra && extra.confirmed) flashRows(ids);
+}
+function flashRows(ids) {             // 방금 확정한 지사 줄을 잠깐 표시(취소는 바로 흰색)(움직임 4: 0.9초, 동작 줄이기 설정이면 CSS 가 끔)
+  ids.forEach(id => { const tr = document.querySelector(`#branchTable tr[data-b="${CSS.escape(id)}"]`); if (!tr) return;
+    tr.classList.remove("just"); void tr.offsetWidth; tr.classList.add("just"); setTimeout(() => tr.classList.remove("just"), 1000); });
 }
 const saveBranch = () => saveBranchRows([...S.rdraft.keys()], null, `저장했습니다 (${S.rdraft.size}개 지사)`);
 const scopeIds = hq => S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private && (!hq || b.hq_id === hq)).map(b => b.id);   // 일괄 확정·취소 대상(민자 제외, hq = 그 본부만)

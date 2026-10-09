@@ -40,6 +40,13 @@
   .skip-link{position:absolute;left:12px;top:-60px;z-index:10000;background:var(--accent);color:#fff;padding:8px 14px;border-radius:8px;font-weight:700;text-decoration:none;}
   .skip-link:focus{top:10px;}
   .content:focus{outline:none;}
+  /* ---- 움직임(2026-10-10, Taste Skill 다이얼 MOTION 4): 짧고 조용하게, 기다리게 하지 않음. 표·지도·숫자는 움직이지 않음 ---- */
+  @keyframes ssFade{from{opacity:0}}
+  @keyframes ssPop{from{opacity:0;transform:scale(.97)}}
+  @keyframes ssToast{from{opacity:0;transform:translate(-50%,10px)}}
+  .view,#page-equip{animation:ssFade .15s ease-out;}
+  .tab-btn,.eq-btn,.page-btn{transition:color .15s ease,background-color .15s ease,border-color .15s ease,box-shadow .15s ease;}
+  @media (prefers-reduced-motion: reduce){*,*::before,*::after{animation:none !important;transition:none !important;}}
 
   /* ---- 바깥 틀: 위쪽 메뉴 + 아래 화면 ---- */
   .shell{display:flex;flex-direction:column;height:100%;}
@@ -345,9 +352,9 @@
   .leaflet-tooltip.snow-label::before{display:none;}
   .unit-note{font-size:10px; color:var(--muted); padding:6px 12px; font-family:var(--mono);}
 </style>
-  <link rel="stylesheet" href="jurisdiction/style.css?v=916c730d">
+  <link rel="stylesheet" href="jurisdiction/style.css?v=059ee1ab">
   <link rel="stylesheet" href="grid/style.css?v=3b375975">
-  <link rel="stylesheet" href="forecast/style.css?v=5ed6b68f">
+  <link rel="stylesheet" href="forecast/style.css?v=0e43e1dc">
   <link rel="stylesheet" href="auth/gate.css?v=8afc6104">
 </head>
 <body>
@@ -388,7 +395,7 @@
 <noscript><div style="padding:40px;font-family:sans-serif;">이 화면은 JavaScript 가 켜져 있어야 로그인할 수 있습니다.</div></noscript>
 
 <div id="page-equip">
-  <iframe id="equipFrame" title="제설장비 지원 현황" data-src="equipment/index.html?v=09bc1110"></iframe>
+  <iframe id="equipFrame" title="제설장비 지원 현황" data-src="equipment/index.html?v=8a042ef3"></iframe>
 </div>
 
 <div class="app" id="page-snow">

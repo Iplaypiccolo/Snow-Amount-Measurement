@@ -315,6 +315,20 @@ table.branch { min-width: 1080px; }
 .toast.err { background: var(--stop); color: #fff; }
 .toast[hidden] { display: none; }
 
+/* ---------- 움직임(2026-10-10, Taste Skill 다이얼 MOTION 4): 짧고 조용하게. 표·숫자는 움직이지 않음 ---------- */
+@keyframes eqFade { from { opacity: 0; } }
+@keyframes eqPop { from { opacity: 0; transform: scale(.97); } }
+@keyframes eqToast { from { opacity: 0; transform: translate(-50%, 10px); } }
+@keyframes eqJust { from { background-color: color-mix(in srgb, var(--plow) 40%, var(--surface)); } }
+.panel { animation: eqFade .15s ease-out; }
+.toast { animation: eqToast .2s ease-out; }
+.tpop { animation: eqPop .15s ease-out; }
+.sheet-backdrop { animation: eqFade .2s ease-out; }
+.btn, .tab, .chip { transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease; }
+.btn:not(:disabled):active { transform: translateY(1px); }
+.branch tr.just td { animation: eqJust .9s ease-out; }      /* 방금 확정한 지사 줄을 잠깐 진한 노랑 → 확정 노랑 */
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
 table.logt { border-collapse: collapse; width: 100%; min-width: 900px; font-size: 13.5px; font-variant-numeric: tabular-nums; }
 .logt th, .logt td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 .logt thead th { background: var(--bg); font-size: 13px; font-weight: 600; position: sticky; top: 0; }
