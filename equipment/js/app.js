@@ -491,7 +491,7 @@ function vehicleRow(v, stops, rec, bid, m) {
   const lg = m && k >= 0 ? (k === m.p ? [m.legs[k - 1], m.legs[k]] : [m.legs[k - 1]]).filter(Boolean) : [];
   const mvTags = lg.map(l => `<span class="tag mv${l.done ? " done" : ""}">${esc(legText(l))}${l.done ? " 완료" : ""}</span>`).join("");
   return `<button type="button" class="vrow${m && k > m.p ? " incoming" : ""}" data-vid="${esc(v.id)}" data-vo="${esc(v.org)}" data-vt="${esc(v.type)}"><span class="plate">${esc(vval(v, "plate"))}</span><span class="vtype">${esc(v.type)}</span>
-    <span class="status-wrap">${hasBlower(v) ? `<span class="tag blw-tag">블로워 ${esc(blowerText(v))}</span>` : ""}${mvTags}${cont ? `<span class="tag eta">연속지원</span>` : eta ? `<span class="tag eta">${esc(eta)} 도착 예상</span>` : ""}${stops.length > 1 ? `<span class="tag" title="${esc(stops.map(bn).join(" → "))}">${stops.length}곳 경유</span>` : ""}</span></button>`;
+    <span class="status-wrap">${hasBlower(v) ? `<span class="tag blw-tag">블로워 ${esc(blowerText(v))}</span>` : ""}${mvTags}${cont ? `<span class="tag eta">연속지원</span>` : eta ? `<span class="tag eta">${esc(eta)} 도착 예상</span>` : ""}</span></button>`;
 }
 function renderDest() {
   const moves = movesOn(S.date), filtered = S.org !== "전체" || S.type !== "전체", out = [];
