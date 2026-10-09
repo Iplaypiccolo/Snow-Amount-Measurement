@@ -2,11 +2,11 @@
    색상·글꼴 토큰 — 여기 값만 바꾸면 전체 색이 바뀝니다
    ============================================================ */
 :root {
-  --bg: #EEF2F5;          /* 눈 온 아침 같은 차가운 흰색 */
+  --bg: #EEF3F7;          /* 서리 바탕(첫 화면과 같은 겨울·눈 색, 2026-10-10) */
   --surface: #FFFFFF;
-  --ink: #16202B;          /* 본문 글자 */
-  --ink-soft: #5A6875;     /* 보조 글자 */
-  --line: #D5DDE3;         /* 구분선 */
+  --ink: #10243A;          /* 밤하늘 글자 */
+  --ink-soft: #4E6274;     /* 안개 글자 */
+  --line: #D6E1E9;         /* 구분선 */
   --plow: #F2A900;         /* 제설차 경광등 노랑: 강조 1개 */
   --plow-ink: #3D2C00;
   --go: #0E7A55;           /* 고속도로 표지판 초록: 배정 완료 */
@@ -45,6 +45,7 @@ button, input, select { font: inherit; color: inherit; }
 :focus-visible { outline: 3px solid var(--plow); outline-offset: 2px; border-radius: 4px; }
 
 /* ---------- 상단 바 ---------- */
+.embedded .topbar { display: none; }   /* 첫 화면 안에서는 왼쪽 메뉴가 머리글·탭을 대신함 */
 .topbar {
   position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
   background: var(--surface); border-bottom: 1px solid var(--line);

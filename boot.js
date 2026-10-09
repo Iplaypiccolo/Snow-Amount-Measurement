@@ -53,6 +53,7 @@
       var fc = /^#fc=(B\d{3})$/.exec(location.hash); if (fc) window.SSOpenForecast(fc[1]);      // 장비 지원에서 따로 열린 경우(#fc=지사번호)
       else { var ft = document.querySelector('.tab-btn[data-tab=forecast]'); if (ft) ft.click(); }   // 첫 탭 = 기관별 24시간 예보
       var can = function(p){ return !!(window.SS_CAN && window.SS_CAN(p)); };
+      if (can('log.view')) { var elb = document.getElementById('eqLogBtn'); if (elb) elb.hidden = false; }   // 왼쪽 메뉴 '로그 기록': 장비 화면과 같은 권한(log.view)
       if (can('snow.upload')) { var sal = document.getElementById('snowAdminLink'); if (sal) sal.hidden = false; }   // 적설 자료 올리기: 권한 있는 계정에만 링크(올리기는 서버가 다시 검사)
       // 지사가 올린 구간 변경 요청이 있으면 알림창·탭 표시 (요청을 승인할 수 있는 juris.edit 권한)
       if (can('juris.edit') && window.JurisRequests){ JurisRequests.startAdminWatch({
@@ -78,22 +79,58 @@
   SSGate.start({ onReady: bootApp });
 })();
 
-/* 최상위 페이지 전환: 강설량 측정 <-> 장비 지원 (장비 지원은 처음 열 때 불러옴) */
+/* 왼쪽 메뉴(2026-10-10): 강설량 측정 / 장비 지원 두 묶음. 장비 지원은 안쪽 화면(iframe)이라 그 화면의 탭을 대신 눌러 줍니다.
+   장비 지원은 처음 열 때 불러오고, 안쪽 화면에서는 자기 머리글·탭을 숨깁니다(equipment/index.html 의 embedded). */
 (function(){
+  var shell = document.getElementById('shell');
+  var nav = document.getElementById('sideNav');
+  var toggle = document.getElementById('snToggle');
   var btns = document.querySelectorAll('.page-btn');
+  var eqBtns = document.querySelectorAll('.eq-btn');
   var snow = document.getElementById('page-snow');
   var equip = document.getElementById('page-equip');
   var frame = document.getElementById('equipFrame');
+  var theme = document.getElementById('snTheme');
+  var eqTab = 'move';
+  function closeMenu(){ nav.classList.remove('open'); toggle.setAttribute('aria-expanded', 'false'); toggle.setAttribute('aria-label', '메뉴 열기'); }
+  toggle.addEventListener('click', function(){
+    var open = !nav.classList.contains('open');
+    nav.classList.toggle('open', open); toggle.setAttribute('aria-expanded', String(open)); toggle.setAttribute('aria-label', open ? '메뉴 닫기' : '메뉴 열기');
+  });
+  function frameDoc(){ try { return frame.getAttribute('src') && frame.contentDocument && frame.contentDocument.readyState !== 'loading' ? frame.contentDocument : null; } catch(e){ return null; } }
+  function paintEq(){ eqBtns.forEach(function(b){ b.classList.toggle('active', b.dataset.eqtab === eqTab); }); }
+  function paintTheme(){
+    var d = frameDoc(); if (!d) return;
+    var t = d.documentElement.dataset.theme || (frame.contentWindow.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    theme.querySelectorAll('[data-eqtheme]').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.eqtheme === t)); });
+  }
+  function applyEqTab(){       // 안쪽 화면이 준비됐으면 그 탭을 누름(아직이면 불러온 뒤 load 에서)
+    var d = frameDoc(); if (!d) return;
+    var t = d.querySelector('.tab[data-tab="' + eqTab + '"]');
+    if (t && !t.hidden && t.getAttribute('aria-selected') !== 'true') t.click();
+  }
   function show(name){
     if(name === 'equip' && !document.body.classList.contains('authed')) return;      // 장비 지원은 로그인한 뒤에만(로그인 전에 열면 '로그인 필요'가 남음)
     btns.forEach(function(b){ b.classList.toggle('active', b.dataset.page === name); });
+    shell.dataset.page = name;
     snow.style.display = (name === 'snow') ? '' : 'none';
     equip.style.display = (name === 'equip') ? 'block' : 'none';
+    theme.hidden = name !== 'equip';
     if(name === 'equip' && !frame.getAttribute('src')){ frame.setAttribute('src', frame.dataset.src); }
+    if(name === 'equip'){ paintEq(); applyEqTab(); paintTheme(); }
     if(name === 'snow'){ setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, 50); } // 지도 크기 다시 맞춤
     try{ history.replaceState(null, '', name === 'equip' ? '#equip' : location.pathname + location.search); }catch(e){}
   }
-  btns.forEach(function(b){ b.addEventListener('click', function(){ show(b.dataset.page); }); });
+  btns.forEach(function(b){ b.addEventListener('click', function(){ show(b.dataset.page); closeMenu(); }); });
+  // 강설량 측정 메뉴: 화면 바꾸기는 app.js 가, 여기서는 그 페이지를 보여 주기만
+  document.querySelectorAll('.tab-btn').forEach(function(b){ b.addEventListener('click', function(){ if (shell.dataset.page !== 'snow') show('snow'); closeMenu(); }); });
+  eqBtns.forEach(function(b){ b.addEventListener('click', function(){ eqTab = b.dataset.eqtab; show('equip'); closeMenu(); }); });
+  frame.addEventListener('load', function(){ applyEqTab(); paintTheme(); });
+  // 안쪽 화면이 스스로 탭을 바꾼 경우(권한이 바뀌어 이동 현황으로 돌아가는 등) 메뉴도 따라감
+  window.SSEqTabChanged = function(name){ eqTab = name; paintEq(); };
+  theme.querySelectorAll('[data-eqtheme]').forEach(function(b){ b.addEventListener('click', function(){
+    var d = frameDoc(); var t = d && d.querySelector('[data-theme-set="' + b.dataset.eqtheme + '"]'); if (t) t.click(); paintTheme();
+  }); });
   // 장비 지원(안쪽 화면)의 예상 적설·강수를 누르면: 강설량 측정 → 기관별 24시간 예보 → 그 지사
   window.SSOpenForecast = function(id){
     show('snow');

@@ -47,7 +47,6 @@ function initApp(){
     document.getElementById('statBranch').textContent = branchCount;
     document.getElementById('statWithin').textContent = withinCount;
     document.getElementById('statUnclass').textContent = HIERARCHY.unclassified.length;
-    document.getElementById('genMeta').textContent = '';
   }
   updateStats();
 

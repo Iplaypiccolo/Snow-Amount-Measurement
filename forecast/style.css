@@ -11,7 +11,7 @@
 .fc-detail table{width:100%;border-collapse:collapse;}
 .fc-detail th,.fc-detail td{padding:3px 4px;text-align:right;border-bottom:1px solid #eee;font-family:var(--mono);}
 .fc-detail th{color:var(--muted);font-weight:600;font-family:inherit;} .fc-detail th:first-child,.fc-detail td:first-child{text-align:left;}
-.fc-detail tr[data-cell]{cursor:pointer;} .fc-detail tr[data-cell]:hover{background:#faf8f1;}
+.fc-detail tr[data-cell]{cursor:pointer;} .fc-detail tr[data-cell]:hover{background:#f3f7fa;}
 .fc-legend .sw{display:inline-block;width:12px;height:12px;border-radius:2px;margin:0 3px 0 8px;vertical-align:-2px;border:1px solid #8a8a8a;}
 .leaflet-tooltip.fc-label{background:rgba(255,255,255,.88);border:1px solid #33424f;border-radius:4px;padding:1px 4px;box-shadow:none;font-family:var(--mono);font-size:11px;line-height:1.15;text-align:center;}
 .leaflet-tooltip.fc-label::before{display:none;}
@@ -23,10 +23,10 @@
 .fc-trend-box{margin-top:4px;display:flex;flex-direction:column;gap:6px;width:283px;}
 .fc-trend-box.big{width:396px;}
 .fc-tt{width:100%;border-collapse:collapse;table-layout:fixed;font-family:var(--mono);font-size:11px;}
-.fc-tt th,.fc-tt td{border:1px solid #e1ddd0;padding:2px 1px;text-align:center;white-space:nowrap;overflow:hidden;}
-.fc-tt thead th{background:#f4f1e8;font-weight:700;color:#444;line-height:1.1;}
+.fc-tt th,.fc-tt td{border:1px solid #d6e1e9;padding:2px 1px;text-align:center;white-space:nowrap;overflow:hidden;}
+.fc-tt thead th{background:#eef3f7;font-weight:700;color:#444;line-height:1.1;}
 .fc-tt thead th small{display:block;font-weight:400;font-size:8.5px;color:#888;}
-.fc-tt th.lb{width:52px;text-align:left;padding-left:3px;font-family:inherit;font-weight:700;font-size:10.5px;background:#faf8f1;}
+.fc-tt th.lb{width:52px;text-align:left;padding-left:3px;font-family:inherit;font-weight:700;font-size:10.5px;background:#f3f7fa;}
 .fc-tt th.lb small{font-weight:400;font-size:9px;color:#888;margin-left:2px;}
 .fc-tt th.s{color:#2e5fb8;} .fc-tt th.p{color:#2f7d4f;} .fc-tt th.t{color:#b0392b;}
 .fc-tt td.v{font-weight:700;} .fc-tt td.z{color:#aaa;} .fc-tt td.neg{color:#1d5fb0;}

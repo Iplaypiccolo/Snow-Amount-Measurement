@@ -1,22 +1,22 @@
 /* 로그인 잠금 화면 — 로그인하기 전에는 첫 화면의 내용을 보여 주지 않습니다 */
-body:not(.authed) .pagebar, body:not(.authed) #page-equip, body:not(.authed) #page-snow{display:none !important;}
-.ss-gate{position:fixed;inset:0;z-index:9999;background:linear-gradient(160deg,#0b3d29 0%,#16202B 100%);display:flex;align-items:center;justify-content:center;padding:18px;font:14px/1.55 -apple-system,"Malgun Gothic","Noto Sans KR",sans-serif;color:#0d1b14;overflow:auto}
+body:not(.authed) .sidenav, body:not(.authed) #page-equip, body:not(.authed) #page-snow{display:none !important;}
+.ss-gate{position:fixed;inset:0;z-index:9999;background:linear-gradient(160deg,#1f5f8f 0%,#10243a 100%);display:flex;align-items:center;justify-content:center;padding:18px;font:14px/1.55 -apple-system,"Malgun Gothic","Noto Sans KR",sans-serif;color:#10243a;overflow:auto}
 .ss-gate[hidden]{display:none}
 .ss-card{background:#fff;border-radius:14px;padding:26px 28px 22px;width:min(400px,100%);box-shadow:0 18px 60px rgba(0,0,0,.45)}
-.ss-badge{display:inline-block;background:#0f6b45;color:#fff;font:600 11px ui-monospace,Consolas,monospace;border-radius:4px;padding:3px 8px;letter-spacing:.04em}
-.ss-card h1{margin:10px 0 2px;font-size:19px}.ss-sub{margin:0 0 14px;color:#6b7566;font-size:13px}
-.ss-card label{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:#6b7566;margin-bottom:10px}
-.ss-card input[type=text],.ss-card input[type=password]{padding:10px 11px;border:1px solid #dcd8c8;border-radius:7px;font:inherit;color:#0d1b14;background:#fff}
-.ss-card input:focus{outline:2px solid #0f6b45;outline-offset:0}
-.ss-card label.ss-chk{flex-direction:row;align-items:flex-start;gap:7px;color:#0d1b14;margin:2px 0 8px;font-size:13px;cursor:pointer}
+.ss-badge{display:inline-block;background:#1f5f8f;color:#fff;font:600 11px ui-monospace,Consolas,monospace;border-radius:4px;padding:3px 8px;letter-spacing:.04em}
+.ss-card h1{margin:10px 0 2px;font-size:19px}.ss-sub{margin:0 0 14px;color:#4e6274;font-size:13px}
+.ss-card label{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:#4e6274;margin-bottom:10px}
+.ss-card input[type=text],.ss-card input[type=password]{padding:10px 11px;border:1px solid #d6e1e9;border-radius:7px;font:inherit;color:#10243a;background:#fff}
+.ss-card input:focus{outline:2px solid #1f5f8f;outline-offset:0}
+.ss-card label.ss-chk{flex-direction:row;align-items:flex-start;gap:7px;color:#10243a;margin:2px 0 8px;font-size:13px;cursor:pointer}
 .ss-card label.ss-chk input{margin-top:3px}.ss-hint{display:block;color:#8a5a00;font-size:11.5px}
-.ss-btn{width:100%;padding:11px 14px;border:1px solid #0f6b45;background:#0f6b45;color:#fff;border-radius:8px;font:600 14px inherit;cursor:pointer;margin-top:4px}
-.ss-btn:disabled{opacity:.5;cursor:default}.ss-btn.alt{background:#fff;color:#0d1b14;border-color:#dcd8c8;font-weight:500}
+.ss-btn{width:100%;padding:11px 14px;border:1px solid #1f5f8f;background:#1f5f8f;color:#fff;border-radius:8px;font:600 14px inherit;cursor:pointer;margin-top:4px}
+.ss-btn:disabled{opacity:.5;cursor:default}.ss-btn.alt{background:#fff;color:#10243a;border-color:#d6e1e9;font-weight:500}
 .ss-msg{padding:8px 11px;border-radius:7px;margin:0 0 10px;font-size:13px;white-space:pre-line}.ss-msg.err{background:#fde8e6;color:#b3261e}.ss-msg.warn{background:#fff1c9;color:#8a5a00}
-.ss-foot{margin:12px 0 0;font-size:12px;color:#6b7566}
-.ss-user{margin-left:auto;display:flex;align-items:center;gap:8px;color:#d7e3dc;font:12.5px -apple-system,"Malgun Gothic",sans-serif}
-.ss-user[hidden]{display:none}.ss-user b{color:#fff;font-weight:600}
-.ss-user button,.ss-user a{font:12px inherit;color:#d7e3dc;background:transparent;border:1px solid #3d4b58;border-radius:6px;padding:3px 10px;cursor:pointer;text-decoration:none}
-.ss-user button:hover,.ss-user a:hover{background:#243241}
-.ss-spin{display:inline-block;width:18px;height:18px;border:3px solid #dcd8c8;border-top-color:#0f6b45;border-radius:50%;animation:ssr .8s linear infinite;vertical-align:-4px;margin-right:8px}
+.ss-foot{margin:12px 0 0;font-size:12px;color:#4e6274}
+.ss-user{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-top:auto;padding:12px;border-radius:14px;background:#f3f7fa;color:#4e6274;font:12.5px -apple-system,"Malgun Gothic",sans-serif}
+.ss-user[hidden]{display:none}.ss-user span{flex:1 1 100%}.ss-user b{color:#10243a;font-weight:700;font-size:13.5px}
+.ss-user button,.ss-user a{font:12px inherit;color:#10243a;background:#fff;border:1px solid #d6e1e9;border-radius:999px;padding:4px 12px;cursor:pointer;text-decoration:none}
+.ss-user button:hover,.ss-user a:hover{background:#e6eff5}
+.ss-spin{display:inline-block;width:18px;height:18px;border:3px solid #d6e1e9;border-top-color:#1f5f8f;border-radius:50%;animation:ssr .8s linear infinite;vertical-align:-4px;margin-right:8px}
 @keyframes ssr{to{transform:rotate(360deg)}}

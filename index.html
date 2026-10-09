@@ -9,61 +9,74 @@
 <title>고속도로 인접 적설관측소 지도 | 반경 5~8km(적응형) 분석</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <style>
+  /* 색 토큰 — 겨울·눈(2026-10-10). 화면 틀·글자·선은 여기 값만 바꾸면 됩니다.
+     --hwy-green 은 지도의 고속도로 선·0~3km 거리 표시처럼 '지도 뜻'이 있는 곳에만 남겨 둡니다 */
   :root{
-    --ink:#0d1b14;
-    --paper:#f5f3ec;
+    --ink:#10243a;           /* 밤하늘 글자 */
+    --paper:#eef3f7;         /* 서리 바탕 */
     --panel:#ffffff;
-    --line:#dcd8c8;
+    --line:#d6e1e9;
+    --frost:#f3f7fa;         /* 옅은 바탕(표 머리·묶음 줄) */
+    --ice:#e6eff5;           /* 얼음: 선택·마우스 올림 */
+    --accent:#1f5f8f;        /* 빙하 파랑: 선택·주 버튼 */
+    --accent-dark:#164a70;
     --hwy-green:#0b5d38;
     --hwy-green-dark:#083f27;
     --signal-amber:#c97a2b;
     --signal-red:#b5432f;
-    --muted:#6b6455;
+    --muted:#4e6274;         /* 안개 글자 */
     --mono: "SFMono-Regular","JetBrains Mono",Consolas,"Liberation Mono",Menlo,monospace;
-    --sans: -apple-system,BlinkMacSystemFont,"Pretendard","Noto Sans KR",system-ui,sans-serif;
+    --sans: -apple-system,BlinkMacSystemFont,"Pretendard","Noto Sans KR","Malgun Gothic",system-ui,sans-serif;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;height:100%;font-family:var(--sans);background:var(--paper);color:var(--ink);}
 
-  body{display:flex;flex-direction:column;}
+  /* ---- 바깥 틀: 왼쪽 메뉴 + 오른쪽 화면 ---- */
+  .shell{display:flex;height:100%;}
+  .content{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;}
   .app{display:flex;flex-direction:column;flex:1;min-height:0;}
 
-  /* ---- 최상위 페이지 전환 바 (강설량 측정 / 장비 지원) ---- */
-  .pagebar{
-    flex:none; display:flex; gap:6px; align-items:center;
-    background:#16202B; padding:6px 22px;
+  .sidenav{flex:0 0 248px;display:flex;flex-direction:column;background:var(--panel);box-shadow:1px 0 0 var(--line);z-index:1000;overflow-y:auto;}
+  .sn-top{display:flex;align-items:center;gap:8px;padding:18px 16px 10px;}
+  .sn-brand{display:flex;align-items:center;gap:10px;margin-right:auto;min-width:0;}
+  .sn-mark{width:38px;height:38px;border-radius:11px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex:none;}
+  .sn-mark svg{width:23px;height:23px;fill:none;stroke:#fff;stroke-width:1.8;stroke-linecap:round;}
+  .sn-title{display:flex;flex-direction:column;line-height:1.3;}
+  .sn-title b{font-size:15.5px;letter-spacing:-.01em;}
+  .sn-title small{font-size:11.5px;color:var(--muted);}
+  .sn-toggle{display:none;width:42px;height:42px;border:0;border-radius:11px;background:var(--frost);color:var(--ink);cursor:pointer;align-items:center;justify-content:center;}
+  .sn-toggle svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;}
+  .sn-body{display:flex;flex-direction:column;gap:2px;padding:6px 12px 14px;flex:1;}
+  .page-btn{font-family:var(--sans);text-align:left;background:none;border:0;cursor:pointer;
+    margin:14px 0 4px;padding:4px 12px;border-radius:8px;font-size:11.5px;font-weight:700;letter-spacing:.06em;color:#6a7c8c;}
+  .page-btn:hover{color:var(--ink);}
+  .page-btn.active{color:var(--accent);}
+  .sn-group{display:flex;flex-direction:column;gap:2px;}
+  .tab-btn,.eq-btn{display:flex;align-items:center;gap:11px;width:100%;text-align:left;font-family:var(--sans);font-size:13.5px;font-weight:500;
+    color:#3e5262;background:none;border:0;border-radius:11px;padding:9px 12px;cursor:pointer;}
+  .tab-btn:hover,.eq-btn:hover{background:var(--frost);color:var(--ink);}
+  .sn-ic{width:19px;height:19px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+  .tab-btn > span,.eq-btn > span{flex:1;}
+  .tab-btn[data-perm]::after,.eq-btn[data-perm]::after{content:"권한";font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:999px;background:var(--ice);color:#1f4a6b;}
+  /* 지금 보고 있는 페이지의 선택된 메뉴만 칠함 */
+  .shell[data-page="snow"] .tab-btn.active,.shell[data-page="equip"] .eq-btn.active{background:var(--ice);color:var(--accent);font-weight:700;}
+  .eq-btn[hidden]{display:none;}
+  .sn-theme{display:flex;align-items:center;gap:4px;margin:14px 4px 0;font-size:12px;color:var(--muted);}
+  .sn-theme[hidden]{display:none;}
+  .sn-theme span{margin-right:auto;}
+  .sn-theme button{font:inherit;font-size:12px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:4px 11px;cursor:pointer;}
+  .sn-theme button[aria-pressed="true"]{background:var(--ice);border-color:var(--ice);color:var(--accent);font-weight:700;}
+  @media (max-width: 860px){
+    .shell{flex-direction:column;}
+    .sidenav{flex:none;overflow:visible;box-shadow:0 1px 0 var(--line);position:relative;}
+    .sn-top{padding:10px 14px;}
+    .sn-toggle{display:flex;}
+    .sn-body{display:none;position:absolute;left:0;right:0;top:100%;background:var(--panel);box-shadow:0 12px 30px rgba(16,36,58,.18);max-height:75vh;overflow-y:auto;}
+    .sidenav.open .sn-body{display:flex;}
   }
-  .page-btn{
-    font-family:var(--sans); font-size:13.5px; font-weight:700;
-    background:none; border:1px solid transparent; color:#9fb0bf;
-    padding:6px 16px; border-radius:6px; cursor:pointer;
-  }
-  .page-btn:hover{color:#fff;}
-  .page-btn.active{color:#16202B; background:#F2A900; border-color:#F2A900;}
   #page-equip{display:none; flex:1; min-height:0;}
-  #page-equip iframe{width:100%; height:100%; border:0; display:block; background:#EEF2F5;}
+  #page-equip iframe{width:100%; height:100%; border:0; display:block; background:var(--paper);}
 
-  header{
-    background:var(--hwy-green);
-    color:#eef7f0;
-    padding:14px 22px;
-    display:flex;
-    align-items:baseline;
-    gap:16px;
-    flex-wrap:wrap;
-    border-bottom:4px solid var(--hwy-green-dark);
-  }
-  header .badge{
-    font-family:var(--mono);
-    font-size:11px;
-    letter-spacing:.08em;
-    background:rgba(255,255,255,.14);
-    padding:3px 8px;
-    border-radius:3px;
-    border:1px solid rgba(255,255,255,.25);
-  }
-  header h1{font-size:18px;margin:0;font-weight:700;letter-spacing:-.01em;}
-  header .sub{font-size:12.5px;color:#cfe3d6;margin-left:auto;font-family:var(--mono);}
 
   .statbar{
     display:flex;
@@ -77,7 +90,7 @@
     border-right:1px solid var(--line);
   }
   .stat:last-child{border-right:none;}
-  .stat .num{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--hwy-green-dark);}
+  .stat .num{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--accent-dark);}
   .stat .lbl{font-size:11px;color:var(--muted);margin-top:2px;}
 
   .main{
@@ -109,9 +122,9 @@
     border-radius:4px;
     font-size:13px;
     font-family:var(--sans);
-    background:#fbfaf6;
+    background:#f8fafc;
   }
-  .side input[type="text"]:focus{outline:2px solid var(--hwy-green);outline-offset:-1px;}
+  .side input[type="text"]:focus{outline:2px solid var(--accent);outline-offset:-1px;}
 
   .dist-band-1{color:var(--hwy-green-dark);}
   .dist-band-2{color:var(--signal-amber);}
@@ -126,12 +139,12 @@
   }
   .hq-row{
     padding:10px 12px;
-    background:#f6f4ec;
+    background:#f3f7fa;
     font-weight:700; font-size:13.5px;
     border-top:1px solid var(--line);
     border-bottom:1px solid var(--line);
   }
-  .hq-row:hover{background:#eee9d9;}
+  .hq-row:hover{background:#e6eff5;}
   .hq-row .chev, .br-row .chev{
     font-size:10px; width:10px; color:var(--muted);
     transition:transform .15s ease;
@@ -140,11 +153,11 @@
   .hq-name{flex:1;}
   .count-badge{
     font-family:var(--mono); font-size:11px;
-    background:var(--hwy-green); color:#fff;
+    background:var(--accent); color:#fff;
     padding:1px 8px; border-radius:10px;
     min-width:26px; text-align:center;
   }
-  .count-badge.zero{background:#c9c4b3; color:#6b6455;}
+  .count-badge.zero{background:#b8c6d1; color:#4e6274;}
 
   .hq-children{display:none;}
   .hq-children.expanded{display:block;}
@@ -154,7 +167,7 @@
     font-size:12.5px; font-weight:600;
     background:#fff;
   }
-  .br-row:hover{background:#f2f6f0;}
+  .br-row:hover{background:#f3f7fa;}
   .br-row.active{background:#FFF3A3; box-shadow:inset 3px 0 0 #FFE400;}
   .color-swatch{
     width:10px; height:10px; border-radius:50%;
@@ -163,7 +176,7 @@
   }
   .br-name{flex:1;}
 
-  .br-children{display:none; background:#fbfaf6;}
+  .br-children{display:none; background:#f8fafc;}
   .br-children.expanded{display:block;}
 
   .st-row{
@@ -172,8 +185,8 @@
     justify-content:space-between;
     background:transparent;
   }
-  .st-row:hover{background:#eef2e6;}
-  .st-row.active{background:#dcebc9;}
+  .st-row:hover{background:#eef3f7;}
+  .st-row.active{background:#dceaf4;}
   .st-name{flex:1;}
   .st-name .id{display:block;font-family:var(--mono);font-size:10px;color:var(--muted);}
   .st-dist{font-family:var(--mono);font-weight:700;white-space:nowrap;}
@@ -182,7 +195,7 @@
   .unclass-section{border-top:3px solid var(--line); margin-top:6px;}
   .unclass-header{
     padding:10px 12px; font-size:12px; color:var(--muted);
-    background:#f6f4ec; font-weight:600;
+    background:#f3f7fa; font-weight:600;
   }
 
   .tablewrap{flex:1;overflow:auto;min-height:0;}
@@ -201,7 +214,7 @@
   .legend .line{width:16px;height:3px;background:var(--hwy-green);display:inline-block;border-radius:2px;}
 
   .leaflet-popup-content{font-family:var(--sans);font-size:12.5px;line-height:1.5;}
-  .leaflet-popup-content b{color:var(--hwy-green-dark);}
+  .leaflet-popup-content b{color:var(--accent-dark);}
   .popup-dist{font-family:var(--mono);font-weight:700;}
 
   footer{
@@ -219,20 +232,6 @@
     .side{max-width:none;min-width:0;flex:1;}
   }
 
-  /* ---- 탭바 ---- */
-  .tabbar{
-    display:flex; gap:0;
-    background:var(--hwy-green-dark);
-    padding:0 22px;
-  }
-  .tab-btn{
-    font-family:var(--sans); font-size:13px; font-weight:600;
-    background:none; border:none; color:#bcd9c6;
-    padding:10px 18px; cursor:pointer;
-    border-bottom:3px solid transparent;
-  }
-  .tab-btn:hover{color:#fff;}
-  .tab-btn.active{color:#fff; border-bottom-color:var(--signal-amber);}
   .view{display:flex; flex-direction:column; flex:1; min-height:0;}
   #view-map{display:none;}
   #view-snowtable{display:flex;}
@@ -240,25 +239,25 @@
   .side .toolbar{flex-wrap:wrap;}
   #dateSelect{
     padding:6px 8px; border:1px solid var(--line); border-radius:4px;
-    font-size:12.5px; font-family:var(--sans); background:#fbfaf6;
+    font-size:12.5px; font-family:var(--sans); background:#f8fafc;
   }
 
   /* ---- 연도별 신적설 탭 ---- */
   .snow-toolbar{
-    padding:10px 16px; display:flex; align-items:center; gap:16px;
+    padding:10px 16px; display:flex; flex-wrap:wrap; align-items:center; gap:10px 16px;
     background:var(--panel); border-bottom:1px solid var(--line);
   }
   .snow-toolbar select{
     padding:6px 10px; border:1px solid var(--line); border-radius:4px;
-    font-size:13px; font-family:var(--sans); background:#fbfaf6;
+    font-size:13px; font-family:var(--sans); background:#f8fafc;
   }
   .upload-btn{
-    font-size:12.5px; color:var(--hwy-green-dark); font-weight:600;
-    border:1px dashed var(--hwy-green); border-radius:4px;
+    font-size:12.5px; color:var(--accent-dark); font-weight:600;
+    border:1px dashed var(--accent); border-radius:4px;
     padding:6px 12px; cursor:pointer;
     background:#fff; font-family:var(--sans);
   }
-  .upload-btn:hover{background:#eef6ef;}
+  .upload-btn:hover{background:#e6eff5;}
   /* 지난 시즌(최근 3시즌 이전): 화면 표에는 없고 엑셀로만 받음 */
   .old-season{display:flex; align-items:center; gap:8px; margin-left:auto; padding-left:16px; border-left:1px solid var(--line); font-size:13px; color:var(--muted);}
   .old-season[hidden]{display:none;}
@@ -266,29 +265,29 @@
 
   .sources-view{overflow:auto; background:var(--panel); display:block;}
   .sources-content{max-width:760px; margin:0 auto; padding:30px 24px 60px;}
-  .sources-content h2{color:var(--hwy-green-dark); font-size:20px; margin-bottom:20px;}
-  .sources-content h3{color:var(--hwy-green-dark); font-size:15px; margin:26px 0 8px; border-bottom:2px solid var(--line); padding-bottom:6px;}
+  .sources-content h2{color:var(--accent-dark); font-size:20px; margin-bottom:20px;}
+  .sources-content h3{color:var(--accent-dark); font-size:15px; margin:26px 0 8px; border-bottom:2px solid var(--line); padding-bottom:6px;}
   .sources-content p{font-size:13.5px; line-height:1.8; color:var(--ink);}
   .sources-content ul{font-size:13.5px; line-height:1.9; padding-left:22px;}
-  .sources-content .mono{font-family:var(--mono); background:#f0eee2; padding:1px 5px; border-radius:3px; font-size:12.5px;}
-  .sources-content a{color:var(--hwy-green-dark); font-weight:600;}
+  .sources-content .mono{font-family:var(--mono); background:#e6eff5; padding:1px 5px; border-radius:3px; font-size:12.5px;}
+  .sources-content a{color:var(--accent-dark); font-weight:600;}
   .code-block-wrap{position:relative; margin:8px 0 20px;}
   .code-block-wrap pre{
-    background:#1e2a22; color:#d8e8dc; font-family:var(--mono); font-size:11.5px;
+    background:#14263a; color:#dceaf4; font-family:var(--mono); font-size:11.5px;
     line-height:1.6; padding:16px; border-radius:6px; overflow-x:auto;
     white-space:pre; margin:0;
   }
   .copy-btn{
     position:absolute; top:8px; right:8px; z-index:2;
-    background:#0b5d38; color:#fff; border:none; border-radius:4px;
+    background:var(--accent); color:#fff; border:none; border-radius:4px;
     font-size:11px; font-family:var(--sans); font-weight:600;
     padding:4px 10px; cursor:pointer;
   }
-  .copy-btn:hover{background:#0d7146;}
+  .copy-btn:hover{background:#164a70;}
   .copy-btn.copied{background:#c97a2b;}
   .seasons-table{border-collapse:collapse; width:100%; margin:10px 0 20px; font-size:13px;}
   .seasons-table th, .seasons-table td{border:1px solid var(--line); padding:7px 12px; text-align:left;}
-  .seasons-table th{background:#f6f4ec; font-family:var(--mono); font-size:11.5px; color:var(--muted);}
+  .seasons-table th{background:#f3f7fa; font-family:var(--mono); font-size:11.5px; color:var(--muted);}
   .seasons-table td.mono-cell{font-family:var(--mono);}
 
   .snowtable-wrap{flex:1; overflow:auto; background:var(--panel);}
@@ -297,13 +296,13 @@
     border:1px solid #eee; padding:4px 8px; text-align:right;
   }
   table.snowtable thead th{
-    position:sticky; top:0; background:#eef1e9; z-index:3;
+    position:sticky; top:0; background:#eef3f7; z-index:3;
     font-family:var(--mono); font-weight:600; color:var(--muted);
     text-align:center;
   }
   table.snowtable .row-label{
     position:sticky; left:0; z-index:2;
-    background:#fbfaf6; text-align:left; font-weight:600;
+    background:#f8fafc; text-align:left; font-weight:600;
     min-width:120px;
   }
   table.snowtable thead th.row-label-head{
@@ -311,18 +310,18 @@
   }
   table.snowtable .sum-col, table.snowtable .sum-col-head{
     position:sticky; left:120px; z-index:2;
-    background:#f6f4ec; font-weight:700; color:var(--hwy-green-dark);
+    background:#f3f7fa; font-weight:700; color:var(--accent-dark);
     border-left:2px solid var(--line); border-right:2px solid var(--line);
     min-width:70px;
   }
   table.snowtable thead .sum-col-head{ z-index:4; text-align:center; }
   table.snowtable tr.hq-row-label td, table.snowtable tr.hq-row-label th{
-    background:#f6f4ec; font-weight:700;
+    background:#f3f7fa; font-weight:700;
   }
   table.snowtable td.snowcell{cursor:pointer; font-family:var(--mono);}
   table.snowtable td.snowcell:hover{background:#fff3d6 !important;}
-  table.snowtable td.snowcell.has-val{color:var(--hwy-green-dark); font-weight:700;}
-  table.snowtable td.snowcell.zero-val{color:#c9c4b3;}
+  table.snowtable td.snowcell.has-val{color:var(--accent-dark); font-weight:700;}
+  table.snowtable td.snowcell.zero-val{color:#b8c6d1;}
   table.snowtable .col-hl{background:#fdf6e3;}
   table.snowtable .row-hl{background:#fdf6e3;}
 
@@ -331,7 +330,7 @@
     background:#1F51FF; color:#fff; padding:1px 8px; border-radius:10px;
     min-width:30px; text-align:center; margin-right:4px;
   }
-  .snow-badge.none{background:#c9c4b3;}
+  .snow-badge.none{background:#b8c6d1;}
   .leaflet-tooltip.snow-label{
     background:#1F51FF; color:#fff; font-weight:700; font-size:11px;
     border:none; padding:1px 5px; border-radius:3px;
@@ -340,39 +339,49 @@
   .leaflet-tooltip.snow-label::before{display:none;}
   .unit-note{font-size:10px; color:var(--muted); padding:6px 12px; font-family:var(--mono);}
 </style>
-  <link rel="stylesheet" href="jurisdiction/style.css?v=f7e0be81">
-  <link rel="stylesheet" href="grid/style.css?v=00f95ce1">
-  <link rel="stylesheet" href="forecast/style.css?v=d900dea4">
-  <link rel="stylesheet" href="auth/gate.css?v=e6315775">
+  <link rel="stylesheet" href="jurisdiction/style.css?v=1d227759">
+  <link rel="stylesheet" href="grid/style.css?v=2e3bfb81">
+  <link rel="stylesheet" href="forecast/style.css?v=c998e065">
+  <link rel="stylesheet" href="auth/gate.css?v=28e29033">
 </head>
 <body>
-<nav class="pagebar" aria-label="페이지 전환">
-  <button type="button" class="page-btn active" data-page="snow">강설량 측정</button>
-  <button type="button" class="page-btn" data-page="equip">장비 지원</button>
-  <span class="ss-user" id="ssUser" hidden></span>
-</nav>
+<div class="shell" id="shell" data-page="snow">
+<aside class="sidenav" id="sideNav">
+  <div class="sn-top">
+    <div class="sn-brand"><span class="sn-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7M9.5 3.5L12 6l2.5-2.5M9.5 20.5L12 18l2.5 2.5M3.6 10.4l3.3-.9-.9-3.3M20.4 13.6l-3.3.9.9 3.3M3.6 13.6l3.3.9-.9 3.3M20.4 10.4l-3.3-.9.9-3.3"/></svg></span><span class="sn-title"><b>제설 지원</b><small>고속도로 강설·장비</small></span></div>
+    <button type="button" class="sn-toggle" id="snToggle" aria-expanded="false" aria-controls="snBody" aria-label="메뉴 열기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  </div>
+  <div class="sn-body" id="snBody">
+    <button type="button" class="page-btn active" data-page="snow">강설량 측정</button>
+    <nav class="sn-group" aria-label="강설량 측정 메뉴">
+      <button type="button" class="tab-btn active" data-tab="forecast"><svg class="sn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15a4 4 0 1 1 .9-7.9A5 5 0 0 1 17.5 9 3.5 3.5 0 0 1 17 16H7z M8 19h.01 M12 20h.01 M16 19h.01"/></svg><span>기관별 24시간 예보</span></button>
+      <button type="button" class="tab-btn" data-tab="snowtable"><svg class="sn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10 M10 20V4 M16 20v-7 M3 20h18"/></svg><span>연도별 신적설</span></button>
+      <button type="button" class="tab-btn" data-tab="map"><svg class="sn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"/></svg><span>관측소 지도</span></button>
+      <button type="button" class="tab-btn" data-tab="jurisdiction"><svg class="sn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3L5 21 M16 3l3 18 M12 4v3 M12 10v3 M12 16v3"/></svg><span>기관별 관할 고속도로</span></button>
+      <button type="button" class="tab-btn" data-tab="sources"><svg class="sn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z M14 3v5h5 M10 13h6 M10 17h6"/></svg><span>데이터 출처</span></button>
+      <button type="button" class="tab-btn" data-tab="grid" id="tabGridBtn" data-perm style="display:none"><svg class="sn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z M4 10h16 M4 15h16 M10 4v16 M15 4v16"/></svg><span>예보 격자 편입</span></button>
+    </nav>
+    <button type="button" class="page-btn" data-page="equip">장비 지원</button>
+    <nav class="sn-group" aria-label="장비 지원 메뉴">
+      <button type="button" class="eq-btn" data-eqtab="move"><svg class="sn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h11v9H3z M14 10h4l3 3v3h-7 M7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z M17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg><span>이동 현황</span></button>
+      <button type="button" class="eq-btn" data-eqtab="fleet"><svg class="sn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01"/></svg><span>기관별 장비</span></button>
+      <button type="button" class="eq-btn" data-eqtab="branch"><svg class="sn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6v3H9z M7 5H5v16h14V5h-2 M9 14l2 2 4-4"/></svg><span>지사별 요청·편성</span></button>
+      <button type="button" class="eq-btn" data-eqtab="log" id="eqLogBtn" data-perm hidden><svg class="sn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v5l3 2"/></svg><span>로그 기록</span></button>
+    </nav>
+    <div class="sn-theme" id="snTheme" role="group" aria-label="장비 지원 화면 밝기" hidden>
+      <span>화면</span><button type="button" data-eqtheme="light" aria-pressed="true">밝게</button><button type="button" data-eqtheme="dark" aria-pressed="false">어둡게</button>
+    </div>
+    <div class="ss-user" id="ssUser" hidden></div>
+  </div>
+</aside>
+<div class="content">
 <noscript><div style="padding:40px;font-family:sans-serif;">이 화면은 JavaScript 가 켜져 있어야 로그인할 수 있습니다.</div></noscript>
 
 <div id="page-equip">
-  <iframe id="equipFrame" title="제설장비 지원 현황" data-src="equipment/index.html?v=5731e634"></iframe>
+  <iframe id="equipFrame" title="제설장비 지원 현황" data-src="equipment/index.html?v=89139808"></iframe>
 </div>
 
 <div class="app" id="page-snow">
-
-  <header>
-    <span class="badge">EX-SNOW-NET</span>
-    <h1>고속도로 인접 관측소 지도</h1>
-    <span class="sub" id="genMeta"></span>
-  </header>
-
-  <div class="tabbar">
-    <button class="tab-btn active" data-tab="forecast">기관별 24시간 예보</button>
-    <button class="tab-btn" data-tab="snowtable">연도별 신적설</button>
-    <button class="tab-btn" data-tab="map">관측소 지도</button>
-    <button class="tab-btn" data-tab="jurisdiction">기관별 관할 고속도로</button>
-    <button class="tab-btn" data-tab="sources">데이터 출처</button>
-    <button class="tab-btn" data-tab="grid" id="tabGridBtn" style="display:none">예보 격자 편입</button>
-  </div>
 
   <div id="view-map" class="view" style="display:none;">
   <div class="statbar">
@@ -461,9 +470,15 @@
 
       <h3>9. 새로운 기간 데이터 추가</h3>
       <p>시즌(11.15~3.15) 동안 매일 <b>01:10</b>에 서버가 <b>전날</b> 자료를 위 6번과 같은 방법(00~23시 24번 조회 → 관측소별 최댓값)으로 받아 저장합니다. 기상청 응답이 늦어 못 받은 시각은 오전 11:40까지 30분마다 그 시각만 다시 받습니다.</p>
+
+      <h3>10. 화면 디자인 참고</h3>
+      <p>왼쪽 메뉴·카드형 화면 배치는 Figma 커뮤니티의 <b>UKO – UI Kit &amp; Dashboard Design System</b>(CC BY 4.0)을 참고했습니다. 색(겨울·눈)과 내용은 이 사이트에 맞게 새로 정했고, 그 파일의 로고·그림은 쓰지 않았습니다.</p>
     </div>
   </div>
 </div>
+</div><!-- /content -->
+</div><!-- /shell -->
+
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="jurisdiction/core.js?v=5591dde2"></script>
@@ -476,6 +491,6 @@
 <script src="auth/events.js?v=0c959479"></script>
 <script src="auth/gate.js?v=309218bc"></script>
 <script src="auth/snow.js?v=2f5aaf21"></script>
-<script src="boot.js?v=a0ee4c7a"></script>
+<script src="boot.js?v=c0f2a86d"></script>
 </body>
 </html>

@@ -17,7 +17,7 @@
    ============================================================ */
 // 배포 직후 브라우저에 예전 index.html(최대 10분 저장)이 남아 있으면 새 app.js 와 화면 틀이 맞지 않아 탭이 비어 보임
 // (GitHub Pages 는 ?v= 꼬리표와 관계없이 최신 파일을 줌). 판번호가 다르면 주소를 바꿔 한 번만 새로 받는다.
-const UI_VERSION = "2026100801";
+const UI_VERSION = "2026101001";
 (() => {
   const m = document.querySelector('meta[name="ui-version"]');
   if ((m && m.content) === UI_VERSION) return;
@@ -1210,6 +1210,7 @@ document.addEventListener("keydown", e => { const tr = e.target.closest && e.tar
 document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
   document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", x === t));
   document.querySelectorAll(".panel").forEach(p => p.hidden = p.id !== "panel-" + t.dataset.tab);
+  try { if (window.top !== window && window.top.SSEqTabChanged) window.top.SSEqTabChanged(t.dataset.tab); } catch (e) {}   // 첫 화면 왼쪽 메뉴도 같은 탭 표시
   hideTip(); if (t.dataset.tab === "move") { fitFilters(); stickHead($("matrix")); } if (t.dataset.tab === "branch") stickHead($("branchTable"));
 });
 const dateInput = $("dateInput"); dateInput.value = S.date;
