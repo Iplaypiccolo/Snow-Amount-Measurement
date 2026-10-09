@@ -60,14 +60,14 @@ def t_load(p):
 
 def t_move_hierarchy(p):
     """이동 현황: 본부 → 지사 계층, 그날 지원받는 지사만, 본부 줄은 장비 1대를 한 번만 셈"""
-    check(rows(p) == ["대관령", "양양", "엄정"] and hqs(p) == ["강원본부", "충북본부"] and p.locator("#matrix tbody th.hqc").first.get_attribute("rowspan") == "2" and p.locator("#matrix tbody tr.hqrow").count() == 0, (rows(p), hqs(p)))
+    check(rows(p) == ["대관령", "양양", "엄정"] and hqs(p) == ["강원", "충북"] and p.locator("#matrix tbody th.hqc").first.get_attribute("rowspan") == "2" and p.locator("#matrix tbody tr.hqrow").count() == 0, (rows(p), hqs(p)))
     head = p.locator("#matrix thead").inner_text(); check("제설차" in head and "제설기" in head and "이동정비차" not in head and "차 " not in p.locator("#matrix").inner_text(), "제설차·제설기로 정확히, 이동정비차 없음")
     hd = [h.strip() for h in p.locator("#matrix thead tr").first.locator("th").all_inner_texts()]
     check(hd[0].startswith("본부") and hd[1] == "합계" and hd[2].startswith("서울경기"), f"합계 열이 지사 이름과 첫 지원기관 사이: {hd[:3]}")
     check(p.locator("#moveTitle").inner_text().endswith("장비 지원 현황") and p.locator("#perm-move").count() == 0 and "어느 기관에서" not in p.locator("body").inner_text(), "제목·안내 정리")
     go_date(p, day(p, 2))            # 모레: V001(제설차)이 대관령 → 양양 두 곳
     go_date(p, day(p, -7))
-    check(rows(p) == ["춘천", "엄정"] and hqs(p) == ["강원본부", "충북본부"], (rows(p), hqs(p)))
+    check(rows(p) == ["춘천", "엄정"] and hqs(p) == ["강원", "충북"], (rows(p), hqs(p)))
     go_date(p, day(p, 30)); check("이동하는 장비가 없습니다" in p.locator("#matrix").inner_text(), "빈 날")
     check(p.locator("#destList .hq-head").count() == 0, "카드 없음")
 
@@ -754,8 +754,8 @@ def t_moves_between_branches(p):
     check("지난 날짜" not in p.locator("#refTime").inner_text() and "앞 날짜" not in p.locator("#refTime").inner_text(), "오늘은 기준 시각만")
     check(p.locator(f".dest[data-bid='{dg}']").locator(".vrow[data-vid=V003]").count() == 0, "떠난 지사(대관령)에서는 안 보임")
     v3 = p.locator(f".dest[data-bid='{yy}']").locator(".vrow[data-vid=V003]")
-    check(v3.count() == 1 and "00:00 이동(대관령→양양) 완료" in v3.inner_text() and "incoming" not in (v3.get_attribute("class") or ""), "간 지사(양양)에서만, 완료 표시")
-    check("00:00 1대 대관령→양양 완료" in cell("양양").inner_text() and "00:00 1대 대관령→양양 완료" in cell("대관령").inner_text(), "표 숫자 밑 이동 내역(완료)")
+    check(v3.count() == 1 and "이동" not in v3.inner_text() and "incoming" not in (v3.get_attribute("class") or ""), "간 지사(양양)에서만, 이미 한 이동 표지는 없음: " + v3.inner_text())
+    check("00:00" not in cell("양양").inner_text() and "00:00" not in cell("대관령").inner_text(), "표: 이미 한 이동은 숫자에만 반영, 내역은 안 보임")
     # 연속지원 시작 시각: 내일 대관령 = 오늘부터 이어서 지원 중('미정' 대신)
     go_date(p, day(p, 1))
     t = p.locator(f".dest[data-bid='{dg}']").locator(".dest-time").inner_text()

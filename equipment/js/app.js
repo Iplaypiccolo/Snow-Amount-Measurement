@@ -428,17 +428,17 @@ function renderMatrix() {
      used = new Set(moves.flatMap(m => m.stops));
   const sel = (org, type) => moves.filter(m => (org == null || m.v.org === org) && m.v.type === type);
   const cnt = (org, ids, type) => sel(org, type).filter(m => !ids || ids.has(m.pos)).length;        // 지금(기준 시각) 있는 지사로 셈
-  // 그 지사로 들어오거나 나가는 이동: "06:00 1대 인천→수원"(같은 시각·같은 길은 묶음). 이미 한 이동은 흐리게
+  // 그 지사로 들어오거나 나갈 이동(아직 안 한 것만): "06:00 1대 인천→수원"(같은 시각·같은 길은 묶음). 이미 한 이동은 안 보임(숫자에만 반영, 사용자 결정 2026-10-09)
   const notes = (org, ids, type) => { if (!ids) return ""; const g = new Map();
-    sel(org, type).forEach(m => m.legs.forEach(l => { if (!ids.has(l.from) && !ids.has(l.to)) return; const k = [l.t, l.from, l.to, l.done].join("|"); g.set(k, { ...l, n: ((g.get(k) || {}).n || 0) + 1 }); }));
-    return [...g.values()].sort((a, b) => (a.t || "99").localeCompare(b.t || "99")).map(l => `<span class="mvn${l.done ? " done" : ""}">${esc(l.t || "시각 미정")} ${l.n}대 ${esc(bn(l.from))}→${esc(bn(l.to))}${l.done ? " 완료" : ""}</span>`).join(""); };
+    sel(org, type).forEach(m => m.legs.forEach(l => { if (l.done || (!ids.has(l.from) && !ids.has(l.to))) return; const k = [l.t, l.from, l.to].join("|"); g.set(k, { ...l, n: ((g.get(k) || {}).n || 0) + 1 }); }));
+    return [...g.values()].sort((a, b) => (a.t || "99").localeCompare(b.t || "99")).map(l => `<span class="mvn">${esc(l.t || "시각 미정")} ${l.n}대 ${esc(bn(l.from))}→${esc(bn(l.to))}</span>`).join(""); };
   // 숫자를 누르면 아래 세부내역의 그 지사(본부)·지원기관·장비 종류 줄로 이동(jumpToDetail). sc = 줄 범위(본부 data-mh / 지사 data-mb / 합계 없음)
   const cells = (ids, sc = "") => cols.map(o => MOVE_TYPES.map((t, k) => { const n = o === "지역본부" ? 0 : cnt(o, ids, t), mv = o === "지역본부" ? "" : notes(o, ids, t);
     return `<td class="${k ? "c2" : "c1"}${o == null ? " tot" : ""}${n || mv ? "" : " zero"}">${n ? `<button type="button" class="mnum" ${sc} data-mo="${o == null ? "" : esc(o)}" data-mt="${t}" title="아래 세부내역으로 이동">${n}</button>` : mv ? `<span class="mnum0">0</span>` : "·"}${mv}</td>`; }).join("")).join("");
   let body = "";
   S.hqs.forEach(h => {
     const brs = S.order.filter(b => b.hq_id === h.id && used.has(b.id)); if (!brs.length) return;
-    brs.forEach((b, i) => { body += `<tr class="brrow${i === brs.length - 1 ? " grpend" : ""}">${i ? "" : `<th class="hqc" scope="rowgroup" rowspan="${brs.length}">${esc(h.name)}<span class="sub">본부</span></th>`}<th scope="row">${esc(b.name)}</th>${cells(new Set([b.id]), `data-mb="${esc(b.id)}"`)}</tr>`; });
+    brs.forEach((b, i) => { body += `<tr class="brrow${i === brs.length - 1 ? " grpend" : ""}">${i ? "" : `<th class="hqc" scope="rowgroup" rowspan="${brs.length}">${esc(h.name)}</th>`}<th scope="row">${esc(b.name)}</th>${cells(new Set([b.id]), `data-mb="${esc(b.id)}"`)}</tr>`; });
   });
   $("matrix").innerHTML = `<thead><tr><th class="l" scope="col" rowspan="2" colspan="2">본부 · 피지원 지사</th>${cols.map(o => `<th scope="colgroup" colspan="2" class="orgh${o == null ? " tot" : ""}">${o == null ? "합계" : esc(o)}${o === "지역본부" ? '<span class="sub">연동 예정</span>' : ""}</th>`).join("")}</tr>` +
     `<tr>${cols.map(o => MOVE_TYPES.map((t, k) => `<th scope="col" class="${k ? "c2" : "c1"}${o == null ? " tot" : ""}">${t}</th>`).join("")).join("")}</tr></thead>` +
@@ -487,9 +487,9 @@ function vehicleRow(v, stops, rec, bid, m) {
   const k = rec && bid ? rec.stops.indexOf(bid) : -1;
   const cont = !!(rec && bid && k === 0 && isCont(v.id, S.date, bid));   // 전날부터 이어서 지원(연속지원)
   const eta = rec && bid && k === 0 && !cont ? (rec.times || [])[0] : null;   // 첫 지사에 도착할 예상 시각(두 번째 지사부터는 '이동' 시각)
-  // 이동 표시: 지금 있는 지사 = 들어온 이동 + 다음에 나갈 이동, 앞으로 갈 지사 = 들어올 이동
-  const lg = m && k >= 0 ? (k === m.p ? [m.legs[k - 1], m.legs[k]] : [m.legs[k - 1]]).filter(Boolean) : [];
-  const mvTags = lg.map(l => `<span class="tag mv${l.done ? " done" : ""}">${esc(legText(l))}${l.done ? " 완료" : ""}</span>`).join("");
+  // 이동 표시(아직 안 한 이동만): 지금 있는 지사 = 다음에 나갈 이동, 앞으로 갈 지사 = 들어올 이동. 이미 한 이동은 안 보임
+  const lg = m && k >= 0 ? (k === m.p ? [m.legs[k]] : [m.legs[k - 1]]).filter(l => l && !l.done) : [];
+  const mvTags = lg.map(l => `<span class="tag mv">${esc(legText(l))}</span>`).join("");
   return `<button type="button" class="vrow${m && k > m.p ? " incoming" : ""}" data-vid="${esc(v.id)}" data-vo="${esc(v.org)}" data-vt="${esc(v.type)}"><span class="plate">${esc(vval(v, "plate"))}</span><span class="vtype">${esc(v.type)}</span>
     <span class="status-wrap">${hasBlower(v) ? `<span class="tag blw-tag">블로워 ${esc(blowerText(v))}</span>` : ""}${mvTags}${cont ? `<span class="tag eta">연속지원</span>` : eta ? `<span class="tag eta">${esc(eta)} 도착 예상</span>` : ""}</span></button>`;
 }
