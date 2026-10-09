@@ -1,0 +1,6 @@
+/* Pretendard(무료 글꼴, SIL OFL 1.1 — LICENSE-Pretendard.txt). 자주 쓰는 한글 2,350자 판(subset), 4가지 굵기.
+   출처: pretendard@1.3.9 공식 배포. 사이트 안에 두어 외부 서버를 부르지 않음(보안 정책 그대로). 드문 글자는 다음 글꼴로 보임 */
+@font-face{font-family:"Pretendard";font-weight:400;font-style:normal;font-display:swap;src:url("Pretendard-Regular.subset.woff2") format("woff2");}
+@font-face{font-family:"Pretendard";font-weight:500;font-style:normal;font-display:swap;src:url("Pretendard-Medium.subset.woff2") format("woff2");}
+@font-face{font-family:"Pretendard";font-weight:600;font-style:normal;font-display:swap;src:url("Pretendard-SemiBold.subset.woff2") format("woff2");}
+@font-face{font-family:"Pretendard";font-weight:700;font-style:normal;font-display:swap;src:url("Pretendard-Bold.subset.woff2") format("woff2");}

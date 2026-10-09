@@ -46,7 +46,7 @@ def run(name, fn, browser):
 def t_locked_before_login(b, ctx, m):
     reqs = []; p = open_site(ctx, m, reqs=reqs)
     check(p.locator("#ssGate").is_visible() and p.locator("#ssU").is_visible() and p.locator("#ssP").is_visible(), "로그인 화면이 보여야 함")
-    check(not in_app(p) and not p.locator(".sidenav").is_visible() and not p.locator("#page-snow").is_visible(), "앱 화면이 보이면 안 됨")
+    check(not in_app(p) and not p.locator(".topnav").is_visible() and not p.locator("#page-snow").is_visible(), "앱 화면이 보이면 안 됨")
     check(not data_fetched(reqs), f"로그인 전에 자료를 불러옴: {data_fetched(reqs)}")
     check(p.evaluate("typeof window.HIERARCHY === 'undefined' && typeof window.JURIS === 'undefined'"), "로그인 전에 자료가 메모리에 있음")
     check(ls(p, "ss_session") is None and ss(p, "ss_session") is None, "로그인 정보가 없어야 함")
@@ -61,29 +61,29 @@ def t_wrong_and_empty(b, ctx, m):
 
 def t_login_session_only(b, ctx, m):
     reqs = []; p = open_site(ctx, m, reqs=reqs)
-    typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".sidenav", state="visible")
+    typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".topnav", state="visible")
     check(in_app(p) and p.locator("#ssGate").is_hidden(), "로그인 뒤 화면이 열려야 함")
     check("관리자1" in p.locator("#ssUser").inner_text() and p.locator("#ssUser a").count() == 1 and p.locator("#ssLogout").count() == 1, p.locator("#ssUser").inner_text())
     p.wait_for_function("window.GridUI && GridUI._state().inited", timeout=60000)
     check(len(data_fetched(reqs)) >= 5, "로그인 뒤에는 자료를 불러와야 함")
     check(ss(p, "ss_session") and ls(p, "ss_session") is None and ls(p, "ss_saved_user") is None, "기본은 탭을 닫으면 사라지는 저장소에만 저장")
-    p.reload(); p.wait_for_selector("body.authed", timeout=20000); check(p.locator(".sidenav").is_visible(), "새로고침해도 로그인 유지(같은 탭)")
+    p.reload(); p.wait_for_selector("body.authed", timeout=20000); check(p.locator(".topnav").is_visible(), "새로고침해도 로그인 유지(같은 탭)")
     p2 = open_site(ctx, m); check(p2.locator("#ssGate").is_visible() and not in_app(p2), "새 탭에서는 다시 로그인해야 함(자동 로그인을 안 켰으므로)")
 
 def t_remember_id(b, ctx, m):
-    p = open_site(ctx, m); typed_login(p, "admin-01", SBM.ADMIN_PW, remember=True, auto=False); p.wait_for_selector(".sidenav", state="visible")
+    p = open_site(ctx, m); typed_login(p, "admin-01", SBM.ADMIN_PW, remember=True, auto=False); p.wait_for_selector(".topnav", state="visible")
     check(ls(p, "ss_saved_user") == "admin-01" and SBM.ADMIN_PW not in p.evaluate("JSON.stringify(localStorage)"), "아이디만 저장되어야 함")
     p.click("#ssLogout"); p.wait_for_selector("#ssU")
     check(p.input_value("#ssU") == "admin-01" and p.locator("#ssRemember").is_checked() and p.input_value("#ssP") == "", "로그아웃 뒤에도 아이디가 채워져 있어야 함")
     check(p.evaluate("document.activeElement.id") == "ssP", "아이디가 있으면 비밀번호 칸에 커서")
     check(ls(p, "ss_session") is None and ss(p, "ss_session") is None, "로그아웃하면 로그인 정보는 지워짐")
-    typed_login(p, "admin-01", SBM.ADMIN_PW, remember=False); p.wait_for_selector(".sidenav", state="visible")
+    typed_login(p, "admin-01", SBM.ADMIN_PW, remember=False); p.wait_for_selector(".topnav", state="visible")
     check(ls(p, "ss_saved_user") is None, "체크를 풀고 로그인하면 저장된 아이디가 지워져야 함")
     p.click("#ssLogout"); p.wait_for_selector("#ssU"); check(p.input_value("#ssU") == "", "다음엔 빈칸")
     typed_login(p, "admin-01", "wrong-pass-zzz", remember=True); check(p.input_value("#ssU") == "admin-01" and p.locator("#ssRemember").is_checked(), "로그인 실패해도 입력한 아이디·체크는 유지")
 
 def t_auto_login(b, ctx, m):
-    p = open_site(ctx, m); typed_login(p, "admin-01", SBM.ADMIN_PW, auto=True); p.wait_for_selector(".sidenav", state="visible")
+    p = open_site(ctx, m); typed_login(p, "admin-01", SBM.ADMIN_PW, auto=True); p.wait_for_selector(".topnav", state="visible")
     s = json.loads(ls(p, "ss_session")); left = (s["auto_until"] - time.time() * 1000) / DAY
     check(s["persist"] is True and 6.9 < left <= 7.01, f"관리자는 7일: {left:.2f}일"); check(ss(p, "ss_session") is None, "자동 로그인은 탭을 닫아도 남는 저장소에")
     check("password" not in json.dumps(s).lower() and SBM.ADMIN_PW not in json.dumps(s), "비밀번호가 저장되면 안 됨")
@@ -95,7 +95,7 @@ def t_auto_login(b, ctx, m):
     # 일반 계정은 30일
     m.users["equip-01"]["profile"]["must_change"] = False
     p4 = open_site(ctx, m); p4.evaluate("localStorage.clear()"); p4.reload(); p4.wait_for_selector("#ssU")
-    typed_login(p4, "equip-01", "Equip#Pass-8821xY", auto=True); p4.wait_for_selector(".sidenav", state="visible")
+    typed_login(p4, "equip-01", "Equip#Pass-8821xY", auto=True); p4.wait_for_selector(".topnav", state="visible")
     left = (json.loads(ls(p4, "ss_session"))["auto_until"] - time.time() * 1000) / DAY; check(29.9 < left <= 30.01, f"일반 계정은 30일: {left:.2f}")
     check(p4.locator("#ssUser a").count() == 0, "관리자가 아니면 '관리' 링크가 없어야 함")
 
@@ -122,13 +122,13 @@ def t_special_accounts(b, ctx, m):
 def t_branch_set_by_admin_enters_main_directly(b, ctx, m):
     """관리자가 정한 비밀번호(변경 요구 없음)로 지사 담당자가 첫 화면에 바로 들어감"""
     x = m.users["exchungju"]; x["password"] = "Snow#Ride-2030k"; x["profile"]["must_change"] = False
-    reqs = []; p = open_site(ctx, m, reqs=reqs); typed_login(p, "exchungju", "Snow#Ride-2030k"); p.wait_for_selector(".sidenav", state="visible")
+    reqs = []; p = open_site(ctx, m, reqs=reqs); typed_login(p, "exchungju", "Snow#Ride-2030k"); p.wait_for_selector(".topnav", state="visible")
     check(in_app(p) and "충주지사" in p.locator("#ssUser").inner_text() and "새 비밀번호를 먼저" not in p.locator("body").inner_text(), "변경 요구 없이 바로 들어가야 함")
     p.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)      # 지사 계정에는 예보 격자 편입 화면이 없으므로 관할 화면으로 확인
     check(p.locator("#tabGridBtn").count() == 0, "지사 계정에는 예보 격자 편입 탭이 없어야 함")
 
 def t_cross_tab_logout(b, ctx, m):
-    p1 = open_site(ctx, m); typed_login(p1, "admin-01", SBM.ADMIN_PW, auto=True); p1.wait_for_selector(".sidenav", state="visible")
+    p1 = open_site(ctx, m); typed_login(p1, "admin-01", SBM.ADMIN_PW, auto=True); p1.wait_for_selector(".topnav", state="visible")
     p2 = open_site(ctx, m); p2.wait_for_selector("body.authed", timeout=20000)
     p1.click("#ssLogout"); p1.wait_for_selector("#ssU"); p2.wait_for_selector("#ssGate:not([hidden]) #ssU", timeout=15000)
     check(not in_app(p2), "다른 탭에서 로그아웃하면 이 탭도 잠겨야 함")
@@ -137,7 +137,7 @@ def t_network_problems(b, ctx, m):
     s = SBM.session_for(m, "admin-01"); ctx.add_init_script("if (!localStorage.getItem('ss_session')) localStorage.setItem('ss_session', %s)" % json.dumps(json.dumps(s)))
     m.down = True; p = open_site(ctx, m)
     check("서버에 연결하지 못했습니다" in p.locator("#ssGate").inner_text() and not in_app(p), "연결이 안 되면 안내"); check(ls(p, "ss_session") is not None, "연결 문제로 로그인 정보를 지우면 안 됨")
-    m.down = False; p.click("#ssRetry"); p.wait_for_selector("body.authed", timeout=20000); check(p.locator(".sidenav").is_visible(), "다시 시도하면 들어가져야 함")
+    m.down = False; p.click("#ssRetry"); p.wait_for_selector("body.authed", timeout=20000); check(p.locator(".topnav").is_visible(), "다시 시도하면 들어가져야 함")
     ctx2 = b.new_context()
     try:
         m.down = True; p2 = open_site(ctx2, m); typed_login(p2, "admin-01", SBM.ADMIN_PW); check("연결할 수 없습니다" in p2.locator(".ss-msg.warn").inner_text() and not in_app(p2), "로그인 중 연결 문제")
@@ -150,18 +150,18 @@ def t_equipment_gate(b, ctx, m):
         check("로그인이 필요합니다" in p.locator("body").inner_text() and p.locator(".tab").count() == 0, "로그인 없이 직접 열면 안내만")
         check(p.locator("a[target=_top]").get_attribute("href") == "../", "첫 화면으로 가는 링크")
     finally: ctx_new.close()
-    p = open_site(ctx, m); typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".sidenav", state="visible"); p.click(".page-btn[data-page=equip]"); p.wait_for_timeout(1200)
+    p = open_site(ctx, m); typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".topnav", state="visible"); p.click(".page-btn[data-page=equip]"); p.wait_for_timeout(1200)
     check(p.frame_locator("#equipFrame").locator(".tab").count() >= 3, "로그인한 뒤 첫 화면에서 들어가면 장비 지원 화면이 열려야 함")
 
 def t_logout_from_equip_then_login_starts_first_screen(b, ctx, m):
     """(사용자 신고 2026-10-05) 장비 지원에서 로그아웃한 뒤 다시 로그인하면 '첫 화면으로 가서 로그인하세요'만 계속 나옴
        → 로그아웃하면 주소의 #equip 을 지우고, 다시 로그인하면 항상 첫 화면(강설량 측정)부터. 장비 지원은 로그인한 뒤에만 불러옴"""
-    p = open_site(ctx, m); typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".sidenav", state="visible")
+    p = open_site(ctx, m); typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".topnav", state="visible")
     p.click(".page-btn[data-page=equip]"); p.wait_for_timeout(1200); check(p.url.endswith("#equip"), "장비 지원을 열면 주소에 #equip")
     p.click("#ssLogout"); p.wait_for_selector("#ssU", timeout=20000); p.wait_for_timeout(300)
     check(any("scope=local" in u for u in getattr(m, "logout_urls", [])), "로그아웃은 이 접속만(같은 아이디의 다른 접속은 유지): " + str(getattr(m, "logout_urls", [])))
     check("#equip" not in p.url and not p.locator("#equipFrame").get_attribute("src"), "로그아웃하면 #equip 없이, 장비 지원은 아직 안 불러옴")
-    typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".sidenav", state="visible"); p.wait_for_timeout(500)
+    typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".topnav", state="visible"); p.wait_for_timeout(500)
     check(p.locator("#page-snow").is_visible() and p.locator(".page-btn[data-page=snow]").get_attribute("class").find("active") >= 0, "다시 로그인하면 첫 화면(강설량 측정)")
     p.click(".page-btn[data-page=equip]"); p.wait_for_timeout(1500)
     fr = p.frame_locator("#equipFrame")
@@ -170,22 +170,22 @@ def t_logout_from_equip_then_login_starts_first_screen(b, ctx, m):
     p.click("#ssLogout"); p.wait_for_selector("#ssU", timeout=20000)
     p.goto(T.URL + "?again=1#equip"); p.wait_for_selector("#ssU", timeout=20000)      # 새로 불러오기(같은 주소에 #만 바꾸면 다시 불러오지 않음)
     check(not p.locator("#equipFrame").get_attribute("src"), "로그인 전에는 장비 지원을 불러오지 않음")
-    typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".sidenav", state="visible"); p.wait_for_timeout(500)
+    typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".topnav", state="visible"); p.wait_for_timeout(500)
     check(p.locator("#page-snow").is_visible() and "#equip" not in p.url, "예전 주소로 열어도 첫 화면부터")
 
 def t_snow_snapshot_cached(b, ctx, m):
     """적설 요약본은 시즌별(마이그레이션 31)이고 이 브라우저에 보관: 처음엔 목록 + 최근 시즌만 받고, 다시 열 때는 만든 시각만 묻고 같으면 받지 않음(무료 내려받기 한도 절약)"""
-    p = open_site(ctx, m); typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".sidenav", state="visible"); p.wait_for_timeout(800)
+    p = open_site(ctx, m); typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".topnav", state="visible"); p.wait_for_timeout(800)
     first = list(getattr(m, "snow_selects", []))
     check(first == ["like.snow*|key,built_at", 'in.("snow")|key,body,built_at', 'in.("snow:2024-11-15~2025-03-15")|key,body,built_at'], f"처음: 만든 시각 → 목록 → 최근 시즌: {first}")
-    p.reload(); p.wait_for_selector(".sidenav", state="visible"); p.wait_for_timeout(800)
+    p.reload(); p.wait_for_selector(".topnav", state="visible"); p.wait_for_timeout(800)
     again = getattr(m, "snow_selects", [])[len(first):]
     check(again == ["like.snow*|key,built_at"], f"다시 열면 만든 시각만: {again}")
     check(p.evaluate("Object.keys(SNOW_DATA.seasons).length") > 0, "보관한 요약본으로 화면이 그려짐")
 
 def t_no_secrets_and_safe_text(b, ctx, m):
     m.add("exxss", "<img src=x onerror=window.__x=1>", "branch", "B001", "Xss#Pass-998877aZ"); m.users["exxss"]["profile"]["must_change"] = False
-    p = open_site(ctx, m); typed_login(p, "exxss", "Xss#Pass-998877aZ", remember=True, auto=True); p.wait_for_selector(".sidenav", state="visible")
+    p = open_site(ctx, m); typed_login(p, "exxss", "Xss#Pass-998877aZ", remember=True, auto=True); p.wait_for_selector(".topnav", state="visible")
     check(p.evaluate("window.__x") is None and p.locator("#ssUser img").count() == 0 and "<img" in p.locator("#ssUser").inner_text(), "이름에 태그가 있어도 글자로만 보여야 함")
     dump = p.evaluate("JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage), document.documentElement.outerHTML.length, location.href])")
     check("Xss#Pass" not in dump, "저장소·주소에 비밀번호가 없어야 함")

@@ -16,7 +16,7 @@
   --wait: #6B7785;
   --wait-bg: #EDF0F3;
   --radius: 10px;
-  --font: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+  --font: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
   box-sizing: border-box;
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -38,7 +38,7 @@
 html { scroll-padding-top: env(safe-area-inset-top, 0px); }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
-  font-family: var(--font); font-size: 15px; line-height: 1.55;
+  font-family: var(--font); font-size: 15px; line-height: 1.55; font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
 }
 button, input, select { font: inherit; color: inherit; }
@@ -212,7 +212,7 @@ table.branch { border-collapse: collapse; width: 100%; min-width: 820px; font-va
   position: fixed; z-index: 41; background: var(--surface); color: var(--ink);
   right: 0; top: 0; bottom: 0; width: min(420px, 100%);
   padding: calc(20px + env(safe-area-inset-top, 0px)) 22px calc(20px + env(safe-area-inset-bottom, 0px));
-  overflow-y: auto; box-shadow: -8px 0 30px rgba(0,0,0,.18);
+  overflow-y: auto; box-shadow: -8px 0 30px rgba(16,36,58,.18);
   animation: slide .2s ease-out;
 }
 @keyframes slide { from { transform: translateX(24px); opacity: .6; } }
@@ -269,7 +269,7 @@ input[data-hv], select[data-hv] { border-bottom: 1px dotted var(--ink-soft); }
 .tip {
   position: fixed; z-index: 60; max-width: 280px; pointer-events: none;
   background: #16202B; color: #F1F5F8; border-radius: 8px; padding: 9px 11px;
-  font-size: 12.5px; line-height: 1.5; box-shadow: 0 6px 20px rgba(0,0,0,.3);
+  font-size: 12.5px; line-height: 1.5; box-shadow: 0 6px 20px rgba(16,36,58,.3);
 }
 .tip[hidden] { display: none; }
 .tip b { color: var(--plow); font-weight: 600; }
@@ -298,7 +298,7 @@ table.branch { min-width: 1080px; }
   position: sticky; bottom: env(safe-area-inset-bottom, 0px); z-index: 15; margin-top: 16px;
   display: flex; align-items: center; gap: 8px; justify-content: flex-end; flex-wrap: wrap;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 10px 14px; box-shadow: 0 -4px 16px rgba(0,0,0,.08);
+  padding: 10px 14px; box-shadow: 0 -4px 16px rgba(16,36,58,.08);
 }
 .savebar[hidden] { display: none; }
 .savebar .save-state { margin-right: auto; font-size: 13.5px; color: var(--ink-soft); }
@@ -310,7 +310,7 @@ table.branch { min-width: 1080px; }
 .toast {
   position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom, 0px));
   z-index: 70; background: #16202B; color: #F1F5F8; padding: 10px 16px; border-radius: 10px;
-  font-size: 14px; max-width: calc(100% - 32px); box-shadow: 0 6px 20px rgba(0,0,0,.3);
+  font-size: 14px; max-width: calc(100% - 32px); box-shadow: 0 6px 20px rgba(16,36,58,.3);
 }
 .toast.err { background: var(--stop); color: #fff; }
 .toast[hidden] { display: none; }
@@ -558,7 +558,7 @@ table.matrix { font-size: 15px; min-width: 900px; }
 /* 최저기온 시각 고르기(기상현황 직접입력): 단추 + 달력 팝업(시만, 분은 00) */
 #branchTable .tpick { min-width: 84px; padding: 4px 8px; text-align: center; cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums; }
 #branchTable .tpick.empty { color: var(--ink-soft); }
-.tpop { position: fixed; z-index: 60; width: 248px; padding: 10px; background: var(--surface, #fff); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); font-size: 13px; }
+.tpop { position: fixed; z-index: 60; width: 248px; padding: 10px; background: var(--surface, #fff); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(16,36,58, .18); font-size: 13px; }
 .tpop[hidden] { display: none; }
 .tp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .tp-head button { border: 0; background: none; font-size: 18px; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; color: var(--ink); }
@@ -620,6 +620,6 @@ table.matrix { font-size: 15px; min-width: 900px; }
 .eq td.vact .btn + .btn { margin-left: 4px; }
 .eq th.unh { white-space: nowrap; }
 .unhide-pop { position: fixed; z-index: 60; min-width: 240px; padding: 8px; border: 1px solid var(--line); border-radius: 10px;
-  background: var(--surface); box-shadow: 0 8px 24px rgba(0, 0, 0, .18); text-align: left; font-weight: 400; }
+  background: var(--surface); box-shadow: 0 8px 24px rgba(16,36,58, .18); text-align: left; font-weight: 400; }
 .unhide-pop .uh-row { display: flex; align-items: center; gap: 8px; padding: 4px 2px; }
 .unhide-pop .uh-row .btn { margin-left: auto; }

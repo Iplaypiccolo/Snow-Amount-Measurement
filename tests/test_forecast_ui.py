@@ -132,25 +132,27 @@ def t_pin_chart(b):
     p.locator(".fc-detail tbody tr").first.click(); p.wait_for_timeout(300)
     check(p.locator("#fc-pin").is_visible(), "옆 표의 격자 줄을 눌러도 고정"); p.click(".fc-pin-x"); p.wait_for_timeout(150); check(not p.locator("#fc-pin").is_visible(), "× 로 닫기")
 
-def t_side_menu(b):
-    """왼쪽 메뉴(2026-10-10): 장비 지원 메뉴를 누르면 안쪽 화면의 그 탭이 열리고(안쪽 머리글은 숨김), 강설량 메뉴로 돌아옴. 휴대폰 폭에서는 ☰ 로 여닫음"""
+def t_top_menu(b):
+    """위쪽 메뉴(2026-10-10): 1줄 페이지 전환(강설량 측정/장비 지원), 2줄은 그 페이지의 메뉴만. 장비 메뉴는 안쪽 화면의 탭을 대신 누름(안쪽 머리글은 숨김)"""
     p, m = open_page(b); p.wait_for_timeout(500)
-    check(p.locator(".sidenav").is_visible() and p.locator(".shell").get_attribute("data-page") == "snow", "왼쪽 메뉴, 처음은 강설량 측정")
-    check(p.locator("#eqLogBtn").is_visible(), "관리자에게는 로그 기록 메뉴")
-    p.click(".eq-btn[data-eqtab=branch]"); p.wait_for_timeout(2500)
+    check(p.locator(".topnav").is_visible() and p.locator(".shell").get_attribute("data-page") == "snow", "위쪽 메뉴, 처음은 강설량 측정")
+    check(p.locator(".tab-btn[data-tab=map]").is_visible() and not p.locator(".eq-btn[data-eqtab=move]").is_visible(), "강설량 페이지에서는 강설량 메뉴만")
+    check(p.evaluate("getComputedStyle(document.body).fontFamily").lstrip('"').startswith('Pretendard') and p.evaluate("document.fonts.check('700 14px Pretendard')"), "글꼴 Pretendard(사이트 안 파일)")
+    p.click(".page-btn[data-page=equip]"); p.wait_for_timeout(2500)
+    check(p.locator(".eq-btn[data-eqtab=move]").is_visible() and not p.locator(".tab-btn[data-tab=map]").is_visible() and p.locator("#eqLogBtn").is_visible(), "장비 지원 페이지에서는 장비 메뉴만(관리자는 로그 기록도)")
+    p.click(".eq-btn[data-eqtab=branch]"); p.wait_for_timeout(800)
     fr = p.frame_locator("#equipFrame")
-    check(p.locator("#page-equip").is_visible() and fr.locator(".tab[data-tab=branch]").get_attribute("aria-selected") == "true" and fr.locator("#panel-branch").is_visible(), "지사별 요청·편성이 열림")
+    check(fr.locator(".tab[data-tab=branch]").get_attribute("aria-selected") == "true" and fr.locator("#panel-branch").is_visible(), "지사별 요청·편성이 열림")
     check(not fr.locator(".topbar").is_visible() and "active" in p.locator(".eq-btn[data-eqtab=branch]").get_attribute("class"), "안쪽 머리글은 숨기고 메뉴에 표시")
     p.click(".eq-btn[data-eqtab=move]"); p.wait_for_timeout(500)
     check(fr.locator("#panel-move").is_visible() and not fr.locator("#panel-branch").is_visible(), "이동 현황으로 바뀜")
-    p.click(".tab-btn[data-tab=snowtable]"); p.wait_for_timeout(400)
-    check(p.locator("#page-snow").is_visible() and not p.locator("#page-equip").is_visible() and p.locator("#view-snowtable").is_visible(), "강설량 메뉴를 누르면 그 화면으로")
+    p.click(".page-btn[data-page=snow]"); p.wait_for_timeout(300); p.click(".tab-btn[data-tab=snowtable]"); p.wait_for_timeout(400)
+    check(p.locator("#page-snow").is_visible() and not p.locator("#page-equip").is_visible() and p.locator("#view-snowtable").is_visible(), "강설량 측정으로 돌아와 메뉴 고르기")
     p.set_viewport_size({"width": 390, "height": 844}); p.wait_for_timeout(300)
-    check(not p.locator(".tab-btn[data-tab=map]").is_visible() and p.locator("#snToggle").is_visible(), "휴대폰 폭: 메뉴는 접혀 있음")
-    p.click("#snToggle"); p.wait_for_timeout(200); p.click(".tab-btn[data-tab=map]"); p.wait_for_timeout(300)
-    check(p.locator("#view-map").is_visible() and not p.locator(".tab-btn[data-tab=map]").is_visible(), "☰ 로 열고 고르면 닫힘")
+    box = p.locator(".tn-tabs").bounding_box()
+    check(p.locator(".tab-btn[data-tab=forecast]").is_visible() and box and box["width"] <= 390 and p.evaluate("document.documentElement.scrollWidth <= 392"), "휴대폰 폭: 메뉴 줄은 옆으로 밀어 보기, 화면은 가로로 넘치지 않음")
 
-TESTS = [t_pin_chart, t_first_tab_and_order, t_levels, t_open_from_equipment, t_branch_user_can_view, t_side_menu]
+TESTS = [t_pin_chart, t_first_tab_and_order, t_levels, t_open_from_equipment, t_branch_user_can_view, t_top_menu]
 
 if __name__ == "__main__":
     only = sys.argv[1:]

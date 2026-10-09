@@ -79,12 +79,10 @@
   SSGate.start({ onReady: bootApp });
 })();
 
-/* 왼쪽 메뉴(2026-10-10): 강설량 측정 / 장비 지원 두 묶음. 장비 지원은 안쪽 화면(iframe)이라 그 화면의 탭을 대신 눌러 줍니다.
+/* 위쪽 메뉴(2026-10-10): 강설량 측정 / 장비 지원 전환 + 그 페이지의 메뉴 줄. 장비 지원은 안쪽 화면(iframe)이라 그 화면의 탭을 대신 눌러 줍니다.
    장비 지원은 처음 열 때 불러오고, 안쪽 화면에서는 자기 머리글·탭을 숨깁니다(equipment/index.html 의 embedded). */
 (function(){
   var shell = document.getElementById('shell');
-  var nav = document.getElementById('sideNav');
-  var toggle = document.getElementById('snToggle');
   var btns = document.querySelectorAll('.page-btn');
   var eqBtns = document.querySelectorAll('.eq-btn');
   var snow = document.getElementById('page-snow');
@@ -92,11 +90,6 @@
   var frame = document.getElementById('equipFrame');
   var theme = document.getElementById('snTheme');
   var eqTab = 'move';
-  function closeMenu(){ nav.classList.remove('open'); toggle.setAttribute('aria-expanded', 'false'); toggle.setAttribute('aria-label', '메뉴 열기'); }
-  toggle.addEventListener('click', function(){
-    var open = !nav.classList.contains('open');
-    nav.classList.toggle('open', open); toggle.setAttribute('aria-expanded', String(open)); toggle.setAttribute('aria-label', open ? '메뉴 닫기' : '메뉴 열기');
-  });
   function frameDoc(){ try { return frame.getAttribute('src') && frame.contentDocument && frame.contentDocument.readyState !== 'loading' ? frame.contentDocument : null; } catch(e){ return null; } }
   function paintEq(){ eqBtns.forEach(function(b){ b.classList.toggle('active', b.dataset.eqtab === eqTab); }); }
   function paintTheme(){
@@ -121,10 +114,10 @@
     if(name === 'snow'){ setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, 50); } // 지도 크기 다시 맞춤
     try{ history.replaceState(null, '', name === 'equip' ? '#equip' : location.pathname + location.search); }catch(e){}
   }
-  btns.forEach(function(b){ b.addEventListener('click', function(){ show(b.dataset.page); closeMenu(); }); });
+  btns.forEach(function(b){ b.addEventListener('click', function(){ show(b.dataset.page); }); });
   // 강설량 측정 메뉴: 화면 바꾸기는 app.js 가, 여기서는 그 페이지를 보여 주기만
-  document.querySelectorAll('.tab-btn').forEach(function(b){ b.addEventListener('click', function(){ if (shell.dataset.page !== 'snow') show('snow'); closeMenu(); }); });
-  eqBtns.forEach(function(b){ b.addEventListener('click', function(){ eqTab = b.dataset.eqtab; show('equip'); closeMenu(); }); });
+  document.querySelectorAll('.tab-btn').forEach(function(b){ b.addEventListener('click', function(){ if (shell.dataset.page !== 'snow') show('snow'); }); });
+  eqBtns.forEach(function(b){ b.addEventListener('click', function(){ eqTab = b.dataset.eqtab; show('equip'); }); });
   frame.addEventListener('load', function(){ applyEqTab(); paintTheme(); });
   // 안쪽 화면이 스스로 탭을 바꾼 경우(권한이 바뀌어 이동 현황으로 돌아가는 등) 메뉴도 따라감
   window.SSEqTabChanged = function(name){ eqTab = name; paintEq(); };

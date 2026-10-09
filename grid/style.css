@@ -6,7 +6,7 @@
 .gr-sub{font-size:12px;color:var(--muted);margin:2px 0 6px;}
 .gr-badge{font-size:12px;border-radius:6px;padding:5px 8px;line-height:1.45;}
 .gr-badge.ok{background:#e3f3ea;color:var(--accent-dark);} .gr-badge.warn{background:#fff1c9;color:#8a5a00;} .gr-badge.over{background:#fde8e6;color:var(--signal-red);font-weight:700;}
-.gr-tools{position:absolute;left:54px;top:12px;z-index:520;background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 8px;gap:8px;align-items:center;box-shadow:0 2px 10px rgba(0,0,0,.2);font-size:12px;}
+.gr-tools{position:absolute;left:54px;top:12px;z-index:520;background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 8px;gap:8px;align-items:center;box-shadow:0 2px 10px rgba(16,36,58,.2);font-size:12px;}
 .gr-tools .hint{color:var(--muted);}
 .gr-legend .sw{display:inline-block;width:12px;height:12px;border-radius:2px;margin:0 3px 0 8px;vertical-align:-2px;border:1.5px solid #888;}
 .gr-legend .sw1{background:rgba(60,150,90,.4);border-color:#3c965a;} .gr-legend .sw2{background:rgba(120,60,180,.3);border:3px solid #5b1a8f;}

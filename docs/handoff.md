@@ -44,6 +44,16 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-10-10 · 커밋 (이 기록 커밋 하나) · 화면 틀 다시: 위쪽 메뉴 + Pretendard + Taste Skill 점검 반영
+- 사용자 요청: Taste Skill(github.com/Leonxlnx/taste-skill, MIT)의 redesign 규칙으로 다시. **설치하지 않고**(npx 는 외부 프로그램 실행이라 안 씀) SKILL.md 내용만 읽고 적용. 사용자 결정: 메뉴는 **위쪽으로 다시**(스킬: '대시보드 왼쪽 메뉴는 흔한 AI 티'), 글꼴은 **Pretendard**.
+- 바로 앞 기록(왼쪽 메뉴)을 대체: `.sidenav` → `header.topnav`. 1줄 = 로고 · 페이지 전환(`.page-btn` 강설량 측정/장비 지원, 알약 모양 전환) · 화면 밝기(`#snTheme`, 장비 화면일 때) · 사용자(`#ssUser`). 2줄 = 지금 페이지의 메뉴만(`.sn-group[data-group]`, `.tab-btn`/`.eq-btn` 그대로, 밑줄로 선택 표시). 휴대폰은 2줄을 옆으로 밀어 봄(☰ 없앰). 장비 iframe 연동(`SSEqTabChanged`, `html.embedded`)은 그대로.
+- 글꼴: `fonts/` 에 Pretendard 1.3.9 subset(한글 2,350자) 400·500·600·700 woff2 4개(약 1.07MB) + `LICENSE-Pretendard.txt`(OFL). `fonts/pretendard.css` 를 첫 화면·장비 화면이 읽음. 사이트 안 파일이라 보안 정책(CSP) 변경 없음. 관리 콘솔(admin)은 CSP `default-src 'none'` 이라 아직 안 바꿈(바꾸려면 `font-src 'self'` 추가 필요).
+- 스킬 점검에서 넣은 것: 숫자 자리 맞춤(tabular-nums), 키보드 포커스 테두리, 버튼 눌림·전환 효과, 그림자 색을 바탕 남색 계열로(rgba(16,36,58)), 겹침 단계 `--z-nav`, '본문 바로가기' 링크(`<main id="content">`), 사이트 아이콘 `favicon.svg`, 제목 줄바꿈 균형, 탭 제목 '고속도로 제설 지원'. 데이터 출처 10번 문구 갱신(UKO CC BY 4.0 · Taste Skill MIT · Pretendard OFL).
+- 스킬 규칙 중 **뺀 것**(업무 화면에 안 맞음/보안 정책): 외부 배경 사진(picsum)·질감·유리 효과·스크롤 애니메이션·쿠키 동의·가짜 숫자.
+- 남은 점검 항목(사용자 결정 대기): 불러오는 중 화면을 표 모양 흐린 틀로, 빈 화면·오류 안내 정리(화면 코드에 alert 17곳), 관리 콘솔 색·글꼴 맞추기, 요약 카드.
+- 시험: `t_side_menu` → `t_top_menu`(페이지별 메뉴, 장비 탭 연동, Pretendard 적용, 휴대폰 가로 넘침 없음), 로그인 시험 `.sidenav` → `.topnav`.
+— ✍ Claude Code 작성
+
 ### 2026-10-10 · 커밋 (이 기록 커밋 하나) · 화면 틀: 왼쪽 메뉴 + 겨울·눈 색
 - 사용자 요청: Claude Design 시안(겨울·눈 색, Figma 'UKO' 대시보드 형식 참고) 중 **왼쪽 메뉴 형식**으로 바꾸기.
 - 첫 화면(`index.html`): 위쪽 남색 페이지 바·초록 머리글·탭 줄을 없애고 **왼쪽 메뉴**(`.sidenav`) 하나로. 묶음 제목 `.page-btn`(강설량 측정/장비 지원) 아래에 강설량 메뉴 `.tab-btn[data-tab]`(이름·순서·권한 그대로)와 장비 메뉴 `.eq-btn[data-eqtab]`(이동 현황·기관별 장비·지사별 요청·편성·로그 기록). '권한' 표지는 CSS(`[data-perm]::after`)라 글자에 안 섞임. 사용자 상자 `#ssUser` 는 메뉴 아래쪽. 860px 이하는 위쪽 줄 + ☰(`#snToggle`)로 여닫음.
