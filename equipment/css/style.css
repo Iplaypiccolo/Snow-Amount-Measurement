@@ -96,6 +96,12 @@ table.matrix { border-collapse: collapse; width: 100%; min-width: 460px; font-va
 .matrix thead th { color: var(--ink-soft); font-weight: 500; font-size: 13px; }
 .matrix th[scope="row"] { text-align: left; font-weight: 600; }
 .matrix td.zero { color: var(--line); }
+/* 지사 사이 이동: 숫자 아래 "06:00 1대 인천→수원". 이미 한 이동은 흐리게 */
+.matrix .mvn { display: block; margin-top: 2px; font-size: 11px; line-height: 1.35; color: #1E4E7C; white-space: nowrap; }
+.matrix .mvn.done { color: var(--ink-soft); }
+.matrix .mnum0 { color: var(--ink-soft); }
+:root[data-theme="dark"] .matrix .mvn:not(.done) { color: #9CC4EA; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .matrix .mvn:not(.done) { color: #9CC4EA; } }
 .matrix tfoot td, .matrix tfoot th { font-weight: 700; border-bottom: 0; }
 .matrix .sub { display: block; font-size: 11px; color: var(--ink-soft); font-weight: 400; }
 
@@ -134,6 +140,11 @@ table.matrix { border-collapse: collapse; width: 100%; min-width: 460px; font-va
 :root[data-theme="dark"] .tag.snow { background: #1B2F44; color: #9CC4EA; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tag.snow { background: #1B2F44; color: #9CC4EA; } }
 .tag.warn { background: var(--stop-bg); color: var(--stop); }
+.tag.mv { background: #E4EEF8; color: #1E4E7C; font-weight: 600; }
+.tag.mv.done { font-weight: 500; opacity: .75; }
+:root[data-theme="dark"] .tag.mv { background: #1B2F44; color: #9CC4EA; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tag.mv { background: #1B2F44; color: #9CC4EA; } }
+.vrow.incoming .plate, .vrow.incoming .vtype { opacity: .6; }   /* 아직 오지 않은(앞으로 옮겨 올) 장비 */
 
 /* 장비 한 줄 */
 .vrow {

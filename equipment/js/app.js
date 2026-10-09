@@ -394,15 +394,47 @@ function roundSel(id) {
    [4] 이동 현황 (모두 보기만)
    ============================================================ */
 const MOVE_TYPES = ["제설차", "제설기"];          // 이동 현황은 제설차·제설기만(이동정비차는 보이지 않음)
-const movesOn = date => S.vehicles.filter(v => MOVE_TYPES.includes(v.type)).map(v => { const rec = effRec(date, v.id); return { v, rec, stops: rec.stops }; }).filter(m => m.stops.length);
+// 지사 사이 이동(사용자 결정 2026-10-09): 하루에 여러 지사를 들르면 두 번째 지사부터는 '그 지사의 시각에 앞 지사에서 옮겨 감'.
+// 기준 시각(지금)이 지난 이동만 반영 — 지난 날짜는 모두 반영, 앞 날짜는 하나도 반영 안 함, 오늘은 시각이 지난 것만(시각이 없으면 오늘 안에는 반영 안 함).
+// 이동은 순서대로만 반영(앞 이동이 안 끝났으면 뒤 이동도 안 끝난 것으로)
+const nowHM = () => { const t = new Date(); return `${p2(t.getHours())}:${p2(t.getMinutes())}`; };
+const moveDone = (date, t) => { const today = todayISO(); return date < today || (date === today && !!t && t <= nowHM()); };
+function legsOf(date, rec) {
+  const st = rec.stops, tm = rec.times || [], legs = []; let p = 0;
+  for (let j = 1; j < st.length; j++) { const done = p === j - 1 && moveDone(date, tm[j] || ""); if (done) p = j; legs.push({ j, t: tm[j] || "", from: st[j - 1], to: st[j], done }); }
+  return { p, pos: st[p], legs };          // p = 지금 있는 지사의 순번, pos = 지금 있는 지사
+}
+const movesOn = date => S.vehicles.filter(v => MOVE_TYPES.includes(v.type)).map(v => { const rec = effRec(date, v.id); return { v, rec, stops: rec.stops, ...legsOf(date, rec) }; }).filter(m => m.stops.length);
+const legText = l => `${l.t || "시각 미정"} 이동(${bn(l.from)}→${bn(l.to)})`;
+// 연속지원이 언제부터인지: 전날로 거슬러 올라가며 그 지사에 처음 들어온 날·시각(불러온 날짜 범위 안에서)
+function contSince(vid, d, bid) {
+  let k = d;
+  for (let i = 0; i < 60; i++) {
+    const prev = addDays(k, -1), r = effRec(prev, vid), st = r.stops, j = st.length - 1;
+    if (j < 0 || st[j] !== bid) return { date: k, time: null };
+    if (j === 0 && isCont(vid, prev, bid)) { k = prev; continue; }
+    return { date: prev, time: (r.times || [])[j] || null };
+  }
+  return { date: k, time: null };
+}
+// 표 위의 기준 시각. 지난 날짜·앞 날짜는 이동을 어떻게 반영했는지 함께
+function refTimeText() {
+  const today = todayISO(), base = `기준 시각 ${fmtMD(today)} ${nowHM()}`;
+  return S.date < today ? base + " (지난 날짜 — 이동 모두 반영)" : S.date > today ? base + " (앞 날짜 — 이동 반영 전)" : base;
+}
 function renderMatrix() {
   // 세로 = 본부 → 지사(그날 지원받는 지사만), 가로 = 지원기관마다 제설차·제설기. 본부 줄·합계는 장비 1대를 한 번만 셈(여러 지사를 들러도)
   const moves = movesOn(S.date), src = SOURCE_ORGS(), cols = [null, ...src],   // 합계 열을 맨 앞(지사 이름 바로 옆)에
      used = new Set(moves.flatMap(m => m.stops));
-  const cnt = (org, ids, type) => moves.filter(m => (org == null || m.v.org === org) && m.v.type === type && (!ids || m.stops.some(s => ids.has(s)))).length;
+  const sel = (org, type) => moves.filter(m => (org == null || m.v.org === org) && m.v.type === type);
+  const cnt = (org, ids, type) => sel(org, type).filter(m => !ids || ids.has(m.pos)).length;        // 지금(기준 시각) 있는 지사로 셈
+  // 그 지사로 들어오거나 나가는 이동: "06:00 1대 인천→수원"(같은 시각·같은 길은 묶음). 이미 한 이동은 흐리게
+  const notes = (org, ids, type) => { if (!ids) return ""; const g = new Map();
+    sel(org, type).forEach(m => m.legs.forEach(l => { if (!ids.has(l.from) && !ids.has(l.to)) return; const k = [l.t, l.from, l.to, l.done].join("|"); g.set(k, { ...l, n: ((g.get(k) || {}).n || 0) + 1 }); }));
+    return [...g.values()].sort((a, b) => (a.t || "99").localeCompare(b.t || "99")).map(l => `<span class="mvn${l.done ? " done" : ""}">${esc(l.t || "시각 미정")} ${l.n}대 ${esc(bn(l.from))}→${esc(bn(l.to))}${l.done ? " 완료" : ""}</span>`).join(""); };
   // 숫자를 누르면 아래 세부내역의 그 지사(본부)·지원기관·장비 종류 줄로 이동(jumpToDetail). sc = 줄 범위(본부 data-mh / 지사 data-mb / 합계 없음)
-  const cells = (ids, sc = "") => cols.map(o => MOVE_TYPES.map((t, k) => { const n = o === "지역본부" ? 0 : cnt(o, ids, t);
-    return `<td class="${k ? "c2" : "c1"}${o == null ? " tot" : ""}${n ? "" : " zero"}">${n ? `<button type="button" class="mnum" ${sc} data-mo="${o == null ? "" : esc(o)}" data-mt="${t}" title="아래 세부내역으로 이동">${n}</button>` : "·"}</td>`; }).join("")).join("");
+  const cells = (ids, sc = "") => cols.map(o => MOVE_TYPES.map((t, k) => { const n = o === "지역본부" ? 0 : cnt(o, ids, t), mv = o === "지역본부" ? "" : notes(o, ids, t);
+    return `<td class="${k ? "c2" : "c1"}${o == null ? " tot" : ""}${n || mv ? "" : " zero"}">${n ? `<button type="button" class="mnum" ${sc} data-mo="${o == null ? "" : esc(o)}" data-mt="${t}" title="아래 세부내역으로 이동">${n}</button>` : mv ? `<span class="mnum0">0</span>` : "·"}${mv}</td>`; }).join("")).join("");
   let body = "";
   S.hqs.forEach(h => {
     const brs = S.order.filter(b => b.hq_id === h.id && used.has(b.id)); if (!brs.length) return;
@@ -415,7 +447,7 @@ function renderMatrix() {
   stickHead($("matrix"));
   const tr = moves.filter(m => m.v.type === "제설차").length, bl = moves.filter(m => m.v.type === "제설기").length;
   $("dateText").textContent = fmtMD(S.date); $("dateInput").value = S.date;      // 제목의 큰 날짜(누르면 달력)
-  $("summaryNote").innerHTML = `<b>제설차 ${tr}대</b> · <b>제설기 ${bl}대</b>` + (moves.some(m => m.stops.length > 1) ? "" : "");
+  $("summaryNote").innerHTML = `<b>제설차 ${tr}대</b> · <b>제설기 ${bl}대</b> · <span id="refTime">${esc(refTimeText())}</span>`;
 }
 // 이동 현황 표의 숫자 → 아래 세부내역에서 그 줄(지사 카드·본부 묶음·해당 지원기관·장비 종류)로 스크롤하고 잠깐 색으로 표시
 let flashTimer;
@@ -451,28 +483,35 @@ function fitFilters() {
 addEventListener("resize", fitFilters);
 if (window.ResizeObserver) new ResizeObserver(() => fitFilters()).observe($("filters"));   // 탭을 옮겨 다시 보일 때·iframe 크기가 바뀔 때도
 const matches = v => (S.org === "전체" || v.org === S.org) && (S.type === "전체" || v.type === S.type);
-function vehicleRow(v, stops, rec, bid) {
-  const cont = !!(rec && bid && rec.stops[0] === bid && isCont(v.id, S.date, bid));   // 전날부터 이어서 지원(연속지원)
-  const eta = rec && bid && !cont ? rec.times[rec.stops.indexOf(bid)] : null;   // 이 장비가 이 지사에 도착할 예상 시각(기관별 장비에서 입력)
-  return `<button type="button" class="vrow" data-vid="${esc(v.id)}" data-vo="${esc(v.org)}" data-vt="${esc(v.type)}"><span class="plate">${esc(vval(v, "plate"))}</span><span class="vtype">${esc(v.type)}</span>
-    <span class="status-wrap">${hasBlower(v) ? `<span class="tag blw-tag">블로워 ${esc(blowerText(v))}</span>` : ""}${cont ? `<span class="tag eta">연속지원</span>` : eta ? `<span class="tag eta">${esc(eta)} 도착 예상</span>` : ""}${stops.length > 1 ? `<span class="tag" title="${esc(stops.map(bn).join(" → "))}">${stops.length}곳 경유</span>` : ""}</span></button>`;
+function vehicleRow(v, stops, rec, bid, m) {
+  const k = rec && bid ? rec.stops.indexOf(bid) : -1;
+  const cont = !!(rec && bid && k === 0 && isCont(v.id, S.date, bid));   // 전날부터 이어서 지원(연속지원)
+  const eta = rec && bid && k === 0 && !cont ? (rec.times || [])[0] : null;   // 첫 지사에 도착할 예상 시각(두 번째 지사부터는 '이동' 시각)
+  // 이동 표시: 지금 있는 지사 = 들어온 이동 + 다음에 나갈 이동, 앞으로 갈 지사 = 들어올 이동
+  const lg = m && k >= 0 ? (k === m.p ? [m.legs[k - 1], m.legs[k]] : [m.legs[k - 1]]).filter(Boolean) : [];
+  const mvTags = lg.map(l => `<span class="tag mv${l.done ? " done" : ""}">${esc(legText(l))}${l.done ? " 완료" : ""}</span>`).join("");
+  return `<button type="button" class="vrow${m && k > m.p ? " incoming" : ""}" data-vid="${esc(v.id)}" data-vo="${esc(v.org)}" data-vt="${esc(v.type)}"><span class="plate">${esc(vval(v, "plate"))}</span><span class="vtype">${esc(v.type)}</span>
+    <span class="status-wrap">${hasBlower(v) ? `<span class="tag blw-tag">블로워 ${esc(blowerText(v))}</span>` : ""}${mvTags}${cont ? `<span class="tag eta">연속지원</span>` : eta ? `<span class="tag eta">${esc(eta)} 도착 예상</span>` : ""}${stops.length > 1 ? `<span class="tag" title="${esc(stops.map(bn).join(" → "))}">${stops.length}곳 경유</span>` : ""}</span></button>`;
 }
 function renderDest() {
   const moves = movesOn(S.date), filtered = S.org !== "전체" || S.type !== "전체", out = [];
   S.hqs.forEach(h => {
     const cards = [];
     S.order.filter(b => b.hq_id === h.id).forEach(b => {
-      const list = moves.filter(m => m.stops.includes(b.id) && matches(m.v)), arr = rval(b.id, "arrive_at");
+      const list = moves.filter(m => m.stops.indexOf(b.id) >= m.p && matches(m.v)), arr = rval(b.id, "arrive_at");   // 이미 떠난 지사에서는 안 보임
       const arriveToday = arr && arr.slice(0, 10) === S.date && rval(b.id, "confirmed");
       if (!list.length && (filtered || !arriveToday)) return;       // 그날 이동도, 확정된 도착 요청도 없는 지사는 숨김
       const t = `round_requests:${S.round},${b.id}`, fc = fcOf(b.id), snow = fc && !fc.none ? fc.snow : null, why = rval(b.id, "reason");
-      const etas = [...new Set(list.filter(m => !(m.rec.stops[0] === b.id && isCont(m.v.id, S.date, b.id))).map(m => m.rec.times[m.rec.stops.indexOf(b.id)]).filter(Boolean))].sort();   // 연속지원 장비는 도착 시각 계산에서 뺌
+      const contOf = m => m.rec.stops[0] === b.id && isCont(m.v.id, S.date, b.id);
+      const etas = [...new Set(list.filter(m => !contOf(m)).map(m => (m.rec.times || [])[m.rec.stops.indexOf(b.id)]).filter(Boolean))].sort();   // 연속지원 장비는 도착 시각 계산에서 뺌
+      // 새로 오는 장비의 시각이 없고 연속지원 장비가 있으면 '미정' 대신 그 지사에 처음 와 있던 때(전날부터 이어서 지원 중)
+      const since = etas.length ? null : list.filter(contOf).map(m => contSince(m.v.id, S.date, b.id)).sort((x, y) => (x.date + (x.time || "")).localeCompare(y.date + (y.time || "")))[0];
       cards.push(`<article class="dest" data-bid="${esc(b.id)}"><div class="dest-head">
         <h3 class="dest-name">${esc(b.name)}<span>${esc(h.name)}본부</span></h3>
-        <div class="dest-time"><strong>${etas.length ? esc(fmtMD(S.date) + " " + etas[0]) : "미정"}</strong><small>도착 예상${etas.length > 1 ? " (가장 이른 장비, 장비마다 다름)" : ""}</small></div>
+        <div class="dest-time">${since ? `<strong>${esc(fmtMD(since.date) + (since.time ? " " + since.time : ""))}부터</strong><small>연속지원 중</small>` : `<strong>${etas.length ? esc(fmtMD(S.date) + " " + etas[0]) : "미정"}</strong><small>도착 예상${etas.length > 1 ? " (가장 이른 장비, 장비마다 다름)" : ""}</small>`}</div>
         <div class="dest-meta">${list.length ? "" : `<span class="tag req">도착 요청 ${esc(fmtTime(arr))}</span>`}${snow != null ? (fc.manual ? `<span class="tag snow">적설 ${esc(fmtCm(snow))}cm · 강수 ${esc(fmtCm(fc.pcp))}mm${fc.tmin != null ? ` · 최저 ${esc(fmtTmp(fc.tmin))}℃` : ""} (직접입력)</span>` : `<span class="tag snow" data-fb="${esc(b.id)}" tabindex="0">예상 적설 ${esc(fmtCm(snow))}cm · 강수 ${esc(fmtCm(fc.pcp))}mm${fc.tmin != null ? ` · 최저 ${esc(fmtTmp(fc.tmin))}℃` : ""}</span>`) : ""}${warnOf(b.id).level ? `<span class="tag wb ${WLV[warnOf(b.id).level][0]}" data-wb="${esc(b.id)}">${esc(wlabel(warnOf(b.id).level, "대설"))}</span>` : ""}
           ${why ? `<span class="tag">사유: ${H(t, "reason", esc(why))}</span>` : ""}</div></div>
-        ${list.length ? list.map(m => vehicleRow(m.v, m.stops, m.rec, b.id)).join("") : `<div class="empty-state" style="border:0">조건에 맞는 장비가 없습니다.</div>`}</article>`);
+        ${list.length ? list.map(m => vehicleRow(m.v, m.stops, m.rec, b.id, m)).join("") : `<div class="empty-state" style="border:0">조건에 맞는 장비가 없습니다.</div>`}</article>`);
     });
     if (cards.length) out.push(`<section class="hq-block" data-hqb="${esc(h.id)}"><h3 class="hq-head">${esc(h.name)}본부</h3><div class="hq-cards">` + cards.join("") + `</div></section>`);   // 본부 하나가 한 줄을 모두 쓰고, 그 안에서 지사 카드는 좌·우 2열
   });
@@ -1179,6 +1218,10 @@ dateInput.onchange = () => setDate(dateInput.value);
 dateInput.addEventListener("click", () => { try { dateInput.showPicker(); } catch (e) {} });   // 제목의 큰 날짜를 누르면 달력이 바로 열림
 $("prevDay").onclick = () => setDate(addDays(S.date, -1));
 $("nextDay").onclick = () => setDate(addDays(S.date, 1));
+// 기준 시각: 20초마다 확인해 글자를 새로 쓰고, 이동 시각이 지나 장비 위치가 바뀌면(또는 날이 바뀌면) 표·카드를 다시 그림
+let mvSig = "";
+setInterval(() => { if (!S.date || !$("refTime")) return; const sig = S.date + "|" + todayISO() + "|" + movesOn(S.date).map(m => m.p).join(",");
+  if (sig !== mvSig) { const first = !mvSig; mvSig = sig; if (!first) { renderMatrix(); renderDest(); return; } } $("refTime").textContent = refTimeText(); }, 20000);
 // 화면 모드: [라이트 모드] [다크 모드] 두 칸 버튼. 고른 모드는 이 브라우저에 기억
 const THEME_KEY = "eq_theme";
 function curTheme() { const r = document.documentElement.dataset.theme; return r || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); }

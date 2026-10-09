@@ -735,6 +735,33 @@ def t_round_status_rules(p):
     p.select_option(f"select[data-off=V005][data-rd='{d[3]}']", "1"); p.wait_for_timeout(200); confirm_fleet(p)
     check("확정했습니다" in toast(p) and ev(p, "stOf(S.round, 'V005').off_from") == d[3], toast(p))
 
+def t_moves_between_branches(p):
+    """지사 사이 이동(2026-10-09): 두 번째 지사부터는 그 시각에 옮겨 감. 기준 시각이 지나야 반영, 표 숫자 밑·카드에 이동 내역, 연속지원 시작 시각, 기준 시각 표시"""
+    dg, yy = bid(p, "대관령"), bid(p, "양양")
+    cell = lambda name: p.locator("#matrix tbody tr", has=p.locator(f"th[scope=row]:text-is('{name}')")).locator("td.tot.c1")
+    # 모레: V001 대관령 → 14:00 양양(앞 날짜라 아직 안 옮김) — 대관령에 그대로, 양양 칸은 0 + 이동 내역
+    go_date(p, day(p, 2))
+    check("앞 날짜" in p.locator("#refTime").inner_text() and "기준 시각" in p.locator("#refTime").inner_text(), p.locator("#refTime").inner_text())
+    trucks_yy = ev(p, f"S.vehicles.filter(v => v.type === '제설차' && effRec(addDays(todayISO(), 2), v.id).stops.includes('{yy}')).length")
+    yt = cell("양양").inner_text(); dt = cell("대관령").inner_text()
+    check(yt.split()[0].strip() == str(trucks_yy - 1) and "14:00 1대 대관령→양양" in yt and "14:00 1대 대관령→양양" in dt, ("표", yt, dt, trucks_yy))
+    v1 = p.locator(f".dest[data-bid='{dg}']").locator(".vrow[data-vid=V001]").inner_text()
+    check("14:00 이동(대관령→양양)" in v1 and "연속지원" in v1 and v1.index("14:00 이동") < v1.index("연속지원"), "지금 있는 지사 줄: 이동 표시가 연속지원 앞: " + v1)
+    check(p.locator(f".dest[data-bid='{yy}']").locator(".vrow.incoming[data-vid=V001]").count() == 1, "갈 지사에는 '옮겨 올 장비'로 보임")
+    # 오늘: 이미 지난 시각(00:00)의 이동은 반영 — 떠난 지사에서 사라지고 간 지사에서만 보임
+    ev(p, f"(() => {{ const t = todayISO(), k = rk(t, 'V003'); S.routes.set(k, {{ ...(S.routes.get(k) || {{}}), stops: ['{dg}', '{yy}'], times: ['', '00:00'] }}); }})()")
+    ev(p, "setDate(todayISO())"); p.wait_for_timeout(200)
+    check("지난 날짜" not in p.locator("#refTime").inner_text() and "앞 날짜" not in p.locator("#refTime").inner_text(), "오늘은 기준 시각만")
+    check(p.locator(f".dest[data-bid='{dg}']").locator(".vrow[data-vid=V003]").count() == 0, "떠난 지사(대관령)에서는 안 보임")
+    v3 = p.locator(f".dest[data-bid='{yy}']").locator(".vrow[data-vid=V003]")
+    check(v3.count() == 1 and "00:00 이동(대관령→양양) 완료" in v3.inner_text() and "incoming" not in (v3.get_attribute("class") or ""), "간 지사(양양)에서만, 완료 표시")
+    check("00:00 1대 대관령→양양 완료" in cell("양양").inner_text() and "00:00 1대 대관령→양양 완료" in cell("대관령").inner_text(), "표 숫자 밑 이동 내역(완료)")
+    # 연속지원 시작 시각: 내일 대관령 = 오늘부터 이어서 지원 중('미정' 대신)
+    go_date(p, day(p, 1))
+    t = p.locator(f".dest[data-bid='{dg}']").locator(".dest-time").inner_text()
+    check(ev(p, "fmtMD(todayISO())") + "" in t and "부터" in t and "연속지원 중" in t and "미정" not in t, "연속지원 시작: " + t)
+    check(ev(p, f"JSON.stringify(contSince('V001', addDays(todayISO(), 1), '{dg}'))") == ev(p, "JSON.stringify({date: todayISO(), time: '21:30'})"), "V001 은 오늘 21:30 부터")
+
 def t_hide_vehicle(p):
     """숨기기(삭제 옆): 고른 기준일자부터 목록에서 빠지고, 삭제 열 제목 칸의 [숨김 취소(N)]로 되돌림. 경로 기록이 있는 장비는 삭제 거절"""
     tab(p, "fleet")
@@ -751,7 +778,7 @@ def t_hide_vehicle(p):
     check(p.locator("tr[data-vrow=V003]").count() == 1 and p.locator("#unhideBtn").count() == 0, "숨김 취소")
     tab(p, "log"); check("숨김" in p.locator("#logTable").inner_text(), "기록에 숨김")
 
-TESTS = [t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+TESTS = [t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
