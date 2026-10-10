@@ -105,5 +105,5 @@ function makeSample(today) {
     .map(([n, v, p, t, th, nx, ny, o]) => ({ branch_id: B(n), issued_at: fcTm, max_snow_24h: v, max_pcp_24h: p, max_pop_24h: o, min_tmp: t, min_tmp_at: new Date(hr + (1 + th) * 3600e3).toISOString(), worst_nx: nx, worst_ny: ny, detail: { start_at: fcStart, end_at: fcEnd, pcp_nx: nx, pcp_ny: ny } }));
   [["대관령", 12.1, 16.0, -10, 90], ["양양", 8.0, 10.5, -3, 70], ["엄정", 0, 0, 2, 20]].forEach(([n, v, p, t, o]) => Object.assign(requests.find(r => r.round_id === 2 && r.branch_id === B(n)), { fc_snow: v, fc_pcp: p, fc_pop: o, fc_tmin: t, fc_tmin_at: kst(1, "06:00"), fc_tmfc: kst(0, "05:00"), fc_at: at(0, 6) }));
   fix("대관령", "주의", [["L1022520", "강릉산지", "주의", "대설", kst(-1, "22:00"), kst(0, "01:00")]]); fix("양양", null, []); fix("엄정", null, [], "기상청 자료를 30분 넘게 받지 못함");
-  return { hqs, branches, holdings, vehicles, routes, rounds, status, requests, audit, orgs: ["서울경기", "충북", "전북", "대구경북"], zones, zoneAuto, zoneOver: [], warnActive, warnBase, warnFc, warnEf, warnEfPre, forecast };
+  return { hqs, branches, holdings, vehicles, routes, rounds, status, requests, allocations: [], audit, orgs: ["서울경기", "충북", "전북", "대구경북"], zones, zoneAuto, zoneOver: [], warnActive, warnBase, warnFc, warnEf, warnEfPre, forecast };
 }

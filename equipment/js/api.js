@@ -13,15 +13,19 @@ const Api = (() => {
   const SAMPLE = new URLSearchParams(location.search).has("sample");
   const ERR = { "42501": "권한이 없습니다(다른 기관·지사 자료이거나 권한이 바뀌었습니다).", "23505": "이미 있는 값입니다(도공번호·기준일자 중복).",
     "23514": "값의 형식이 올바르지 않습니다.", "23503": "없는 지사·장비·기준일자입니다.", "22023": "저장할 내용이 없습니다.", "54000": "한 번에 너무 많이 저장하려고 합니다.",
-    "55000": "확정한 지사는 확정을 취소한 뒤에 고칠 수 있습니다." };
+    "55000": "확정한 지사는 확정을 취소한 뒤에 고칠 수 있습니다.",
+    // 기계화부(지원장비 계정)가 지원일 1의 지사를 고를 때(마이그레이션 43)
+    "SA001": "관리자가 이 기관에 배정하지 않은 지사입니다. 기관별 배정을 확인해 주세요.", "SA002": "배정받은 대수보다 많은 장비를 같은 지사로 보낼 수 없습니다.",
+    "SA003": "지원일 1의 피지원 지사 한 곳만 고를 수 있습니다(둘째 날부터·하루 여러 곳·수정본·관리자가 정한 경로는 관리자가 고칩니다)." };
   // over = 이 요청에서만 쓰는 오류 설명(예: { "23503": "…" }) — 같은 오류 번호라도 상황마다 뜻이 달라서
   const fail = (r, fallback, over) => { const c = r && r.json && r.json.code; return { ok: false, message: (over && over[c]) || ERR[c] || fallback || "저장하지 못했습니다. 잠시 후 다시 시도해 주세요.", code: c }; };
   // 저장 함수(save_fleet)의 23514 = 다른 기준일자가 맡은 날짜이거나, 그날 지원 가능이 아닌 장비의 경로(마이그레이션 38)
   const FLEET_ERR = { "23514": "다른 기준일자가 맡은 날짜이거나, 그날 지원 가능이 아닌 장비의 경로입니다. 새로고침(F5) 후 다시 확인해 주세요.", "22023": "저장할 내용이 없거나 기준일자가 없습니다." };
   const ROUND_ERR = { "23514": "새 기준일자는 마지막 기준일자보다 뒤 날짜여야 하고, 기준일자는 마지막 것이면서 그 기간에 경로가 없을 때만 지울 수 있습니다." };
+  const ALLOC_ERR = { "23514": "편성이 확정된 지사에만 배정할 수 있습니다.", "23503": "없는 기관·지사·기준일자입니다." };
   const VDEL_ERR = { "23503": "경로 기록이 있는 장비는 지울 수 없습니다. [숨기기]를 쓰세요." };
   const NET = () => ({ ok: false, message: (window.SSAuth && SSAuth.NET_MSG) || "서버에 연결할 수 없습니다." });
-  const EQUIP_TABS = "vehicles,vehicle_routes,round_vehicle_status,round_requests,support_rounds,branch_zone_overrides";
+  const EQUIP_TABS = "vehicles,vehicle_routes,round_vehicle_status,round_requests,round_allocations,support_rounds,branch_zone_overrides";
 
   /* ---------- 서버(Supabase) ---------- */
   const server = {
@@ -48,6 +52,12 @@ const Api = (() => {
     requests(round) {
       return SSAuth.rest(`round_requests?select=round_id,branch_id,req_truck,req_blower,assigned_truck,assigned_blower,arrive_at,reason,confirmed,warn_level,warn_zones,warn_base,warn_at,warn_note,fc_snow,fc_pcp,fc_pop,fc_tmin,fc_tmin_at,fc_tmfc,fc_at,wx_manual,wx_snow,wx_pcp,wx_tmin,wx_tmin_at,wx_level,wx_fc,wx_ef&round_id=eq.${+round}`)
         .then(r => r.ok ? { ok: true, rows: r.json } : fail(r, "요청을 불러오지 못했습니다.")).catch(NET);
+    },
+    allocations(round) {     // 기관별 배정(기준일자, 기관, 지사) → 제설차·제설기 대수
+      return SSAuth.rest(`round_allocations?select=round_id,org,branch_id,truck,blower&round_id=eq.${+round}`).then(r => r.ok ? { ok: true, rows: r.json } : fail(r, "기관별 배정을 불러오지 못했습니다.")).catch(NET);
+    },
+    saveAllocations(round, rows) {
+      return SSAuth.authed("/rest/v1/rpc/save_allocations", { method: "POST", body: { p_round: round, p_rows: rows } }).then(r => r.ok ? { ok: true, result: r.json } : fail(r, null, ALLOC_ERR)).catch(NET);
     },
     warnings() {
       return SSAuth.authed("/rest/v1/rpc/warning_status", { method: "POST", body: {} }).then(r => r.ok ? { ok: true, status: r.json } : fail(r, "특보를 불러오지 못했습니다.")).catch(NET);
@@ -134,6 +144,19 @@ const Api = (() => {
       routes(from, to) { return done({ ok: true, rows: clone(db.routes.filter(r => r.date >= from && r.date <= to)) }); },
       vehicleHistory(vid) { return done({ ok: true, rows: clone(db.routes.filter(r => r.vehicle_id === vid).sort((a, b) => b.date.localeCompare(a.date))) }); },
       requests(round) { return done({ ok: true, rows: clone(db.requests.filter(r => r.round_id === +round)) }); },
+      allocations(round) { return done({ ok: true, rows: clone(db.allocations.filter(a => a.round_id === +round)) }); },
+      saveAllocations(round, rows) {       // 서버 save_allocations 흉내: 관리자만, 편성이 확정된 지사만, 둘 다 0 이면 줄 삭제
+        if (!can("equip.edit.all")) return done({ ok: false, message: ERR["42501"], code: "42501" });
+        if (rows.some(x => (x.truck || x.blower) && !db.requests.some(q => q.round_id === +round && q.branch_id === x.branch_id && q.confirmed))) return done({ ok: false, message: ALLOC_ERR["23514"], code: "23514" });
+        rows.forEach(x => {
+          const i = db.allocations.findIndex(a => a.round_id === +round && a.org === x.org && a.branch_id === x.branch_id), t = `round_allocations:${round},${x.org},${x.branch_id}`, old = i >= 0 ? db.allocations[i] : null;
+          const nv = { round_id: +round, org: x.org, branch_id: x.branch_id, truck: x.truck || 0, blower: x.blower || 0 };
+          if (!nv.truck && !nv.blower) { if (old) { log("삭제", "round_allocations", t, clone(old), null); db.allocations.splice(i, 1); } }
+          else if (!old) { db.allocations.push(nv); log("추가", "round_allocations", t, null, clone(nv)); }
+          else if (old.truck !== nv.truck || old.blower !== nv.blower) { log("수정", "round_allocations", t, { truck: old.truck, blower: old.blower }, { truck: nv.truck, blower: nv.blower }); db.allocations[i] = nv; }
+        });
+        return done({ ok: true });
+      },
       audit() { return done({ ok: true, rows: can("log.view") ? clone(db.audit) : [] }); },
       warnings() { return done({ ok: true, status: clone(warnStatus()) }); },
       forecast() { return done({ ok: true, rows: clone(db.forecast) }); },
@@ -156,12 +179,34 @@ const Api = (() => {
       },
       saveFleet(vehicles, routes, round, status) {
         status = status || [];
-        // 경로는 관리자(equip.edit.all)만. 지원장비는 자기 기관 장비의 정해진 경로(지사 그대로)에서 도착 예상 시각만. 지원 여부는 자기 기관 장비까지
-        const timeOnlyOk = r => vehOk(r.vehicle_id) && db.routes.some(x => x.date === r.date && x.vehicle_id === r.vehicle_id && JSON.stringify(x.stops) === JSON.stringify(r.stops));
+        // 경로는 관리자(equip.edit.all). 기계화부(지원장비)는 자기 기관 장비의 ① 정해진 경로의 도착 예상 시각 ② 지원일 1의 지사 한 곳(배정받은 지사·대수 안에서, 마이그레이션 43)
+        const allocOf = (org, bid) => db.allocations.find(a => a.round_id === +round && a.org === org && a.branch_id === bid);
+        const ownRoutesErr = () => {      // 서버 트리거 흉내: 오류 번호 또는 null. 대수는 이번 저장을 모두 적용한 뒤에 셈(서로 바꾸기 허용)
+          const rd0 = db.rounds.find(r => r.id === +round), sim = new Map(db.routes.map(x => [x.date + "|" + x.vehicle_id, x])), touched = [];
+          for (const r of routes) {
+            if (!vehOk(r.vehicle_id)) return "42501";
+            const k = r.date + "|" + r.vehicle_id, old = sim.get(k), v = db.vehicles.find(x => x.id === r.vehicle_id);
+            if (old && JSON.stringify(old.stops) === JSON.stringify(r.stops)) continue;                 // 시각만
+            if (!rd0 || r.date !== rd0.start_date || (old && (old.revised || old.stops.length !== 1)) || r.stops.length > 1) return "SA003";
+            if (!r.stops.length) { sim.delete(k); continue; }
+            const a = allocOf(v.org, r.stops[0]);
+            if (!a || (v.type === "제설차" && !a.truck) || (v.type === "제설기" && !a.blower)) return "SA001";
+            sim.set(k, { ...r, revised: false }); touched.push([v, r.stops[0]]);
+          }
+          for (const [v, bid] of touched) {
+            if (v.type === "이동정비차") continue;
+            const cur = sim.get(rd0.start_date + "|" + v.id); if (!cur || cur.stops[0] !== bid) continue;
+            const a = allocOf(v.org, bid), cap = a ? (v.type === "제설차" ? a.truck : a.blower) : 0;
+            const n = [...sim.values()].filter(x => { const y = db.vehicles.find(z => z.id === x.vehicle_id); return x.date === rd0.start_date && x.stops[0] === bid && y && y.org === v.org && y.type === v.type; }).length;
+            if (n > cap) return "SA002";
+          }
+          return null;
+        };
         if (vehicles.some(v => "status" in v)) return done({ ok: false, message: "저장할 내용이 없거나 기준일자가 없습니다.", code: "22023" });
         if ((routes.length || status.length) && !db.rounds.some(r => r.id === +round)) return done({ ok: false, message: "저장할 내용이 없거나 기준일자가 없습니다.", code: "22023" });
-        if (vehicles.some(v => !vehOk(v.id)) || status.some(x => !vehOk(x.vehicle_id)) || (!can("equip.edit.all") && routes.some(r => !timeOnlyOk(r)))) return done({ ok: false, message: ERR["42501"] });
-        if (!can("equip.edit.all")) routes = routes.map(r => { const x = db.routes.find(y => y.date === r.date && y.vehicle_id === r.vehicle_id); return { ...r, revised: !!x.revised }; });
+        if (vehicles.some(v => !vehOk(v.id)) || status.some(x => !vehOk(x.vehicle_id))) return done({ ok: false, message: ERR["42501"] });
+        if (!can("equip.edit.all")) { const c = ownRoutesErr(); if (c) return done({ ok: false, message: ERR[c], code: c }); }
+        if (!can("equip.edit.all")) routes = routes.map(r => { const x = db.routes.find(y => y.date === r.date && y.vehicle_id === r.vehicle_id); return { ...r, revised: !!(x && x.revised) }; });
         if (!can("equip.edit.all") && vehicles.some(v => Object.keys(v).some(k => !["id", "plate", "blower_s", "blower_l"].includes(k)))) return done({ ok: false, message: ERR["42501"] });
         if (vehicles.some(p => (p.blower_s || p.blower_l) && (db.vehicles.find(x => x.id === p.id) || {}).type !== "제설기")) return done({ ok: false, message: ERR["23514"] || "값이 규칙에 맞지 않습니다." });
         const plates = new Map(db.vehicles.map(v => [v.id, v.plate])); vehicles.forEach(v => { if ("plate" in v) plates.set(v.id, v.plate); });

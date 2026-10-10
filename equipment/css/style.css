@@ -637,3 +637,19 @@ table.matrix { font-size: 15px; min-width: 900px; }
   background: var(--surface); box-shadow: 0 8px 24px rgba(16,36,58, .18); text-align: left; font-weight: 400; }
 .unhide-pop .uh-row { display: flex; align-items: center; gap: 8px; padding: 4px 2px; }
 .unhide-pop .uh-row .btn { margin-left: auto; }
+
+/* ---------- 기관별 배정(마이그레이션 43) ---------- */
+table.alloc { min-width: 760px; }
+.alloc thead tr:first-child th[colspan] { border-left: 1px solid var(--line); }
+.alloc tbody td, .alloc tfoot td { border-left: 1px solid color-mix(in srgb, var(--line) 55%, transparent); }
+.alloc input.ci.num { width: 58px; text-align: center; }
+.alloc tfoot th, .alloc tfoot td { background: var(--bg); font-weight: 600; font-size: 13.5px; }
+.alloc tr.changed td.l { box-shadow: inset 3px 0 0 var(--plow); }
+.alloc td.empty { padding: 40px 16px; color: var(--ink-soft); }
+.al-ok { color: var(--go); font-weight: 700; } .al-short { color: #8A5A00; font-weight: 700; } .al-over { color: var(--stop); font-weight: 700; }
+/* 기관별 장비: 기관 카드 아래의 배정 요약, 칸의 '배정 초과' 표시 */
+.al-org { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 4px 6px; font-size: 13px; }
+.al-org .al-head { flex: 1 1 100%; color: var(--ink-soft); } .al-org .al-head b { color: var(--ink); }
+.al-chip { padding: 1px 8px; border-radius: 6px; background: var(--wait-bg); color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.al-chip.full { background: var(--go-bg); color: var(--go); } .al-chip.over { background: var(--stop-bg); color: var(--stop); font-weight: 700; }
+.al-flag { margin-left: 4px; white-space: nowrap; }

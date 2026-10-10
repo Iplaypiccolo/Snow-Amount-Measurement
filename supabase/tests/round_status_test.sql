@@ -52,7 +52,7 @@ begin
   perform pg_temp.chk('관리자: 경로 12/2','authenticated',a,format('select public.save_fleet(''[]'', ''[{"date":"2099-12-02","vehicle_id":"V9001","stops":["B001","B002"],"times":["03:50","07:30"]}]'', %s)', r1),'ok:1');
   perform pg_temp.chk('기준일자 이전 날짜(담당 없음)는 거절','authenticated',a,format('select public.save_fleet(''[]'', ''[{"date":"2099-11-30","vehicle_id":"V9001","stops":["B001"]}]'', %s)', r1),'err:23514');
   perform pg_temp.chk('지원 가능이 아닌 장비의 경로는 거절','authenticated',a,format('select public.save_fleet(''[]'', ''[{"date":"2099-12-02","vehicle_id":"V9002","stops":["B001"]}]'', %s)', r1),'err:23514');
-  perform pg_temp.chk('지원장비: 경로 지사 바꾸기 거절','authenticated',e,format('select public.save_fleet(''[]'', ''[{"date":"2099-12-02","vehicle_id":"V9001","stops":["B003"]}]'', %s)', r1),'err:42501');
+  perform pg_temp.chk('지원장비: 경로 지사 바꾸기 거절','authenticated',e,format('select public.save_fleet(''[]'', ''[{"date":"2099-12-02","vehicle_id":"V9001","stops":["B003"]}]'', %s)', r1),'err:SA003');
   perform pg_temp.chk('관리자: 지원 여부와 경로를 한 번에','authenticated',a,format('select public.save_fleet(''[]'', ''[{"date":"2099-12-03","vehicle_id":"V9002","stops":["B001"]}]'', %s, ''[{"vehicle_id":"V9002","status":"O"}]'')', r1),'ok:1');
 
   -- 4. 새 기준일자(12/3 시작): 겹치는 날짜는 새 기준일자가 맡음

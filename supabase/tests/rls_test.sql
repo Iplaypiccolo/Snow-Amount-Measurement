@@ -182,7 +182,7 @@ begin
   perform pg_temp.yes('장비 수정자는 DB가 채움', (select updated_by = e from public.vehicles where id = 'V9001'));
 
   -- ===== G2. 날짜별 경로: 관리자(equip.edit.all)만, [확정]한 날짜마다 한 줄, 이전 날짜는 남는다 =====
-  perform pg_temp.chk('지원장비: 자기 장비라도 경로 확정 차단(관리자만)','authenticated',e,'insert into public.vehicle_routes (date,vehicle_id,stops) values (''2099-12-09'',''V9001'',''{B901}'')','err:42501');
+  perform pg_temp.chk('지원장비: 자기 장비라도 첫날이 아닌 경로는 차단(마이그레이션 43)','authenticated',e,'insert into public.vehicle_routes (date,vehicle_id,stops) values (''2099-12-09'',''V9001'',''{B901}'')','err:SA003');
   perform pg_temp.chk('관리자: 12/2 경로 확정','authenticated',a,'insert into public.vehicle_routes (date,vehicle_id,stops) values (''2099-12-02'',''V9001'',''{B901,B902}'')','ok:1');
   perform pg_temp.chk('관리자: 같은 장비 12/3 다른 지사로 확정','authenticated',a,'insert into public.vehicle_routes (date,vehicle_id,stops) values (''2099-12-03'',''V9001'',''{B903}'')','ok:1');
   perform pg_temp.yes('이전 날짜 경로가 그대로 남음(장비 1대에 2줄)', (select count(*) = 2 from public.vehicle_routes where vehicle_id = 'V9001'));
@@ -190,7 +190,7 @@ begin
   perform pg_temp.yes('경로 확정자는 DB가 채움', (select confirmed_by = a from public.vehicle_routes where date = '2099-12-02' and vehicle_id = 'V9001'));
   select format('%s|%s', kind, from_val::text) into s from public.audit_log where target like 'vehicle_routes:%' and kind = '수정' order by id desc limit 1;
   perform pg_temp.yes('경로를 고치면 이전 값이 수정 기록에 남음', s like '수정|%B901%', coalesce(s,'없음'));
-  perform pg_temp.chk('충북 지원장비: 자기 장비 경로도 차단','authenticated',e2,'insert into public.vehicle_routes (date,vehicle_id,stops) values (''2099-12-02'',''V9002'',''{B901}'')','err:42501');
+  perform pg_temp.chk('충북 지원장비: 자기 장비 경로도 차단(첫날 배정받은 지사만)','authenticated',e2,'insert into public.vehicle_routes (date,vehicle_id,stops) values (''2099-12-02'',''V9002'',''{B901}'')','err:SA003');
   perform pg_temp.chk('관리자: 충북 장비 경로 확정','authenticated',a,'insert into public.vehicle_routes (date,vehicle_id,stops) values (''2099-12-02'',''V9002'',''{B901}'')','ok:1');
   perform pg_temp.chk('충북 지원장비: 서울경기 장비 경로 수정은 0건','authenticated',e2,'update public.vehicle_routes set stops=''{B903}'' where vehicle_id=''V9001''','ok:0');
   perform pg_temp.chk('충북 지원장비: 서울경기 장비 경로 삭제는 0건','authenticated',e2,'delete from public.vehicle_routes where vehicle_id=''V9001''','ok:0');
@@ -199,7 +199,7 @@ begin
   perform pg_temp.chk('빈 경로 거절(지우려면 줄 삭제)','authenticated',a,'insert into public.vehicle_routes (date,vehicle_id,stops) values (''2099-12-04'',''V9001'',''{}'')','err:23514');
   perform pg_temp.chk('지사: 경로 확정 차단','authenticated',b1,'insert into public.vehicle_routes (date,vehicle_id,stops) values (''2099-12-04'',''V9001'',''{B901}'')','err:42501');
   perform pg_temp.chk('지사: 경로 읽기(모든 장비)','authenticated',b1,'select 1 from public.vehicle_routes where vehicle_id like ''V9%''','ok:3');
-  perform pg_temp.chk('지원장비: 경로 삭제는 0건','authenticated',e,'delete from public.vehicle_routes where vehicle_id=''V9001''','ok:0');
+  perform pg_temp.chk('지원장비: 관리자가 넣은 경로 삭제는 거절','authenticated',e,'delete from public.vehicle_routes where vehicle_id=''V9001''','err:SA003');
   perform pg_temp.chk('관리자: 경로 삭제(확정 취소)','authenticated',a,'delete from public.vehicle_routes where date=''2099-12-03'' and vehicle_id=''V9001''','ok:1');
   perform pg_temp.chk('관리자: 장비 삭제(경로도 함께 지워짐)','authenticated',a,'delete from public.vehicles where id=''V9002''','ok:1');
   perform pg_temp.yes('삭제한 장비 경로가 남지 않음', not exists (select 1 from public.vehicle_routes where vehicle_id = 'V9002'));

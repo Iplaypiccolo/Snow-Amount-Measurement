@@ -5,11 +5,11 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <!-- 화면 틀 판번호: js/app.js 의 UI_VERSION 과 같아야 함. 화면 틀(이 파일의 칸 id 등)을 바꾸면 둘 다 올리세요 -->
-<meta name="ui-version" content="2026101001">
+<meta name="ui-version" content="2026101002">
 <title>제설장비 지원 현황</title>
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../fonts/pretendard.css?v=5aa1c40c">
-<link rel="stylesheet" href="css/style.css?v=e1347f07">
+<link rel="stylesheet" href="css/style.css?v=1048ead7">
 <script src="../auth/auth.js?v=3a94d92b"></script>
 <script>
 /* 로그인 잠금(가벼운 확인): 로그인 정보가 이 브라우저에 없으면 화면을 만들지 않고 안내만 보여 줍니다(?sample=1 시연 화면은 예외).
@@ -42,6 +42,7 @@ if (!/[?&]sample(=|&|$)/.test(location.search) && (!window.SSAuth || !SSAuth.has
     <button class="tab" role="tab" aria-selected="true" data-tab="move">이동 현황</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="fleet">기관별 장비</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="branch">지사별 요청·편성</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="alloc">기관별 배정</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="log" id="logTabBtn" hidden>로그 기록</button>
   </nav>
 </header>
@@ -88,6 +89,18 @@ if (!/[?&]sample(=|&|$)/.test(location.search) && (!window.SSAuth || !SSAuth.has
     </div>
   </section>
 
+  <!-- ===== 기관별 배정: 관리자가 "어느 기관이 어느 지사에 제설차·제설기 몇 대"를 정함(마이그레이션 43). 기계화부는 이 대수 안에서 장비별 지사를 고름 ===== -->
+  <section class="panel" id="panel-alloc" hidden>
+    <div class="perm" id="perm-alloc"></div>
+    <div class="round-bar" id="allocRound"></div>
+    <div class="table-wrap tall"><table class="branch alloc" id="allocTable"></table></div>
+    <div class="savebar" id="save-alloc" hidden>
+      <span class="save-state" aria-live="polite"></span>
+      <button type="button" class="btn" data-revert="alloc">되돌리기</button>
+      <button type="button" class="btn primary" data-save="alloc">확정</button>
+    </div>
+  </section>
+
   <!-- ===== 로그 기록 (log.view 권한) ===== -->
   <section class="panel" id="panel-log" hidden>
     <div class="perm" id="perm-log"></div>
@@ -101,8 +114,8 @@ if (!/[?&]sample(=|&|$)/.test(location.search) && (!window.SSAuth || !SSAuth.has
 <div class="tip" id="tip" hidden role="tooltip"></div>
 <div class="toast" id="toast" hidden role="status"></div>
 <!-- 코드는 아래 순서대로 불러옵니다 (순서가 중요합니다). auth.js 는 위 <head> 에서 먼저 불러옴 -->
-<script src="js/sample-data.js?v=cec95083"></script>
-<script src="js/api.js?v=0714c878"></script>
-<script src="js/app.js?v=eeed32d6"></script>
+<script src="js/sample-data.js?v=f9f37bc7"></script>
+<script src="js/api.js?v=b3c4fe18"></script>
+<script src="js/app.js?v=20217e93"></script>
 </body>
 </html>

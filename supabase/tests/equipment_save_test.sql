@@ -25,7 +25,7 @@ begin
   insert into public.vehicles (id,org,type,plate) values ('V9001','서울경기','제설차','서울경기9901'),('V9002','충북','제설기','충북9902');
   insert into public.support_rounds (name,start_date,days) values ('t','2099-12-01',10) returning id into rid;          -- 2099-12-01 ~ 12-10 (마이그레이션 38: 경로 날짜는 기준일자 기간 안)
   perform pg_temp.chk('장비: 자기 장비 상태·도공번호 확정','authenticated',e,format('select public.save_fleet(''[{"id":"V9001","plate":"서울경기9911"}]'', ''[]'', %s, ''[{"vehicle_id":"V9001","status":"O"}]'')', rid),'ok:1');
-  perform pg_temp.chk('장비: 자기 장비라도 경로는 거절(관리자만)','authenticated',e,format('select public.save_fleet(''[]'', ''[{"date":"2099-12-02","vehicle_id":"V9001","stops":["B001"]}]'', %s)', rid),'err:42501');
+  perform pg_temp.chk('장비: 자기 장비라도 첫날이 아닌 경로는 거절(마이그레이션 43: 첫날 한 곳만)','authenticated',e,format('select public.save_fleet(''[]'', ''[{"date":"2099-12-02","vehicle_id":"V9001","stops":["B001"]}]'', %s)', rid),'err:SA003');
   perform pg_temp.chk('관리자: 경로 두 날짜 한 번에 확정','authenticated',a,format('select public.save_fleet(''[]'', ''[{"date":"2099-12-02","vehicle_id":"V9001","stops":["B001","B002"]},{"date":"2099-12-03","vehicle_id":"V9001","stops":["B003"]}]'', %s)', rid),'ok:1');
   perform pg_temp.yes('경로 2줄·상태 O·도공번호', (select count(*) = 2 from public.vehicle_routes where vehicle_id='V9001') and (select plate = '서울경기9911' from public.vehicles where id='V9001') and (select status = 'O' from public.round_vehicle_status where round_id=rid and vehicle_id='V9001'));
   select count(*) into c from public.audit_log where tab = 'vehicle_routes';
@@ -33,7 +33,7 @@ begin
   perform pg_temp.yes('같은 경로는 기록이 늘지 않음', (select count(*) from public.audit_log where tab = 'vehicle_routes') = c);
   perform pg_temp.chk('빈 목록 = 그 날짜 경로 지우기','authenticated',a,format('select public.save_fleet(''[]'', ''[{"date":"2099-12-03","vehicle_id":"V9001","stops":[]}]'', %s)', rid),'ok:1');
   perform pg_temp.yes('12/3 지워지고 12/2 남음', (select array_agg(date order by date) from public.vehicle_routes where vehicle_id='V9001') = array['2099-12-02'::date]);
-  perform pg_temp.chk('하나라도 권한이 없으면 전체 취소(장비 상태 + 경로)','authenticated',e,format('select public.save_fleet(''[]'', ''[{"date":"2099-12-05","vehicle_id":"V9001","stops":["B001"]}]'', %s, ''[{"vehicle_id":"V9001","status":"X"}]'')', rid),'err:42501');
+  perform pg_temp.chk('하나라도 권한이 없으면 전체 취소(장비 상태 + 경로)','authenticated',e,format('select public.save_fleet(''[]'', ''[{"date":"2099-12-05","vehicle_id":"V9001","stops":["B001"]}]'', %s, ''[{"vehicle_id":"V9001","status":"X"}]'')', rid),'err:SA003');
   perform pg_temp.yes('취소되어 상태 그대로', (select status = 'O' from public.round_vehicle_status where round_id=rid and vehicle_id='V9001'));
   perform pg_temp.yes('취소되어 12/5 없음', not exists (select 1 from public.vehicle_routes where date='2099-12-05'));
   perform pg_temp.chk('다른 기관 장비 경로 지우기도 거절','authenticated',e,format('select public.save_fleet(''[]'', ''[{"date":"2099-12-05","vehicle_id":"V9002","stops":[]}]'', %s)', rid),'err:42501');
@@ -60,9 +60,9 @@ begin
   perform pg_temp.chk('시각 24:00 거절','authenticated',a,format('select public.save_fleet(''[]'', ''[{"date":"2099-12-08","vehicle_id":"V9001","stops":["B001"],"times":["24:00"]}]'', %s)', rid),'err:23514');
   perform pg_temp.chk('지원장비: 자기 장비 정해진 경로의 시각만','authenticated',e,format('select public.save_fleet(''[]'', ''[{"date":"2099-12-08","vehicle_id":"V9001","stops":["B001"],"times":["06:40"]}]'', %s)', rid),'ok:1');
   perform pg_temp.yes('시각만 바뀜', (select times = array['06:40'] and stops = array['B001'] from public.vehicle_routes where vehicle_id='V9001' and date='2099-12-08'));
-  perform pg_temp.chk('지원장비: 지사를 바꾸면 거절','authenticated',e,format('select public.save_fleet(''[]'', ''[{"date":"2099-12-08","vehicle_id":"V9001","stops":["B002"],"times":["06:40"]}]'', %s)', rid),'err:42501');
+  perform pg_temp.chk('지원장비: 지사를 바꾸면 거절','authenticated',e,format('select public.save_fleet(''[]'', ''[{"date":"2099-12-08","vehicle_id":"V9001","stops":["B002"],"times":["06:40"]}]'', %s)', rid),'err:SA003');
   perform pg_temp.chk('지원장비: 다른 기관 장비 시각 거절','authenticated',e,format('select public.save_fleet(''[]'', ''[{"date":"2099-12-06","vehicle_id":"V9002","stops":["B001"],"times":["06:40"]}]'', %s)', rid),'err:42501');
-  perform pg_temp.chk('지원장비: 직접 UPDATE 로 지사 바꾸기 거절','authenticated',e,'update public.vehicle_routes set stops=''{B002}'' where vehicle_id=''V9001'' and date=''2099-12-08''','err:42501');
+  perform pg_temp.chk('지원장비: 직접 UPDATE 로 지사 바꾸기 거절','authenticated',e,'update public.vehicle_routes set stops=''{B002}'' where vehicle_id=''V9001'' and date=''2099-12-08''','err:SA003');
   perform pg_temp.chk('도공번호: 다른 기관 이름이면 거절','authenticated',a,format('select public.save_fleet(''[{"id":"V9002","plate":"서울경기902"}]'', ''[]'', %s)', rid),'err:23514');
   perform pg_temp.chk('없는 기준일자','authenticated',a,'select public.save_requests(-1, ''[{"branch_id":"B001"}]'')','err:23503');
   perform pg_temp.chk('장비 계정: 요청 저장 거절','authenticated',e,format('select public.save_requests(%s, ''[{"branch_id":"B003","req_truck":1}]'')',rid),'err:42501');

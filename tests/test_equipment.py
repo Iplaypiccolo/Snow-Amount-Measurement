@@ -54,7 +54,7 @@ def bid(p, name): return ev(p, f"S.branches.find(b => b.name === '{name}').id")
 # ---------------------------------------------------------------- 테스트 목록
 def t_load(p):
     names = p.locator(".tab:visible").all_inner_texts()
-    check(names == ["이동 현황", "기관별 장비", "지사별 요청·편성", "로그 기록"], names)
+    check(names == ["이동 현황", "기관별 장비", "지사별 요청·편성", "기관별 배정", "로그 기록"], names)
     check(p.locator("#dateInput").input_value() == day(p, 0), "오늘 날짜로 시작")
     check(not p.locator("#loading").is_visible(), "불러오는 중 표시가 사라져야 함")
 
@@ -165,7 +165,7 @@ def t_permissions_equip_own(p):
     p.select_option("[data-vs=V013]", "M"); p.wait_for_timeout(150); confirm_fleet(p); check("확정했습니다" in toast(p) and ev(p, "stOf(S.round, 'V013').status") == "M", toast(p))
     check(route(p, "V014", day(p, 0)) == ["양양"], "지원장비가 지원 여부를 바꿔도 경로는 그대로(경로는 관리자)")
     ev(p, f"S.draft.set(rk('{day(p, 3)}', 'V014'), {{ stops: ['{bid(p, '양양')}'], revised: false, times: [null] }}), updateSavebars()"); confirm_fleet(p)   # 화면을 우회해 경로를 보내도 서버가 막음
-    check("권한이 없습니다" in toast(p), toast(p))
+    check("지원일 1" in toast(p), toast(p))      # 마이그레이션 43: 기계화부는 지원일 1의 지사 한 곳만(그 밖의 날은 관리자)
     as_user(p, "br1"); tab(p, "fleet")
     check(p.locator("#eqTable select, #eqTable input:enabled, #vehAdd, #fleetReset").count() == 0 and not p.locator("#save-fleet").is_visible(), "지사는 기관별 장비에서 아무것도 못 고침")
 
@@ -785,7 +785,62 @@ def t_hide_vehicle(p):
     check(p.locator("tr[data-vrow=V003]").count() == 1 and p.locator("#unhideBtn").count() == 0, "숨김 취소")
     tab(p, "log"); check("숨김" in p.locator("#logTable").inner_text(), "기록에 숨김")
 
-TESTS = [t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+def t_allocation(p):
+    """기관별 배정(마이그레이션 43): 관리자가 기관 → 지사 대수를 정하고, 기계화부(지원장비 계정)는 지원일 1의 지사를 그 안에서 고름. 넘기면 거절, 서로 바꾸기는 됨, 관리자 화면에 지정 현황"""
+    d0 = day(p, 0); dg, yy, ej, cc = (bid(p, n) for n in ("대관령", "양양", "엄정", "춘천"))
+    cell = lambda vid, d=None: f"#eqTable td[data-cell='{d or d0}|{vid}']"
+    # ① 관리자: 기관별 배정 탭 — 편성이 확정된 지사만 줄로, 칸 = 기관별 제설차·제설기
+    tab(p, "alloc")
+    check([x.get_attribute("data-ab") for x in p.locator("#allocTable tbody tr").all()] == [dg, yy, ej], "확정된 지사 3곳(춘천은 요청만이라 없음)")
+    check(p.locator("#allocTable thead tr").first.locator("th").all_inner_texts()[1:5] == ["서울경기", "충북", "전북", "대구경북"] and not p.locator("#save-alloc").is_hidden(), "기관 4곳 · 관리자는 저장 바")
+    al = lambda org, b, f: f"#allocTable input[data-al='{org}|{b}'][data-f={f}]"
+    for sel, v in ((al("서울경기", dg, "truck"), "2"), (al("서울경기", dg, "blower"), "3"), (al("서울경기", yy, "truck"), "2"), (al("서울경기", ej, "truck"), "1"), (al("충북", dg, "truck"), "2")):
+        p.fill(sel, v); p.dispatch_event(sel, "change"); p.wait_for_timeout(60)
+    sm = p.locator(f"#allocTable tr[data-ab='{dg}'] [data-asum=truck] span")
+    check(sm.inner_text() == "4 / 6" and "al-short" in sm.get_attribute("class") and p.locator(f"#allocTable tr[data-ab='{ej}'] [data-asum=truck] span").get_attribute("class") == "al-ok", "배정 / 편성: 모자라면 주황, 맞으면 초록")
+    check("4칸" in p.locator("#save-alloc .save-state").inner_text(), p.locator("#save-alloc .save-state").inner_text())
+    p.click("#save-alloc [data-save]"); p.wait_for_timeout(300)
+    check("기관별 배정을 확정했습니다" in toast(p) and ev(p, "S.alloc.size") == 4 and ev(p, "S.adraft.size") == 0, toast(p))
+    check(p.locator("#allocTable [data-adone='서울경기']").inner_text().startswith("8 / 8") and "배정 초과" in p.locator("#allocTable [data-adone='서울경기']").inner_text(), "장비 지정 현황: 서울경기 8/8 이지만 대관령 제설차 3대(배정 2)라 초과: " + p.locator("#allocTable [data-adone='서울경기']").inner_text())
+    # ② 관리자의 기관별 장비: 기관 카드에 배정 요약, 넘긴 칸에 '배정 초과'(지우지 않음)
+    tab(p, "fleet")
+    card = p.locator("#orgGrid [data-alorg='서울경기']")
+    check("배정 8대" in card.inner_text() and "배정 초과" in card.inner_text() and card.locator(".al-chip.over").inner_text() == "대관령 차 3/2", card.inner_text())
+    check(p.locator(cell("V002") + " .al-flag").inner_text() == "배정 초과" and p.locator(cell("V005") + " .al-flag").count() == 0 and p.locator(cell("V002", day(p, 1)) + " .al-flag").count() == 0, "지원일 1 칸에만 표시")
+    check(p.locator("#orgGrid [data-alorg='전북']").count() == 0 and p.locator(cell("V043") + " .al-flag").count() == 0, "배정이 없는 기관은 예전 그대로(표시 없음)")
+    check(p.locator(cell("V014") + " .al-flag").inner_text() == "배정 없음", "충북은 대관령만 배정받음 → 양양으로 간 장비는 '배정 없음'")
+    # ③ 서울경기 기계화부: 지원일 1 칸에서 배정받은 지사 중에 고름(남은 대수 표시, 찬 지사는 못 고름)
+    as_user(p, "eq-sg"); tab(p, "fleet")
+    sel = f"select[data-fk='ra:{d0}:V003']"
+    check(p.locator(sel).count() == 1 and p.locator(f"select[data-fk='ra:{day(p, 1)}:V003']").count() == 0 and p.locator("select[data-rv]").count() == 0, "지원일 1 칸만 고를 수 있음(둘째 날부터는 보기만)")
+    opts = [(o.inner_text(), o.get_attribute("value"), o.is_disabled()) for o in p.locator(sel + " option").all()]
+    check(("대관령 (3/2)", dg, False) in opts and ("양양 (2/2)", yy, True) in opts and ("엄정 (1/1)", ej, True) in opts and cc not in [o[1] for o in opts], f"배정받은 지사만, 찬 지사는 못 고름: {opts}")
+    check(p.locator(f"select[data-fk='ra:{d0}:V004']").count() == 0, "지원이 아닌 장비(미정)는 고를 수 없음")
+    check([o.inner_text() for o in p.locator(f"select[data-fk='ra:{d0}:V012'] option").all()][:4] == ["지사 선택", "대관령", "양양", "엄정"], "이동정비차는 배정받은 아무 지사(대수 표시 없음)")
+    p.select_option(sel, "__del"); p.wait_for_timeout(200)
+    check(route(p, "V003", d0) == [] and "대관령 (2/2)" in p.locator(f"select[data-fk='ra:{d0}:V002']").inner_text(), "하나를 지우면 다른 칸의 남은 대수도 바뀜")
+    confirm_fleet(p); check("확정했습니다" in toast(p) and ev(p, f"S.routes.has(rk('{d0}', 'V003'))") is False, toast(p))
+    check(p.locator(cell("V002") + " .al-flag").count() == 0 and "지정 완료" in p.locator("#orgGrid [data-alorg='서울경기']").inner_text(), "초과가 풀리고 8대 모두 지정 완료: " + p.locator("#orgGrid [data-alorg='서울경기']").inner_text())
+    # 화면을 우회해 보내도 서버 규칙이 막음: 대수 넘김 / 배정 없는 지사 / 둘째 날
+    put = lambda vid, d, b: ev(p, f"S.draft.set(rk('{d}', '{vid}'), {{ stops: ['{b}'], revised: false, times: [null] }}), updateSavebars()")
+    put("V003", d0, dg); confirm_fleet(p); check("배정받은 대수보다" in toast(p), "대수 넘김: " + toast(p))
+    put("V003", d0, cc); confirm_fleet(p); check("배정하지 않은 지사" in toast(p), "배정 없는 지사: " + toast(p))
+    ev(p, "S.draft.clear()"); put("V003", day(p, 1), yy); confirm_fleet(p); check("지원일 1" in toast(p), "둘째 날: " + toast(p))
+    ev(p, "S.draft.clear()"); put("V005", d0, ej); put("V007", d0, yy); confirm_fleet(p)
+    check("확정했습니다" in toast(p) and route(p, "V005", d0) == ["엄정"] and route(p, "V007", d0) == ["양양"], "한 번의 확정 안에서 서로 바꾸기는 됨: " + toast(p))
+    check(p.locator(f"select[data-fk='ra:{d0}:V001']").count() == 1, "V001(한 곳·최초 지원)도 고를 수 있음")
+    # ④ 다른 기관·지사 계정: 배정 탭은 보기만
+    as_user(p, "eq-cb"); tab(p, "alloc")
+    check(p.locator("#allocTable input").count() == 0 and p.locator("#save-alloc").is_hidden() and p.locator(f"#allocTable tr[data-ab='{dg}']").inner_text().split()[1:3] == ["2", "3"], "기계화부는 배정 표를 보기만")
+    tab(p, "fleet"); check(p.locator(f"select[data-fk='ra:{d0}:V017'] option").nth(1).inner_text() == "대관령 (2/2)" and p.locator(f"select[data-fk='ra:{d0}:V001']").count() == 0, "충북은 충북 장비만, 충북 배정 지사만")
+    # ⑤ 관리자: 배정을 줄여도 경로는 그대로(초과 표시), 지정 현황 확인
+    as_user(p, "admin1"); tab(p, "alloc")
+    check(p.locator("#allocTable [data-adone='서울경기']").inner_text().startswith("8 / 8") and "완료" in p.locator("#allocTable [data-adone='서울경기']").inner_text(), p.locator("#allocTable [data-adone='서울경기']").inner_text())
+    p.fill(al("서울경기", yy, "truck"), "1"); p.dispatch_event(al("서울경기", yy, "truck"), "change"); p.click("#save-alloc [data-save]"); p.wait_for_timeout(300)
+    check(route(p, "V006", d0) == ["양양"] and route(p, "V007", d0) == ["양양"] and "배정 초과" in p.locator("#allocTable [data-adone='서울경기']").inner_text(), "배정을 줄여도 경로는 남고 '배정 초과'로 표시")
+    tab(p, "log"); check("기관별 배정" in p.locator("#logTable").inner_text() and "서울경기 → 양양" in p.locator("#logTable").inner_text(), "수정 기록에 배정 변경")
+
+TESTS = [t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,

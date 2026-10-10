@@ -44,6 +44,18 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-10-10 · 커밋 (이 기록 커밋 하나) · 기관별 배정 + 기계화부의 지원일 1 지사 지정(migration 43, 실서버 적용함)
+- 사용자 요청·결정: 관리자는 "어느 기관이 어느 지사에 몇 대"까지만, 기계화부(지원장비 계정)가 "어느 장비가 어느 지사로". 제설차·제설기 따로, 이동정비차는 배정 없이 기계화부가 알아서, 배정은 기준일자 전체에 한 번(첫날만), 지사 사이 이동·연속지원·수정본은 관리자만, 배정을 줄이면 지우지 않고 '배정 초과' 표시, 지정 현황 표시(일단 넣어 봄 — 불필요하면 뺌).
+- **서버**(`20261010_43_round_allocations.sql`): SQL 을 먼저 보여 주고 확인받은 뒤 실서버 되돌리기 시험 47/47 → 적용(규칙 3).
+  - 새 표 `round_allocations(round_id, org, branch_id, truck, blower)` + RLS(읽기 모두·쓰기 `equip.edit.all`) + 수정 기록. 저장 함수 `save_allocations(p_round, p_rows)`(편성이 확정된 지사만, 둘 다 0 이면 줄 삭제).
+  - **RLS 변경**: `vehicle_routes` 의 insert·delete 를 기계화부(`equip.edit.own` + 자기 기관 장비)에게도 엶. 무엇을 넣을 수 있는지는 트리거가 정함 → `private.vehicle_routes_guard()`(BEFORE insert/update/delete: 첫날·한 곳·최초 지원·배정받은 지사, 관리자가 넣은 여러 곳·수정본은 못 바꿈) + `private.route_alloc_cap()`(미룬 검사: 배정 대수 넘김, 서로 바꾸기 허용). `save_fleet` 가 기계화부의 지사 지정·지우기를 받음(끝에서 `set constraints all immediate`).
+  - 거절 번호 SA001(배정 없는 지사)·SA002(대수 초과)·SA003(첫날 한 곳만). 권한이 없는 계정은 예전처럼 42501. 로그인 사용자가 아닌 서버 안 작업(auth.uid() 없음)은 통과.
+  - **예전 SQL 시험 기대값을 고침**(실행은 같은 경우를 `allocation_test.sql` 로 확인): `equipment_save_test.sql` 4곳·`round_status_test.sql` 1곳·`rls_test.sql` 3곳 — 기계화부의 '첫날이 아닌 경로' 시도는 42501 → SA003, 자기 기관 경로 일괄 삭제는 'ok:0' → SA003.
+- **화면**(장비 지원): 새 탭 **기관별 배정**(`#panel-alloc`, 첫 화면 메뉴에도 추가, UI_VERSION 2026101002) — 줄 = 편성 확정 지사, 칸 = 기관별 제설차·제설기, '배정 / 편성'·'배정 / 지원 가능' 색 표시, 맨 아래 '장비 지정(기계화부)' 현황. **기관별 장비**: 기계화부는 지원일 1 칸에서 배정받은 지사를 고름(`select[data-ra]`, 남은 대수 표시·찬 지사는 못 고름), 기관 카드 아래 배정 요약(`.al-org`), 칸의 '배정 초과'·'배정 없음' 표지. 그 기관에 배정이 없는 기준일자는 예전 화면 그대로.
+- 문서: `docs/equipment-rules.md` 2-1 장. 시험: `supabase/tests/allocation_test.sql`(새), `tests/test_equipment.py` `t_allocation`(새), 시연 모드(`api.js` sample)도 같은 규칙.
+- 남은 것: 지원일 2 이후의 배정(날짜별), 직접입력 줄의 강수확률 칸, 요약 카드 — 사용자 결정 대기.
+— ✍ Claude Code 작성
+
 ### 2026-10-10 · 커밋 (이 기록 커밋 하나) · 기관별 24시간 예보: 범례 체크박스로 지도 칸에 보일 값 고르기 + 축척에 맞춘 줄 수
 - 사용자 요청: 화면을 줄이면 숫자 상자가 격자 칸보다 커지는 문제. `forecast/ui.js`·`style.css`, 서버 변경 없음.
 - 범례에 체크박스 **적설·강수·확률·기온**(기본 적설·기온). 고른 값은 이 브라우저에 기억(`localStorage` `ss_fc_show`).
