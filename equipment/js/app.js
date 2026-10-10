@@ -8,6 +8,7 @@
      ⚠ 화면의 권한 검사는 보기 좋게 정리하는 용도이고, 실제로 막는 것은 서버 규칙(RLS·트리거)입니다.
    - 경로는 (날짜, 장비)마다 한 줄로 서버에 남습니다. 다른 날짜를 확정해도 지난 날짜 경로는 지워지지 않습니다.
    - 특보: 서버가 10분마다 기상청에서 받아 둔 것(warning_status)을 자동 표시. 확정한 지사는 확정 순간 값을 서버가 남김(warn_* 열)
+     24시 강설 [적설 | 강수 | 확률]: 확률 = 지사 격자의 24시간 중 가장 높은 강수확률(%, branch_forecast.max_pop_24h — 시각 없이 값만. 직접입력 줄은 '-').
      24시 강설 [적설 | 강수]: 기상청 단기예보 격자의 1시간 신적설(cm)·1시간 강수량(mm) 24시간 합 중 지사 격자의 가장 큰 값(branch_forecast).
      확정하면 서버가 그 순간 값을 남김(fc_* 열). 값을 누르면 강설량 측정 → 기관별 24시간 예보의 그 지사로 이동. 확정한 지사 줄은 바탕이 노랑
      최저기온 [기온 | 시각]: 같은 예보의 1시간 기온 24시간 중 가장 낮은 값과 그 시각(지사 격자 중 가장 추운 곳, branch_forecast.min_tmp·min_tmp_at)
@@ -170,26 +171,27 @@ function warnCells(bid) {
 const fmtBase = b => b && /^\d{12}$/.test(b) ? `${+b.slice(4, 6)}/${+b.slice(6, 8)} ${b.slice(8, 10)}:${b.slice(10, 12)}` : "-";
 async function loadWarn() { const [r, f] = await Promise.all([Api.warnings(), Api.forecast()]); if (r.ok) S.warn = r.status; if (f.ok) S.fc = Object.fromEntries(f.rows.map(x => [x.branch_id, x])); }
 /* ---------- 예상 적설 — 기상청 단기예보 24시간 신적설 합의 지사 최댓값(발표 후 12시간 안). 확정한 지사는 확정 순간 값 ---------- */
-function fcOf(bid) {      // { snow, pcp, tmin, tmin_at, tmfc, start, end, nx, ny, pnx, pny, fixed, at, manual } 또는 { none } / null(예보 없음)
+function fcOf(bid) {      // { snow, pcp, pop, tmin, tmin_at, tmfc, start, end, nx, ny, pnx, pny, fixed, at, manual } 또는 { none } / null(예보 없음)
   const r = S.reqs[bid];
   if (isManual(bid)) return { snow: rval(bid, "wx_snow"), pcp: rval(bid, "wx_pcp"), tmin: rval(bid, "wx_tmin"), tmin_at: rval(bid, "wx_tmin_at"), manual: true, fixed: isConf(bid) };
-  if (r && r.confirmed) return r.fc_at ? { snow: r.fc_snow, pcp: r.fc_pcp, tmin: r.fc_tmin, tmin_at: r.fc_tmin_at, tmfc: r.fc_tmfc, fixed: true, at: r.fc_at } : { none: true };
+  if (r && r.confirmed) return r.fc_at ? { snow: r.fc_snow, pcp: r.fc_pcp, pop: r.fc_pop, tmin: r.fc_tmin, tmin_at: r.fc_tmin_at, tmfc: r.fc_tmfc, fixed: true, at: r.fc_at } : { none: true };
   const f = S.fc[bid];
   if (!f || Date.now() - Date.parse(f.issued_at) > 12 * 3600e3) return null;
   const d = f.detail || {};
-  return { snow: f.max_snow_24h, pcp: f.max_pcp_24h, tmin: f.min_tmp, tmin_at: f.min_tmp_at, tmfc: f.issued_at, start: d.start_at, end: d.end_at, nx: f.worst_nx, ny: f.worst_ny, pnx: d.pcp_nx, pny: d.pcp_ny, fixed: false };
+  return { snow: f.max_snow_24h, pcp: f.max_pcp_24h, pop: f.max_pop_24h, tmin: f.min_tmp, tmin_at: f.min_tmp_at, tmfc: f.issued_at, start: d.start_at, end: d.end_at, nx: f.worst_nx, ny: f.worst_ny, pnx: d.pcp_nx, pny: d.pcp_ny, fixed: false };
 }
 const fmtCm = v => v == null ? "-" : (Math.round(v * 10) / 10).toFixed(1);
 const fmtTmp = v => v == null ? "-" : String(Math.round(v * 10) / 10);                        // 기온(℃): -5, 1.5
 const fmtHM = iso => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? `${p2(d.getHours())}:${p2(d.getMinutes())}` : "-"; };   // 직접입력 특보 시각(시:분)
 const fmtAt = iso => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? `${d.getMonth() + 1}/${d.getDate()} ${p2(d.getHours())}시` : "-"; };
-// k = "snow"(적설 cm) / "pcp"(강수 mm) / "tmin"(최저기온 ℃) / "tmin_at"(그 시각). 값을 누르면 기관별 24시간 예보의 그 지사로.
+// k = "snow"(적설 cm) / "pcp"(강수 mm) / "pop"(강수확률 % — 예보 값만, 직접입력 줄은 '-') / "tmin"(최저기온 ℃) / "tmin_at"(그 시각). 값을 누르면 기관별 24시간 예보의 그 지사로.
 // 직접입력이면 입력칸(고칠 수 없으면 값만, 누를 수 없음)
 const WX_FIELD = { snow: "wx_snow", pcp: "wx_pcp", tmin: "wx_tmin", tmin_at: "wx_tmin_at" };
-const fcText = (k, v) => k === "tmin_at" ? fmtAt(v) : k === "tmin" ? fmtTmp(v) : fmtCm(v);
+const fcText = (k, v) => k === "tmin_at" ? fmtAt(v) : k === "tmin" ? fmtTmp(v) : k === "pop" ? String(Math.round(v)) : fmtCm(v);
 function fcInner(bid, k = "snow") {
   const f = fcOf(bid), v = f && !f.none ? f[k] : null;
   if (f && f.manual) {
+    if (k === "pop") return `<span class="muted">-</span>`;          // 강수확률은 직접 넣지 않음
     const b = S.brById[bid], fld = WX_FIELD[k];
     if (b && canReq(b)) {
       if (k === "tmin_at") return `<button type="button" class="ci tpick${v ? "" : " empty"}" data-tpick="${esc(bid)}" aria-label="${esc(b.name)} 최저기온 시각 고르기"${dis(bid)}>${v ? esc(fmtAt(v)) : "시각 선택"}</button>`;   // 누르면 달력 + 시
@@ -200,7 +202,7 @@ function fcInner(bid, k = "snow") {
   }
   if (!f) return `<span class="muted fcv" data-fb="${esc(bid)}" data-fk2="${k}" tabindex="0">-</span>`;
   if (f.none) return `<span class="muted">-</span>`;
-  const cls = k === "snow" ? (v >= 5 ? " hi" : v > 0 ? " some" : "") : k === "pcp" ? (v >= 30 ? " hi" : v > 0 ? " wet" : "")
+  const cls = k === "snow" ? (v >= 5 ? " hi" : v > 0 ? " some" : "") : k === "pcp" ? (v >= 30 ? " hi" : v > 0 ? " wet" : "") : k === "pop" ? (v >= 60 ? " wet" : "")
     : k === "tmin" ? (v != null && v <= -10 ? " cold2" : v != null && v <= 0 ? " cold" : "") : " at";
   return `<span class="fcv${cls}" data-fb="${esc(bid)}" data-fk2="${k}" tabindex="0" role="link">${v == null ? "-" : esc(fcText(k, v))}</span>`;
 }
@@ -223,6 +225,7 @@ const fmtHour = iso => { const d = new Date(iso); return isNaN(d) ? "-" : `${d.g
 function paintWarn() {                // 자동 값만 새로 그림(직접입력 줄은 입력 중일 수 있어 그대로)
   document.querySelectorAll("[data-fcell]").forEach(td => { if (!isManual(td.dataset.fcell)) td.innerHTML = fcInner(td.dataset.fcell, "snow"); });
   document.querySelectorAll("[data-pcell]").forEach(td => { if (!isManual(td.dataset.pcell)) td.innerHTML = fcInner(td.dataset.pcell, "pcp"); });
+  document.querySelectorAll("[data-ocell]").forEach(td => { if (!isManual(td.dataset.ocell)) td.innerHTML = fcInner(td.dataset.ocell, "pop"); });
   document.querySelectorAll("[data-tcell]").forEach(td => { if (!isManual(td.dataset.tcell)) td.innerHTML = fcInner(td.dataset.tcell, "tmin"); });
   document.querySelectorAll("[data-tacell]").forEach(td => { if (!isManual(td.dataset.tacell)) td.innerHTML = fcInner(td.dataset.tacell, "tmin_at"); });
   const fb = document.getElementById("fcBaseHead"); if (fb) fb.textContent = fcBase();
@@ -334,7 +337,7 @@ function toast(msg, isErr) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 3500);
 }
 const TAB_LABEL = { vehicles: "장비", vehicle_routes: "경로", round_vehicle_status: "지원 여부", round_requests: "지사 요청", support_rounds: "기준일자", branch_zone_overrides: "특보구역" };
-const FIELD = { fc_snow: "확정 예상 적설", fc_pcp: "확정 예상 강수", wx_manual: "기상현황 직접입력", wx_snow: "직접 적설", wx_pcp: "직접 강수", wx_tmin: "직접 최저기온", wx_tmin_at: "직접 최저기온 시각", fc_tmin: "확정 최저기온", wx_level: "직접 대설특보", wx_fc: "직접 특보 발표", wx_ef: "직접 특보 발효", plate: "도공번호", status: "지원 여부", stops: "경로", revised: "구분", times: "도착 예상", snow_cm: "예상 적설", warning: "특보", req_truck: "요청 제설차", req_blower: "요청 제설기",
+const FIELD = { fc_snow: "확정 예상 적설", fc_pcp: "확정 예상 강수", fc_pop: "확정 강수확률", wx_manual: "기상현황 직접입력", wx_snow: "직접 적설", wx_pcp: "직접 강수", wx_tmin: "직접 최저기온", wx_tmin_at: "직접 최저기온 시각", fc_tmin: "확정 최저기온", wx_level: "직접 대설특보", wx_fc: "직접 특보 발표", wx_ef: "직접 특보 발효", plate: "도공번호", status: "지원 여부", stops: "경로", revised: "구분", times: "도착 예상", snow_cm: "예상 적설", warning: "특보", req_truck: "요청 제설차", req_blower: "요청 제설기",
   blower_s: "블로워 소", blower_l: "블로워 대", off_from: "지원 불가 시작일", hidden_after: "숨김", days: "기간(일)", assigned_truck: "편성 제설차", assigned_blower: "편성 제설기", arrive_at: "도착 요청", reason: "사유", confirmed: "확정", start_date: "기준일자", type: "장비", org: "기관", warn_level: "확정 특보", include: "특보구역" };
 const HIDE = new Set(["fc_tmfc", "fc_at", "zone_code", "warn_zones", "warn_base", "warn_at", "warn_note", "updated_by", "updated_at", "confirmed_by", "confirmed_at", "created_by", "created_at", "round_id", "branch_id", "vehicle_id", "date", "id", "sort", "active", "name", "end_date"]);
 function fmtField(f, v) {
@@ -355,6 +358,7 @@ function fmtField(f, v) {
   if (f === "arrive_at") return fmtTime(localInput(v));
   if (f === "snow_cm" || f === "fc_snow") return v + "cm";
   if (f === "fc_pcp") return v + "mm";
+  if (f === "fc_pop") return v + "%";
   return String(v);
 }
 // 칸 하나(target)의 오늘 수정 기록. field 를 주면 그 열이 바뀐 기록만
@@ -786,8 +790,8 @@ function renderBranch() {
     (S.me.role === "admin" ? `<button type="button" class="btn sm" id="zoneMgr">특보구역 관리</button>` : "") + `</div>` : "";
   if (!r) { $("branchTable").innerHTML = `<tbody><tr><td class="empty">기준일자가 없습니다.</td></tr></tbody>`; return; }
   const conf = can("req.confirm");
-  let h = `<thead><tr><th class="l" rowspan="2">지사</th><th colspan="2" class="fch">24시 강설 <small class="fcbase" id="fcBaseHead" data-bt="fc" tabindex="0">${esc(fcBase())}</small></th><th colspan="2" class="fch tmh">최저기온</th><th colspan="3" class="wh">대설특보 발표 <small class="fcbase" id="wBaseHead" data-bt="warn" tabindex="0">${esc(warnBase())}</small></th><th class="wxh" rowspan="2">기상현황<br>직접입력</th><th colspan="2">지사 요청</th><th colspan="2">편성</th><th>확정</th><th class="l" rowspan="2">도착 요청</th></tr>
-    <tr><th class="fch">적설<small class="thsub">cm</small></th><th class="fch">강수<small class="thsub">mm</small></th><th class="fch tmh">기온<small class="thsub">℃</small></th><th class="fch tmh">시각</th><th class="wh">종류</th><th class="wh">발표</th><th class="wh">발효</th><th>제설차</th><th>제설기</th><th>제설차</th><th>제설기</th><th class="cf">${conf ? bulkCell(null) : ""}</th></tr></thead><tbody>`;
+  let h = `<thead><tr><th class="l" rowspan="2">지사</th><th colspan="3" class="fch">24시 강설 <small class="fcbase" id="fcBaseHead" data-bt="fc" tabindex="0">${esc(fcBase())}</small></th><th colspan="2" class="fch tmh">최저기온</th><th colspan="3" class="wh">대설특보 발표 <small class="fcbase" id="wBaseHead" data-bt="warn" tabindex="0">${esc(warnBase())}</small></th><th class="wxh" rowspan="2">기상현황<br>직접입력</th><th colspan="2">지사 요청</th><th colspan="2">편성</th><th>확정</th><th class="l" rowspan="2">도착 요청</th></tr>
+    <tr><th class="fch">적설<small class="thsub">cm</small></th><th class="fch">강수<small class="thsub">mm</small></th><th class="fch">확률<small class="thsub">%</small></th><th class="fch tmh">기온<small class="thsub">℃</small></th><th class="fch tmh">시각</th><th class="wh">종류</th><th class="wh">발표</th><th class="wh">발효</th><th>제설차</th><th>제설기</th><th>제설차</th><th>제설기</th><th class="cf">${conf ? bulkCell(null) : ""}</th></tr></thead><tbody>`;
   const has = b => hasReq(b.id) || S.rdraft.has(b.id);                  // 요청 있음(입력 중 포함)
   const mine = b => (m.branch_id === b.id) || (can("req.edit.hq") && !can("req.confirm") && b.hq_id === m.hq_id);
   S.hqs.forEach(hq => {
@@ -795,7 +799,7 @@ function renderBranch() {
     const rows = S.order.filter(b => b.hq_id === hq.id), shown = rows.filter(b => S.bview === "all" || mine(b) || (S.bview === "req" ? has(b) : isFixed(b.id)));
     if (!shown.length) return;
     const closed = S.closedHq.has(hq.id), hsum = hqSums(hq.id);
-    h += `<tr class="hq ${closed ? "closed" : ""}" data-hq="${hq.id}" tabindex="0"><td class="l">${esc(hq.name)}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+    h += `<tr class="hq ${closed ? "closed" : ""}" data-hq="${hq.id}" tabindex="0"><td class="l">${esc(hq.name)}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
       ${HQ_SUM_KEYS.map(k => k === "confirmed" && conf ? `<td class="cf">${bulkCell(hq.id)}</td>` : `<td data-s="${k}">${hsum[k]}</td>`).join("")}<td></td></tr>`;
     if (closed) return;
     shown.forEach(b => {
@@ -804,7 +808,7 @@ function renderBranch() {
         : (on ? H(t, f, esc(rval(b.id, f) ?? 0)) : "-");
       const ok = rval(b.id, "confirmed");
       h += `<tr class="${on ? "active" : ""} ${m.branch_id === b.id ? "mine" : ""} ${S.rdraft.has(b.id) ? "changed" : ""} ${isConf(b.id) ? "locked" : ""}" data-b="${b.id}"><td class="l">${esc(b.name)}${m.branch_id === b.id ? ' <span class="tag">내 지사</span>' : ""}</td>
-        <td class="${isManual(b.id) ? "wxe" : ""}" data-fcell="${b.id}">${fcInner(b.id, "snow")}</td><td class="${isManual(b.id) ? "wxe" : ""}" data-pcell="${b.id}">${fcInner(b.id, "pcp")}</td>
+        <td class="${isManual(b.id) ? "wxe" : ""}" data-fcell="${b.id}">${fcInner(b.id, "snow")}</td><td class="${isManual(b.id) ? "wxe" : ""}" data-pcell="${b.id}">${fcInner(b.id, "pcp")}</td><td data-ocell="${b.id}">${fcInner(b.id, "pop")}</td>
         <td class="${isManual(b.id) ? "wxe" : ""}" data-tcell="${b.id}">${fcInner(b.id, "tmin")}</td><td class="tat ${isManual(b.id) ? "wxe" : ""}" data-tacell="${b.id}">${fcInner(b.id, "tmin_at")}</td>
         ${warnCells(b.id)}
         <td class="wxm">${ed ? `<input type="checkbox" data-rq="${b.id}" data-f="wx_manual" data-fk="q:${b.id}:wx_manual"${isManual(b.id) ? " checked" : ""} aria-label="${esc(b.name)} 기상현황 직접입력"${hvA(t, "wx_manual")}${d0}>` : (isManual(b.id) ? H(t, "wx_manual", "✓") : '<span class="muted">-</span>')}</td>

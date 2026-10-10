@@ -113,9 +113,11 @@ def t_pin_chart(b):
     hrs = [h.split("\n")[0] for h in heads]
     check(len(hrs) == 8 and all(int(hrs[i]) == (int(hrs[0]) + 3 * i) % 24 for i in range(8)), f"3시간 표 머리글 = 3시간 간격 8칸 {hrs}")
     rows = [r.locator("th.lb").inner_text() for r in t3.locator("tbody tr").all()]
-    check([x.startswith(y) for x, y in zip(rows, ["신적설", "강수", "최저기온"])] == [True] * 3 and len(rows) == 3, f"행: {rows}")
+    check([x.startswith(y) for x, y in zip(rows, ["신적설", "강수", "확률", "최저기온"])] == [True] * 4 and len(rows) == 4, f"행(강수확률 포함): {rows}")
     vals = [float(x) for x in t3.locator("tbody tr").first.locator("td").all_inner_texts() if x not in ("-", "0")]
-    tot = float(tp.locator(".fc-tt-sum b").first.inner_text())
+    import re as _re
+    tiptext = tp.inner_text(); tot = float(_re.search(r"24시간 적설 ([\d.]+)cm", tiptext).group(1))
+    check("24시간 합" not in tiptext and "누르면" not in tiptext and tp.locator(".fc-tt-sum").count() == 0 and "확률 최고" in tiptext, "말풍선: 표 아래 '24시간 합'부터는 없음(위 요약에 강수확률): " + tiptext[:80].replace("\n", " "))
     check(abs(sum(vals) - tot) < 0.35, f"3시간 합들의 합 = 24시간 합 ({sum(vals):.1f} ≈ {tot})")
     box = tp.locator(".fc-trend-box").bounding_box(); check(box and 270 <= box["width"] <= 296, f"말풍선 표 폭 약 20% 확대(283px): {box and box['width']}")
     # 지사를 고르면 눈여겨볼 격자(적설이 가장 많은 칸)가 고른 채로 열림(2026-10-10)
@@ -129,8 +131,16 @@ def t_pin_chart(b):
     check(h1[0][1] and all(dt == (hr == "00") for hr, dt in h1[1:]), f"첫 줄: 첫 칸과 00시에만 날짜 {h1}")
     check(all(dt == (hr == "00") for hr, dt in h2), f"둘째 줄: 00시에만 날짜(첫 칸이라고 붙이지 않음) {h2}")
     leg = p.locator("#fc-legend")
-    check(leg.locator(".fc-key").inner_text().split() == ["적설", "강수", "기온"] and leg.locator(".fc-ramp li").count() == 6 and "cm" not in leg.inner_text() and "mm" not in leg.inner_text() and "마우스" not in leg.inner_text(),
-          "범례: 숫자 순서(적설·강수·기온) + 적설량 색띠만: " + leg.inner_text().replace("\n", " "))
+    check(leg.locator(".fc-key").inner_text().split() == ["적설", "강수", "확률", "기온"] and leg.locator(".fc-ramp li").count() == 6 and "cm" not in leg.inner_text() and "mm" not in leg.inner_text() and "마우스" not in leg.inner_text(),
+          "범례: 숫자 순서(적설·강수 확률·기온) + 적설량 색띠만: " + leg.inner_text().replace("\n", " "))
+    prow = [r.locator("th.lb").inner_text() for r in pin0.locator("table.fc-t1").first.locator("tbody tr").all()]
+    check(len(prow) == 4 and prow[2].startswith("확률") and "확률 최고" in pin0.locator(".fc-tt-sum").inner_text(), f"고정 창 표에 강수확률 줄·합계 줄에 확률 최고: {prow}")
+    mine = [c for c in m.fc_cells if d in c[2]]; hot = [c for c in mine if c[3] > 0 or c[4] > 0]
+    check(p.locator("#fmap .fc-label.hot").count() == len(hot) and p.locator("#fmap .fc-label.calm").count() == len(mine) - len(hot) and len(hot) > 0, f"지도 칸: 적설·강수가 있는 칸만 크게({len(hot)}칸), 나머지는 흐리게")
+    lab = p.locator("#fmap .fc-label").first
+    check(lab.locator("span i").inner_text().endswith("%") and p.locator("#fmap .fc-label .z").count() > 0, "칸 글자에 강수확률(%), 0 인 숫자는 흐리게")
+    top_pop = max(c[8] for c in mine)
+    check("확률" in p.locator(".fc-cols").inner_text() and f"{top_pop}%" in p.locator(f"#fc-tree [data-fcbr='{d}']").inner_text() and "확률(%)" in p.locator(".fc-detail thead").inner_text(), "옆 목록: 지사 줄에 최고 강수확률, 격자 표에 확률 칸")
     p.click(".fc-pin-x"); p.wait_for_timeout(150)
     check(not p.locator("#fc-pin").is_visible() and p.locator(".fc-detail tr.sel").count() == 0, "× 로 닫으면 고정 없음")
     key = J(p, f"(() => {{ const l = {S}.cells.getLayers().find(l => l.getLatLngs && l.getTooltip()); l.fire('click'); return {S}.pin }})()"); p.wait_for_timeout(300)
@@ -147,10 +157,10 @@ def t_pin_chart(b):
     check(p.locator("#fc-pin").is_visible(), "옆 표의 격자 줄을 눌러도 고정"); p.click(".fc-pin-x"); p.wait_for_timeout(150); check(not p.locator("#fc-pin").is_visible(), "× 로 닫기")
 
 def t_auto_pick(b):
-    """지사를 고르면 격자 하나를 고른 채로 엶(2026-10-10). 순서: ① 적설 ② 강수 + 그 시각 4℃ 이하 ③ 강수 ④ 최저 4℃ 이하. 아무것도 없으면 고르지 않음"""
+    """지사를 고르면 격자 하나를 고른 채로 엶(2026-10-10). 순서: ① 적설 ② 강수 + 24시간 안에 한 번이라도 4℃ 이하 ③ 강수 ④ 최저 4℃ 이하. 아무것도 없으면 고르지 않음"""
     def case(setup, name):
-        m = SBM.Mock(); d = m.branch_forecast[0]["branch_id"]; cs = [c for c in m.fc_cells if d in c[2]]
-        for c in cs: c[3] = 0; c[4] = 0; c[5] = 10.0; c[7] = {"s": [0] * 24, "p": [0] * 24, "t": [10.0] * 24}      # 모두 맑고 따뜻하게 만든 뒤 경우마다 바꿈
+        m = SBM.Mock(); d = next(x["branch_id"] for x in m.branch_forecast if sum(1 for c in m.fc_cells if x["branch_id"] in c[2]) >= 5); cs = [c for c in m.fc_cells if d in c[2]]
+        for c in cs: c[3] = 0; c[4] = 0; c[5] = 10.0; c[7] = {"s": [0] * 24, "p": [0] * 24, "t": [10.0] * 24, "r": [0] * 24}; c[8] = 0      # 모두 맑고 따뜻하게 만든 뒤 경우마다 바꿈
         want = setup(cs)
         p, _ = open_page(b, mock=m); J(p, f"(() => {{ SSOpenForecast('{d}'); return null }})()"); p.wait_for_timeout(1300)
         got = J(p, f"{S}.pin"); key = want and f"{want[0][0]},{want[0][1]}"
@@ -159,13 +169,15 @@ def t_auto_pick(b):
         else: check(not p.locator("#fc-pin").is_visible(), f"{name}: 고정 창 없음")
         p.close()
     def rain(c, mm, t):                                    # 2~4시에 비 mm, 그 칸 기온 t
-        c[4] = mm; c[5] = t; c[7] = {"s": [0] * 24, "p": [round(mm / 3, 1) if 2 <= i < 5 else 0 for i in range(24)], "t": [t] * 24}
+        c[4] = mm; c[5] = t; c[7] = {"s": [0] * 24, "p": [round(mm / 3, 1) if 2 <= i < 5 else 0 for i in range(24)], "t": [t] * 24, "r": [60] * 24}
     def s1(cs): rain(cs[0], 9.0, 1.0); cs[1][3] = 0.5; cs[1][7]["s"][5] = 0.5; cs[2][3] = 2.0; cs[2][7]["s"][5] = 2.0; return (cs[2], "적설이 가장 많은 칸")
-    def s2(cs): rain(cs[0], 9.0, 10.0); rain(cs[1], 1.5, 1.0); rain(cs[2], 3.0, 4.0); cs[3][5] = -8.0; cs[3][7]["t"] = [-8.0] * 24; return (cs[2], "4℃ 이하에서 강수가 가장 많은 칸")
+    def s2(cs):                                            # 비 올 땐 10℃ 지만 밤(20시)에 2℃ 로 내려가는 칸도 ② — 24시간 안에 한 번이라도 4℃ 이하
+        rain(cs[0], 9.0, 10.0); cs[0][5] = 2.0; cs[0][7]["t"][20] = 2.0; rain(cs[1], 3.0, 4.0); rain(cs[2], 12.0, 10.0); cs[3][5] = -8.0; cs[3][7]["t"] = [-8.0] * 24
+        return (cs[0], "4℃ 이하 + 강수가 가장 많은 칸")
     def s3(cs): rain(cs[0], 2.0, 10.0); rain(cs[1], 9.0, 4.5); cs[2][5] = -8.0; cs[2][7]["t"] = [-8.0] * 24; return (cs[1], "강수가 가장 많은 칸")
     def s4(cs): cs[0][5] = 4.0; cs[0][7]["t"] = [4.0] * 24; cs[1][5] = -3.0; cs[1][7]["t"] = [-3.0] * 24; return (cs[1], "기온이 가장 낮은 칸")
     def s5(cs): cs[0][5] = 4.5; return None
-    case(s1, "① 적설(강수·기온보다 먼저)"); case(s2, "② 강수 + 4℃ 이하(비가 더 많은 따뜻한 칸·더 추운 맑은 칸보다 먼저)"); case(s3, "③ 강수(4.5℃ 는 해당 없음)")
+    case(s1, "① 적설(강수·기온보다 먼저)"); case(s2, "② 강수 + 4℃ 이하(비가 더 많은 따뜻한 칸·더 추운 맑은 칸보다 먼저, 같은 시각이 아니어도)"); case(s3, "③ 강수(4.5℃ 는 해당 없음)")
     case(s4, "④ 최저 4℃ 이하"); case(s5, "해당 없음")
 
 def t_top_menu(b):

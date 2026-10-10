@@ -1,7 +1,7 @@
 /* 예상 적설 받기 함수(supabase/functions/collect-forecast/core.mjs) 자동 테스트 — 격자 글에서 지사 격자 고르기, 가짜 DB 로 받기 흐름·다시 받기·시간 제한
    실행: node tests/test_collect_forecast.mjs   (저장소 맨 위 폴더에서) */
 import assert from 'node:assert/strict';
-import { pickCells, kstHour, handle, NX, NY, GRID_URL } from '../supabase/functions/collect-forecast/core.mjs';
+import { pickCells, kstHour, handle, NX, NY, GRID_URL, gridStats } from '../supabase/functions/collect-forecast/core.mjs';
 
 const results = [];
 async function test(name, fn) { try { await fn(); results.push([name, true]); } catch (e) { results.push([name, false, String(e.message).split('\n')[0]]); } }
@@ -38,7 +38,7 @@ function world(o = {}) {
   };
   return w;
 }
-const call = async (w, h = { token: 'tok' }) => { const r = await handle(new Request('https://x/f', { method: 'POST', headers: h.token ? { 'x-collector-token': h.token } : {}, body: '{}' }), w.deps); return { status: r.status, j: await r.json() }; };
+const call = async (w, h = { token: 'tok' }, body = '{}') => { const r = await handle(new Request('https://x/f', { method: 'POST', headers: h.token ? { 'x-collector-token': h.token } : {}, body }), w.deps); return { status: r.status, j: await r.json() }; };
 
 await test('권한: 토큰 없으면 401(기상청에 묻지 않음)', async () => {
   const w = world(); assert.equal((await call(w, {})).status, 401); assert.equal((await call(w, { token: 'x' })).status, 401); assert.equal(w.fetched.length, 0);
@@ -66,6 +66,19 @@ await test('120초가 넘으면 멈추고 나머지는 다음 예약 때', async
 await test('이미 다 받은 발표분이면 아무것도 받지 않음, 키 없으면 실패 기록', async () => {
   const w = world({ plan: { done: true, tmfc: 'x' } }); const r = await call(w); assert.equal(r.j.done, true); assert.equal(w.fetched.length, 0);
   const w2 = world({ key: '' }); await call(w2); assert.equal(w2.fetched.length, 0); assert.ok(w2.fails[0].includes('KMA_AUTH_KEY'));
+});
+await test('강수확률(POP)도 서버가 준 목록대로 받아 넣음(종류는 서버가 정함)', async () => {
+  const w = world(); w.plan.missing = [['SNO', w.plan.start_at], ['POP', w.plan.start_at]];
+  w.deps.store.put = async (tmfc, v, tmef, vals) => { w.puts.push([tmfc, tmef, vals, v]); return { data: { ok: true, done: w.puts.length === 2 }, error: null }; };
+  const r = await call(w); assert.equal(r.j.done, true); assert.deepEqual(w.puts.map((x) => x[3]), ['SNO', 'POP']); assert.ok(w.fetched[1].includes('vars=POP'));
+});
+await test('시험 호출(probe): 한 시각만 받아 요약만 돌려주고 저장하지 않음, 모르는 종류는 거절, 권한은 같음', async () => {
+  const w = world(); const r = await call(w, { token: 'tok' }, '{"probe":"pop"}');
+  assert.equal(r.j.ok, true); assert.equal(r.j.probe, 'POP'); assert.equal(w.fetched.length, 1); assert.ok(w.fetched[0].includes('vars=POP') && w.fetched[0].includes('tmfc=2026100508') && w.fetched[0].includes('tmef=2026100514'));
+  assert.equal(w.puts.length, 0); assert.equal(w.fails.length, 0); assert.equal(r.j.stats.n, NX * NY); assert.equal(r.j.stats.min, 1001); assert.equal(r.j.stats.max, 253149);
+  assert.ok(!JSON.stringify(r.j).includes(w.key), '키가 응답에 없어야 함');
+  assert.equal((await call(world(), { token: 'tok' }, '{"probe":"XYZ"}')).status, 400); assert.equal((await call(world(), {}, '{"probe":"POP"}')).status, 401);
+  assert.equal(gridStats('1,2,3').ok, false); assert.equal(gridStats(null), null);
 });
 
 const ok = results.filter((r) => r[1]).length;

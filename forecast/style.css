@@ -3,19 +3,22 @@
 #fmap{position:absolute;inset:0;}
 .fc-meta{margin:0 14px 10px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:12.5px;line-height:1.5;}
 .fc-stale{display:block;color:#8a5a00;font-size:12px;}
-.fc-cols{display:grid;grid-template-columns:minmax(0,1fr) 58px 58px 52px;gap:4px;padding:4px 14px;font-size:11px;color:var(--muted);font-weight:700;text-align:right;}
-.fc-row .fc-v{width:58px;text-align:right;font-family:var(--mono);font-size:12px;font-weight:700;flex:none;}
+#view-forecast .jr-side{width:440px;}      /* 확률 칸이 늘어 옆 목록을 조금 넓힘(다른 탭은 390px 그대로) */
+#view-forecast .jr-hqpick .hn,#view-forecast .jr-br .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.fc-cols{display:grid;grid-template-columns:minmax(0,1fr) 56px 56px 42px 50px;gap:4px;padding:4px 14px;font-size:11px;color:var(--muted);font-weight:700;text-align:right;}
+.fc-row .fc-v{width:56px;text-align:right;font-family:var(--mono);font-size:12px;font-weight:700;flex:none;}
 .fc-row .fc-v i{font-style:normal;font-weight:400;font-size:10px;color:var(--muted);margin-left:1px;}
-.fc-row .fc-v.s{color:#2e5fb8;} .fc-row .fc-v.p{color:#2f7d4f;} .fc-row .fc-v.t{color:#b0392b;width:52px;}
-.fc-detail{padding:4px 14px 10px 30px;font-size:12px;}
+.fc-row .fc-v.s{color:#2e5fb8;} .fc-row .fc-v.p{color:#2f7d4f;} .fc-row .fc-v.o{color:#1f7a8c;width:42px;} .fc-row .fc-v.t{color:#b0392b;width:50px;}
+.fc-detail{padding:4px 12px 10px 22px;font-size:12px;}
 .fc-detail table{width:100%;border-collapse:collapse;}
-.fc-detail th,.fc-detail td{padding:3px 4px;text-align:right;border-bottom:1px solid #eee;font-family:var(--mono);}
+.fc-detail th,.fc-detail td{padding:3px 4px;text-align:right;border-bottom:1px solid #eee;font-family:var(--mono);white-space:nowrap;}
+.fc-detail th{font-size:11px;} .fc-detail td:first-child{white-space:normal;}
 .fc-detail th{color:var(--muted);font-weight:600;font-family:inherit;} .fc-detail th:first-child,.fc-detail td:first-child{text-align:left;}
 .fc-detail tr[data-cell]{cursor:pointer;} .fc-detail tr[data-cell]:hover{background:#f3f7fa;}
 .fc-legend{gap:6px 14px;padding:7px 10px;color:var(--ink);}
 /* 범례: 칸 숫자 순서(지도 칸의 글자와 같은 모양) + 적설량 색띠 */
 .fc-key{display:inline-flex;flex-direction:column;align-items:center;background:#fff;border:1px solid #33424f;border-radius:4px;padding:2px 7px;font-size:10.5px;line-height:1.25;}
-.fc-key b{color:#1d4fa0;font-size:11px;} .fc-key span{color:#2f7d4f;} .fc-key em{color:#b0392b;font-style:normal;}
+.fc-key b{color:#1d4fa0;font-size:11px;} .fc-key span{color:#2f7d4f;} .fc-key span i{color:#1f7a8c;font-style:normal;} .fc-key em{color:#b0392b;font-style:normal;}
 .fc-ramp{display:inline-flex;align-items:center;gap:8px;}
 .fc-ramp-t{font-weight:700;font-size:11.5px;}
 .fc-ramp ol{display:flex;margin:0;padding:0;list-style:none;}
@@ -29,6 +32,12 @@
 .leaflet-tooltip.fc-label b{display:block;color:#1d4fa0;}
 .leaflet-tooltip.fc-label span{display:block;color:#2f7d4f;font-size:10px;}
 .leaflet-tooltip.fc-label em{display:block;color:#b0392b;font-size:10px;font-style:normal;}
+.leaflet-tooltip.fc-label span i{font-style:normal;color:#1f7a8c;margin-left:4px;}
+/* 값이 있는 칸만 크게(hot), 적설·강수가 모두 0 인 칸은 작고 흐리게(calm). 0 인 숫자는 회색 */
+.leaflet-tooltip.fc-label.hot{font-size:13px;border-width:1.5px;padding:2px 6px;z-index:2;}
+.leaflet-tooltip.fc-label.hot b{font-size:14px;} .leaflet-tooltip.fc-label.hot span{font-size:12px;} .leaflet-tooltip.fc-label.hot em{font-size:11px;}
+.leaflet-tooltip.fc-label.calm{opacity:.62;border-color:#9fb0bf;background:rgba(255,255,255,.7);}
+.leaflet-tooltip.fc-label .z{color:#9aa8b4;font-weight:400;}
 /* 격자 마우스·고정: 24시간 추이 표(그림 대신). 마우스 말풍선 283px(=236×1.2), 고정 창 396px(=330×1.2) */
 .leaflet-tooltip.fc-tip{max-width:none;background:#fff;z-index:700;}
 .fc-trend-box{margin-top:4px;display:flex;flex-direction:column;gap:6px;width:283px;}
@@ -39,7 +48,7 @@
 .fc-tt thead th small{display:block;font-weight:400;font-size:8.5px;color:#888;}
 .fc-tt th.lb{width:52px;text-align:left;padding-left:3px;font-family:inherit;font-weight:700;font-size:10.5px;background:#f3f7fa;}
 .fc-tt th.lb small{font-weight:400;font-size:9px;color:#888;margin-left:2px;}
-.fc-tt th.s{color:#2e5fb8;} .fc-tt th.p{color:#2f7d4f;} .fc-tt th.t{color:#b0392b;}
+.fc-tt th.s{color:#2e5fb8;} .fc-tt th.p{color:#2f7d4f;} .fc-tt th.o{color:#1f7a8c;} .fc-tt th.t{color:#b0392b;}
 .fc-tt td.v{font-weight:700;} .fc-tt td.z{color:#aaa;} .fc-tt td.neg{color:#1d5fb0;}
 .fc-tt-cap{font-size:10px;color:#777;margin-top:-3px;}
 .fc-tt-sum{font-size:11px;color:#333;} .fc-tt-sum b{font-family:var(--mono);}

@@ -20,6 +20,7 @@
   function fmtHour(iso) { var d = new Date(iso); return isNaN(d) ? '-' : (d.getMonth() + 1) + '/' + d.getDate() + ' ' + p2(d.getHours()) + '시'; }
   function num(v) { return v == null ? '-' : (Math.round(v * 10) / 10).toFixed(1); }
   function tmp(v) { return v == null ? '-' : String(Math.round(v * 10) / 10); }                 // 기온(℃): -5, 1.5
+  function pct(v) { return v == null ? '-' : String(Math.round(v)); }                             // 강수확률(%): 60
   function hh(iso) { var d = iso ? new Date(iso) : null; return d && !isNaN(d) ? p2(d.getHours()) + '시' : '-'; }
   var STALE = 12 * 3600e3;                                 // 발표 후 12시간이 지난 예보는 쓰지 않음(장비 지원 화면과 같음)
   // 24시간 예상 적설(cm) → 칸 색
@@ -56,7 +57,7 @@
 
   /* ---------- 서버 ---------- */
   function loadOverview() {
-    return SSAuth.rest('branch_forecast?select=branch_id,issued_at,max_snow_24h,max_pcp_24h,min_tmp,min_tmp_at,worst_nx,worst_ny,detail').then(function (r) {
+    return SSAuth.rest('branch_forecast?select=*').then(function (r) {
       S.bf = {}; if (!r.ok) return;
       r.json.forEach(function (x) { S.bf[x.branch_id] = x; });
       var latest = r.json.reduce(function (a, x) { return !a || x.issued_at > a.issued_at ? x : a; }, null);
@@ -87,29 +88,32 @@
   function hourLabel(start, i) { var d = hourAt(start, i); return d ? p2(d.getHours()) + '시' : ''; }
   function sumOf(a) { var x = a.filter(function (v) { return v != null; }); return x.length ? x.reduce(function (m, v) { return m + v; }, 0) : null; }
   function minOf(a) { var x = a.filter(function (v) { return v != null; }); return x.length ? Math.min.apply(null, x) : null; }
+  function maxOf(a) { var x = a.filter(function (v) { return v != null; }); return x.length ? Math.max.apply(null, x) : null; }
+  function cellPop(v) { return v == null ? '<td class="z">-</td>' : v === 0 ? '<td class="z">0</td>' : '<td class="v">' + pct(v) + '</td>'; }
   function cellNum(v) { return v == null ? '<td class="z">-</td>' : v === 0 ? '<td class="z">0</td>' : '<td class="v">' + num(v) + '</td>'; }
   function cellTmp(v) { return v == null ? '<td class="z">-</td>' : '<td class="v' + (v < 0 ? ' neg' : '') + '">' + tmp(v) + '</td>'; }
   // from~to(번호) 구간을 step 시간씩 묶어 표 하나 — step 3 이면 합·최저, step 1 이면 그 시각 값
   function tableBlock(sr, start, from, to, step) {
-    var head = '', rs = '', rp = '', rt = '';
+    var head = '', rs = '', rp = '', rt = '', ro = '', hasPop = !!(sr.r && sr.r.length);      // r = 강수확률(%), 서버에 있을 때만 줄을 보임
     for (var i = from; i < to; i += step) {
       var d = hourAt(start, i), part = function (k) { return (sr[k] || []).slice(i, Math.min(i + step, to)); };
       var prev = i > 0 ? hourAt(start, i - step) : null, newDay = d && (i === 0 || (prev && prev.getDate() !== d.getDate()));   // 날짜는 맨 처음 칸과 날짜가 바뀌는 칸에만
       head += '<th>' + (d ? p2(d.getHours()) : '') + (newDay ? '<small>' + (d.getMonth() + 1) + '/' + d.getDate() + '</small>' : '') + '</th>';
-      rs += cellNum(sumOf(part('s'))); rp += cellNum(sumOf(part('p'))); rt += cellTmp(minOf(part('t')));
+      rs += cellNum(sumOf(part('s'))); rp += cellNum(sumOf(part('p'))); rt += cellTmp(minOf(part('t'))); if (hasPop) ro += cellPop(maxOf(part('r')));
     }
     var u = step === 1 ? '' : (step + '시간 ');
     return '<table class="fc-tt fc-t' + step + '"><thead><tr><th class="lb">시</th>' + head + '</tr></thead><tbody>' +
       '<tr><th class="lb s">신적설<small>cm</small></th>' + rs + '</tr><tr><th class="lb p">강수<small>mm</small></th>' + rp + '</tr>' +
+      (hasPop ? '<tr><th class="lb o">확률<small>%</small></th>' + ro + '</tr>' : '') +
       '<tr><th class="lb t">' + (step === 1 ? '기온' : '최저기온') + '<small>℃</small></th>' + rt + '</tr></tbody></table>';
   }
   function totalLine(sr) {
-    return '<div class="fc-tt-sum">24시간 합 · 적설 <b>' + num(sumOf(sr.s || [])) + '</b>cm · 강수 <b>' + num(sumOf(sr.p || [])) + '</b>mm · 최저 <b>' + tmp(minOf(sr.t || [])) + '</b>℃</div>';
+    return '<div class="fc-tt-sum">24시간 합 · 적설 <b>' + num(sumOf(sr.s || [])) + '</b>cm · 강수 <b>' + num(sumOf(sr.p || [])) + '</b>mm' + (sr.r && sr.r.length ? ' · 확률 최고 <b>' + pct(maxOf(sr.r)) + '</b>%' : '') + ' · 최저 <b>' + tmp(minOf(sr.t || [])) + '</b>℃</div>';
   }
   // big = false: 마우스 말풍선(3시간 단위 한 표), true: 고정 창(1시간 단위, 12시간씩 두 표)
   function trendBox(sr, start, big) {
     if (!sr) return '';
-    if (!big) return '<div class="fc-trend-box">' + tableBlock(sr, start, 0, 24, 3) + '<div class="fc-tt-cap">칸 = 그 시각부터 3시간 합 (기온은 최저)</div>' + totalLine(sr) + '</div>';
+    if (!big) return '<div class="fc-trend-box">' + tableBlock(sr, start, 0, 24, 3) + '<div class="fc-tt-cap">칸 = 그 시각부터 3시간 합 (기온은 최저' + (sr.r && sr.r.length ? ', 확률은 최고' : '') + ')</div></div>';
     return '<div class="fc-trend-box big">' + tableBlock(sr, start, 0, 12, 1) + tableBlock(sr, start, 12, 24, 1) + totalLine(sr) + '</div>';
   }
   // 격자를 누르면 그 격자의 그림을 지도 오른쪽 위에 고정(지도 아무 데나 누르면 닫힘)
@@ -126,9 +130,9 @@
   function markSel() { var rows = document.querySelectorAll('#fc-tree .fc-detail tr[data-cell]'); for (var i = 0; i < rows.length; i++) rows[i].classList.toggle('sel', rows[i].dataset.cell === S.pin); }
   function pinCell(key) { S.pin = key; S.pinWhy = null; S.pinAt = Date.now(); renderPin(); drawCells(); markSel(); }
   function unpin() { if (!S.pin) return; S.pin = null; S.pinWhy = null; renderPin(); drawCells(); markSel(); }
-  // 지사를 고르면 눈여겨볼 격자 하나를 골라 1시간 표를 바로 엶(2026-10-10). 순서: ① 적설 있음 ② 강수 + 그 시각 기온 4℃ 이하 ③ 강수 있음 ④ 최저기온 4℃ 이하
-  //  각 단계에서는 값이 가장 센 칸(적설 최대 / 4℃ 이하일 때 내린 강수 합 최대 / 강수 최대 / 기온 최저). 해당하는 칸이 없으면 고르지 않음
-  var COLD = 4, WHY = ['적설이 가장 많은 칸', '4℃ 이하에서 강수가 가장 많은 칸', '강수가 가장 많은 칸', '기온이 가장 낮은 칸'];
+  // 지사를 고르면 눈여겨볼 격자 하나를 골라 1시간 표를 바로 엶(2026-10-10). 순서: ① 적설 있음 ② 강수 있음 + 24시간 안에 한 번이라도 4℃ 이하 ③ 강수 있음 ④ 최저기온 4℃ 이하
+  //  각 단계에서는 값이 가장 센 칸(적설 최대 / 강수 최대 / 강수 최대 / 기온 최저). 해당하는 칸이 없으면 고르지 않음
+  var COLD = 4, WHY = ['적설이 가장 많은 칸', '4℃ 이하 + 강수가 가장 많은 칸', '강수가 가장 많은 칸', '기온이 가장 낮은 칸'];
   function autoPick(id) {
     var g = S.grid[hqOf(id)], all = S.series[id]; if (!g || !g.cells || !all) return null;
     if (!(g.tmfc && Date.now() - Date.parse(g.tmfc) <= STALE)) return null;
@@ -140,9 +144,8 @@
     g.cells.forEach(function (c) {
       if ((c[2] || []).indexOf(id) < 0) return;
       var key = c[0] + ',' + c[1], sr = all[key]; if (!sr) return;
-      var cold = 0; (sr.p || []).forEach(function (v, i) { var t = (sr.t || [])[i]; if (v > 0 && t != null && t <= COLD) cold += v; });
       if (c[3] > 0) put(0, key, c[3], c);
-      if (cold > 0) put(1, key, cold, c);
+      if (c[4] > 0 && c[5] != null && c[5] <= COLD) put(1, key, c[4], c);
       if (c[4] > 0) put(2, key, c[4], c);
       if (c[5] != null && c[5] <= COLD) put(3, key, -c[5], c);
     });
@@ -170,7 +173,7 @@
     var g = S.grid[S.hq]; if (!g || !g.cells) return;
     var fresh = g.tmfc && Date.now() - Date.parse(g.tmfc) <= STALE;
     g.cells.forEach(function (c) {
-      var nx = c[0], ny = c[1], bs = c[2] || [], snow = fresh ? c[3] : null, pcp = fresh ? c[4] : null, tmin = fresh ? c[5] : null, tat = fresh ? c[6] : null;
+      var nx = c[0], ny = c[1], bs = c[2] || [], snow = fresh ? c[3] : null, pcp = fresh ? c[4] : null, tmin = fresh ? c[5] : null, tat = fresh ? c[6] : null, pop = fresh && c[8] != null ? c[8] : null;
       var mine = S.focus ? bs.indexOf(S.focus) >= 0 : true;
       if (S.focus && !mine) return;                                  // 지사를 고르면 그 지사 격자만
       var col = S.focus ? snowColor(snow) : JC.colorOf(st(), bs[0], S.hq);
@@ -178,8 +181,8 @@
       var poly = L.polygon(G.cellCorners(nx, ny), { weight: pinned ? 4 : S.focus ? 1.5 : 1, color: pinned ? '#FFC400' : S.focus ? '#33424f' : col, fillColor: col, fillOpacity: S.focus ? 0.7 : 0.28, opacity: 0.9 });
       var sr = S.focus && fresh && S.series[S.focus] ? S.series[S.focus][key] : null;
       poly.bindTooltip('<b>' + esc(cellName(nx, ny)) + '</b>' + cellNo(nx, ny) + '<br>' + bs.map(function (b) { return esc(bname(b)); }).join(', ') +
-        (S.focus ? '<br>24시간 적설 <b>' + num(snow) + 'cm</b> · 강수 <b>' + num(pcp) + 'mm</b><br>최저기온 <b>' + tmp(tmin) + '℃</b> (' + esc(hh(tat)) + ')' +
-          (sr ? trendBox(sr, S.series[S.focus]._start, false) + '<div class="fc-trend-key">누르면 1시간 단위 표 고정</div>' : '') : ''),
+        (S.focus ? '<br>24시간 적설 <b>' + num(snow) + 'cm</b> · 강수 <b>' + num(pcp) + 'mm</b>' + (pop != null ? ' · 확률 최고 <b>' + pct(pop) + '%</b>' : '') + '<br>최저기온 <b>' + tmp(tmin) + '℃</b> (' + esc(hh(tat)) + ')' +
+          (sr ? trendBox(sr, S.series[S.focus]._start, false) : '') : ''),
         { sticky: true, opacity: 1, className: 'gr-tip' + (sr ? ' fc-tip' : '') });
       poly.on('click', function () {
         if (!S.focus) { if (bs.length) focusBranch(bs[0]); return; }
@@ -187,8 +190,9 @@
       });
       poly.addTo(S.cells);
       if (S.focus) {                                                 // 지사: 격자마다 값(적설 / 강수)
-        L.tooltip({ permanent: true, direction: 'center', className: 'fc-label', interactive: false })
-          .setLatLng(G.cellCenter(nx, ny)).setContent('<b>' + num(snow) + '</b><span>' + num(pcp) + '</span><em>' + tmp(tmin) + '°</em>').addTo(S.cells);
+        var hot = snow > 0 || pcp > 0, zc = function (v) { return v > 0 ? '' : ' class="z"'; };      // 적설·강수가 있는 칸만 크게, 0 은 흐리게
+        L.tooltip({ permanent: true, direction: 'center', className: 'fc-label ' + (hot ? 'hot' : 'calm'), interactive: false })
+          .setLatLng(G.cellCenter(nx, ny)).setContent('<b' + zc(snow) + '>' + num(snow) + '</b><span' + zc(pcp) + '>' + num(pcp) + (pop != null ? '<i' + zc(pop) + '>' + pct(pop) + '%</i>' : '') + '</span><em>' + tmp(tmin) + '°</em>').addTo(S.cells);
       }
     });
   }
@@ -215,17 +219,18 @@
       : '<span class="fc-stale">예보 없음</span>';
   }
   function cellPair(f) {
-    return f ? '<span class="fc-v s">' + num(f.max_snow_24h) + '<i>cm</i></span><span class="fc-v p">' + num(f.max_pcp_24h) + '<i>mm</i></span><span class="fc-v t">' + tmp(f.min_tmp) + '<i>℃</i></span>'
-      : '<span class="fc-v s">-</span><span class="fc-v p">-</span><span class="fc-v t">-</span>';
+    return f ? '<span class="fc-v s">' + num(f.max_snow_24h) + '<i>cm</i></span><span class="fc-v p">' + num(f.max_pcp_24h) + '<i>mm</i></span><span class="fc-v o">' + pct(f.max_pop_24h) + (f.max_pop_24h == null ? '' : '<i>%</i>') + '</span><span class="fc-v t">' + tmp(f.min_tmp) + '<i>℃</i></span>'
+      : '<span class="fc-v s">-</span><span class="fc-v p">-</span><span class="fc-v o">-</span><span class="fc-v t">-</span>';
   }
   function hqMax(hq) {               // 본부 줄: 적설·강수는 가장 큰 지사, 최저기온은 가장 추운 지사
-    var s = null, p = null, t = null;
+    var s = null, p = null, t = null, o = null;
     branchesOf(hq).forEach(function (id) { var f = bval(id); if (!f) return; if (s == null || f.max_snow_24h > s) s = f.max_snow_24h; if (p == null || f.max_pcp_24h > p) p = f.max_pcp_24h;
+      if (f.max_pop_24h != null && (o == null || f.max_pop_24h > o)) o = f.max_pop_24h;
       if (f.min_tmp != null && (t == null || f.min_tmp < t)) t = f.min_tmp; });
-    return s == null && p == null ? null : { max_snow_24h: s, max_pcp_24h: p, min_tmp: t };
+    return s == null && p == null ? null : { max_snow_24h: s, max_pcp_24h: p, max_pop_24h: o, min_tmp: t };
   }
   function renderTree() {
-    var html = '<div class="fc-cols"><span></span><span>적설</span><span>강수</span><span>최저</span></div>' + st().hqs.filter(function (h) { return !JC.isPrivate(h); }).map(function (hq) {
+    var html = '<div class="fc-cols"><span></span><span>적설</span><span>강수</span><span>확률</span><span>최저</span></div>' + st().hqs.filter(function (h) { return !JC.isPrivate(h); }).map(function (hq) {
       var ids = branchesOf(hq); if (!ids.length) return '';
       var open = S.hq === hq;
       return '<div class="jr-hq' + (open ? ' open' : '') + '"><div class="jr-hqname jr-hqpick fc-row' + (open ? ' on' : '') + '" data-fchq="' + esc(hq) + '">' +
@@ -241,14 +246,14 @@
     var g = S.grid[S.hq]; if (!g || !g.cells) return '<div class="fc-detail muted">격자를 불러오는 중…</div>';
     var fresh = g.tmfc && Date.now() - Date.parse(g.tmfc) <= STALE;
     var rows = g.cells.filter(function (c) { return (c[2] || []).indexOf(id) >= 0; })
-      .map(function (c) { return { nx: c[0], ny: c[1], s: fresh ? c[3] : null, p: fresh ? c[4] : null, t: fresh ? c[5] : null, ta: fresh ? c[6] : null }; })
+      .map(function (c) { return { nx: c[0], ny: c[1], s: fresh ? c[3] : null, p: fresh ? c[4] : null, t: fresh ? c[5] : null, ta: fresh ? c[6] : null, o: fresh && c[8] != null ? c[8] : null }; })
       .sort(function (a, b) { return (b.s || 0) - (a.s || 0) || (b.p || 0) - (a.p || 0) || (a.t == null ? 99 : a.t) - (b.t == null ? 99 : b.t); });
-    return '<div class="fc-detail"><table><thead><tr><th>지명</th><th>적설(cm)</th><th>강수(mm)</th><th>최저(℃)</th><th>시각</th></tr></thead><tbody>' +
-      rows.map(function (r) { return '<tr data-cell="' + r.nx + ',' + r.ny + '"><td>' + esc(cellName(r.nx, r.ny)) + cellNo(r.nx, r.ny) + '</td><td>' + num(r.s) + '</td><td>' + num(r.p) + '</td><td>' + tmp(r.t) + '</td><td>' + esc(hh(r.ta)) + '</td></tr>'; }).join('') +
+    return '<div class="fc-detail"><table><thead><tr><th>지명</th><th>적설(cm)</th><th>강수(mm)</th><th>확률(%)</th><th>최저(℃)</th><th>시각</th></tr></thead><tbody>' +
+      rows.map(function (r) { return '<tr data-cell="' + r.nx + ',' + r.ny + '"><td>' + esc(cellName(r.nx, r.ny)) + cellNo(r.nx, r.ny) + '</td><td>' + num(r.s) + '</td><td>' + num(r.p) + '</td><td>' + pct(r.o) + '</td><td>' + tmp(r.t) + '</td><td>' + esc(hh(r.ta)) + '</td></tr>'; }).join('') +
       '</tbody></table></div>';
   }
   function renderLegend() {             // 범례(2026-10-10 간단히): 칸 숫자 순서 + 적설량 색띠만
-    $('fc-legend').innerHTML = S.focus ? '<span class="fc-key" aria-label="칸 숫자: 위부터 적설, 강수, 기온"><b>적설</b><span>강수</span><em>기온</em></span>' +
+    $('fc-legend').innerHTML = S.focus ? '<span class="fc-key" aria-label="칸 숫자: 위부터 적설, 강수와 강수확률, 기온"><b>적설</b><span>강수 <i>확률</i></span><em>기온</em></span>' +
         '<span class="fc-ramp"><span class="fc-ramp-t">적설량</span><ol>' + SCALE.slice().reverse().map(function (x) { return '<li><i style="background:' + x[1] + '"></i>' + esc(x[2]) + '</li>'; }).join('') + '</ol></span>'
       : '';
     $('fc-legend').style.display = S.focus ? '' : 'none';

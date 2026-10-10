@@ -574,9 +574,15 @@ def t_weather_manual(p):
     i = [k for k, x in enumerate(th) if x.startswith("대설특보 발표")][0]
     check(th[i + 1] == "기상현황직접입력" and th[i + 2] == "지사 요청", f"대설특보 발표와 지사 요청 사이: {th}")
     cj = bid(p, "춘천"); row = p.locator(f"tr[data-b='{cj}']")
-    check(row.locator("[data-fb]").count() == 4 and row.locator("input[data-f=wx_snow]").count() == 0, "처음엔 자동 값 4개(적설·강수·최저기온·시각, 누르면 예보로)")
+    check(row.locator("[data-fb]").count() == 5 and row.locator("input[data-f=wx_snow]").count() == 0, "처음엔 자동 값 5개(적설·강수·확률·최저기온·시각, 누르면 예보로)")
+    # 강수확률(2026-10-10, 마이그레이션 42): 24시 강설 아래 소제목 '확률' — 지사 격자의 24시간 최고 %(시각 없이 값만), 직접입력 줄은 '-'
+    sub = [x.strip().replace("\n", "") for x in p.locator("#branchTable thead tr").nth(1).locator("th").all_inner_texts()]
+    check(sub[:3] == ["적설cm", "강수mm", "확률%"] and p.locator("#branchTable thead tr").first.locator("th.fch").first.get_attribute("colspan") == "3", f"24시 강설 = 적설·강수·확률: {sub[:5]}")
+    check(row.locator(f"td[data-ocell='{cj}']").inner_text() == "60" and p.locator(f"td[data-ocell='{bid(p, '대관령')}']").inner_text() == "90", "확률 칸: 예보 값(춘천 60) / 확정한 지사는 확정 때 값(대관령 90)")
+    check(p.locator("#branchTable tr.hq").first.locator("td").count() == p.locator(f"tr[data-b='{cj}'] td").count(), "본부 줄과 지사 줄의 칸 수가 같음")
     row.locator("input[data-f=wx_manual]").check(); p.wait_for_timeout(200); row = p.locator(f"tr[data-b='{cj}']")
     check(row.locator("[data-fb]").count() == 0 and row.locator(".fcv").count() == 0, "체크하면 밑줄·예보 이동 없음")
+    check(row.locator(f"td[data-ocell='{cj}']").inner_text() == "-" and row.locator(f"td[data-ocell='{cj}'] input").count() == 0, "직접입력 줄의 확률은 '-'(넣는 칸 없음)")
     check(row.locator("select[data-f=wx_level] option").all_inner_texts() == ["특보 없음", "예비특보", "대설주의보", "대설경보"], "특보 종류는 선택")
     row.locator("input[data-f=wx_snow]").fill("7.5"); row.locator("input[data-f=wx_snow]").dispatch_event("change")
     row.locator("input[data-f=wx_pcp]").fill("10"); row.locator("input[data-f=wx_pcp]").dispatch_event("change")

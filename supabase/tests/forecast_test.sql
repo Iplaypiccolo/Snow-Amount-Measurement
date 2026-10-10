@@ -1,5 +1,5 @@
 -- ============================================================
--- 예상 적설·강수·최저기온(마이그레이션 27·28·34) 시험 — 모으기 계획·1시간치 넣기(적설·강수·기온)·격자별 24시간 합·최저기온·추이·지사 값·격자 편입 변경 반영·지도용 함수·확정 고정·권한 — SQL Editor 에 통째로 붙여넣고 실행
+-- 예상 적설·강수·최저기온·강수확률(마이그레이션 27·28·34·42) 시험 — 모으기 계획·1시간치 넣기(적설·강수·기온·강수확률)·격자별 24시간 합·최저기온·추이·지사 값·격자 편입 변경 반영·지도용 함수·확정 고정·권한 — SQL Editor 에 통째로 붙여넣고 실행
 -- 마지막에 일부러 오류를 내서 시험 자료를 전부 되돌립니다(지금 예보도 원래대로). "전체 N, 실패 0" 이어야 합니다.
 -- ============================================================
 create temp table _t (n serial, name text, got text, want text, ok boolean);
@@ -28,21 +28,31 @@ begin
 
   set local role service_role; p := public.forecast_plan(); reset role;
   select count(distinct (nx, ny)) into nc from private.grid_effective(); st0 := (p ->> 'start_at')::timestamptz;   -- 다음 계획(done)에는 start_at 이 없어 따로 둠
-  perform pg_temp.yes('계획: 가장 최근 발표분, 다음 정시부터 27시각 × 적설·강수·기온, 지사 격자 전부', not (p ->> 'done')::boolean and jsonb_array_length(p -> 'missing') = 81 and jsonb_array_length(p -> 'cells') = nc
+  perform pg_temp.yes('계획: 가장 최근 발표분, 다음 정시부터 27시각 × 적설·강수·기온·강수확률, 지사 격자 전부(강수확률은 맨 뒤 27개)', not (p ->> 'done')::boolean and jsonb_array_length(p -> 'missing') = 108 and jsonb_array_length(p -> 'cells') = nc
+    and not exists (select 1 from jsonb_array_elements(p -> 'missing') with ordinality m where (m.ordinality <= 81) = (m.value ->> 0 = 'POP'))
     and (p ->> 'tmfc')::timestamptz = private.fc_latest_tmfc() and (p ->> 'start_at')::timestamptz = date_trunc('hour', now()) + interval '1 hour', p::text);
+  -- 강수확률: B001 의 첫 격자는 시작 5시간 뒤 60%·나머지 30%, 다른 격자는 20%
   -- B001 의 첫 격자만 매시간 1.5cm·강수 2mm, 기온은 시작 7시간 뒤와 15시간 뒤 -6℃(같으면 이른 시각), 나머지 3℃. 다른 격자는 0·0·10℃, 바다(-99)인 격자 하나
   select g.nx, g.ny into cx, cy from private.grid_effective() g where g.branch_id = 'B001' order by g.ny, g.nx limit 1;
   select c.ordinality::int into k from jsonb_array_elements(p -> 'cells') with ordinality c where (c.value ->> 0)::int = cx and (c.value ->> 1)::int = cy;
   i := 0;
   for vr, h in select x ->> 0, (x ->> 1)::timestamptz from jsonb_array_elements(p -> 'missing') x loop
     hi := (extract(epoch from h - (p ->> 'start_at')::timestamptz) / 3600)::int;
-    v := array_fill(case when vr = 'TMP' then 10 else 0 end::real, array[nc]);
-    v[k] := case when vr = 'SNO' then 1.5 when vr = 'PCP' then 2 when hi in (7, 15) then -6 else 3 end; v[1] := case when k = 1 then v[k] else -99 end;
+    v := array_fill(case when vr = 'TMP' then 10 when vr = 'POP' then 20 else 0 end::real, array[nc]);
+    v[k] := case when vr = 'SNO' then 1.5 when vr = 'PCP' then 2 when vr = 'POP' then (case when hi = 5 then 60 else 30 end) when hi in (7, 15) then -6 else 3 end; v[1] := case when k = 1 then v[k] else -99 end;
     set local role service_role; perform public.forecast_put((p ->> 'tmfc')::timestamptz, vr, h, v); reset role;
     i := i + 1;
     if i = 80 then perform pg_temp.yes('80개째까지는 아직 끝나지 않음', (select done_at is null from public.forecast_runs where tmfc = (p ->> 'tmfc')::timestamptz) and not exists (select 1 from public.branch_forecast where branch_id = 'B001' and max_snow_24h = 36)); end if;   -- 같은 발표분의 실제 결과가 이미 있을 수 있어 값으로 봄
+    if i = 81 then perform pg_temp.yes('81개(적설·강수·기온)가 모이면 먼저 계산 — 강수확률은 아직 비어 있고, 모으기는 안 끝남', (select core_at is not null and done_at is null from public.forecast_runs where tmfc = (p ->> 'tmfc')::timestamptz)
+      and (select max_snow_24h = 36 and max_pcp_24h = 48 and max_pop_24h is null from public.branch_forecast where branch_id = 'B001')
+      and (select not (series ? 'r') and pop_24h is null from public.forecast_cells where nx = cx and ny = cy)); end if;
+    if i = 107 then perform pg_temp.yes('107개째까지는 끝나지 않음', (select done_at is null from public.forecast_runs where tmfc = (p ->> 'tmfc')::timestamptz)); end if;
   end loop;
-  perform pg_temp.yes('81개 다 모이면 끝(지금 창 = 다음 정시부터 24시간): B001 적설 36.0cm(1.5×24)·강수 48.0mm(2×24), 가장 많은 격자', (select max_snow_24h = 36 and max_pcp_24h = 48 and worst_nx = cx and worst_ny = cy and issued_at = (p ->> 'tmfc')::timestamptz from public.branch_forecast where branch_id = 'B001'));
+  perform pg_temp.yes('강수확률까지 108개가 모이면 끝: B001 최고 강수확률 60%(시작 5시간 뒤), 격자 추이 24시각', (select done_at is not null from public.forecast_runs where tmfc = (p ->> 'tmfc')::timestamptz)
+    and (select max_pop_24h = 60 from public.branch_forecast where branch_id = 'B001')
+    and (select pop_24h = 60 and jsonb_array_length(series -> 'r') = 24 and (series -> 'r' ->> 5)::int = 60 and (series -> 'r' ->> 0)::int = 30 from public.forecast_cells where nx = cx and ny = cy));
+  perform pg_temp.yes('바다(-99) 강수확률은 없음으로', (select count(*) = 0 from public.forecast_cells where pop_24h < 0) and (select count(*) = 0 from public.branch_forecast where max_pop_24h < 0));
+  perform pg_temp.yes('지금 창 = 다음 정시부터 24시간: B001 적설 36.0cm(1.5×24)·강수 48.0mm(2×24), 가장 많은 격자', (select max_snow_24h = 36 and max_pcp_24h = 48 and worst_nx = cx and worst_ny = cy and issued_at = (p ->> 'tmfc')::timestamptz from public.branch_forecast where branch_id = 'B001'));
   perform pg_temp.yes('지사 창 = 다음 정시부터 24시간', (select (detail ->> 'start_at')::timestamptz = date_trunc('hour', now()) + interval '1 hour' and (detail ->> 'end_at')::timestamptz = date_trunc('hour', now()) + interval '25 hours' from public.branch_forecast where branch_id = 'B001'));
   -- 매시 창 옮기기: 창 시작을 한 시간 뒤로 → 받은 27시간 안이면 다시 계산(마지막 시각 값 = 3cm 로 바꿔 합이 달라지는지 봄)
   update public.forecast_hours set vals[k] = 3 where tmfc = (p ->> 'tmfc')::timestamptz and var = 'SNO' and tmef = st0 + interval '24 hours';
@@ -63,7 +73,7 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated')::text, true);
   set local role authenticated; fg := public.forecast_grid(array['B001']); reset role;
   perform pg_temp.yes('지도용 함수: B001 격자와 값', jsonb_array_length(fg -> 'cells') = (select count(*) from private.grid_effective() where branch_id = 'B001')
-    and exists (select 1 from jsonb_array_elements(fg -> 'cells') c where (c ->> 0)::int = cx and (c ->> 1)::int = cy and (c ->> 3)::numeric = 36 and (c ->> 4)::numeric = 48), fg::text);
+    and exists (select 1 from jsonb_array_elements(fg -> 'cells') c where (c ->> 0)::int = cx and (c ->> 1)::int = cy and (c ->> 3)::numeric = 36 and (c ->> 4)::numeric = 48 and (c ->> 8)::int = 60), fg::text);
   perform pg_temp.yes('지도용 함수: 추이는 기본으로 보내지 않음', not exists (select 1 from jsonb_array_elements(fg -> 'cells') c where c -> 7 <> 'null'::jsonb) and exists (select 1 from jsonb_array_elements(fg -> 'cells') c where (c ->> 5)::numeric = -6));
   set local role authenticated; fg := public.forecast_grid(array['B001'], true); reset role;
   perform pg_temp.yes('지도용 함수: 지사 하나는 추이까지', exists (select 1 from jsonb_array_elements(fg -> 'cells') c where (c ->> 0)::int = cx and (c ->> 1)::int = cy and jsonb_array_length(c -> 7 -> 't') = 24), left(fg::text, 300));
@@ -84,11 +94,11 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated')::text, true);
   insert into public.support_rounds (name, start_date) values ('t', '2099-12-01') returning id into rid;
   perform pg_temp.chk('관리자: B001 확정','authenticated',a,format('select public.save_requests(%s, ''[{"branch_id":"B001","confirmed":true}]'')', rid),'ok:1');
-  perform pg_temp.yes('확정 순간 예상 적설 36.0·강수 48.0·최저기온 -6 고정', (select fc_snow = 36 and fc_pcp = 48 and fc_tmin = -6 and fc_tmin_at = st0 + interval '7 hours' and fc_tmfc = (p ->> 'tmfc')::timestamptz and fc_at is not null from public.round_requests where round_id = rid and branch_id = 'B001'));
+  perform pg_temp.yes('확정 순간 예상 적설 36.0·강수 48.0·최저기온 -6·강수확률 60 고정', (select fc_snow = 36 and fc_pcp = 48 and fc_pop = 60 and fc_tmin = -6 and fc_tmin_at = st0 + interval '7 hours' and fc_tmfc = (p ->> 'tmfc')::timestamptz and fc_at is not null from public.round_requests where round_id = rid and branch_id = 'B001'));
   perform pg_temp.chk('관리자: 고정값 직접 바꾸기(무시됨)','authenticated',a,format('update public.round_requests set fc_snow = 1 where round_id = %s and branch_id = ''B001''', rid),'ok:1');
   perform pg_temp.yes('고정값 그대로', (select fc_snow = 36 from public.round_requests where round_id = rid and branch_id = 'B001'));
   perform pg_temp.chk('관리자: 확정 취소','authenticated',a,format('select public.save_requests(%s, ''[{"branch_id":"B001","confirmed":false}]'')', rid),'ok:1');
-  perform pg_temp.yes('취소하면 지움', (select fc_snow is null and fc_pcp is null and fc_tmin is null and fc_tmin_at is null and fc_at is null from public.round_requests where round_id = rid and branch_id = 'B001'));
+  perform pg_temp.yes('취소하면 지움', (select fc_snow is null and fc_pcp is null and fc_pop is null and fc_tmin is null and fc_tmin_at is null and fc_at is null from public.round_requests where round_id = rid and branch_id = 'B001'));
   update public.branch_forecast set issued_at = now() - interval '13 hours' where branch_id = 'B002';
   perform pg_temp.chk('관리자: 예보가 12시간 넘게 지난 지사 확정','authenticated',a,format('select public.save_requests(%s, ''[{"branch_id":"B002","confirmed":true}]'')', rid),'ok:1');
   perform pg_temp.yes('지난 예보는 쓰지 않음(값 없음으로 고정)', (select fc_snow is null and fc_at is not null from public.round_requests where round_id = rid and branch_id = 'B002'));
