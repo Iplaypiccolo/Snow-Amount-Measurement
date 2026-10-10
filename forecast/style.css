@@ -17,8 +17,10 @@
 .fc-detail tr[data-cell]{cursor:pointer;} .fc-detail tr[data-cell]:hover{background:#f3f7fa;}
 .fc-legend{gap:6px 14px;padding:7px 10px;color:var(--ink);}
 /* 범례: 칸 숫자 순서(지도 칸의 글자와 같은 모양) + 적설량 색띠 */
-.fc-key{display:inline-flex;flex-direction:column;align-items:center;background:#fff;border:1px solid #33424f;border-radius:4px;padding:2px 7px;font-size:10.5px;line-height:1.25;}
-.fc-key b{color:#1d4fa0;font-size:11px;} .fc-key span{color:#2f7d4f;} .fc-key span i{color:#1f7a8c;font-style:normal;} .fc-key em{color:#b0392b;font-style:normal;}
+.fc-show{display:inline-flex;flex-wrap:wrap;gap:2px 10px;}
+.jr-legend label.fc-chk{display:inline-flex;align-items:center;gap:4px;margin:0;padding:3px 2px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
+.fc-chk input{width:15px;height:15px;margin:0;accent-color:var(--accent);cursor:pointer;}
+.fc-chk.s{color:#1d4fa0;} .fc-chk.p{color:#2f7d4f;} .fc-chk.o{color:#1f7a8c;} .fc-chk.t{color:#b0392b;}
 .fc-ramp{display:inline-flex;align-items:center;gap:8px;}
 .fc-ramp-t{font-weight:700;font-size:11.5px;}
 .fc-ramp ol{display:flex;margin:0;padding:0;list-style:none;}
@@ -32,10 +34,13 @@
 .leaflet-tooltip.fc-label b{display:block;color:#1d4fa0;}
 .leaflet-tooltip.fc-label span{display:block;color:#2f7d4f;font-size:10px;}
 .leaflet-tooltip.fc-label em{display:block;color:#b0392b;font-size:10px;font-style:normal;}
-.leaflet-tooltip.fc-label span i{font-style:normal;color:#1f7a8c;margin-left:4px;}
+.leaflet-tooltip.fc-label i{display:block;font-style:normal;color:#1f7a8c;font-size:10px;}
 /* 값이 있는 칸만 크게(hot), 적설·강수가 모두 0 인 칸은 작고 흐리게(calm). 0 인 숫자는 회색 */
 .leaflet-tooltip.fc-label.hot{font-size:13px;border-width:1.5px;padding:2px 6px;z-index:2;}
-.leaflet-tooltip.fc-label.hot b{font-size:14px;} .leaflet-tooltip.fc-label.hot span{font-size:12px;} .leaflet-tooltip.fc-label.hot em{font-size:11px;}
+.leaflet-tooltip.fc-label.hot b{font-size:14px;} .leaflet-tooltip.fc-label.hot span{font-size:12px;} .leaflet-tooltip.fc-label.hot i,.leaflet-tooltip.fc-label.hot em{font-size:11px;}
+/* 칸이 작아 한두 줄만 들어갈 때(tight): 여백을 줄이고 글자는 한 크기로 */
+.leaflet-tooltip.fc-label.tight{padding:0 3px;border-width:1px;font-size:11px;line-height:1.2;}
+.leaflet-tooltip.fc-label.tight b,.leaflet-tooltip.fc-label.tight span,.leaflet-tooltip.fc-label.tight i,.leaflet-tooltip.fc-label.tight em{font-size:11px;font-weight:700;}
 .leaflet-tooltip.fc-label.calm{opacity:.62;border-color:#9fb0bf;background:rgba(255,255,255,.7);}
 .leaflet-tooltip.fc-label .z{color:#9aa8b4;font-weight:400;}
 /* 격자 마우스·고정: 24시간 추이 표(그림 대신). 마우스 말풍선 283px(=236×1.2), 고정 창 396px(=330×1.2) */

@@ -27,6 +27,22 @@
   var SCALE = [[20, '#c0392b', '20+'], [10, '#8e44ad', '10+'], [5, '#2e5fb8', '5+'], [1, '#5b9be0', '1+'], [0.1, '#a9cdf2', '<1'], [0, '#eef3f8', '0']];
   function snowColor(v) { if (v == null) return '#d8d6cc'; for (var i = 0; i < SCALE.length; i++) if (v >= SCALE[i][0]) return SCALE[i][1]; return '#eef3f8'; }
 
+  // 지도 칸에 보일 값 — 범례의 체크박스(2026-10-10). 기본 = 적설·기온. 이 브라우저에 기억(localStorage)
+  var SHOW_KEY = 'ss_fc_show', SHOW_ITEMS = [['s', '적설'], ['p', '강수'], ['o', '확률'], ['t', '기온']];
+  function loadShow() {
+    var d = { s: true, p: false, o: false, t: true };
+    try { var j = JSON.parse(localStorage.getItem(SHOW_KEY) || 'null'); if (j && typeof j === 'object') SHOW_ITEMS.forEach(function (x) { if (typeof j[x[0]] === 'boolean') d[x[0]] = j[x[0]]; }); } catch (e) {}
+    return d;
+  }
+  function saveShow() { try { localStorage.setItem(SHOW_KEY, JSON.stringify(S.show)); } catch (e) {} }
+  // 지금 축척에서 격자 한 칸의 화면 크기(px) → 칸에 들어가는 줄 수(0 = 글자 없이 색만)
+  function cellPx() {
+    var g = S.grid[S.hq]; if (!S.map || !g || !g.cells || !g.cells.length) return 0;
+    var k = G.cellCorners(g.cells[0][0], g.cells[0][1]), a = S.map.latLngToLayerPoint(L.latLng(k[0])), b = S.map.latLngToLayerPoint(L.latLng(k[2]));
+    return Math.min(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+  }
+  function fitLines(px) { return px < 34 ? 0 : Math.max(1, Math.min(4, Math.floor((px - 10) / 15))); }
+
   function st() { return S.state; }
   function bname(id) { var b = st().branches[id]; return b ? b.name : id; }
   function hqOf(id) { var b = st().branches[id]; return b ? b.hq : null; }
@@ -171,7 +187,7 @@
     S.cells.clearLayers();
     if (S.hq === 'ALL') return;
     var g = S.grid[S.hq]; if (!g || !g.cells) return;
-    var fresh = g.tmfc && Date.now() - Date.parse(g.tmfc) <= STALE;
+    var fresh = g.tmfc && Date.now() - Date.parse(g.tmfc) <= STALE, fit = fitLines(cellPx());
     g.cells.forEach(function (c) {
       var nx = c[0], ny = c[1], bs = c[2] || [], snow = fresh ? c[3] : null, pcp = fresh ? c[4] : null, tmin = fresh ? c[5] : null, tat = fresh ? c[6] : null, pop = fresh && c[8] != null ? c[8] : null;
       var mine = S.focus ? bs.indexOf(S.focus) >= 0 : true;
@@ -191,8 +207,17 @@
       poly.addTo(S.cells);
       if (S.focus) {                                                 // 지사: 격자마다 값(적설 / 강수)
         var hot = snow > 0 || pcp > 0, zc = function (v) { return v > 0 ? '' : ' class="z"'; };      // 적설·강수가 있는 칸만 크게, 0 은 흐리게
-        L.tooltip({ permanent: true, direction: 'center', className: 'fc-label ' + (hot ? 'hot' : 'calm'), interactive: false })
-          .setLatLng(G.cellCenter(nx, ny)).setContent('<b' + zc(snow) + '>' + num(snow) + '</b><span' + zc(pcp) + '>' + num(pcp) + (pop != null ? '<i' + zc(pop) + '>' + pct(pop) + '%</i>' : '') + '</span><em>' + tmp(tmin) + '°</em>').addTo(S.cells);
+        var has = { s: snow > 0, p: pcp > 0, o: pop > 0, t: tmin != null };
+        var html = { s: '<b' + zc(snow) + '>' + num(snow) + '</b>', p: '<span' + zc(pcp) + '>' + num(pcp) + '</span>', o: '<i' + zc(pop) + '>' + pct(pop) + '%</i>', t: '<em>' + tmp(tmin) + '°</em>' };
+        var on = ['s', 'p', 'o', 't'].filter(function (k) { return S.show[k] && !(k === 'o' && pop == null); });      // 체크한 값(적설 > 강수 > 확률 > 기온 순)
+        if (on.length > fit) {                                       // 다 못 넣으면: 값이 있는 것 먼저, 같은 조건이면 위 순서대로
+          var pick = on.filter(function (k) { return has[k]; }).concat(on.filter(function (k) { return !has[k]; })).slice(0, fit);
+          on = on.filter(function (k) { return pick.indexOf(k) >= 0; });
+        }
+        if (on.length) L.tooltip({ permanent: true, direction: 'center', className: 'fc-label ' + (hot ? 'hot' : 'calm') + (fit < 3 ? ' tight' : ''), interactive: false })
+          .setLatLng(G.cellCenter(nx, ny)).setContent(on.map(function (k) { return html[k]; }).join('')).addTo(S.cells);
+        else if (!fit && S.show.p && pcp > 0)                        // 글자가 안 들어가는 크기: 칸 색(적설) + 강수가 있으면 초록 점
+          L.circleMarker(G.cellCenter(nx, ny), { radius: pcp >= 10 ? 4 : 2.5, color: '#14532d', weight: 1, fillColor: '#2f7d4f', fillOpacity: 1, interactive: false, className: 'fc-dot' }).addTo(S.cells);
       }
     });
   }
@@ -207,7 +232,8 @@
     S.map = L.map('fmap', { zoomControl: true }).setView([36.4, 127.9], 7);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(S.map);
     S.lines = L.layerGroup().addTo(S.map); S.cells = L.layerGroup().addTo(S.map);
-    S.map.on('click', function () { if (Date.now() - S.pinAt > 300) unpin(); });      // 지도 아무 데나 누르면 고정 그림 닫기(격자를 누른 그 순간은 제외)
+    S.map.on('click', function () { if (Date.now() - S.pinAt > 300) unpin(); });
+    S.map.on('zoomend', function () { if (S.focus) drawCells(); });           // 축척이 바뀌면 칸에 들어가는 줄 수를 다시 맞춤      // 지도 아무 데나 누르면 고정 그림 닫기(격자를 누른 그 순간은 제외)
     setTimeout(function () { S.map.invalidateSize(); }, 50);
   }
 
@@ -253,7 +279,8 @@
       '</tbody></table></div>';
   }
   function renderLegend() {             // 범례(2026-10-10 간단히): 칸 숫자 순서 + 적설량 색띠만
-    $('fc-legend').innerHTML = S.focus ? '<span class="fc-key" aria-label="칸 숫자: 위부터 적설, 강수와 강수확률, 기온"><b>적설</b><span>강수 <i>확률</i></span><em>기온</em></span>' +
+    $('fc-legend').innerHTML = S.focus ? '<span class="fc-show" role="group" aria-label="지도 칸에 보일 값">' + SHOW_ITEMS.map(function (x) {
+          return '<label class="fc-chk ' + x[0] + '"><input type="checkbox" data-fcshow="' + x[0] + '"' + (S.show[x[0]] ? ' checked' : '') + '>' + x[1] + '</label>'; }).join('') + '</span>' +
         '<span class="fc-ramp"><span class="fc-ramp-t">적설량</span><ol>' + SCALE.slice().reverse().map(function (x) { return '<li><i style="background:' + x[1] + '"></i>' + esc(x[2]) + '</li>'; }).join('') + '</ol></span>'
       : '';
     $('fc-legend').style.display = S.focus ? '' : 'none';
@@ -278,6 +305,10 @@
   }
 
   function bind() {
+    $('view-forecast').addEventListener('change', function (e) {         // 범례 체크박스: 지도 칸에 보일 값
+      var k = e.target && e.target.dataset && e.target.dataset.fcshow; if (!k) return;
+      S.show[k] = !!e.target.checked; saveShow(); drawCells();
+    });
     $('view-forecast').addEventListener('click', function (e) {
       var t = e.target, h = t.closest && t.closest('[data-fchq]'); if (h) { setHq(S.hq === h.dataset.fchq ? 'ALL' : h.dataset.fchq); return; }
       var b = t.closest && t.closest('[data-fcbr]'); if (b) { focusBranch(b.dataset.fcbr); return; }
@@ -290,7 +321,7 @@
     var root = $('view-forecast'); if (!root) return;
     if (!G || !JC || !window.JURIS || !window.JURIS.doc) { root.innerHTML = '<div class="jr-empty" style="padding:30px">노선 자료를 불러오지 못했습니다.</div>'; return; }
     S.state = JC.resolve(window.JURIS.doc, window.JURIS.session || window.JURIS.committed || []);
-    buildShell(); bind(); S.inited = true;
+    S.show = loadShow(); buildShell(); bind(); S.inited = true;
   }
   function show() {
     if (!S.inited) return;

@@ -51,7 +51,7 @@ def t_levels(b):
     d = bid(p, "대관령"); p.click(f"#fc-tree [data-fcbr='{d}']"); p.wait_for_timeout(700)
     n = len([c for c in m.fc_cells if d in c[2]])
     check(labels(p) == n and n > 0, f"지사: 격자마다 값 글자 {labels(p)} / {n}")
-    lab = p.locator("#fmap .fc-label").first; check(lab.locator("b").count() == 1 and lab.locator("span").count() == 1 and lab.locator("em").inner_text().endswith("°"), "격자 글자 = 적설·강수·최저기온")
+    lab = p.locator("#fmap .fc-label").first; check(lab.locator("b").count() == 1 and lab.locator("span").count() == 0 and lab.locator("i").count() == 0 and lab.locator("em").inner_text().endswith("°"), "격자 글자 기본 = 적설·기온(범례 체크박스 기본값)")
     check(m.fc_series_calls and m.fc_series_calls[-1] == [d], "지사를 열 때만 그 지사 추이를 받음")
     cold = min((c for c in m.fc_cells if d in c[2]), key=lambda c: c[5])
     bf0 = [x for x in m.branch_forecast if x["branch_id"] == d][0]
@@ -131,14 +131,18 @@ def t_pin_chart(b):
     check(h1[0][1] and all(dt == (hr == "00") for hr, dt in h1[1:]), f"첫 줄: 첫 칸과 00시에만 날짜 {h1}")
     check(all(dt == (hr == "00") for hr, dt in h2), f"둘째 줄: 00시에만 날짜(첫 칸이라고 붙이지 않음) {h2}")
     leg = p.locator("#fc-legend")
-    check(leg.locator(".fc-key").inner_text().split() == ["적설", "강수", "확률", "기온"] and leg.locator(".fc-ramp li").count() == 6 and "cm" not in leg.inner_text() and "mm" not in leg.inner_text() and "마우스" not in leg.inner_text(),
-          "범례: 숫자 순서(적설·강수 확률·기온) + 적설량 색띠만: " + leg.inner_text().replace("\n", " "))
+    check(leg.locator(".fc-show").inner_text().split() == ["적설", "강수", "확률", "기온"] and leg.locator(".fc-ramp li").count() == 6 and "cm" not in leg.inner_text() and "mm" not in leg.inner_text() and "마우스" not in leg.inner_text(),
+          "범례: 체크박스(적설·강수·확률·기온) + 적설량 색띠만: " + leg.inner_text().replace("\n", " "))
+    check([leg.locator(f"[data-fcshow={k}]").is_checked() for k in "spot"] == [True, False, False, True], "체크박스 기본 = 적설·기온")
     prow = [r.locator("th.lb").inner_text() for r in pin0.locator("table.fc-t1").first.locator("tbody tr").all()]
     check(len(prow) == 4 and prow[2].startswith("확률") and "확률 최고" in pin0.locator(".fc-tt-sum").inner_text(), f"고정 창 표에 강수확률 줄·합계 줄에 확률 최고: {prow}")
     mine = [c for c in m.fc_cells if d in c[2]]; hot = [c for c in mine if c[3] > 0 or c[4] > 0]
     check(p.locator("#fmap .fc-label.hot").count() == len(hot) and p.locator("#fmap .fc-label.calm").count() == len(mine) - len(hot) and len(hot) > 0, f"지도 칸: 적설·강수가 있는 칸만 크게({len(hot)}칸), 나머지는 흐리게")
     lab = p.locator("#fmap .fc-label").first
-    check(lab.locator("span i").inner_text().endswith("%") and p.locator("#fmap .fc-label .z").count() > 0, "칸 글자에 강수확률(%), 0 인 숫자는 흐리게")
+    check(lab.locator("i").count() == 0 and lab.locator("span").count() == 0, "기본(적설·기온)에서는 칸에 강수·확률이 없음")
+    p.check("#fc-legend [data-fcshow=p]"); p.check("#fc-legend [data-fcshow=o]"); p.wait_for_timeout(200)
+    lab = p.locator("#fmap .fc-label").first
+    check([lab.locator(t).count() for t in ("b", "span", "i", "em")] == [1, 1, 1, 1] and lab.locator("i").inner_text().endswith("%") and p.locator("#fmap .fc-label .z").count() > 0, "모두 체크하면 적설·강수·확률(%)·기온 순서로, 0 인 숫자는 흐리게")
     top_pop = max(c[8] for c in mine)
     check("확률" in p.locator(".fc-cols").inner_text() and f"{top_pop}%" in p.locator(f"#fc-tree [data-fcbr='{d}']").inner_text() and "확률(%)" in p.locator(".fc-detail thead").inner_text(), "옆 목록: 지사 줄에 최고 강수확률, 격자 표에 확률 칸")
     p.click(".fc-pin-x"); p.wait_for_timeout(150)
@@ -155,6 +159,34 @@ def t_pin_chart(b):
     check(not p.locator("#fc-pin").is_visible() and J(p, f"{S}.pin") is None, "지도 아무 데나 누르면 닫힘")
     p.locator(".fc-detail tbody tr").first.click(); p.wait_for_timeout(300)
     check(p.locator("#fc-pin").is_visible(), "옆 표의 격자 줄을 눌러도 고정"); p.click(".fc-pin-x"); p.wait_for_timeout(150); check(not p.locator("#fc-pin").is_visible(), "× 로 닫기")
+
+def t_legend_show(b):
+    """범례 체크박스(2026-10-10): 지도 칸에 보일 값을 고름(기본 적설·기온), 브라우저에 기억. 칸이 작아지면 적설 > 강수 > 확률 > 기온 순으로 들어가는 만큼(값이 있는 것 먼저), 더 작으면 글자 없이 색 + 강수 점"""
+    p, m = open_page(b); p.click(".tab-btn[data-tab=forecast]"); p.wait_for_timeout(600)
+    d = bid(p, "대관령"); p.click("#fc-tree [data-fchq='강원']"); p.wait_for_timeout(500); p.click(f"#fc-tree [data-fcbr='{d}']"); p.wait_for_timeout(1100)
+    mine = [c for c in m.fc_cells if d in c[2]]
+    kinds = lambda: J(p, "[...document.querySelectorAll('#fmap .fc-label')].map(e => [...e.children].map(c => c.tagName).join('+'))")
+    check(labels(p) == len(mine) and set(kinds()) == {"B+EM"}, f"가까이: 기본은 칸마다 적설·기온 두 줄 {set(kinds())}")
+    for k in "po": p.check(f"#fc-legend [data-fcshow={k}]")
+    p.wait_for_timeout(200); check(set(kinds()) == {"B+SPAN+I+EM"}, f"모두 체크: 네 줄(적설·강수·확률·기온) {set(kinds())}")
+    check(J(p, "JSON.parse(localStorage.getItem('ss_fc_show'))") == {"s": True, "p": True, "o": True, "t": True}, "체크한 값을 브라우저에 저장")
+    z0 = J(p, f"{S}.map.getZoom()")
+    J(p, f"(() => {{ {S}.map.setZoom({z0} - 1, {{ animate: false }}); return null }})()"); p.wait_for_timeout(400)
+    ks = kinds()
+    check(labels(p) == len(mine) and all(x.count("+") == 1 for x in ks), f"한 단계 축소: 칸마다 두 줄만 {set(ks)}")
+    both = [c for c in mine if c[3] > 0 and c[4] > 0]
+    check(len(both) > 0 and ks.count("B+SPAN") == len(both), f"두 줄일 때는 순서대로 적설·강수(확률·기온은 밀림): {ks.count('B+SPAN')} / {len(both)}")
+    p.uncheck("#fc-legend [data-fcshow=p]"); p.uncheck("#fc-legend [data-fcshow=o]"); p.wait_for_timeout(200)
+    check(set(kinds()) == {"B+EM"}, f"적설·기온만 체크하면 축소해도 그 둘 {set(kinds())}")
+    p.check("#fc-legend [data-fcshow=p]"); p.wait_for_timeout(100)
+    J(p, f"(() => {{ {S}.map.setZoom({z0} - 2, {{ animate: false }}); return null }})()"); p.wait_for_timeout(400)
+    wet = [c for c in mine if c[4] > 0]
+    check(labels(p) == 0 and p.locator("#fmap path.fc-dot").count() == len(wet) and len(wet) > 0, f"두 단계 축소: 글자 없이 칸 색 + 강수가 있는 칸에 점({len(wet)}칸)")
+    p.uncheck("#fc-legend [data-fcshow=p]"); p.wait_for_timeout(200); check(p.locator("#fmap path.fc-dot").count() == 0, "강수 체크를 끄면 점도 없음")
+    p.check("#fc-legend [data-fcshow=o]"); p.wait_for_timeout(100)
+    p.reload(); p.wait_for_function("window.ForecastUI && ForecastUI._state().inited", timeout=60000); p.wait_for_timeout(800)
+    p.click("#fc-tree [data-fchq='강원']"); p.wait_for_timeout(500); p.click(f"#fc-tree [data-fcbr='{d}']"); p.wait_for_timeout(1100)
+    check([p.locator(f"#fc-legend [data-fcshow={k}]").is_checked() for k in "spot"] == [True, False, True, True] and set(kinds()) == {"B+I+EM"}, f"새로 열어도 체크한 값 그대로(적설·확률·기온) {set(kinds())}")
 
 def t_auto_pick(b):
     """지사를 고르면 격자 하나를 고른 채로 엶(2026-10-10). 순서: ① 적설 ② 강수 + 24시간 안에 한 번이라도 4℃ 이하 ③ 강수 ④ 최저 4℃ 이하. 아무것도 없으면 고르지 않음"""
@@ -204,7 +236,7 @@ def t_top_menu(b):
     box = p.locator(".tn-tabs").bounding_box()
     check(p.locator(".tab-btn[data-tab=forecast]").is_visible() and box and box["width"] <= 390 and p.evaluate("document.documentElement.scrollWidth <= 392"), "휴대폰 폭: 메뉴 줄은 옆으로 밀어 보기, 화면은 가로로 넘치지 않음")
 
-TESTS = [t_pin_chart, t_first_tab_and_order, t_levels, t_open_from_equipment, t_branch_user_can_view, t_auto_pick, t_top_menu]
+TESTS = [t_pin_chart, t_first_tab_and_order, t_levels, t_open_from_equipment, t_branch_user_can_view, t_legend_show, t_auto_pick, t_top_menu]
 
 if __name__ == "__main__":
     only = sys.argv[1:]
