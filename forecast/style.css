@@ -12,7 +12,18 @@
 .fc-detail th,.fc-detail td{padding:3px 4px;text-align:right;border-bottom:1px solid #eee;font-family:var(--mono);}
 .fc-detail th{color:var(--muted);font-weight:600;font-family:inherit;} .fc-detail th:first-child,.fc-detail td:first-child{text-align:left;}
 .fc-detail tr[data-cell]{cursor:pointer;} .fc-detail tr[data-cell]:hover{background:#f3f7fa;}
-.fc-legend .sw{display:inline-block;width:12px;height:12px;border-radius:2px;margin:0 3px 0 8px;vertical-align:-2px;border:1px solid #8a8a8a;}
+.fc-legend{gap:6px 14px;padding:7px 10px;color:var(--ink);}
+/* 범례: 칸 숫자 순서(지도 칸의 글자와 같은 모양) + 적설량 색띠 */
+.fc-key{display:inline-flex;flex-direction:column;align-items:center;background:#fff;border:1px solid #33424f;border-radius:4px;padding:2px 7px;font-size:10.5px;line-height:1.25;}
+.fc-key b{color:#1d4fa0;font-size:11px;} .fc-key span{color:#2f7d4f;} .fc-key em{color:#b0392b;font-style:normal;}
+.fc-ramp{display:inline-flex;align-items:center;gap:8px;}
+.fc-ramp-t{font-weight:700;font-size:11.5px;}
+.fc-ramp ol{display:flex;margin:0;padding:0;list-style:none;}
+.fc-ramp li{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:30px;font-family:var(--mono);font-size:10.5px;color:var(--muted);}
+.fc-ramp li i{display:block;width:100%;height:10px;border:1px solid rgba(16,36,58,.3);border-left-width:0;}
+.fc-ramp li:first-child i{border-left-width:1px;border-radius:3px 0 0 3px;} .fc-ramp li:last-child i{border-radius:0 3px 3px 0;}
+.fc-detail tr.sel td{background:#fff3a3;font-weight:700;}      /* 지금 고정 창에 떠 있는 격자 */
+.fc-pin-why{display:inline-block;margin:0 0 3px;padding:1px 7px;border-radius:4px;background:var(--ice);color:var(--accent);font-size:11px;font-weight:700;}
 .leaflet-tooltip.fc-label{background:rgba(255,255,255,.88);border:1px solid #33424f;border-radius:4px;padding:1px 4px;box-shadow:none;font-family:var(--mono);font-size:11px;line-height:1.15;text-align:center;}
 .leaflet-tooltip.fc-label::before{display:none;}
 .leaflet-tooltip.fc-label b{display:block;color:#1d4fa0;}

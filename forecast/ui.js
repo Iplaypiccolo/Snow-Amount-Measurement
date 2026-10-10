@@ -23,7 +23,7 @@
   function hh(iso) { var d = iso ? new Date(iso) : null; return d && !isNaN(d) ? p2(d.getHours()) + '시' : '-'; }
   var STALE = 12 * 3600e3;                                 // 발표 후 12시간이 지난 예보는 쓰지 않음(장비 지원 화면과 같음)
   // 24시간 예상 적설(cm) → 칸 색
-  var SCALE = [[20, '#c0392b', '20 이상'], [10, '#8e44ad', '10~20'], [5, '#2e5fb8', '5~10'], [1, '#5b9be0', '1~5'], [0.1, '#a9cdf2', '1 미만'], [0, '#eef3f8', '0']];
+  var SCALE = [[20, '#c0392b', '20+'], [10, '#8e44ad', '10+'], [5, '#2e5fb8', '5+'], [1, '#5b9be0', '1+'], [0.1, '#a9cdf2', '<1'], [0, '#eef3f8', '0']];
   function snowColor(v) { if (v == null) return '#d8d6cc'; for (var i = 0; i < SCALE.length; i++) if (v >= SCALE[i][0]) return SCALE[i][1]; return '#eef3f8'; }
 
   function st() { return S.state; }
@@ -94,7 +94,8 @@
     var head = '', rs = '', rp = '', rt = '';
     for (var i = from; i < to; i += step) {
       var d = hourAt(start, i), part = function (k) { return (sr[k] || []).slice(i, Math.min(i + step, to)); };
-      head += '<th>' + (d ? p2(d.getHours()) : '') + ((i === from || (d && d.getHours() === 0)) && d ? '<small>' + (d.getMonth() + 1) + '/' + d.getDate() + '</small>' : '') + '</th>';
+      var prev = i > 0 ? hourAt(start, i - step) : null, newDay = d && (i === 0 || (prev && prev.getDate() !== d.getDate()));   // 날짜는 맨 처음 칸과 날짜가 바뀌는 칸에만
+      head += '<th>' + (d ? p2(d.getHours()) : '') + (newDay ? '<small>' + (d.getMonth() + 1) + '/' + d.getDate() + '</small>' : '') + '</th>';
       rs += cellNum(sumOf(part('s'))); rp += cellNum(sumOf(part('p'))); rt += cellTmp(minOf(part('t')));
     }
     var u = step === 1 ? '' : (step + '시간 ');
@@ -118,12 +119,36 @@
     if (!sr) { box.hidden = true; box.innerHTML = ''; return; }
     var k = S.pin.split(','), g = S.grid[S.hq], c = g && g.cells ? g.cells.filter(function (x) { return x[0] === +k[0] && x[1] === +k[1]; })[0] : null;
     box.innerHTML = '<div class="fc-pin-head"><b>' + esc(cellName(+k[0], +k[1])) + '</b>' + cellNo(+k[0], +k[1]) + ' <span class="fc-pin-br">' + (c ? esc((c[2] || []).map(bname).join(', ')) : '') + '</span>' +
-      '<button type="button" class="fc-pin-x" aria-label="닫기">×</button></div>' + trendBox(sr, S.series[S.focus]._start, true) +
+      '<button type="button" class="fc-pin-x" aria-label="닫기">×</button></div>' + (S.pinWhy ? '<div class="fc-pin-why">' + esc(S.pinWhy) + '</div>' : '') + trendBox(sr, S.series[S.focus]._start, true) +
       '<div class="fc-pin-note">1시간 단위 표 · 지도 아무 데나 누르면 닫힘</div>';
     box.hidden = false;
   }
-  function pinCell(key) { S.pin = key; S.pinAt = Date.now(); renderPin(); drawCells(); }
-  function unpin() { if (!S.pin) return; S.pin = null; renderPin(); drawCells(); }
+  function markSel() { var rows = document.querySelectorAll('#fc-tree .fc-detail tr[data-cell]'); for (var i = 0; i < rows.length; i++) rows[i].classList.toggle('sel', rows[i].dataset.cell === S.pin); }
+  function pinCell(key) { S.pin = key; S.pinWhy = null; S.pinAt = Date.now(); renderPin(); drawCells(); markSel(); }
+  function unpin() { if (!S.pin) return; S.pin = null; S.pinWhy = null; renderPin(); drawCells(); markSel(); }
+  // 지사를 고르면 눈여겨볼 격자 하나를 골라 1시간 표를 바로 엶(2026-10-10). 순서: ① 적설 있음 ② 강수 + 그 시각 기온 4℃ 이하 ③ 강수 있음 ④ 최저기온 4℃ 이하
+  //  각 단계에서는 값이 가장 센 칸(적설 최대 / 4℃ 이하일 때 내린 강수 합 최대 / 강수 최대 / 기온 최저). 해당하는 칸이 없으면 고르지 않음
+  var COLD = 4, WHY = ['적설이 가장 많은 칸', '4℃ 이하에서 강수가 가장 많은 칸', '강수가 가장 많은 칸', '기온이 가장 낮은 칸'];
+  function autoPick(id) {
+    var g = S.grid[hqOf(id)], all = S.series[id]; if (!g || !g.cells || !all) return null;
+    if (!(g.tmfc && Date.now() - Date.parse(g.tmfc) <= STALE)) return null;
+    var best = [null, null, null, null];
+    function put(i, key, v, c) {                               // 같은 값이면 옆 표 순서대로(강수 많은 칸 → 더 추운 칸)
+      var b = best[i], p = c[4] || 0, t = c[5] == null ? 99 : c[5];
+      if (!b || v > b.v || (v === b.v && (p > b.p || (p === b.p && t < b.t)))) best[i] = { key: key, v: v, p: p, t: t };
+    }
+    g.cells.forEach(function (c) {
+      if ((c[2] || []).indexOf(id) < 0) return;
+      var key = c[0] + ',' + c[1], sr = all[key]; if (!sr) return;
+      var cold = 0; (sr.p || []).forEach(function (v, i) { var t = (sr.t || [])[i]; if (v > 0 && t != null && t <= COLD) cold += v; });
+      if (c[3] > 0) put(0, key, c[3], c);
+      if (cold > 0) put(1, key, cold, c);
+      if (c[4] > 0) put(2, key, c[4], c);
+      if (c[5] != null && c[5] <= COLD) put(3, key, -c[5], c);
+    });
+    for (var i = 0; i < best.length; i++) if (best[i]) return { key: best[i].key, why: WHY[i] };
+    return null;
+  }
 
   /* ---------- 지도 ---------- */
   function lineColor(owner) {
@@ -210,20 +235,21 @@
             (S.focus === id ? detailHtml(id) : '');
         }).join('') : '') + '</div>';
     }).join('');
-    $('fc-tree').innerHTML = html;
+    $('fc-tree').innerHTML = html; markSel();
   }
   function detailHtml(id) {
     var g = S.grid[S.hq]; if (!g || !g.cells) return '<div class="fc-detail muted">격자를 불러오는 중…</div>';
     var fresh = g.tmfc && Date.now() - Date.parse(g.tmfc) <= STALE;
     var rows = g.cells.filter(function (c) { return (c[2] || []).indexOf(id) >= 0; })
       .map(function (c) { return { nx: c[0], ny: c[1], s: fresh ? c[3] : null, p: fresh ? c[4] : null, t: fresh ? c[5] : null, ta: fresh ? c[6] : null }; })
-      .sort(function (a, b) { return (b.s || 0) - (a.s || 0) || (b.p || 0) - (a.p || 0); });
+      .sort(function (a, b) { return (b.s || 0) - (a.s || 0) || (b.p || 0) - (a.p || 0) || (a.t == null ? 99 : a.t) - (b.t == null ? 99 : b.t); });
     return '<div class="fc-detail"><table><thead><tr><th>지명</th><th>적설(cm)</th><th>강수(mm)</th><th>최저(℃)</th><th>시각</th></tr></thead><tbody>' +
       rows.map(function (r) { return '<tr data-cell="' + r.nx + ',' + r.ny + '"><td>' + esc(cellName(r.nx, r.ny)) + cellNo(r.nx, r.ny) + '</td><td>' + num(r.s) + '</td><td>' + num(r.p) + '</td><td>' + tmp(r.t) + '</td><td>' + esc(hh(r.ta)) + '</td></tr>'; }).join('') +
       '</tbody></table></div>';
   }
-  function renderLegend() {
-    $('fc-legend').innerHTML = S.focus ? '<b>24시간 예상 적설(cm)</b> ' + SCALE.slice().reverse().map(function (x) { return '<span class="sw" style="background:' + x[1] + '"></span>' + esc(x[2]); }).join(' ') + ' · 칸 위 숫자: 위 = 적설(cm), 가운데 = 강수(mm), 아래 = 최저기온(℃) · 격자에 마우스를 올리면 24시간 추이'
+  function renderLegend() {             // 범례(2026-10-10 간단히): 칸 숫자 순서 + 적설량 색띠만
+    $('fc-legend').innerHTML = S.focus ? '<span class="fc-key" aria-label="칸 숫자: 위부터 적설, 강수, 기온"><b>적설</b><span>강수</span><em>기온</em></span>' +
+        '<span class="fc-ramp"><span class="fc-ramp-t">적설량</span><ol>' + SCALE.slice().reverse().map(function (x) { return '<li><i style="background:' + x[1] + '"></i>' + esc(x[2]) + '</li>'; }).join('') + '</ol></span>'
       : '';
     $('fc-legend').style.display = S.focus ? '' : 'none';
   }
@@ -231,15 +257,19 @@
 
   /* ---------- 단계 이동 ---------- */
   function setHq(hq) {
-    S.hq = hq; S.focus = null; S.pin = null; render(); fitTo();
+    S.hq = hq; S.focus = null; S.pin = null; S.pinWhy = null; render(); fitTo();
     if (hq !== 'ALL' && !S.grid[hq]) loadGrid(hq).then(function () { if (S.hq === hq) { render(); fitTo(); } });
   }
   function focusBranch(id) {
     var hq = hqOf(id); if (!hq) return;
-    S.pin = null;
+    S.pin = null; S.pinWhy = null;
     if (S.focus === id) { S.focus = null; render(); fitTo(); return; }
     S.hq = hq; S.focus = id; render();
-    Promise.all([loadGrid(hq), loadSeries(id)]).then(function () { if (S.focus === id) { render(); fitTo(); } });
+    Promise.all([loadGrid(hq), loadSeries(id)]).then(function () {
+      if (S.focus !== id) return;
+      var a = S.pin ? null : autoPick(id); if (a) { S.pin = a.key; S.pinWhy = a.why; S.pinAt = Date.now(); }      // 눈여겨볼 격자를 고른 채로 엶
+      render(); fitTo();
+    });
   }
 
   function bind() {
@@ -260,7 +290,7 @@
   function show() {
     if (!S.inited) return;
     S.state = JC.resolve(window.JURIS.doc, window.JURIS.session || window.JURIS.committed || []);    // 관할을 바꿨으면 반영
-    ensureMap(); S.grid = {}; S.series = {}; S.pin = null;
+    ensureMap(); S.grid = {}; S.series = {}; S.pin = null; S.pinWhy = null;
     Promise.all([loadOverview(), loadNames()]).then(function () {
       var id = S.pendingFocus; S.pendingFocus = null;
       if (id && st().branches[id]) { S.hq = 'ALL'; S.focus = null; focusBranch(id); } else { render(); fitTo(); }

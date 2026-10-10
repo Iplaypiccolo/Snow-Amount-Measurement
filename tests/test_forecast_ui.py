@@ -118,7 +118,21 @@ def t_pin_chart(b):
     tot = float(tp.locator(".fc-tt-sum b").first.inner_text())
     check(abs(sum(vals) - tot) < 0.35, f"3시간 합들의 합 = 24시간 합 ({sum(vals):.1f} ≈ {tot})")
     box = tp.locator(".fc-trend-box").bounding_box(); check(box and 270 <= box["width"] <= 296, f"말풍선 표 폭 약 20% 확대(283px): {box and box['width']}")
-    check(not p.locator("#fc-pin").is_visible(), "처음엔 고정 그림 없음")
+    # 지사를 고르면 눈여겨볼 격자(적설이 가장 많은 칸)가 고른 채로 열림(2026-10-10)
+    top = max((c for c in m.fc_cells if d in c[2]), key=lambda c: (c[3], c[4], -c[5])); tk = f"{top[0]},{top[1]}"      # 같은 적설이면 강수 많은 칸 → 더 추운 칸(옆 표 순서와 같음)
+    pin0 = p.locator("#fc-pin")
+    check(pin0.is_visible() and J(p, f"{S}.pin") == tk and "적설이 가장 많은 칸" in pin0.inner_text(), f"지사를 열면 적설 최대 칸이 고정됨: {J(p, f'{S}.pin')} / {tk}")
+    check(p.locator(".fc-detail tr.sel").count() == 1 and p.locator(".fc-detail tbody tr").first.get_attribute("class") == "sel" and p.locator(".fc-detail tr.sel").get_attribute("data-cell") == tk, "옆 표 맨 윗줄이 그 칸이고 표시됨")
+    # 표 머리글 날짜: 맨 처음 칸과 날짜가 바뀌는(00시) 칸에만 — 둘째 줄 첫 칸에는 붙이지 않음
+    def heads(i): return [(x.split("\n")[0], "/" in x) for x in pin0.locator("table.fc-t1").nth(i).locator("thead th:not(.lb)").all_inner_texts()]
+    h1, h2 = heads(0), heads(1)
+    check(h1[0][1] and all(dt == (hr == "00") for hr, dt in h1[1:]), f"첫 줄: 첫 칸과 00시에만 날짜 {h1}")
+    check(all(dt == (hr == "00") for hr, dt in h2), f"둘째 줄: 00시에만 날짜(첫 칸이라고 붙이지 않음) {h2}")
+    leg = p.locator("#fc-legend")
+    check(leg.locator(".fc-key").inner_text().split() == ["적설", "강수", "기온"] and leg.locator(".fc-ramp li").count() == 6 and "cm" not in leg.inner_text() and "mm" not in leg.inner_text() and "마우스" not in leg.inner_text(),
+          "범례: 숫자 순서(적설·강수·기온) + 적설량 색띠만: " + leg.inner_text().replace("\n", " "))
+    p.click(".fc-pin-x"); p.wait_for_timeout(150)
+    check(not p.locator("#fc-pin").is_visible() and p.locator(".fc-detail tr.sel").count() == 0, "× 로 닫으면 고정 없음")
     key = J(p, f"(() => {{ const l = {S}.cells.getLayers().find(l => l.getLatLngs && l.getTooltip()); l.fire('click'); return {S}.pin }})()"); p.wait_for_timeout(300)
     pin = p.locator("#fc-pin")
     check(pin.is_visible() and key and key in pin.inner_text(), f"격자를 누르면 그 격자 그림 고정: {key}")
@@ -131,6 +145,28 @@ def t_pin_chart(b):
     check(not p.locator("#fc-pin").is_visible() and J(p, f"{S}.pin") is None, "지도 아무 데나 누르면 닫힘")
     p.locator(".fc-detail tbody tr").first.click(); p.wait_for_timeout(300)
     check(p.locator("#fc-pin").is_visible(), "옆 표의 격자 줄을 눌러도 고정"); p.click(".fc-pin-x"); p.wait_for_timeout(150); check(not p.locator("#fc-pin").is_visible(), "× 로 닫기")
+
+def t_auto_pick(b):
+    """지사를 고르면 격자 하나를 고른 채로 엶(2026-10-10). 순서: ① 적설 ② 강수 + 그 시각 4℃ 이하 ③ 강수 ④ 최저 4℃ 이하. 아무것도 없으면 고르지 않음"""
+    def case(setup, name):
+        m = SBM.Mock(); d = m.branch_forecast[0]["branch_id"]; cs = [c for c in m.fc_cells if d in c[2]]
+        for c in cs: c[3] = 0; c[4] = 0; c[5] = 10.0; c[7] = {"s": [0] * 24, "p": [0] * 24, "t": [10.0] * 24}      # 모두 맑고 따뜻하게 만든 뒤 경우마다 바꿈
+        want = setup(cs)
+        p, _ = open_page(b, mock=m); J(p, f"(() => {{ SSOpenForecast('{d}'); return null }})()"); p.wait_for_timeout(1300)
+        got = J(p, f"{S}.pin"); key = want and f"{want[0][0]},{want[0][1]}"
+        check(J(p, f"{S}.focus") == d and got == key, f"{name}: {got} / {key}")
+        if want: check(want[1] in p.locator("#fc-pin").inner_text() and p.locator(".fc-detail tr.sel").get_attribute("data-cell") == key, f"{name}: 고정 창에 까닭·옆 표 표시")
+        else: check(not p.locator("#fc-pin").is_visible(), f"{name}: 고정 창 없음")
+        p.close()
+    def rain(c, mm, t):                                    # 2~4시에 비 mm, 그 칸 기온 t
+        c[4] = mm; c[5] = t; c[7] = {"s": [0] * 24, "p": [round(mm / 3, 1) if 2 <= i < 5 else 0 for i in range(24)], "t": [t] * 24}
+    def s1(cs): rain(cs[0], 9.0, 1.0); cs[1][3] = 0.5; cs[1][7]["s"][5] = 0.5; cs[2][3] = 2.0; cs[2][7]["s"][5] = 2.0; return (cs[2], "적설이 가장 많은 칸")
+    def s2(cs): rain(cs[0], 9.0, 10.0); rain(cs[1], 1.5, 1.0); rain(cs[2], 3.0, 4.0); cs[3][5] = -8.0; cs[3][7]["t"] = [-8.0] * 24; return (cs[2], "4℃ 이하에서 강수가 가장 많은 칸")
+    def s3(cs): rain(cs[0], 2.0, 10.0); rain(cs[1], 9.0, 4.5); cs[2][5] = -8.0; cs[2][7]["t"] = [-8.0] * 24; return (cs[1], "강수가 가장 많은 칸")
+    def s4(cs): cs[0][5] = 4.0; cs[0][7]["t"] = [4.0] * 24; cs[1][5] = -3.0; cs[1][7]["t"] = [-3.0] * 24; return (cs[1], "기온이 가장 낮은 칸")
+    def s5(cs): cs[0][5] = 4.5; return None
+    case(s1, "① 적설(강수·기온보다 먼저)"); case(s2, "② 강수 + 4℃ 이하(비가 더 많은 따뜻한 칸·더 추운 맑은 칸보다 먼저)"); case(s3, "③ 강수(4.5℃ 는 해당 없음)")
+    case(s4, "④ 최저 4℃ 이하"); case(s5, "해당 없음")
 
 def t_top_menu(b):
     """위쪽 메뉴(2026-10-10): 1줄 페이지 전환(강설량 측정/장비 지원), 2줄은 그 페이지의 메뉴만. 장비 메뉴는 안쪽 화면의 탭을 대신 누름(안쪽 머리글은 숨김)"""
@@ -156,7 +192,7 @@ def t_top_menu(b):
     box = p.locator(".tn-tabs").bounding_box()
     check(p.locator(".tab-btn[data-tab=forecast]").is_visible() and box and box["width"] <= 390 and p.evaluate("document.documentElement.scrollWidth <= 392"), "휴대폰 폭: 메뉴 줄은 옆으로 밀어 보기, 화면은 가로로 넘치지 않음")
 
-TESTS = [t_pin_chart, t_first_tab_and_order, t_levels, t_open_from_equipment, t_branch_user_can_view, t_top_menu]
+TESTS = [t_pin_chart, t_first_tab_and_order, t_levels, t_open_from_equipment, t_branch_user_can_view, t_auto_pick, t_top_menu]
 
 if __name__ == "__main__":
     only = sys.argv[1:]
