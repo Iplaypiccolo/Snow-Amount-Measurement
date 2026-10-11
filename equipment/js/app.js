@@ -586,6 +586,7 @@ const NUM_RE = /^\d{1,5}$/;                                           // 도공�
 const plateNum = v => { const p = vval(v, "plate") || ""; return p.startsWith(v.org) ? p.slice(v.org.length) : ""; };
 function renderFleet() {
   const choices = routeChoices(), r = curRound(), all = canRoute(), pend = pendingChoices();
+  if (!all) S.cols = 4;                                              // 관리자가 아니면 지원일 칸은 늘 기본 4칸(고르는 목록 없음)
   banner("perm-fleet", canAnyVeh(),
     all ? "도공번호·지원 여부(고른 기준일자)·지원일별 피지원 지사(하루 여러 곳은 ＋)를 고친 뒤 아래 [확정]을 눌러야 저장됩니다. 다른 기준일자가 맡은 날짜는 고칠 수 없습니다."
         : `${S.me.org || ""} 장비를 추가하고 도공번호·지원 여부(지원일 2부터는 '지원 불가'도)를 고칠 수 있습니다. 지원일 1의 피지원 지사는 관리자가 배정한 지사·대수 안에서 고릅니다(둘째 날부터·하루 여러 곳은 관리자). 고친 뒤 아래 [확정]을 눌러야 저장됩니다.`,
@@ -595,7 +596,7 @@ function renderFleet() {
   const myOrgs = all ? S.orgs : S.orgs.filter(o => o === S.me.org);
   $("fleetFilters").innerHTML =
     `<div class="tb-row"><span class="tb-label">기관</span><span class="fgroup">${["전체", ...S.orgs].map(o => `<button type="button" class="chip" data-fo="${esc(o)}" aria-pressed="${S.fleetOrg === o}">${o === "전체" ? "모든 기관" : esc(o)}</button>`).join("")}</span>` +
-    `<span class="tb-right"><label class="ctl">지원일 칸 <select class="ci" id="colsSel">${Array.from({ length: 9 }, (_, k) => k + 2).map(n => `<option value="${n}" ${n === S.cols ? "selected" : ""}>${n}개</option>`).join("")}</select></label>` +
+    `<span class="tb-right">` + (all ? `<label class="ctl">지원일 칸 <select class="ci" id="colsSel">${Array.from({ length: 9 }, (_, k) => k + 2).map(n => `<option value="${n}" ${n === S.cols ? "selected" : ""}>${n}개</option>`).join("")}</select></label>` : "") +      // 지원일 칸 수 고르기는 관리자만(다른 계정은 기본 4칸)
     (all ? `<button type="button" class="btn" id="fleetReset">초기화</button>` : "") + `</span></div>` +
     (canAddVeh() && myOrgs.length || all ? `<div class="tb-row">` + (canAddVeh() && myOrgs.length ? `<span class="tb-label">장비 추가</span><select class="ci" id="nvOrg" aria-label="새 장비 기관">${myOrgs.map(o => `<option>${esc(o)}</option>`).join("")}</select>` +
       `<select class="ci" id="nvType" aria-label="새 장비 종류">${TYPES.map(t => `<option>${t}</option>`).join("")}</select>` +
@@ -1175,7 +1176,7 @@ document.addEventListener("change", async e => {
     if (r && t.value < r.start_date) { toast(`지원일은 기준일자(${fmtMD(r.start_date)})부터 고를 수 있습니다`, true); S.day1 = r.start_date; } else S.day1 = t.value;
     S.extraStop.clear(); await ensureRoutes(); return refresh();
   }
-  if (t.id === "colsSel") { S.cols = Math.min(10, Math.max(2, +t.value)); await ensureRoutes(); return refresh(); }
+  if (t.id === "colsSel") { if (!canRoute()) return refresh(); S.cols = Math.min(10, Math.max(2, +t.value)); await ensureRoutes(); return refresh(); }
   if (t.id === "logUser") { S.logUser = t.value; return renderLog(); }
   if (t.id === "zbr") return renderZones();
   if (t.dataset.rv) {                       // 경로 칸(관리자): 그 (날짜, 장비)의 지사 목록을 다시 모음
