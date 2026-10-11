@@ -39,6 +39,11 @@ const Api = (() => {
           return { ok: true, me: me.me, hqs: h.json, branches: b.json.filter(x => x.status !== "closed"), vehicles: v.json, rounds: s.json, orgs: (o.json || []).map(x => x.name), holdings: null };
         }).catch(NET);
     },
+    reload() {         // [새로고침] 버튼: 다른 아이디가 바꿨을 수 있는 장비·기준일자 목록만 다시 읽음(본부·지사·로그인은 그대로). 나머지 표는 화면이 이어서 읽음
+      const R = SSAuth.rest;
+      return Promise.all([R("vehicles?select=id,org,type,plate,status,sort,active,blower_s,blower_l,hidden_after&order=sort,id"), R("support_rounds?select=id,name,start_date,days&order=start_date.desc")])
+        .then(([v, s]) => v.ok && s.ok ? { ok: true, vehicles: v.json, rounds: s.json } : fail(v.ok ? s : v, "자료를 불러오지 못했습니다.")).catch(NET);
+    },
     routes(from, to) {
       return SSAuth.rest(`vehicle_routes?select=date,vehicle_id,stops,revised,times,confirmed_at&date=gte.${from}&date=lte.${to}&order=date`).then(r => r.ok ? { ok: true, rows: r.json } : fail(r, "경로를 불러오지 못했습니다.")).catch(NET);
     },
@@ -140,6 +145,7 @@ const Api = (() => {
         db = makeSample(today);
         return done({ ok: true, me: null, hqs: clone(db.hqs), branches: clone(db.branches), vehicles: clone(db.vehicles), rounds: clone(db.rounds), orgs: db.orgs.slice(), holdings: clone(db.holdings) });
       },
+      reload() { return done({ ok: true, vehicles: clone(db.vehicles), rounds: clone(db.rounds) }); },
       statuses(ids) { return done({ ok: true, rows: clone(db.status.filter(x => ids.includes(x.round_id))) }); },
       routes(from, to) { return done({ ok: true, rows: clone(db.routes.filter(r => r.date >= from && r.date <= to)) }); },
       vehicleHistory(vid) { return done({ ok: true, rows: clone(db.routes.filter(r => r.vehicle_id === vid).sort((a, b) => b.date.localeCompare(a.date))) }); },

@@ -840,7 +840,32 @@ def t_allocation(p):
     check(route(p, "V006", d0) == ["양양"] and route(p, "V007", d0) == ["양양"] and "배정 초과" in p.locator("#allocTable [data-adone='서울경기']").inner_text(), "배정을 줄여도 경로는 남고 '배정 초과'로 표시")
     tab(p, "log"); check("기관별 배정" in p.locator("#logTable").inner_text() and "서울경기 → 양양" in p.locator("#logTable").inner_text(), "수정 기록에 배정 변경")
 
-TESTS = [t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+def t_reload(p):
+    """새로고침 버튼(2026-10-11): 이동 현황·기관별 장비·지사별 요청·편성·기관별 배정에서, 다른 아이디가 넣은 자료를 화면을 새로 열지 않고 다시 읽음"""
+    for tb in ("move", "fleet", "branch", "alloc"):
+        tab(p, tb); check(p.locator(f"#panel-{tb} [data-reload]").count() == 1 and p.locator(f"#panel-{tb} [data-reload]").is_visible(), f"{tb} 탭에 새로고침 버튼")
+    d0 = day(p, 0); cj, dg = bid(p, "춘천"), bid(p, "대관령")
+    # 다른 아이디가 서버에 넣은 것처럼: 시연 서버 자료만 바꾸고 화면 상태(S)는 그대로 둠
+    ev(p, f"""(() => {{ const u = S.me; Api.setActor({{ role: 'admin', label: '다른 관리자', username: 'other' }});
+        Api.saveRequests(S.round, [{{ branch_id: '{cj}', req_truck: 7 }}]);
+        Api.saveFleet([], [{{ date: '{d0}', vehicle_id: 'V004', stops: ['{dg}'], revised: false, times: ['09:10'] }}], S.round, [{{ vehicle_id: 'V004', status: 'O' }}]);
+        Api.addVehicle({{ id: 'V777', org: '충북', type: '제설차', plate: '충북977', sort: 9990 }});
+        Api.saveAllocations(S.round, [{{ org: '충북', branch_id: '{dg}', truck: 4, blower: 0 }}]);
+        Api.setActor(u); return null }})()""")
+    tab(p, "branch")
+    check(ev(p, f"rval('{cj}', 'req_truck')") == 2 and route(p, "V004", d0) == [] and ev(p, "!vehById('V777')") and ev(p, "S.alloc.size") == 0, "누르기 전에는 화면이 예전 값 그대로")
+    p.click("#panel-branch [data-reload]"); p.wait_for_timeout(500)
+    check("새로 불러왔습니다" in toast(p) and ev(p, f"rval('{cj}', 'req_truck')") == 7 and p.locator(f"#branchTable tr[data-b='{cj}'] input[data-f=req_truck]").input_value() == "7", "지사 요청이 새 값으로: " + toast(p))
+    check(route(p, "V004", d0) == ["대관령"] and ev(p, "stOf(S.round, 'V004').status") == "O" and ev(p, "!!vehById('V777')") and ev(p, f"(S.alloc.get('충북|{dg}') || {{}}).truck") == 4, "경로·지원 여부·새 장비·기관별 배정도 새 값으로")
+    check("불러옴" in p.locator("#panel-branch [data-reload-at]").inner_text(), "불러온 시각 표시")
+    tab(p, "fleet"); check(p.locator("#eqTable tr[data-vrow=V777]").count() == 1, "기관별 장비 표에 새 장비")
+    # 저장하지 않은 변경이 있으면 물어보고(여기서는 자동으로 '예') 버린 뒤 다시 읽음
+    p.select_option("[data-vs=V013]", "M"); p.wait_for_timeout(150); check(ev(p, "S.sdraft.size") == 1, "고치는 중")
+    p.click("#panel-fleet [data-reload]"); p.wait_for_timeout(500)
+    check(ev(p, "S.sdraft.size") == 0 and ev(p, "stOf(S.round, 'V013').status") == "" and "새로 불러왔습니다" in toast(p), "버리고 다시 읽음")
+    tab(p, "move"); p.click("#panel-move [data-reload]"); p.wait_for_timeout(500); check("새로 불러왔습니다" in toast(p) and p.locator("#matrix tbody tr").count() > 0, "이동 현황에서도")
+
+TESTS = [t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,

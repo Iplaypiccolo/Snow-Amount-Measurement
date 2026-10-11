@@ -653,3 +653,9 @@ table.alloc { min-width: 760px; }
 .al-chip { padding: 1px 8px; border-radius: 6px; background: var(--wait-bg); color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 .al-chip.full { background: var(--go-bg); color: var(--go); } .al-chip.over { background: var(--stop-bg); color: var(--stop); font-weight: 700; }
 .al-flag { margin-left: 4px; white-space: nowrap; }
+
+/* ---------- [새로고침] 버튼(탭마다 오른쪽 끝) ---------- */
+.rl { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.rl .btn { min-height: 34px; padding: 4px 14px; }
+.rl .hint { font-size: 12px; color: var(--ink-soft); font-weight: 400; }
+.summary-head p .rl { margin-left: 14px; vertical-align: middle; }
