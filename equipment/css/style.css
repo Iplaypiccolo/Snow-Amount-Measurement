@@ -704,3 +704,4 @@ table.alloc { min-width: 760px; }
 #branchTable .bulk .btn { padding-left: 6px; padding-right: 6px; }
 /* 기관별 배정의 지역본부 칸 */
 .alloc th.al-pool, .alloc td.al-pool { border-left: 2px solid var(--line); border-right: 2px solid var(--line); }
+.tb-sep { width: 1px; align-self: stretch; min-height: 24px; background: var(--line); margin: 0 4px; }      /* 기관 버튼들 | [지원 장비만] */

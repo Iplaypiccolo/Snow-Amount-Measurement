@@ -918,7 +918,8 @@ def t_pool_vehicles(p):
     check(p.locator("#nvType").count() == 0 and p.locator("#nvRent").count() == 1 and p.locator("#nvPfx").inner_text() == "인천" and p.locator("#vehAdd").inner_text() == "등록", "지사를 고르면 장비 종류 대신 임차 체크")
     p.fill("#nvPlate", "252"); p.click("#vehAdd"); p.wait_for_timeout(300); check("등록했습니다 (인천 252호)" in toast(p), toast(p)); v1 = vid("인천 252호")
     check(p.locator("#nvOrg").input_value() == "B:" + ic, "등록한 뒤에도 고른 지사 그대로(이어서 등록)")
-    p.check("#nvRent"); p.wait_for_timeout(150); check(p.locator("#nvPfx").inner_text() == "인천 임차", "임차를 켜면 이름 앞부분이 바뀜")
+    check(p.locator("#nvPlate").get_attribute("placeholder") == "252", "일반 장비 번호 예시는 252")
+    p.check("#nvRent"); p.wait_for_timeout(150); check(p.locator("#nvPfx").inner_text() == "인천 임차" and p.locator("#nvPlate").get_attribute("placeholder") == "1", "임차를 켜면 이름 앞부분이 바뀌고 번호 예시는 1")
     p.fill("#nvPlate", "1"); p.click("#vehAdd"); p.wait_for_timeout(300); check("인천 임차 1호" in toast(p), toast(p)); v2 = vid("인천 임차 1호")
     p.fill("#nvPlate", "1"); p.click("#vehAdd"); p.wait_for_timeout(250); check("같은 이름" in toast(p), "같은 기준일자에 같은 이름은 거절: " + toast(p))
     p.uncheck("#nvRent"); p.wait_for_timeout(100); p.fill("#nvPlate", "1"); p.click("#vehAdd"); p.wait_for_timeout(300); check("인천 1호" in toast(p), "임차 번호와 일반 번호는 따로: " + toast(p)); v3 = vid("인천 1호")
@@ -991,7 +992,21 @@ def t_pool_vehicles(p):
     tab(p, "move"); check(p.locator(f"#matrix button.mnum[data-mb='{dg}'][data-mo='지역본부'][data-mt='제설차']").inner_text() == "1", "오늘 이동 현황에는 그대로")
     tab(p, "fleet"); p.select_option("#roundSelFleet", str(old)); p.wait_for_timeout(400); check(p.locator("#eqTable tr.pool").count() == 3, "예전 기준일자로 돌아가면 다시 보임")
 
-TESTS = [t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+def t_fleet_only_go(p):
+    """기관별 장비 [지원 장비만](2026-10-13): 지원 여부가 '지원'인 장비만 보기. 기관 버튼과 함께 쓰이고, 고치는 중인 줄은 확정 전까지 남음"""
+    tab(p, "fleet"); rows = lambda: ev(p, "[...document.querySelectorAll('#eqTable tbody tr[data-vrow]')].map(r => r.dataset.vrow)")
+    total = len(rows()); go = ev(p, "S.vehicles.filter(v => stOf(S.round, v.id).status === 'O').map(v => v.id)")
+    check(p.locator("#onlyGo").inner_text() == "지원 장비만" and p.locator("#onlyGo").get_attribute("aria-pressed") == "false" and 0 < len(go) < total, "기관 버튼 줄에 [지원 장비만]")
+    p.click("#onlyGo"); p.wait_for_timeout(150)
+    check(sorted(rows()) == sorted(go) and p.locator("#onlyGo").get_attribute("aria-pressed") == "true" and p.locator("#eqTable select[data-vs]").evaluate_all("xs => xs.every(x => x.value === 'O')"), f"지원인 장비만: {len(rows())} / {total}")
+    p.click("[data-fo='충북']"); p.wait_for_timeout(150); check(rows() == [v for v in go if ev(p, f"vehById('{v}').org") == "충북"] and len(rows()) > 0, "기관 버튼과 함께")
+    p.click("[data-fo='전북']"); p.click("[data-fo='충북']"); p.wait_for_timeout(150); check(rows() == [] and "지원 여부가 '지원'인 장비가 없습니다" in p.locator("#eqTable").inner_text(), "지원 장비가 없는 기관")
+    p.click("[data-fo='전체']"); p.wait_for_timeout(150)
+    p.select_option("[data-vs=V014]", "X"); p.wait_for_timeout(150); check("V014" in rows(), "고치는 중인 줄은 바로 사라지지 않음")
+    confirm_fleet(p); check("확정했습니다" in toast(p) and "V014" not in rows() and len(rows()) == len(go) - 1, "확정하면 목록에서 빠짐: " + toast(p))
+    p.click("#onlyGo"); p.wait_for_timeout(150); check(len(rows()) == total and p.locator("#onlyGo").get_attribute("aria-pressed") == "false", "다시 누르면 모든 장비")
+
+TESTS = [t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,

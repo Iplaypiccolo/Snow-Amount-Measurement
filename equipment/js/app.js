@@ -71,6 +71,7 @@ const S = {
   draft: new Map(), vdraft: new Map(), rdraft: new Map(), revisedMode: false,   // revisedMode: 표 위 [최초 지원]/[수정본] — 고르는 지사 목록과 저장 구분          // 아직 확정·저장하지 않은 변경(경로 / 장비 / 지사 요청)
   date: todayISO(), day1: todayISO(), cols: 4, round: null,
   org: "전체", type: "전체", fleetOrgs: new Set(), bview: "req", closedHq: new Set(), extraStop: new Set(),   // fleetOrgs: 기관별 장비에서 고른 기관들(비어 있으면 모든 기관) / bview: 지사별 요청·편성 보기 = req(요청 있는 지사만) / fixed(편성 확정된 지사만) / offer(지원 가능 지사만) / all
+  fleetGo: false,                                                                  // 기관별 장비 [지원 장비만]: 고른 기준일자에서 지원 여부가 '지원'인 장비만 보기
   nvSel: "", nvRent: false,                                                         // 장비 추가 줄에서 고른 기관(또는 "B:지사번호")·임차 체크
   logUser: "전체", logKind: "전체", logToday: false,
   warn: null, zdata: null, wtab: null, fc: {}                                      // warn: 지금 대설 특보(서버 요약) / zdata: 특보구역 관리 창 자료
@@ -604,7 +605,9 @@ function renderDest() {
 const routeChoices = () => S.order.filter(b => isFixed(b.id));
 // 요청은 있지만 아직 편성 확정 전인 지사: 목록에 회색(고를 수 없음)으로 보여서 "왜 없지?"를 바로 알게 함
 const pendingChoices = () => S.order.filter(b => hasReq(b.id) && !isFixed(b.id));
-const fleetRows = () => S.vehicles.filter(v => (!S.fleetOrgs.size || S.fleetOrgs.has(v.org)) && shownIn(v, curRound()));
+// [지원 장비만]을 켜면 지원 여부가 '지원'인 장비만(고치는 중인 줄은 확정 전까지 그대로 보임 — 고르는 순간 줄이 사라지지 않게)
+const isGo = v => { const r = curRound(); return !!r && stOf(r.id, v.id).status === "O"; };
+const fleetRows = () => S.vehicles.filter(v => (!S.fleetOrgs.size || S.fleetOrgs.has(v.org)) && shownIn(v, curRound()) && (!S.fleetGo || isGo(v) || S.sdraft.has(v.id)));
 const nextRoundMin = () => S.rounds.length ? addDays(S.rounds[0].start_date, 1) : "2000-01-01";       // 새 기준일자는 마지막 기준일자보다 뒤
 const hiddenNow = () => S.vehicles.filter(v => v.hidden_after && !shownIn(v, curRound()));          // 지금 고른 기준일자에서 숨겨진 장비(숨김 취소 목록)
 const canRoute = () => can("equip.edit.all");                      // 날짜별 경로·장비 삭제·지원일 1·초기화 = 관리자(모든 장비 권한 equip.edit.all)만
@@ -634,10 +637,11 @@ function renderFleet() {
       brOpts.map(b => `<option value="B:${esc(b.id)}"${S.nvSel === "B:" + b.id ? " selected" : ""}>${esc(b.name)}${all ? "" : " (지역본부 장비)"}</option>`).join("") + `</select>` +
       (pb ? `<label class="rent"><input type="checkbox" id="nvRent"${S.nvRent ? " checked" : ""}> 임차</label>`
           : `<select class="ci" id="nvType" aria-label="새 장비 종류">${TYPES.map(t => `<option>${t}</option>`).join("")}</select>`) +
-      `<span class="pnum"><span class="pfx" id="nvPfx">${esc(pb ? bn(pb) + (S.nvRent ? " 임차" : "") : S.nvSel)}</span><input class="ci" id="nvPlate" inputmode="numeric" maxlength="5" placeholder="${pb ? "252" : "901"}" aria-label="${pb ? "새 장비 번호(숫자만)" : "새 장비 도공번호(숫자만)"}"><span class="sfx">호</span></span><button type="button" class="btn" id="vehAdd">${pb ? "등록" : "추가"}</button>`
+      `<span class="pnum"><span class="pfx" id="nvPfx">${esc(pb ? bn(pb) + (S.nvRent ? " 임차" : "") : S.nvSel)}</span><input class="ci" id="nvPlate" inputmode="numeric" maxlength="5" placeholder="${pb ? (S.nvRent ? "1" : "252") : "901"}" aria-label="${pb ? "새 장비 번호(숫자만)" : "새 장비 도공번호(숫자만)"}"><span class="sfx">호</span></span><button type="button" class="btn" id="vehAdd">${pb ? "등록" : "추가"}</button>`
     : myB ? `<span class="tb-label">장비 추가</span><span class="hint" id="poolWait">지사별 요청·편성에서 '타지사 지원 가능' 대수를 넣고 관리자가 확정하면 ${esc(bn(myB))} 지사의 장비를 등록할 수 있습니다.</span>` : "";
   $("fleetFilters").innerHTML =
     `<div class="tb-row"><span class="tb-label">기관</span><span class="fgroup">${["전체", ...SOURCE_ORGS()].map(orgChip).join("")}</span>` +
+    `<span class="tb-sep" aria-hidden="true"></span><button type="button" class="chip" id="onlyGo" aria-pressed="${S.fleetGo}" title="지원 여부가 '지원'인 장비만 보기(다시 누르면 모든 장비)">지원 장비만</button>` +
     `<span class="tb-right">` + (all ? `<label class="ctl">지원일 칸 <select class="ci" id="colsSel">${Array.from({ length: 9 }, (_, k) => k + 2).map(n => `<option value="${n}" ${n === S.cols ? "selected" : ""}>${n}개</option>`).join("")}</select></label>` : "") +      // 지원일 칸 수 고르기는 관리자만(다른 계정은 기본 4칸)
     (all ? `<button type="button" class="btn" id="fleetReset">초기화</button>` : "") + `</span></div>` +
     (addRow || all ? `<div class="tb-row">` + addRow +
@@ -646,7 +650,7 @@ function renderFleet() {
   const dates = windowDates(), head = dates.map((d, i) => `<th class="dayh">지원일 ${i + 1}<span class="sub">` +
     (i === 0 && all ? `<input class="ci" type="date" id="day1In" value="${esc(d)}"${r ? ` min="${esc(r.start_date)}"` : ""} aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동, 기준일자보다 앞은 안 됨)">` : esc(fmtMD(d))) + `</span></th>`).join("");
   const rows = fleetRows().map(v => fleetRowHtml(v, dates, choices, all)).join("");
-  $("eqTable").innerHTML = `<thead><tr><th>도공번호</th><th>장비</th><th>블로워</th><th>지원 여부</th>${head}${actCol() ? `<th class="unh">${canRoute() ? unhideHead() : ""}</th>` : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${5 + dates.length}" class="empty">장비가 없습니다.${addRow ? " 위의 [장비 추가]로 넣으세요." : ""}</td></tr>`}</tbody>`;
+  $("eqTable").innerHTML = `<thead><tr><th>도공번호</th><th>장비</th><th>블로워</th><th>지원 여부</th>${head}${actCol() ? `<th class="unh">${canRoute() ? unhideHead() : ""}</th>` : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${5 + dates.length}" class="empty">${S.fleetGo ? "지원 여부가 '지원'인 장비가 없습니다." : "장비가 없습니다."}${addRow && !S.fleetGo ? " 위의 [장비 추가]로 넣으세요." : ""}</td></tr>`}</tbody>`;
   placeUnhide();
 }
 const myPoolN = () => canPoolAdd() ? poolVehs(S.me.branch_id).length : 0;            // 지사 계정: 이 기준일자에 등록한 자기 지사 장비 수
@@ -662,7 +666,7 @@ function blowerCell(v, ed) {
 function poolRowHtml(v, dates, choices) {
   const ed = canVeh(v), bid = v.home_branch, id = esc(v.id), nm = esc(vname(v));
   const nameCell = ed ? `<span class="pnum pool"><span class="pfx">${esc(bn(bid))}</span><label class="rent"><input type="checkbox" data-vr="${id}" data-fk="vr:${id}"${vval(v, "rented") ? " checked" : ""} aria-label="${nm} 임차"> 임차</label>` +
-      `<input class="ci" inputmode="numeric" maxlength="5" data-vp="${id}" data-fk="vp:${id}" value="${esc(poolNum(v))}" placeholder="252" aria-label="${nm} 번호 숫자"><span class="sfx">호</span></span>`
+      `<input class="ci" inputmode="numeric" maxlength="5" data-vp="${id}" data-fk="vp:${id}" value="${esc(poolNum(v))}" placeholder="${vval(v, "rented") ? "1" : "252"}" aria-label="${nm} 번호 숫자"><span class="sfx">호</span></span>`
     : `<span class="plate">${nm}</span>`;
   return `<tr class="pool${S.vdraft.has(v.id) ? " changed" : ""}" data-vrow="${id}" data-home="${esc(bid)}"><td>${nameCell}</td><td>${esc(v.type)}</td><td>${blowerCell(v, false)}</td>` +
     `<td><span class="status go">지원</span>${offerOk(bid) ? "" : ` <span class="tag warn pool-wait" title="이 지사의 타지사 지원 가능 대수가 확정되지 않았습니다(확정이 취소됨)">확정 전</span>`}</td>` +
@@ -846,7 +850,7 @@ async function addVehicle() {
 async function addPoolVehicle(bid, num) {
   const b = S.brById[bid], r = curRound(), rented = !!($("nvRent") || {}).checked;
   if (!b || !r) return;
-  if (!NUM_RE.test(num)) return toast(`번호는 숫자만 넣으세요 (예: 252 → ${b.name} ${rented ? "임차 " : ""}252호)`, true);
+  if (!NUM_RE.test(num)) return toast(`번호는 숫자만 넣으세요 (예: ${rented ? `1 → ${b.name} 임차 1호` : `252 → ${b.name} 252호`})`, true);
   if (!(can("equip.edit.all") || (canPoolAdd() && S.me.branch_id === bid))) return toast("자기 지사의 장비만 등록할 수 있습니다", true);
   if (!offerOk(bid)) return toast(`${b.name} 지사의 '타지사 지원 가능' 대수가 확정된 뒤에 등록할 수 있습니다`, true);
   const plate = poolPlate(bid, rented, num);
@@ -1425,6 +1429,7 @@ document.addEventListener("click", e => {
   if (c("#onlyActive")) { S.bview = S.bview === "req" ? "all" : "req"; return renderBranch(); }      // 세 보기 중 하나만, 다시 누르면 모든 지사
   if (c("#onlyFixed")) { S.bview = S.bview === "fixed" ? "all" : "fixed"; return renderBranch(); }
   if (c("#onlyOffer")) { S.bview = S.bview === "offer" ? "all" : "offer"; return renderBranch(); }
+  if (c("#onlyGo")) { S.fleetGo = !S.fleetGo; return renderFleet(); }
   if ((x = c("[data-fo]"))) {               // 기관 버튼: 여러 개 고르기. '모든 기관'을 누르거나 고른 것을 모두 풀면 모든 기관
     const o = x.dataset.fo; if (o === "전체") S.fleetOrgs.clear(); else if (S.fleetOrgs.has(o)) S.fleetOrgs.delete(o); else S.fleetOrgs.add(o);
     return renderFleet();
