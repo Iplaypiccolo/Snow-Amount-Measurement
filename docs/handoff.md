@@ -44,6 +44,20 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-10-12 · 커밋 (이 기록 커밋 하나) · 지역본부 장비 연동(migration 44, 실서버 적용함)
+- 사용자와 두 차례 검토해 정한 것: 지사가 '타지사 지원 가능' 대수(제설차만)를 내고 관리자가 확정(편성과 같은 [확정] 한 번, 확정하면 함께 잠김) → **그 지사 계정과 관리자만** 그 기준일자의 장비를 등록(본부·기계화부 계정은 불가) → **피지원 지사는 관리자가 고름**, 지사는 번호·임차·도착 예상 시각·삭제. 이름 '인천 252호'/'인천 임차 1호'(같은 기준일자 안에서만 중복 불가), 기계화부 장비도 화면에 '호'. 지원 여부는 늘 지원. 새 기준일자로 이어받지 않음. 확정 취소 때 장비·경로는 남기고 '확정 전' 표지(넘치는 장비는 관리자가 지움). 등록 대수는 막지 않음.
+- **서버**(`20261012_44_pool_vehicles.sql`): SQL 을 먼저 보여 주고 확인받은 뒤 실서버 되돌리기 시험 → 적용(규칙 3).
+  - `round_requests.offer_truck`(0~99) + `save_requests`·확정 잠금(`round_requests_guard`)에 포함.
+  - `vehicles.round_id · home_branch · rented`, 모양 검사(`vehicles_pool_shape`), 이름 중복 = 기계화부 장비는 전체에서(`vehicles_plate_key` 부분 색인), 지역본부 장비는 기준일자 안에서(`vehicles_pool_plate_key`).
+  - 트리거 `private.vehicles_pool_guard()`(BEFORE insert/update: 장비 번호 자동, 이름 형식, 등록 권한·'지원 가능 확정' 검사 → `SA004`, 기관·기준일자·출발 지사는 못 바꿈), `private.vehicles_pool_status()`(등록하면 지원 여부 'O' 자동 — 수정 기록에는 안 남김), `rvs_check`(지역본부 장비는 자기 기준일자에서 늘 'O'), `check_route`(자기 지사로 못 보냄 → `SA005`), `create_round`(지역본부 장비는 이어받지 않음).
+  - **RLS 변경**: `vehicles` insert·update·delete 를 지사 계정(`req.edit.own` + 자기 지사의 지역본부 장비)에게도, `vehicle_routes` update 를 같은 계정에게(무엇을 고칠 수 있는지는 `vehicle_routes_guard` — 도착 예상 시각만). `save_fleet` 가 `rented` 와 지사 계정의 시각 고치기를 받음.
+  - 기관 목록 `equip_orgs` 에 '지역본부' 추가(기관별 배정·장비용). 계정 소속으로는 못 쓰게 `profiles_org_not_pool` 검사 + 관리 콘솔(`admin/admin.js`) 목록에서 뺌. ⚠ 계정 발급 함수(`account-admin`)는 고치지 않음 — 화면을 거치지 않고 '지역본부'를 넣어 보내면 DB 검사에서 거절됨. `round_allocations` 는 지역본부 제설기 배정을 막음.
+- **화면**(장비 지원, `equipment/index.html` 틀은 그대로라 UI_VERSION 변동 없음): 지사별 요청·편성 칸 순서 바꿈(도착 요청·타지사 지원 가능 ║ 편성·확정, 굵은 경계선 + 관리자 영역 바탕) · 보기 버튼 [지원 가능 지사만] · **직접입력을 켜도 칸 폭 고정**(기상 칸 폭을 제목 칸에서 정하고 입력칸을 줄임, 표 전체 폭은 예전보다 좁음) / 기관별 장비 카드 5개 같은 폭·0대 흐림 · 기관 버튼 여러 개 고르기(`S.fleetOrgs`)·0대 비활성 · 장비 추가 목록(경계선 아래 확정된 지사, 임차 체크) · 지역본부 장비 줄(`tr.pool`) / 기관별 배정 '지역본부' 칸 / 이동 현황 '지역본부' 열 실제 대수.
+  - 화면 이름은 `vname(v)` 한 곳에서 만듦. 지역본부 장비가 보이는 기준일자는 `shownIn(v, r)`.
+- 문서 `docs/equipment-rules.md` 2-2 장. 시험: `supabase/tests/pool_test.sql`(새), `tests/test_equipment.py` `t_pool_vehicles`(새), 시연 모드(`api.js` sample)도 같은 규칙. 시연 아이디에 인천지사·수원지사 추가(시연 자료에는 지역본부 장비를 미리 넣지 않음).
+- 남은 것(사용자 결정 대기): 이동 현황의 기관 버튼도 여러 개 고르기로 할지, 요약 카드, 직접입력 줄의 강수확률 칸.
+— ✍ Claude Code 작성
+
 ### 2026-10-11 · 커밋 (이 기록 커밋 하나) · 기관별 장비: '지원일 칸' 수 고르기는 관리자만
 - 사용자 요청. `renderFleet` 의 `#colsSel`(지원일 칸 2~10개)을 `equip.edit.all`(관리자)에게만 보임. 다른 계정은 늘 기본 4칸(`S.cols = 4`). 서버 변경 없음. 시험 `t_permissions_equip_own`.
 — ✍ Claude Code 작성

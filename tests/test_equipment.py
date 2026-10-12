@@ -369,7 +369,7 @@ def t_typing_then_clicking_next_input_keeps_both(p):
     """(사용자 신고 2026-10-04) 한 칸에 입력하고 바로 다른 칸을 눌러 입력해도 두 값이 모두 남아야 함(예전에는 표 전체를 다시 그려 두 번째 칸이 사라짐)"""
     tab(p, "branch"); p.click("#onlyActive"); p.wait_for_timeout(150); b = bid(p, "인천")
     p.click(f"[data-rq={b}][data-f=req_blower]"); p.keyboard.press("Control+A"); p.keyboard.type("1")
-    p.click(f"[data-arr={b}][data-part=d]"); p.keyboard.type("10042026"); p.wait_for_timeout(200)
+    p.click(f"[data-arr={b}][data-part=d]", position={"x": 10, "y": 12}); p.keyboard.type("10042026"); p.wait_for_timeout(200)      # 날짜 칸의 맨 앞(월)부터 입력 — 칸 폭이 바뀌어도 같은 자리
     p.select_option(f"[data-arr={b}][data-part=h]", "16"); p.wait_for_timeout(150)
     p.click(f"[data-rq={b}][data-f=req_truck]"); p.keyboard.press("Control+A"); p.keyboard.type("2")
     p.click(f"[data-rq={b}][data-f=req_blower]"); p.wait_for_timeout(200)
@@ -868,7 +868,130 @@ def t_reload(p):
     check(ev(p, "S.sdraft.size") == 0 and ev(p, "stOf(S.round, 'V013').status") == "" and "새로 불러왔습니다" in toast(p), "버리고 다시 읽음")
     tab(p, "move"); p.click("#panel-move [data-reload]"); p.wait_for_timeout(500); check("새로 불러왔습니다" in toast(p) and p.locator("#matrix tbody tr").count() > 0, "이동 현황에서도")
 
-TESTS = [t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+def t_pool_vehicles(p):
+    """지역본부 장비(2026-10-12, 마이그레이션 44): 지사가 '타지사 지원 가능' 대수를 내고 관리자가 확정 → 그 지사·관리자가 그 기준일자의 제설차를 등록.
+    피지원 지사는 관리자만, 지사는 번호·임차·도착 시각·삭제. 이름 '인천 252호'/'인천 임차 1호'. 카드 5개·기관 버튼 여러 개·표 칸 순서·배정 '지역본부' 칸·이동 현황 연동"""
+    d0 = day(p, 0); ic, sw, dg, yy, cj = (bid(p, n) for n in ("인천", "수원", "대관령", "양양", "춘천"))
+    vid = lambda name: ev(p, f"(S.vehicles.find(v => isPool(v) && vname(v) === '{name}') || {{}}).id || null")
+    setnum = lambda sel, v: (p.fill(sel, str(v)), p.press(sel, "Tab"), p.wait_for_timeout(150))
+    # ── 지사별 요청·편성: 칸 순서, 관리자 영역 경계선, 보기 버튼 3개, 직접입력을 켜도 칸 폭 그대로
+    tab(p, "branch")
+    heads = [x.replace("\n", " ").strip() for x in p.locator("#branchTable thead tr:first-child th").all_inner_texts()]
+    check([h.split(" ")[0] for h in heads] == ["지사", "24시", "최저기온", "대설특보", "기상현황", "지사", "도착", "타지사", "편성", "확정"] and "지원 가능" in heads[7], f"칸 순서: {heads}")
+    check(ev(p, "getComputedStyle(document.querySelector('#branchTable tbody td.adm0')).borderLeftWidth") == "3px" and p.locator("#branchTable thead th.adm").count() == 5, "편성·확정 앞 굵은 경계선")
+    check(ev(p, f"(() => {{ const tr = document.querySelector(\"#branchTable tr[data-b='{cj}']\"), bg = c => getComputedStyle(tr.querySelector(c)).backgroundColor; return bg('td.adm') !== bg('td.ofc') }})()"), "관리자 칸은 바탕이 다름")
+    check([x.strip() for x in p.locator("#branchCtl .chip").all_inner_texts()] == ["요청 있는 지사만", "편성 확정된 지사만", "지원 가능 지사만"], "보기 버튼 순서")
+    widths = lambda: ev(p, "[...document.querySelectorAll('#branchTable thead tr:nth-child(2) th')].map(th => Math.round(th.getBoundingClientRect().width * 2) / 2)")
+    w0 = widths(); p.check(f"input[data-rq={cj}][data-f=wx_manual]"); p.wait_for_timeout(200); w1 = widths()
+    check(p.locator(f"#branchTable tr[data-b='{cj}'] input.wxn").count() == 3 and w0 == w1, f"직접입력을 켜도 칸 폭이 같아야 함: {w0} → {w1}")
+    p.uncheck(f"input[data-rq={cj}][data-f=wx_manual]"); p.wait_for_timeout(200); w2 = widths(); check(w2 == w0, f"끄면 처음 그대로: {w0} → {w2}"); p.click("#save-branch [data-revert]"); p.wait_for_timeout(150)
+    p.set_viewport_size({"width": 1920, "height": 1000}); p.wait_for_timeout(200); w3 = widths(); p.check(f"input[data-rq={cj}][data-f=wx_manual]"); p.wait_for_timeout(200); w4 = widths()
+    check(w3 == w4, f"넓은 화면에서도 칸 폭이 같아야 함: {w3} → {w4}"); p.click("#save-branch [data-revert]"); p.set_viewport_size({"width": 1440, "height": 1000}); p.wait_for_timeout(200)
+    check(ev(p, "(() => { const t = document.querySelector('#branchTable'); return t.scrollWidth - t.parentElement.clientWidth })()") <= 8, "1440 화면에서 표가 옆으로 넘치지 않음(편성·확정 칸이 한 화면에)")
+    # ── 지사(인천): 자기 줄에 지원 가능 3대, 확정 전에는 장비 등록 안내만
+    as_user(p, "br-ic"); tab(p, "branch"); row = lambda b: p.locator(f"#branchTable tr[data-b='{b}']")
+    check(row(ic).count() == 1 and row(ic).locator("input[data-f=offer_truck]").count() == 1 and row(ic).locator("input[data-f=assigned_truck]").count() == 0, "인천지사: 자기 줄의 지원 가능 칸만(편성은 관리자)")
+    setnum(f"[data-rq={ic}][data-f=offer_truck]", 3); save_branch(p); check("저장했습니다" in toast(p) and ev(p, f"offerOf('{ic}')") == 3 and not ev(p, f"offerOk('{ic}')"), toast(p))
+    tab(p, "fleet"); check(p.locator("#poolWait").is_visible() and p.locator("#vehAdd").count() == 0 and not p.locator("#save-fleet").is_visible(), "확정 전에는 등록할 수 없고 안내만")
+    check(ev(p, f"Api.addVehicle({{ org: '지역본부', type: '제설차', plate: '인천252', round_id: S.round, home_branch: '{ic}', rented: false }}).then(r => r.code)") == "SA004", "서버도 확정 전 등록 거절")
+    as_user(p, "hq-gw"); tab(p, "branch"); check(row(cj).locator("input[data-f=offer_truck]").count() == 1 and row(ic).locator("input").count() == 0, "본부: 자기 본부 지사의 지원 가능 칸")
+    tab(p, "fleet"); check(p.locator("#nvOrg, #poolWait, #vehAdd").count() == 0, "본부 계정은 장비 등록 없음")
+    # ── 관리자: 지원 가능 지사만 보기 → 확정(편성과 한 번에) → 잠금
+    as_user(p, "admin1"); tab(p, "branch"); p.click("#onlyOffer"); p.wait_for_timeout(150)
+    shown = lambda: [x for x in ev(p, "[...document.querySelectorAll('#branchTable tr[data-b]')].map(r => r.dataset.b)")]
+    check(shown() == [ic] and p.locator("#onlyOffer").get_attribute("aria-pressed") == "true" and p.locator("#onlyActive").get_attribute("aria-pressed") == "false", f"지원 가능 지사만: {shown()}")
+    check(p.locator(f"#branchTable tr.hq[data-hq='{ev(p, 'S.brById[' + repr(ic) + '].hq_id')}'] [data-s=offer_truck]").inner_text() == "3", "본부 줄에 지원 가능 합계")
+    p.click(f"[data-confirm={ic}]"); p.wait_for_timeout(350); check("확정했습니다" in toast(p) and ev(p, f"offerOk('{ic}')") and row(ic).locator("input[data-f=offer_truck]").is_disabled(), "확정하면 지원 가능 칸도 잠김: " + toast(p))
+    check(ev(p, f"Api.saveRequests(S.round, [{{ branch_id: '{ic}', offer_truck: 9 }}]).then(r => r.code)") == "55000", "서버도 확정한 줄의 지원 가능 대수는 잠금")
+    p.click("#onlyOffer"); p.wait_for_timeout(150); setnum(f"[data-rq={sw}][data-f=offer_truck]", 2); p.click(f"[data-confirm={sw}]"); p.wait_for_timeout(350); check(ev(p, f"offerOk('{sw}')"), "수원도 확정(고친 값과 함께): " + toast(p))
+    # ── 기관별 장비(관리자): 카드 5개 같은 폭, 0대 카드 흐림, 기관 버튼, 장비 추가 목록의 경계선 아래 지사
+    tab(p, "fleet")
+    cw = ev(p, "[...document.querySelectorAll('#orgGrid .org')].map(e => Math.round(e.getBoundingClientRect().width))")
+    check(len(cw) == 5 and max(cw) - min(cw) <= 1 and ev(p, "new Set([...document.querySelectorAll('#orgGrid .org')].map(e => Math.round(e.getBoundingClientRect().top))).size") == 1, f"카드 5개 같은 폭·한 줄: {cw}")
+    card = lambda o: p.locator(f"#orgGrid [data-orgcard='{o}']")
+    check("off" in card("전북").get_attribute("class") and "off" not in card("서울경기").get_attribute("class") and "off" not in card("지역본부").get_attribute("class"), "지원 0대인 전북만 흐림(지역본부는 가능 5대)")
+    check(card("지역본부").locator("[data-pcap]").inner_text() == "5대" and card("지역본부").locator("[data-preg]").inner_text() == "0대", card("지역본부").inner_text())
+    check(p.locator("[data-fo]").count() == 6 and p.locator("[data-fo='지역본부']").is_disabled() and not p.locator("[data-fo='전북']").is_disabled(), "장비 0대인 지역본부 버튼은 비활성")
+    opts = ev(p, "[...document.querySelectorAll('#nvOrg option')].map(o => [o.value, o.textContent, o.disabled])")
+    check([o[0] for o in opts if not o[2]] == ["서울경기", "충북", "전북", "대구경북", "B:" + ic, "B:" + sw] and opts[4][2] and "─" in opts[4][1], f"기관 4곳 ─ 경계선 ─ 확정된 지사: {opts}")
+    p.select_option("#nvOrg", "B:" + ic); p.wait_for_timeout(150)
+    check(p.locator("#nvType").count() == 0 and p.locator("#nvRent").count() == 1 and p.locator("#nvPfx").inner_text() == "인천" and p.locator("#vehAdd").inner_text() == "등록", "지사를 고르면 장비 종류 대신 임차 체크")
+    p.fill("#nvPlate", "252"); p.click("#vehAdd"); p.wait_for_timeout(300); check("등록했습니다 (인천 252호)" in toast(p), toast(p)); v1 = vid("인천 252호")
+    check(p.locator("#nvOrg").input_value() == "B:" + ic, "등록한 뒤에도 고른 지사 그대로(이어서 등록)")
+    p.check("#nvRent"); p.wait_for_timeout(150); check(p.locator("#nvPfx").inner_text() == "인천 임차", "임차를 켜면 이름 앞부분이 바뀜")
+    p.fill("#nvPlate", "1"); p.click("#vehAdd"); p.wait_for_timeout(300); check("인천 임차 1호" in toast(p), toast(p)); v2 = vid("인천 임차 1호")
+    p.fill("#nvPlate", "1"); p.click("#vehAdd"); p.wait_for_timeout(250); check("같은 이름" in toast(p), "같은 기준일자에 같은 이름은 거절: " + toast(p))
+    p.uncheck("#nvRent"); p.wait_for_timeout(100); p.fill("#nvPlate", "1"); p.click("#vehAdd"); p.wait_for_timeout(300); check("인천 1호" in toast(p), "임차 번호와 일반 번호는 따로: " + toast(p)); v3 = vid("인천 1호")
+    check(v1 and v2 and v3 and ev(p, f"vehById('{v2}').plate") == "인천임차1" and ev(p, f"stOf(S.round, '{v1}').status") == "O", "저장 값·지원 여부 자동")
+    vr = lambda v: p.locator(f"#eqTable tr[data-vrow='{v}']")
+    check(ev(p, "[...document.querySelectorAll('#eqTable tr.pool')].map(r => r.dataset.vrow)") == [v3, v1, v2], "지역본부 장비는 맨 아래, 일반(숫자 순) → 임차")
+    check("지원" == vr(v1).locator("td:nth-child(4)").inner_text().strip() and vr(v1).locator("[data-vs], [data-vhide], select.offsel").count() == 0 and vr(v1).locator("[data-vdel]").count() == 1, "지원 여부는 늘 지원, 숨기기 없음, 삭제 있음")
+    check(vr("V001").locator(".sfx").inner_text() == "호", "기계화부 장비도 끝에 '호'")
+    check(card("지역본부").locator("[data-preg]").inner_text() == "3대" and "인천 3/3" in card("지역본부").locator(f"[data-pbr='{ic}']").inner_text() and "수원 0/2" in card("지역본부").inner_text(), card("지역본부").inner_text())
+    # 기관 버튼: 여러 개, '모든 기관'은 혼자
+    nrows = lambda: p.locator("#eqTable tbody tr[data-vrow]").count(); total = nrows()
+    p.click("[data-fo='지역본부']"); p.wait_for_timeout(150); check(nrows() == 3 and p.locator("[data-fo='전체']").get_attribute("aria-pressed") == "false", "지역본부만")
+    p.click("[data-fo='서울경기']"); p.wait_for_timeout(150); check(nrows() == 3 + 12 and p.locator("[data-fo='지역본부']").get_attribute("aria-pressed") == "true" and p.locator("[data-fo='서울경기']").get_attribute("aria-pressed") == "true", f"두 기관 함께: {nrows()}")
+    p.click("[data-fo='서울경기']"); p.click("[data-fo='지역본부']"); p.wait_for_timeout(150); check(nrows() == total and p.locator("[data-fo='전체']").get_attribute("aria-pressed") == "true", "모두 풀면 모든 기관")
+    p.click("[data-fo='충북']"); p.click("[data-fo='전체']"); p.wait_for_timeout(150); check(nrows() == total and p.locator("[data-fo='충북']").get_attribute("aria-pressed") == "false", "'모든 기관'을 누르면 고른 것이 풀림")
+    # ── 경로는 관리자: 자기 지사는 목록에 없음, 지원 불가(이날부터) 없음
+    p.check("#modeRev"); p.wait_for_timeout(150); o = ev(p, f"[...document.querySelectorAll(\"select[data-fk='r:{d0}:{v1}:0'] option\")].map(o => o.value)")
+    check(ic not in o and sw in o and dg in o, "자기(출발) 지사는 고를 수 없음")
+    check(ev(p, f"Api.saveFleet([], [{{ date: '{d0}', vehicle_id: '{v1}', stops: ['{ic}'], revised: true, times: null }}], S.round, []).then(r => r.code)") == "SA005", "서버도 자기 지사로는 거절")
+    check("__off" not in ev(p, f"[...document.querySelectorAll(\"select[data-fk='r:{day(p, 1)}:{v1}:0'] option\")].map(o => o.value)") and "__off" in ev(p, f"[...document.querySelectorAll(\"select[data-fk='r:{day(p, 1)}:V002:0'] option\")].map(o => o.value)"), "지역본부 장비에는 '지원 불가(이날부터)' 없음")
+    p.check("#modeInit"); p.wait_for_timeout(150)
+    p.select_option(rsel(v1, d0), dg); p.wait_for_timeout(150); confirm_fleet(p); check("확정했습니다" in toast(p) and route(p, v1, d0) == ["대관령"], toast(p))
+    # ── 이동 현황: 지역본부 열에 실제 대수, 카드에 '인천 252호'
+    tab(p, "move"); check("연동 예정" not in p.locator("#matrix").inner_text(), "'연동 예정' 글자 없음")
+    check(p.locator(f"#matrix button.mnum[data-mb='{dg}'][data-mo='지역본부'][data-mt='제설차']").inner_text() == "1", "지역본부 열에 대관령 제설차 1대")
+    check(p.locator(f"#destList [data-bid='{dg}'] .vrow[data-vid='{v1}'] .plate").inner_text() == "인천 252호", "지사 카드에 인천 252호")
+    p.click("#filters [data-org='지역본부']"); p.wait_for_timeout(150); check(p.locator("#destList .vrow").count() == 1, "지원기관 '지역본부'로 거르기"); p.click("#filters [data-org='전체']")
+    # ── 기관별 배정: 지역본부 칸(제설차만), 지원 가능 = 확정된 대수 합계, 장비 지정, 배정 초과·배정 없음 표지
+    tab(p, "alloc"); key = f"지역본부|{dg}"
+    check("지역본부" in p.locator("#allocTable thead").inner_text() and p.locator(f"[data-al='{key}'][data-f=truck]").count() == 1 and p.locator(f"[data-al='{key}'][data-f=blower]").count() == 0, "지역본부는 제설차 칸만")
+    setnum(f"[data-al='{key}'][data-f=truck]", 1); p.click("#save-alloc [data-save]"); p.wait_for_timeout(300); check("확정했습니다" in toast(p), toast(p))
+    check(p.locator("#allocTable [data-apool=av]").inner_text().strip() == "1 / 5" and p.locator("#allocTable [data-adone='지역본부']").inner_text().startswith("1 / 1") and "완료" in p.locator("#allocTable [data-adone='지역본부']").inner_text(), "배정 1 / 지원 가능 5, 장비 지정 1 / 1")
+    check(ev(p, f"Api.saveAllocations(S.round, [{{ org: '지역본부', branch_id: '{dg}', truck: 1, blower: 1 }}]).then(r => r.code)") == "23514", "서버: 지역본부 제설기 배정 거절")
+    tab(p, "fleet"); cell = lambda v: f"#eqTable td[data-cell='{d0}|{v}']"
+    check(p.locator(cell(v1) + " .al-flag").count() == 0 and "지정 완료" in card("지역본부").inner_text(), "배정 안이면 표지 없음")
+    p.select_option(rsel(v2, d0), dg); p.wait_for_timeout(200); check("배정 초과" in p.locator(cell(v2) + " .al-flag").inner_text(), "배정(1대)보다 많이 보내면 배정 초과")
+    p.select_option(rsel(v2, d0), yy); p.wait_for_timeout(200); check("배정 없음" in p.locator(cell(v2) + " .al-flag").inner_text(), "배정이 없는 지사는 배정 없음")
+    p.select_option(rsel(v2, d0), "__del"); p.wait_for_timeout(200); check(ev(p, "S.draft.size") == 0, "지움")
+    # ── 지사(인천): 자기 장비의 번호·임차·도착 시각·삭제. 피지원 지사는 못 고름
+    as_user(p, "br-ic"); tab(p, "fleet")
+    check(ev(p, "[...document.querySelectorAll('#nvOrg option')].map(o => o.value)") == ["B:" + ic] and p.locator("#save-fleet").is_visible(), "지사: 자기 지사만 등록, 저장 바 보임")
+    check(vr(v1).locator("[data-vp], [data-vr], [data-vdel]").count() == 3 and p.locator("#eqTable select[data-rv], #eqTable select[data-ra]").count() == 0 and vr("V001").locator("input:enabled, select").count() == 0, "자기 장비만 고칠 수 있고 지사를 고르는 칸은 없음")
+    ti = f"input[data-fk='t:{d0}:{v1}:0']"; p.fill(ti, "0830"); p.press(ti, "Tab"); p.wait_for_timeout(150); confirm_fleet(p)
+    check("확정했습니다" in toast(p) and ev(p, f"recOf('{d0}', '{v1}').times[0]") == "08:30", "지사: 도착 예상 시각 — " + toast(p))
+    check(ev(p, f"Api.saveFleet([], [{{ date: '{d0}', vehicle_id: '{v1}', stops: ['{yy}'], revised: false, times: null }}], S.round, []).then(r => r.code)") == "42501", "서버: 지사가 피지원 지사를 바꾸면 거절")
+    setnum(f"[data-vp='{v2}']", 7)
+    p.check(f"[data-vr='{v3}']"); p.wait_for_timeout(150); check(ev(p, f"vval(vehById('{v3}'), 'plate')") == "인천임차1" and ev(p, "S.vdraft.size") == 2, "번호·임차를 고치면 이름(저장 값)도 함께")
+    confirm_fleet(p); check("확정했습니다" in toast(p) and ev(p, f"vname(vehById('{v2}'))") == "인천 임차 7호" and ev(p, f"vname(vehById('{v3}'))") == "인천 임차 1호", toast(p))
+    setnum(f"[data-vp='{v3}']", 7); check("같은 이름" in toast(p) and ev(p, "S.vdraft.size") == 0, "같은 이름으로는 못 바꿈: " + toast(p))
+    p.click(f"[data-vdel='{v1}']"); p.wait_for_timeout(250); check("경로가 있는 장비" in toast(p) and vr(v1).count() == 1, "경로가 있으면 못 지움: " + toast(p))
+    p.click(f"[data-vdel='{v3}']"); p.wait_for_timeout(250); check("지웠습니다" in toast(p) and vr(v3).count() == 0, toast(p))
+    p.fill("#nvPlate", "300"); p.click("#vehAdd"); p.wait_for_timeout(300); check("인천 300호" in toast(p), "지사 계정이 직접 등록: " + toast(p)); v4 = vid("인천 300호")
+    check(ev(p, f"Api.addVehicle({{ org: '지역본부', type: '제설차', plate: '수원1', round_id: S.round, home_branch: '{sw}', rented: false }}).then(r => r.code)") == "42501", "서버: 다른 지사 이름으로는 등록 거절")
+    # ── 다른 지사·기계화부: 보기만
+    as_user(p, "br-sw"); tab(p, "fleet"); check(vr(v1).locator("input:enabled, select, button").count() == 0 and ev(p, "[...document.querySelectorAll('#nvOrg option')].map(o => o.value)") == ["B:" + sw], "수원지사: 인천 장비는 보기만, 자기 지사만 등록")
+    as_user(p, "eq-sg"); tab(p, "fleet"); check(vr(v1).locator("input:enabled, select, button").count() == 0 and ev(p, "[...document.querySelectorAll('#nvOrg option')].map(o => o.value)") == ["서울경기"], "기계화부: 지역본부 장비는 보기만, 지사는 목록에 없음")
+    check(vr(v1).locator(".plate").inner_text() == "인천 252호", "보기 전용 이름")
+    # ── 확정 취소: 장비·경로는 남고 '확정 전' 표지, 새 등록만 막힘
+    as_user(p, "admin1"); tab(p, "branch"); p.click("#onlyOffer"); p.wait_for_timeout(150); p.click(f"[data-unconfirm={ic}]"); p.wait_for_timeout(350)
+    tab(p, "fleet"); check(vr(v1).locator(".pool-wait").count() == 1 and vr(v4).count() == 1 and route(p, v1, d0) == ["대관령"], "확정을 취소해도 장비·경로는 그대로, '확정 전' 표지")
+    check("B:" + ic not in ev(p, "[...document.querySelectorAll('#nvOrg option')].map(o => o.value)") and "확정 전" in card("지역본부").locator(f"[data-pbr='{ic}']").inner_text(), "새 등록 목록에서 빠짐")
+    as_user(p, "br-ic"); tab(p, "fleet"); check(p.locator("#poolWait").is_visible() and p.locator("#vehAdd").count() == 0 and vr(v1).locator("[data-vp]").count() == 1, "지사: 다시 확정될 때까지 새 등록 불가(있는 장비는 고칠 수 있음)")
+    # 대수를 등록 대수(3대)보다 적게 줄여 다시 확정해도 됨
+    tab(p, "branch"); setnum(f"[data-rq={ic}][data-f=offer_truck]", 1); save_branch(p); as_user(p, "admin1"); tab(p, "branch"); p.click(f"[data-confirm={ic}]"); p.wait_for_timeout(350)
+    check(ev(p, f"offerOk('{ic}') && offerOf('{ic}')") == 1 and ev(p, f"poolVehs('{ic}').length") == 3, "등록 3대보다 적은 1대로도 저장·확정")
+    # ── 새 기준일자: 지역본부 장비는 이어받지 않음(그 기준일자에서만 보임)
+    p.click("#onlyOffer"); p.wait_for_timeout(100); old = ev(p, "S.round"); p.fill("#newRoundDate", day(p, 2)); p.click("#roundMake"); p.wait_for_timeout(400); new = ev(p, "S.round")
+    tab(p, "fleet"); check(new != old and p.locator("#eqTable tr.pool").count() == 0 and "off" in card("지역본부").get_attribute("class") and p.locator("[data-fo='지역본부']").is_disabled(), "새 기준일자에는 지역본부 장비가 안 보임")
+    check(ev(p, f"stOf({new}, '{v1}').status") == "" and ev(p, f"!availOn('{v1}', '{day(p, 2)}')") and ev(p, f"availOn('{v1}', '{d0}')"), "새 기준일자부터는 지원 없음(앞 날짜 기록은 그대로)")
+    tab(p, "move"); check(p.locator(f"#matrix button.mnum[data-mb='{dg}'][data-mo='지역본부'][data-mt='제설차']").inner_text() == "1", "오늘 이동 현황에는 그대로")
+    tab(p, "fleet"); p.select_option("#roundSelFleet", str(old)); p.wait_for_timeout(400); check(p.locator("#eqTable tr.pool").count() == 3, "예전 기준일자로 돌아가면 다시 보임")
+
+TESTS = [t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,

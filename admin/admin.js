@@ -135,7 +135,7 @@
       if (!rs[0].ok) throw new Error('profiles');
       S.users = rs[0].json || []; S.br = {}; S.hq = {}; S.perms = rs[3].json || [];
       var ORG_ORDER = ['서울경기', '충북', '전북', '대구경북'];
-      S.orgs = (rs[4].json || []).map(function (o) { return o.name; }).sort(function (a, b) { var x = ORG_ORDER.indexOf(a), y = ORG_ORDER.indexOf(b); return (x < 0 ? 99 : x) - (y < 0 ? 99 : y) || (a < b ? -1 : 1); });
+      S.orgs = (rs[4].json || []).map(function (o) { return o.name; }).filter(function (n) { return n !== '지역본부'; }).sort(function (a, b) { var x = ORG_ORDER.indexOf(a), y = ORG_ORDER.indexOf(b); return (x < 0 ? 99 : x) - (y < 0 ? 99 : y) || (a < b ? -1 : 1); });
       (rs[1].json || []).forEach(function (b) { S.br[b.id] = b; }); (rs[2].json || []).forEach(function (h) { S.hq[h.id] = h; });
     });
   }

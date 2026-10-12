@@ -14,6 +14,9 @@
      최저기온 [기온 | 시각]: 같은 예보의 1시간 기온 24시간 중 가장 낮은 값과 그 시각(지사 격자 중 가장 추운 곳, branch_forecast.min_tmp·min_tmp_at)
      [기상현황 직접입력]을 켜면 적설·강수·최저기온·대설특보(종류·발표·발효)를 지사가 직접 넣음(wx_* 열) — 자동 값 대신 보이고, 눌러도 예보로 가지 않음
      지사별 요청·편성은 대설특보(예비·주의보·경보)만: [종류 | 발표 | 발효] 세 칸. 다른 특보는 관리자 [특보구역 관리] 아래 종류별 탭에서만
+   - 지역본부 장비(마이그레이션 44): 다른 지사를 도울 수 있는 지사가 '타지사 지원 가능' 대수를 내고 관리자가 확정하면, 그 지사(와 관리자)가 그 기준일자에 보낼 제설차를 등록.
+     장비는 그 기준일자에만 딸림(org = '지역본부', round_id, home_branch = 출발 지사, rented = 임차). 이름은 '인천 252호' / '인천 임차 1호'(저장 값 plate = 인천252 / 인천임차1).
+     피지원 지사는 관리자가 정하고, 지사는 번호·임차·도착 예상 시각·삭제(경로 없을 때)만. 지원 여부는 늘 '지원'.
    - 사람이 읽는 규칙 설명: docs/equipment-rules.md
    ============================================================ */
 // 배포 직후 브라우저에 예전 index.html(최대 10분 저장)이 남아 있으면 새 app.js 와 화면 틀이 맞지 않아 탭이 비어 보임
@@ -31,6 +34,8 @@ function esc(v) {   // XSS 방지: 화면에 글자를 넣을 땐 항상 이 함
 }
 const p2 = n => String(n).padStart(2, "0");
 const TYPES = ["제설차", "제설기", "이동정비차"];
+const POOL = "지역본부";                              // 지역본부 장비의 기관 이름(기계화부 4곳과 따로)
+const isPool = v => !!v && v.org === POOL;
 const STATUS = { "": ["wait", "미정"], O: ["go", "지원"], X: ["stop", "지원 불가"], M: ["fix", "정비중"] };     // 정비중도 지원 불가
 const WD = "일월화수목금토";
 const todayISO = () => { const t = new Date(); return `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`; };
@@ -51,6 +56,8 @@ const DEMO = [
   { id: "br1", label: "대관령지사", role: "branch", branch: "대관령", perms: ["juris.request", "req.edit.own"], g: "피지원지사" },
   { id: "br2", label: "양양지사", role: "branch", branch: "양양", perms: ["juris.request", "req.edit.own"], g: "피지원지사" },
   { id: "br3", label: "엄정지사", role: "branch", branch: "엄정", perms: ["juris.request", "req.edit.own"], g: "피지원지사" },
+  { id: "br-ic", label: "인천지사", role: "branch", branch: "인천", perms: ["juris.request", "req.edit.own"], g: "지원지사(지역본부 장비)" },
+  { id: "br-sw", label: "수원지사", role: "branch", branch: "수원", perms: ["juris.request", "req.edit.own"], g: "지원지사(지역본부 장비)" },
   { id: "eq-sg", label: "서울경기 지원장비", role: "equip", org: "서울경기", perms: ["equip.edit.own"], g: "지원장비" },
   { id: "eq-cb", label: "충북 지원장비", role: "equip", org: "충북", perms: ["equip.edit.own"], g: "지원장비" },
   { id: "viewer", label: "보기 전용", role: "viewer", perms: [], g: "보기 전용" }
@@ -63,23 +70,33 @@ const S = {
   rstat: new Map(), stLoaded: new Set(), sdraft: new Map(), unhideOpen: false,   // rstat: "기준일자|장비" → 지원 여부 {status, off_from, updated_at} / sdraft: 고른 기준일자의 아직 확정 안 한 지원 여부(장비 → 값)
   draft: new Map(), vdraft: new Map(), rdraft: new Map(), revisedMode: false,   // revisedMode: 표 위 [최초 지원]/[수정본] — 고르는 지사 목록과 저장 구분          // 아직 확정·저장하지 않은 변경(경로 / 장비 / 지사 요청)
   date: todayISO(), day1: todayISO(), cols: 4, round: null,
-  org: "전체", type: "전체", fleetOrg: "전체", bview: "req", closedHq: new Set(), extraStop: new Set(),   // bview: 지사별 요청·편성 보기 = req(요청 있는 지사만) / fixed(편성 확정된 지사만) / all
+  org: "전체", type: "전체", fleetOrgs: new Set(), bview: "req", closedHq: new Set(), extraStop: new Set(),   // fleetOrgs: 기관별 장비에서 고른 기관들(비어 있으면 모든 기관) / bview: 지사별 요청·편성 보기 = req(요청 있는 지사만) / fixed(편성 확정된 지사만) / offer(지원 가능 지사만) / all
+  nvSel: "", nvRent: false,                                                         // 장비 추가 줄에서 고른 기관(또는 "B:지사번호")·임차 체크
   logUser: "전체", logKind: "전체", logToday: false,
   warn: null, zdata: null, wtab: null, fc: {}                                      // warn: 지금 대설 특보(서버 요약) / zdata: 특보구역 관리 창 자료
 };
-// 장비 정렬 규칙(사용자 지정): ① 기관 서울경기 → 충북 → 전북 → 대구경북(S.orgs 순서) ② 종류 제설차 → 제설기 → 이동정비차(TYPES 순서) ③ 도공번호 숫자 순
+// 장비 정렬 규칙(사용자 지정): ① 기관 서울경기 → 충북 → 전북 → 대구경북(S.orgs 순서) → 지역본부 ② 종류 제설차 → 제설기 → 이동정비차(TYPES 순서) ③ 도공번호 숫자 순
+//   지역본부 장비끼리는 출발 지사(본부·지사 순서) → 일반 → 임차 → 숫자 순
 const vehNo = v => { const m = /(\d+)$/.exec(v.plate || ""); return m ? +m[1] : 1e9; };
-const vehCmp = (a, b) => (((S.orgs.indexOf(a.org) + 1) || 99) - ((S.orgs.indexOf(b.org) + 1) || 99)) || (((TYPES.indexOf(a.type) + 1) || 99) - ((TYPES.indexOf(b.type) + 1) || 99)) || (vehNo(a) - vehNo(b)) || String(a.id).localeCompare(String(b.id));
+const brIdx = id => { const i = S.order.findIndex(b => b.id === id); return i < 0 ? 999 : i; };
+const vehCmp = (a, b) => (((S.orgs.indexOf(a.org) + 1) || 99) - ((S.orgs.indexOf(b.org) + 1) || 99)) || (isPool(a) && isPool(b) ? (brIdx(a.home_branch) - brIdx(b.home_branch)) || ((a.rented ? 1 : 0) - (b.rented ? 1 : 0)) : 0) ||
+  (((TYPES.indexOf(a.type) + 1) || 99) - ((TYPES.indexOf(b.type) + 1) || 99)) || (vehNo(a) - vehNo(b)) || String(a.id).localeCompare(String(b.id));
 const sortVehicles = () => { S.vehicles.sort(vehCmp); };
-const SOURCE_ORGS = () => [...S.orgs, "지역본부"];        // 이동 현황 지원기관 열. 지역본부 장비는 나중에 '지역본부' 탭에서 연동(지금은 0)
+const SOURCE_ORGS = () => [...S.orgs, POOL];             // 이동 현황 지원기관 열·기관별 장비 기관 버튼: 기계화부 4곳 + 지역본부
 const can = p => !!S.me && (S.me.role === "admin" || (S.me.perms || []).includes(p));
-const canVeh = v => can("equip.edit.all") || (can("equip.edit.own") && v.org === S.me.org);
-const canAnyVeh = () => can("equip.edit.all") || can("equip.edit.own");
+// 지역본부 장비는 그 지사 계정(자기 지사 요청 권한 req.edit.own)과 관리자만 고침. 본부·기계화부 계정은 못 함
+const canPoolAdd = () => !!S.me && !can("equip.edit.all") && can("req.edit.own") && !!S.me.branch_id;
+const canVeh = v => can("equip.edit.all") || (isPool(v) ? canPoolAdd() && v.home_branch === S.me.branch_id : can("equip.edit.own") && v.org === S.me.org);
+const canAnyVeh = () => can("equip.edit.all") || can("equip.edit.own") || canPoolAdd();
 const canReq = b => can("req.confirm") || (can("req.edit.own") && S.me.branch_id === b.id) || (can("req.edit.hq") && b.hq_id === S.me.hq_id);
 const canAnyReq = () => can("req.confirm") || can("req.edit.own") || can("req.edit.hq");
 const bn = id => (S.brById[id] || {}).name || id;
 const vehById = id => S.vehicles.find(v => v.id === id);
-const plateOf = id => { const v = vehById(id); return v ? vval(v, "plate") : id; };
+// 화면에 보이는 장비 이름(저장 값 plate 는 그대로): 기계화부 '서울경기901호' / 지역본부 '인천 252호'·'인천 임차 1호'
+const poolNum = v => { const m = /(\d{1,5})$/.exec(vval(v, "plate") || ""); return m ? m[1] : ""; };
+const poolPlate = (bid, rented, num) => bn(bid) + (rented ? "임차" : "") + num;
+const vname = v => !v ? "" : isPool(v) ? `${bn(v.home_branch)} ${vval(v, "rented") ? "임차 " : ""}${poolNum(v)}호` : vval(v, "plate") + (plateNum(v) ? "호" : "");
+const plateOf = id => { const v = vehById(id); return v ? vname(v) : id; };
 const curRound = () => S.rounds.find(r => r.id === S.round) || null;
 
 /* ---------- 값: 서버 값 + 아직 확정하지 않은 변경 ---------- */
@@ -107,7 +124,8 @@ const effRec = (d, vid) => availOn(vid, d) ? recOf(d, vid) : EMPTY;             
 // 연속지원: 전날 마지막으로 들른 지사 = 오늘 첫 번째 지사 → 오늘 그 지사의 도착 시각 대신 "연속지원"(사용자 결정 2026-10-08)
 const isCont = (vid, d, stop) => { if (!stop) return false; const p = effRec(addDays(d, -1), vid).stops; return p.length > 0 && p[p.length - 1] === stop; };
 // 숨긴 장비(hidden_after): 그 날짜보다 늦게 시작하는 기준일자부터 기관별 장비 목록에서 안 보임(이전 기준일자·이동 현황 기록은 그대로)
-const shownIn = (v, r) => !v.hidden_after || (!!r && r.start_date <= v.hidden_after);
+// 지역본부 장비는 등록한 기준일자에서만 보임(다른 기준일자에서는 목록·카드·대수에 안 나옴)
+const shownIn = (v, r) => isPool(v) ? !!r && v.round_id === r.id : (!v.hidden_after || (!!r && r.start_date <= v.hidden_after));
 /* ---------- 기관별 배정(마이그레이션 43): 관리자가 "기관 → 지사 몇 대", 기계화부는 그 안에서 지원일 1의 장비별 지사를 고름 ---------- */
 const ak = (org, bid) => org + "|" + bid, A0 = { truck: 0, blower: 0 }, AF = { "제설차": "truck", "제설기": "blower" };
 const aval = (org, bid) => S.adraft.get(ak(org, bid)) || S.alloc.get(ak(org, bid)) || A0;      // 배정 탭에 보이는 값(고치는 중 포함)
@@ -127,7 +145,7 @@ function orgAllocSummary(org) {     // 기관별: 배정 합계·기계화부가
     const used = allocUsed(org, t, b.id); items.push({ bid: b.id, type: t, cap, used }); total += cap; done += Math.min(used, cap); if (used > cap) over = true; }));
   return { items, total, done, over };
 }
-const REQ_DEF = { req_truck: 0, req_blower: 0, assigned_truck: 0, assigned_blower: 0, arrive_at: null, reason: null, confirmed: false,
+const REQ_DEF = { req_truck: 0, req_blower: 0, assigned_truck: 0, assigned_blower: 0, offer_truck: 0, arrive_at: null, reason: null, confirmed: false,
   wx_manual: false, wx_snow: null, wx_pcp: null, wx_tmin: null, wx_tmin_at: null, wx_level: null, wx_fc: null, wx_ef: null };
 const rbase = (b, f) => { const r = S.reqs[b]; return r ? r[f] : REQ_DEF[f]; };
 const rval = (b, f) => { const d = S.rdraft.get(b); return d && f in d ? d[f] : rbase(b, f); };
@@ -137,6 +155,12 @@ const isConf = bid => !!(S.reqs[bid] && S.reqs[bid].confirmed);          // 저�
 // 요청 있음 = 요청 제설차·제설기가 1대 이상(일괄 확정으로 줄만 생긴 지사는 아님). 편성 확정 = 확정했고 편성 대수가 1대 이상(저장된 것 기준)
 const hasReq = bid => (+rval(bid, "req_truck") || 0) + (+rval(bid, "req_blower") || 0) > 0;
 const isFixed = bid => isConf(bid) && (+rbase(bid, "assigned_truck") || 0) + (+rbase(bid, "assigned_blower") || 0) > 0;
+// 타지사 지원 가능(제설차): 넣은 값 있음(입력 중 포함) / 확정됨(저장된 것 — 이때부터 그 지사가 지역본부 장비를 등록할 수 있음)
+const hasOffer = bid => (+rval(bid, "offer_truck") || 0) > 0;
+const offerOf = bid => +rbase(bid, "offer_truck") || 0;
+const offerOk = bid => isConf(bid) && offerOf(bid) > 0;
+const offerBranches = () => S.order.filter(b => offerOk(b.id));
+const poolVehs = bid => S.vehicles.filter(v => isPool(v) && shownIn(v, curRound()) && (!bid || v.home_branch === bid));   // 고른 기준일자의 지역본부 장비
 const canEdit = b => canReq(b) && !isConf(b.id);                         // 확정한 줄은 [취소]하기 전까지 아무도 못 고침(서버도 막음, 마이그레이션 35)
 const dis = bid => isConf(bid) ? " disabled" : "";                       // 확정한 줄의 입력칸 = 비활성(보이기만)
 /* ---------- 특보 — 지사 관할 특보구역 중 가장 높은 단계. 확정한 지사는 확정 순간 값(서버가 고정), 자료가 없으면 특보 없음 ---------- */
@@ -186,7 +210,7 @@ function warnCells(bid) {
       `<td class="wt wxe" data-wfc="${esc(bid)}">${inp("wx_fc")}</td><td class="wt wxe" data-wef="${esc(bid)}">${inp("wx_ef")}</td>`;
   }
   const t = (v, ef) => w.none || !w.level || !v ? dash : esc(w.manual ? fmtHM(v) : fmtWarnTime(v, w.level, ef));
-  return `<td class="" data-wcell="${esc(bid)}">${warnBadge(bid)}</td><td class="wt" data-wfc="${esc(bid)}">${t(w.fc)}</td><td class="wt" data-wef="${esc(bid)}">${t(w.ef, true)}</td>`;
+  return `<td class="" data-wcell="${esc(bid)}">${warnBadge(bid)}</td><td class="wt" data-wfc="${esc(bid)}">${t(w.fc)}</td><td class="wt" data-wef="${esc(bid)}"><span class="wef">${t(w.ef, true)}</span></td>`;
 }
 const fmtBase = b => b && /^\d{12}$/.test(b) ? `${+b.slice(4, 6)}/${+b.slice(6, 8)} ${b.slice(8, 10)}:${b.slice(10, 12)}` : "-";
 async function loadWarn() { const [r, f] = await Promise.all([Api.warnings(), Api.forecast()]); if (r.ok) S.warn = r.status; if (f.ok) S.fc = Object.fromEntries(f.rows.map(x => [x.branch_id, x])); }
@@ -355,10 +379,11 @@ async function boot() {
   S.hqs = r.hqs.slice().sort((a, b) => a.sort - b.sort); S.branches = r.branches; S.vehicles = r.vehicles.filter(v => v.active !== false);
   S.rounds = r.rounds.slice().sort((a, b) => b.start_date.localeCompare(a.start_date)); S.holdings = r.holdings;
   const OO = ["서울경기", "충북", "전북", "대구경북"];
-  S.orgs = (r.orgs.length ? r.orgs : OO).slice().sort((a, b) => ((OO.indexOf(a) + 1) || 99) - ((OO.indexOf(b) + 1) || 99));
-  sortVehicles();
+  const mech = r.orgs.filter(o => o !== POOL);                     // 기관 목록의 '지역본부'는 기계화부가 아님(따로 다룸)
+  S.orgs = (mech.length ? mech : OO).slice().sort((a, b) => ((OO.indexOf(a) + 1) || 99) - ((OO.indexOf(b) + 1) || 99));
   S.hqById = Object.fromEntries(S.hqs.map(h => [h.id, h])); S.brById = Object.fromEntries(S.branches.map(b => [b.id, b]));
   S.order = S.hqs.flatMap(h => S.branches.filter(b => b.hq_id === h.id));               // 본부(순서) → 지사(번호 순) = 강설량 화면과 같은 계층
+  sortVehicles();
   if (r.me) {
     S.real = { label: r.me.display_name, username: r.me.username, role: r.me.role, perms: r.me.perms || [], branch_id: r.me.branch_id, org: r.me.org, hq_id: r.me.hq_id || (S.brById[r.me.branch_id] || {}).hq_id || null };
     S.me = S.real; S.uid = "__me";
@@ -384,12 +409,14 @@ function toast(msg, isErr) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 3500);
 }
 const TAB_LABEL = { vehicles: "장비", vehicle_routes: "경로", round_vehicle_status: "지원 여부", round_requests: "지사 요청", round_allocations: "기관별 배정", support_rounds: "기준일자", branch_zone_overrides: "특보구역" };
-const FIELD = { truck: "배정 제설차", blower: "배정 제설기", fc_snow: "확정 예상 적설", fc_pcp: "확정 예상 강수", fc_pop: "확정 강수확률", wx_manual: "기상현황 직접입력", wx_snow: "직접 적설", wx_pcp: "직접 강수", wx_tmin: "직접 최저기온", wx_tmin_at: "직접 최저기온 시각", fc_tmin: "확정 최저기온", wx_level: "직접 대설특보", wx_fc: "직접 특보 발표", wx_ef: "직접 특보 발효", plate: "도공번호", status: "지원 여부", stops: "경로", revised: "구분", times: "도착 예상", snow_cm: "예상 적설", warning: "특보", req_truck: "요청 제설차", req_blower: "요청 제설기",
+const FIELD = { offer_truck: "타지사 지원 가능", rented: "임차", home_branch: "출발 지사", truck: "배정 제설차", blower: "배정 제설기", fc_snow: "확정 예상 적설", fc_pcp: "확정 예상 강수", fc_pop: "확정 강수확률", wx_manual: "기상현황 직접입력", wx_snow: "직접 적설", wx_pcp: "직접 강수", wx_tmin: "직접 최저기온", wx_tmin_at: "직접 최저기온 시각", fc_tmin: "확정 최저기온", wx_level: "직접 대설특보", wx_fc: "직접 특보 발표", wx_ef: "직접 특보 발효", plate: "도공번호", status: "지원 여부", stops: "경로", revised: "구분", times: "도착 예상", snow_cm: "예상 적설", warning: "특보", req_truck: "요청 제설차", req_blower: "요청 제설기",
   blower_s: "블로워 소", blower_l: "블로워 대", off_from: "지원 불가 시작일", hidden_after: "숨김", days: "기간(일)", assigned_truck: "편성 제설차", assigned_blower: "편성 제설기", arrive_at: "도착 요청", reason: "사유", confirmed: "확정", start_date: "기준일자", type: "장비", org: "기관", warn_level: "확정 특보", include: "특보구역" };
 const HIDE = new Set(["fc_tmfc", "fc_at", "zone_code", "warn_zones", "warn_base", "warn_at", "warn_note", "updated_by", "updated_at", "confirmed_by", "confirmed_at", "created_by", "created_at", "round_id", "branch_id", "vehicle_id", "date", "id", "sort", "active", "name", "end_date"]);
 function fmtField(f, v) {
   if (f === "warn_level" || f === "wx_level") return v ? (WLV[v] || [0, v])[1].replace("대설", "") || v : "특보 없음";
   if (f === "wx_manual") return v ? "켬" : "끔";
+  if (f === "rented") return v ? "임차" : "일반";
+  if (f === "home_branch") return v ? bn(v) : "-";
   if ((f === "wx_fc" || f === "wx_ef") && v) return fmtHM(v);
   if (f === "wx_tmin_at" && v) return fmtWarnTime(v);
   if (f === "include") return v == null ? "자동대로" : v ? "더함" : "뺌";
@@ -484,14 +511,14 @@ function renderMatrix() {
     sel(org, type).forEach(m => m.legs.forEach(l => { if (l.done || (!ids.has(l.from) && !ids.has(l.to))) return; const k = [l.t, l.from, l.to].join("|"); g.set(k, { ...l, n: ((g.get(k) || {}).n || 0) + 1 }); }));
     return [...g.values()].sort((a, b) => (a.t || "99").localeCompare(b.t || "99")).map(l => `<span class="mvn">${esc(l.t || "시각 미정")} ${l.n}대 ${esc(bn(l.from))}→${esc(bn(l.to))}</span>`).join(""); };
   // 숫자를 누르면 아래 세부내역의 그 지사(본부)·지원기관·장비 종류 줄로 이동(jumpToDetail). sc = 줄 범위(본부 data-mh / 지사 data-mb / 합계 없음)
-  const cells = (ids, sc = "") => cols.map(o => MOVE_TYPES.map((t, k) => { const n = o === "지역본부" ? 0 : cnt(o, ids, t), mv = o === "지역본부" ? "" : notes(o, ids, t);
+  const cells = (ids, sc = "") => cols.map(o => MOVE_TYPES.map((t, k) => { const n = cnt(o, ids, t), mv = notes(o, ids, t);
     return `<td class="${k ? "c2" : "c1"}${o == null ? " tot" : ""}${n || mv ? "" : " zero"}">${n ? `<button type="button" class="mnum" ${sc} data-mo="${o == null ? "" : esc(o)}" data-mt="${t}" title="아래 세부내역으로 이동">${n}</button>` : mv ? `<span class="mnum0">0</span>` : "·"}${mv}</td>`; }).join("")).join("");
   let body = "";
   S.hqs.forEach(h => {
     const brs = S.order.filter(b => b.hq_id === h.id && used.has(b.id)); if (!brs.length) return;
     brs.forEach((b, i) => { body += `<tr class="brrow${i === brs.length - 1 ? " grpend" : ""}">${i ? "" : `<th class="hqc" scope="rowgroup" rowspan="${brs.length}">${esc(h.name)}</th>`}<th scope="row">${esc(b.name)}</th>${cells(new Set([b.id]), `data-mb="${esc(b.id)}"`)}</tr>`; });
   });
-  $("matrix").innerHTML = `<thead><tr><th class="l" scope="col" rowspan="2" colspan="2">본부 · 피지원 지사</th>${cols.map(o => `<th scope="colgroup" colspan="2" class="orgh${o == null ? " tot" : ""}">${o == null ? "합계" : esc(o)}${o === "지역본부" ? '<span class="sub">연동 예정</span>' : ""}</th>`).join("")}</tr>` +
+  $("matrix").innerHTML = `<thead><tr><th class="l" scope="col" rowspan="2" colspan="2">본부 · 피지원 지사</th>${cols.map(o => `<th scope="colgroup" colspan="2" class="orgh${o == null ? " tot" : ""}">${o == null ? "합계" : esc(o)}</th>`).join("")}</tr>` +
     `<tr>${cols.map(o => MOVE_TYPES.map((t, k) => `<th scope="col" class="${k ? "c2" : "c1"}${o == null ? " tot" : ""}">${t}</th>`).join("")).join("")}</tr></thead>` +
     `<tbody>${body || `<tr><td class="empty" colspan="${cols.length * 2 + 2}">${esc(fmtMD(S.date))}에 이동하는 장비가 없습니다.</td></tr>`}</tbody>` +
     `<tfoot><tr><th scope="row" colspan="2">합계</th>${cells(null, 'data-mall="1"')}</tr></tfoot>`;
@@ -541,7 +568,7 @@ function vehicleRow(v, stops, rec, bid, m) {
   // 이동 표시(아직 안 한 이동만): 지금 있는 지사 = 다음에 나갈 이동, 앞으로 갈 지사 = 들어올 이동. 이미 한 이동은 안 보임
   const lg = m && k >= 0 ? (k === m.p ? [m.legs[k]] : [m.legs[k - 1]]).filter(l => l && !l.done) : [];
   const mvTags = lg.map(l => `<span class="tag mv">${esc(legText(l))}</span>`).join("");
-  return `<button type="button" class="vrow${m && k > m.p ? " incoming" : ""}" data-vid="${esc(v.id)}" data-vo="${esc(v.org)}" data-vt="${esc(v.type)}"><span class="plate">${esc(vval(v, "plate"))}</span><span class="vtype">${esc(v.type)}</span>
+  return `<button type="button" class="vrow${m && k > m.p ? " incoming" : ""}" data-vid="${esc(v.id)}" data-vo="${esc(v.org)}" data-vt="${esc(v.type)}"><span class="plate">${esc(vname(v))}</span><span class="vtype">${esc(v.type)}</span>
     <span class="status-wrap">${hasBlower(v) ? `<span class="tag blw-tag">블로워 ${esc(blowerText(v))}</span>` : ""}${mvTags}${cont ? `<span class="tag eta">연속지원</span>` : eta ? `<span class="tag eta">${esc(eta)} 도착 예상</span>` : ""}</span></button>`;
 }
 function renderDest() {
@@ -577,7 +604,7 @@ function renderDest() {
 const routeChoices = () => S.order.filter(b => isFixed(b.id));
 // 요청은 있지만 아직 편성 확정 전인 지사: 목록에 회색(고를 수 없음)으로 보여서 "왜 없지?"를 바로 알게 함
 const pendingChoices = () => S.order.filter(b => hasReq(b.id) && !isFixed(b.id));
-const fleetRows = () => S.vehicles.filter(v => (S.fleetOrg === "전체" || v.org === S.fleetOrg) && shownIn(v, curRound()));
+const fleetRows = () => S.vehicles.filter(v => (!S.fleetOrgs.size || S.fleetOrgs.has(v.org)) && shownIn(v, curRound()));
 const nextRoundMin = () => S.rounds.length ? addDays(S.rounds[0].start_date, 1) : "2000-01-01";       // 새 기준일자는 마지막 기준일자보다 뒤
 const hiddenNow = () => S.vehicles.filter(v => v.hidden_after && !shownIn(v, curRound()));          // 지금 고른 기준일자에서 숨겨진 장비(숨김 취소 목록)
 const canRoute = () => can("equip.edit.all");                      // 날짜별 경로·장비 삭제·지원일 1·초기화 = 관리자(모든 장비 권한 equip.edit.all)만
@@ -587,46 +614,73 @@ const plateNum = v => { const p = vval(v, "plate") || ""; return p.startsWith(v.
 function renderFleet() {
   const choices = routeChoices(), r = curRound(), all = canRoute(), pend = pendingChoices();
   if (!all) S.cols = 4;                                              // 관리자가 아니면 지원일 칸은 늘 기본 4칸(고르는 목록 없음)
-  banner("perm-fleet", canAnyVeh(),
-    all ? "도공번호·지원 여부(고른 기준일자)·지원일별 피지원 지사(하루 여러 곳은 ＋)를 고친 뒤 아래 [확정]을 눌러야 저장됩니다. 다른 기준일자가 맡은 날짜는 고칠 수 없습니다."
-        : `${S.me.org || ""} 장비를 추가하고 도공번호·지원 여부(지원일 2부터는 '지원 불가'도)를 고칠 수 있습니다. 지원일 1의 피지원 지사는 관리자가 배정한 지사·대수 안에서 고릅니다(둘째 날부터·하루 여러 곳은 관리자). 고친 뒤 아래 [확정]을 눌러야 저장됩니다.`,
-    "보기만 가능합니다.");
+  banner("perm-fleet");
   $("fleetRound").innerHTML = roundSel("roundSelFleet") + (r ? "" : `<span class="hint">기준일자가 없습니다.</span>`) + reloadBtn();
   renderOrgGrid();
-  const myOrgs = all ? S.orgs : S.orgs.filter(o => o === S.me.org);
+  // 기관 버튼: 여러 개를 함께 고를 수 있음('모든 기관'은 혼자). 이 기준일자에 장비가 0대인 기관은 누를 수 없음
+  const cntOrg = o => S.vehicles.filter(v => v.org === o && shownIn(v, r)).length;
+  [...S.fleetOrgs].forEach(o => { if (!cntOrg(o)) S.fleetOrgs.delete(o); });
+  const orgChip = o => { const on = o === "전체" ? !S.fleetOrgs.size : S.fleetOrgs.has(o), none = o !== "전체" && !cntOrg(o);
+    return `<button type="button" class="chip" data-fo="${esc(o)}" aria-pressed="${on}"${none ? ' disabled title="이 기준일자에 장비가 없습니다"' : ""}>${o === "전체" ? "모든 기관" : esc(o)}</button>`; };
+  // 장비 추가: 관리자 = 기관 4곳 ─ 경계선 ─ 지원 가능이 확정된 지사 / 기계화부 = 자기 기관 / 지사 = 자기 지사(지원 가능 확정 뒤)
+  const orgOpts = all ? S.orgs : can("equip.edit.own") ? S.orgs.filter(o => o === S.me.org) : [];
+  const myB = canPoolAdd() ? S.me.branch_id : null, brOpts = !r ? [] : all ? offerBranches() : myB && offerOk(myB) ? [S.brById[myB]] : [];
+  const vals = [...orgOpts, ...brOpts.map(b => "B:" + b.id)];
+  if (!vals.includes(S.nvSel)) S.nvSel = vals[0] || "";
+  const pb = S.nvSel.startsWith("B:") ? S.nvSel.slice(2) : null;      // 지사를 골랐으면 그 지사 번호(지역본부 장비 등록)
+  const sep = `<option disabled>──────────</option>`;
+  const addRow = vals.length ? `<span class="tb-label">장비 추가</span><select class="ci" id="nvOrg" aria-label="새 장비 기관(또는 지역본부 지사)">${orgOpts.map(o => `<option value="${esc(o)}"${S.nvSel === o ? " selected" : ""}>${esc(o)}</option>`).join("")}` +
+      (all ? sep + (brOpts.length ? "" : `<option disabled>지역본부: 지원 가능이 확정된 지사 없음</option>`) : "") +
+      brOpts.map(b => `<option value="B:${esc(b.id)}"${S.nvSel === "B:" + b.id ? " selected" : ""}>${esc(b.name)}${all ? "" : " (지역본부 장비)"}</option>`).join("") + `</select>` +
+      (pb ? `<label class="rent"><input type="checkbox" id="nvRent"${S.nvRent ? " checked" : ""}> 임차</label>`
+          : `<select class="ci" id="nvType" aria-label="새 장비 종류">${TYPES.map(t => `<option>${t}</option>`).join("")}</select>`) +
+      `<span class="pnum"><span class="pfx" id="nvPfx">${esc(pb ? bn(pb) + (S.nvRent ? " 임차" : "") : S.nvSel)}</span><input class="ci" id="nvPlate" inputmode="numeric" maxlength="5" placeholder="${pb ? "252" : "901"}" aria-label="${pb ? "새 장비 번호(숫자만)" : "새 장비 도공번호(숫자만)"}"><span class="sfx">호</span></span><button type="button" class="btn" id="vehAdd">${pb ? "등록" : "추가"}</button>`
+    : myB ? `<span class="tb-label">장비 추가</span><span class="hint" id="poolWait">지사별 요청·편성에서 '타지사 지원 가능' 대수를 넣고 관리자가 확정하면 ${esc(bn(myB))} 지사의 장비를 등록할 수 있습니다.</span>` : "";
   $("fleetFilters").innerHTML =
-    `<div class="tb-row"><span class="tb-label">기관</span><span class="fgroup">${["전체", ...S.orgs].map(o => `<button type="button" class="chip" data-fo="${esc(o)}" aria-pressed="${S.fleetOrg === o}">${o === "전체" ? "모든 기관" : esc(o)}</button>`).join("")}</span>` +
+    `<div class="tb-row"><span class="tb-label">기관</span><span class="fgroup">${["전체", ...SOURCE_ORGS()].map(orgChip).join("")}</span>` +
     `<span class="tb-right">` + (all ? `<label class="ctl">지원일 칸 <select class="ci" id="colsSel">${Array.from({ length: 9 }, (_, k) => k + 2).map(n => `<option value="${n}" ${n === S.cols ? "selected" : ""}>${n}개</option>`).join("")}</select></label>` : "") +      // 지원일 칸 수 고르기는 관리자만(다른 계정은 기본 4칸)
     (all ? `<button type="button" class="btn" id="fleetReset">초기화</button>` : "") + `</span></div>` +
-    (canAddVeh() && myOrgs.length || all ? `<div class="tb-row">` + (canAddVeh() && myOrgs.length ? `<span class="tb-label">장비 추가</span><select class="ci" id="nvOrg" aria-label="새 장비 기관">${myOrgs.map(o => `<option>${esc(o)}</option>`).join("")}</select>` +
-      `<select class="ci" id="nvType" aria-label="새 장비 종류">${TYPES.map(t => `<option>${t}</option>`).join("")}</select>` +
-      `<span class="pnum"><span class="pfx" id="nvPfx">${esc(myOrgs[0])}</span><input class="ci" id="nvPlate" inputmode="numeric" maxlength="5" placeholder="901" aria-label="새 장비 도공번호(숫자만)"></span><button type="button" class="btn" id="vehAdd">추가</button>` : "") +
+    (addRow || all ? `<div class="tb-row">` + addRow +
       (all ? `<span class="tb-right mode" role="group" aria-label="지원 구분"><label><input type="checkbox" id="modeInit" ${S.revisedMode ? "" : "checked"}> 최초 지원</label>` +
         `<label><input type="checkbox" id="modeRev" ${S.revisedMode ? "checked" : ""}> 수정본</label></span>` : "") + `</div>` : "");
   const dates = windowDates(), head = dates.map((d, i) => `<th class="dayh">지원일 ${i + 1}<span class="sub">` +
     (i === 0 && all ? `<input class="ci" type="date" id="day1In" value="${esc(d)}"${r ? ` min="${esc(r.start_date)}"` : ""} aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동, 기준일자보다 앞은 안 됨)">` : esc(fmtMD(d))) + `</span></th>`).join("");
   const rows = fleetRows().map(v => fleetRowHtml(v, dates, choices, all)).join("");
-  $("eqTable").innerHTML = `<thead><tr><th>도공번호</th><th>장비</th><th>블로워</th><th>지원 여부</th>${head}${canRoute() ? `<th class="unh">${unhideHead()}</th>` : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${5 + dates.length}" class="empty">장비가 없습니다.${canAddVeh() ? " 위의 [장비 추가]로 넣으세요." : ""}</td></tr>`}</tbody>`;
+  $("eqTable").innerHTML = `<thead><tr><th>도공번호</th><th>장비</th><th>블로워</th><th>지원 여부</th>${head}${actCol() ? `<th class="unh">${canRoute() ? unhideHead() : ""}</th>` : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${5 + dates.length}" class="empty">장비가 없습니다.${addRow ? " 위의 [장비 추가]로 넣으세요." : ""}</td></tr>`}</tbody>`;
   placeUnhide();
 }
+const myPoolN = () => canPoolAdd() ? poolVehs(S.me.branch_id).length : 0;            // 지사 계정: 이 기준일자에 등록한 자기 지사 장비 수
+const actCol = () => canRoute() || myPoolN() > 0;       // 맨 끝 칸(숨기기·삭제): 관리자, 그리고 자기 지사 지역본부 장비가 있는 지사 계정
 // 블로워(소·대) 체크: 제설기만 켜지고(둘 다 안 켤 수도 있음), 다른 장비·고칠 권한이 없는 줄은 꺼진 칸
 const hasBlower = v => !!(vval(v, "blower_s") || vval(v, "blower_l"));
 const blowerText = v => [vval(v, "blower_s") ? "소" : "", vval(v, "blower_l") ? "대" : ""].filter(Boolean).join("·");
 function blowerCell(v, ed) {
-  const on = ed && v.type === "제설기", box = (f, lab) => `<label class="bl${on ? "" : " off"}"><input type="checkbox" data-vb="${esc(v.id)}" data-bf="${f}" data-fk="vb:${esc(v.id)}:${f}"${vval(v, f) ? " checked" : ""}${on ? "" : " disabled"} aria-label="${esc(vval(v, "plate"))} 블로워 ${lab}"> ${lab}</label>`;
+  const on = ed && v.type === "제설기", box = (f, lab) => `<label class="bl${on ? "" : " off"}"><input type="checkbox" data-vb="${esc(v.id)}" data-bf="${f}" data-fk="vb:${esc(v.id)}:${f}"${vval(v, f) ? " checked" : ""}${on ? "" : " disabled"} aria-label="${esc(vname(v))} 블로워 ${lab}"> ${lab}</label>`;
   return `<span class="blw">${box("blower_s", "소")}${box("blower_l", "대")}</span>`;
 }
+// 지역본부 장비 한 줄: 이름 = 지사 + [임차] + 숫자 + '호', 지원 여부는 늘 '지원', 피지원 지사는 관리자만(지사 계정은 도착 예상 시각), 숨기기 없음
+function poolRowHtml(v, dates, choices) {
+  const ed = canVeh(v), bid = v.home_branch, id = esc(v.id), nm = esc(vname(v));
+  const nameCell = ed ? `<span class="pnum pool"><span class="pfx">${esc(bn(bid))}</span><label class="rent"><input type="checkbox" data-vr="${id}" data-fk="vr:${id}"${vval(v, "rented") ? " checked" : ""} aria-label="${nm} 임차"> 임차</label>` +
+      `<input class="ci" inputmode="numeric" maxlength="5" data-vp="${id}" data-fk="vp:${id}" value="${esc(poolNum(v))}" placeholder="252" aria-label="${nm} 번호 숫자"><span class="sfx">호</span></span>`
+    : `<span class="plate">${nm}</span>`;
+  return `<tr class="pool${S.vdraft.has(v.id) ? " changed" : ""}" data-vrow="${id}" data-home="${esc(bid)}"><td>${nameCell}</td><td>${esc(v.type)}</td><td>${blowerCell(v, false)}</td>` +
+    `<td><span class="status go">지원</span>${offerOk(bid) ? "" : ` <span class="tag warn pool-wait" title="이 지사의 타지사 지원 가능 대수가 확정되지 않았습니다(확정이 취소됨)">확정 전</span>`}</td>` +
+    dates.map(d => `<td data-cell="${esc(rk(d, v.id))}">${slotCell(v, d, canRoute(), choices)}</td>`).join("") +
+    (actCol() ? `<td class="vact">${ed ? `<button type="button" class="btn sm danger" data-vdel="${id}">삭제</button>` : ""}</td>` : "") + `</tr>`;
+}
 function fleetRowHtml(v, dates, choices, all) {
+    if (isPool(v)) return poolRowHtml(v, dates, choices);
     const ed = canVeh(v), r = curRound(), st = r ? stOf(r.id, v.id).status : "", [cls, label] = STATUS[st] || STATUS[""], tv = "vehicles:" + v.id;
     // 지원 여부 = 고른 기준일자의 값(기준일자가 바뀌면 따로). 기준일자가 없으면 고칠 수 없음
-    const statusCell = ed && r ? `<select class="ci" data-vs="${esc(v.id)}" data-fk="vs:${esc(v.id)}" aria-label="${esc(vval(v, "plate"))} 지원 여부"${S.sdraft.has(v.id) ? ' data-changed="1"' : ""}>${Object.keys(STATUS).map(s => `<option value="${s}" ${st === s ? "selected" : ""}>${STATUS[s][1]}</option>`).join("")}</select>`
+    const statusCell = ed && r ? `<select class="ci" data-vs="${esc(v.id)}" data-fk="vs:${esc(v.id)}" aria-label="${esc(vname(v))} 지원 여부"${S.sdraft.has(v.id) ? ' data-changed="1"' : ""}>${Object.keys(STATUS).map(s => `<option value="${s}" ${st === s ? "selected" : ""}>${STATUS[s][1]}</option>`).join("")}</select>`
       : r ? `<span class="status ${cls}">${label}</span>` : '<span class="muted">-</span>';
     const old = !plateNum(v) && vval(v, "plate");      // 예전 차량번호 형식이 남은 장비: 숫자를 새로 넣어야 함
-    const plateCell = ed ? `<span class="pnum"${hvA(tv, "plate")}><span class="pfx">${esc(v.org)}</span><input class="ci" inputmode="numeric" maxlength="5" data-vp="${esc(v.id)}" data-fk="vp:${esc(v.id)}" value="${esc(plateNum(v))}" placeholder="901" aria-label="도공번호 숫자"${old ? `` : ""}></span>${old ? `<div class="muted sm">예전 번호 ${esc(old)}</div>` : ""}`
-      : H(tv, "plate", `<span class="plate">${esc(vval(v, "plate"))}</span>`);
+    const plateCell = ed ? `<span class="pnum"${hvA(tv, "plate")}><span class="pfx">${esc(v.org)}</span><input class="ci" inputmode="numeric" maxlength="5" data-vp="${esc(v.id)}" data-fk="vp:${esc(v.id)}" value="${esc(plateNum(v))}" placeholder="901" aria-label="도공번호 숫자"><span class="sfx">호</span></span>${old ? `<div class="muted sm">예전 번호 ${esc(old)}</div>` : ""}`
+      : H(tv, "plate", `<span class="plate">${esc(vname(v))}</span>`);
     const changed = S.vdraft.has(v.id) || S.sdraft.has(v.id) ? " changed" : "";
     return `<tr class="${changed}" data-vrow="${esc(v.id)}"><td>${plateCell}</td><td>${esc(v.type)}</td><td>${blowerCell(v, ed)}</td><td>${statusCell}</td>${dates.map(d => `<td data-cell="${esc(rk(d, v.id))}">${slotCell(v, d, canRoute(), choices)}</td>`).join("")}` +
-      (canRoute() ? `<td class="vact"><button type="button" class="btn sm" data-vhide="${esc(v.id)}">숨기기</button><button type="button" class="btn sm danger" data-vdel="${esc(v.id)}">삭제</button></td>` : "") + `</tr>`;
+      (canRoute() ? `<td class="vact"><button type="button" class="btn sm" data-vhide="${esc(v.id)}">숨기기</button><button type="button" class="btn sm danger" data-vdel="${esc(v.id)}">삭제</button></td>` : actCol() ? `<td class="vact"></td>` : "") + `</tr>`;
 }
 function placeUnhide() {        // 숨김 취소 목록: 표가 가로로 스크롤되는 상자 안이라 잘리지 않게 화면 기준으로 버튼 아래에 띄움
   const b = $("unhideBtn"), pop = document.querySelector(".unhide-pop"); if (!b || !pop) return;
@@ -637,17 +691,25 @@ addEventListener("scroll", () => { if (S.unhideOpen) placeUnhide(); }, true);
 function unhideHead() {
   const l = hiddenNow(); if (!l.length) { S.unhideOpen = false; return ""; }
   return `<button type="button" class="btn sm" id="unhideBtn" aria-expanded="${S.unhideOpen}">숨김 취소(${l.length})</button>` +
-    (S.unhideOpen ? `<div class="unhide-pop" role="dialog" aria-label="숨긴 장비">${l.map(v => `<div class="uh-row"><span class="plate">${esc(v.plate)}</span><span class="muted">${esc(v.type)}</span><button type="button" class="btn sm" data-unhide="${esc(v.id)}">숨김 취소</button></div>`).join("")}</div>` : "");
+    (S.unhideOpen ? `<div class="unhide-pop" role="dialog" aria-label="숨긴 장비">${l.map(v => `<div class="uh-row"><span class="plate">${esc(vname(v))}</span><span class="muted">${esc(v.type)}</span><button type="button" class="btn sm" data-unhide="${esc(v.id)}">숨김 취소</button></div>`).join("")}</div>` : "");
 }
-function renderOrgGrid() {
-  $("orgGrid").innerHTML = S.orgs.map(org => {
-    const r = curRound(), sv = v => r ? stOf(r.id, v.id).status : "";            // 고른 기준일자의 지원 여부
+function renderOrgGrid() {      // 카드 5개(기계화부 4곳 + 지역본부) 같은 폭. 지원할 장비가 0대인 카드는 흐리게
+  const r = curRound(), sv = v => r ? stOf(r.id, v.id).status : "";            // 고른 기준일자의 지원 여부
+  const cards = S.orgs.map(org => {
     const l = S.vehicles.filter(v => v.org === org && shownIn(v, r)), c = s => l.filter(v => sv(v) === s).length, w = x => l.length ? x / l.length * 100 : 0;
-    return `<div class="org"><h3>${esc(org)}</h3>
+    return `<div class="org${c("O") ? "" : " off"}" data-orgcard="${esc(org)}"><h3>${esc(org)}</h3>
       <div class="bar" aria-hidden="true"><i class="b-go" style="width:${w(c("O"))}%"></i><i class="b-stop" style="width:${w(c("X") + c("M"))}%"></i></div>
       <dl><dt>지원</dt><dd>${c("O")}대</dd><dt>지원 불가</dt><dd>${c("X")}대</dd><dt>정비중</dt><dd>${c("M")}대</dd><dt>미정</dt><dd>${c("")}대</dd>
       ${TYPES.map(t => { const tl = l.filter(v => v.type === t); return `<dt>${t}</dt><dd>${tl.filter(v => sv(v) === "O").length} / ${tl.length}</dd>`; }).join("")}</dl>${orgAllocHtml(org)}</div>`;
-  }).join("");
+  });
+  // 지역본부: 확정된 '타지사 지원 가능' 대수 합계와 등록한 장비 수, 지사별 줄(등록 / 가능)
+  const pv = poolVehs(), cap = offerBranches().reduce((n, b) => n + offerOf(b.id), 0), brs = S.order.filter(b => offerOk(b.id) || pv.some(v => v.home_branch === b.id));
+  cards.push(`<div class="org pool${cap || pv.length ? "" : " off"}" data-orgcard="${POOL}"><h3>${POOL}</h3>
+    <div class="bar" aria-hidden="true"><i class="b-go" style="width:${cap ? Math.min(100, pv.length / cap * 100) : pv.length ? 100 : 0}%"></i></div>
+    <dl><dt>지원 가능(확정)</dt><dd data-pcap>${cap}대</dd><dt>등록</dt><dd data-preg>${pv.length}대</dd><dt>임차</dt><dd>${pv.filter(v => vval(v, "rented")).length}대</dd><dt>지원 지사</dt><dd>${offerBranches().length}곳</dd></dl>` +
+    (brs.length ? `<div class="al-org pool-brs">${brs.map(b => { const n = pv.filter(v => v.home_branch === b.id).length, ok = offerOk(b.id), c = ok ? offerOf(b.id) : 0;
+      return `<span class="al-chip${!ok ? " over" : n >= c ? " full" : ""}" data-pbr="${esc(b.id)}">${esc(b.name)} ${n}/${ok ? c : "확정 전"}</span>`; }).join("")}</div>` : "") + orgAllocHtml(POOL) + `</div>`);
+  $("orgGrid").innerHTML = cards.join("");
 }
 // 기관 카드 아래: 관리자가 배정한 지사별 대수와 기계화부가 지정한 대수(지원일 1). 배정이 없는 기관은 아무것도 안 보임
 function orgAllocHtml(org) {
@@ -691,7 +753,7 @@ function lockedCell(v, d, g) {
 function offCell(v, d, st) {
   const first = d === st.off_from && canVeh(v);
   return `<div class="slot offday"><span class="status stop">지원 불가</span>${d === st.off_from ? `<small class="muted">이날부터</small>` : ""}` +
-    (first ? ` <button type="button" class="btn sm" data-offclr="${esc(v.id)}" aria-label="${esc(vval(v, "plate"))} 지원 불가 취소">취소</button>` : "") + `</div>`;
+    (first ? ` <button type="button" class="btn sm" data-offclr="${esc(v.id)}" aria-label="${esc(vname(v))} 지원 불가 취소">취소</button>` : "") + `</div>`;
 }
 function slotCell(v, d, ed, confirmed) {
   const g = govRound(d), cr = curRound();
@@ -701,32 +763,33 @@ function slotCell(v, d, ed, confirmed) {
   const later = d > cr.start_date;                                     // 지원일 2부터는 '지원 불가(이날부터)'를 고를 수 있음
   const rec = effRec(d, v.id), stops = rec.stops, k = rk(d, v.id), t = `vehicle_routes:${d},${v.id}`, changed = S.draft.has(k), vid = esc(v.id);
   const cont = j => j === 0 && isCont(v.id, d, stops[0]);            // 전날 마지막 지사 = 오늘 첫 지사 → 시각 대신 "연속지원"(입력해 둔 시각은 그대로 남음)
-  const tIn = (val, j, extra, dis) => !extra && cont(j) ? `<span class="cont">연속지원</span>` : `<input class="ci tm" data-rt="${vid}" data-rd="${d}" data-fk="${extra ? "tn" : "t"}:${d}:${vid}:${j}" value="${esc(val || "")}" placeholder="--:--" maxlength="5" inputmode="numeric" ${dis ? "disabled" : ""} aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))} 지사 ${j + 1} 도착 예상 시각">`;
-  const offSel = later && canVeh(v) && st.status === "O" ? `<select class="ci offsel" data-off="${vid}" data-rd="${d}" data-fk="off:${d}:${vid}" aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))} 지원 여부"><option value="">지원</option><option value="1">지원 불가(이날부터)</option></select>` : "";
+  const tIn = (val, j, extra, dis) => !extra && cont(j) ? `<span class="cont">연속지원</span>` : `<input class="ci tm" data-rt="${vid}" data-rd="${d}" data-fk="${extra ? "tn" : "t"}:${d}:${vid}:${j}" value="${esc(val || "")}" placeholder="--:--" maxlength="5" inputmode="numeric" ${dis ? "disabled" : ""} aria-label="${esc(vname(v))} ${esc(fmtMD(d))} 지사 ${j + 1} 도착 예상 시각">`;
+  const offSel = later && canVeh(v) && st.status === "O" && !isPool(v) ? `<select class="ci offsel" data-off="${vid}" data-rd="${d}" data-fk="off:${d}:${vid}" aria-label="${esc(vname(v))} ${esc(fmtMD(d))} 지원 여부"><option value="">지원</option><option value="1">지원 불가(이날부터)</option></select>` : "";
   const flag = d === cr.start_date ? flagTag(allocFlag(v, stops[0])) : "";       // 지원일 1: 관리자 배정을 넘겼거나 배정 없는 지사
   if (!ed) {                     // 지원장비(기계화부) 계정: 자기 기관 장비의 도착 예상 시각·지원 불가(지원일 2부터) + 지원일 1의 지사 한 곳(배정받은 지사 중, 마이그레이션 43)
     const timeEd = canVeh(v);
-    if (timeEd && orgHasAlloc(v.org) && d === cr.start_date && st.status === "O" && (!stops.length || (stops.length === 1 && !rec.revised))) {
+    if (timeEd && !isPool(v) && orgHasAlloc(v.org) && d === cr.start_date && st.status === "O" && (!stops.length || (stops.length === 1 && !rec.revised))) {
       const cur = stops[0] || "", list = allocBranches(v.org, v.type), ids = new Set(list.map(b => b.id)), free = v.type === "이동정비차";
       const full = b => !free && b.id !== cur && allocUsed(v.org, v.type, b.id) >= allocCap(v.org, v.type, b.id);
       const opts = `<option value="">${list.length ? "지사 선택" : "배정받은 지사 없음"}</option>` +
         list.map(b => `<option value="${b.id}"${cur === b.id ? " selected" : ""}${full(b) ? " disabled" : ""}>${esc(b.name)}${free ? "" : ` (${allocUsed(v.org, v.type, b.id)}/${allocCap(v.org, v.type, b.id)})`}</option>`).join("") +
         (cur && !ids.has(cur) ? `<option value="${esc(cur)}" selected>${esc(bn(cur))} (배정 없음)</option>` : "") + (cur ? `<option value="__del">지우기</option>` : "");
-      return `<div class="slot${changed ? " changed" : ""}"${hvA(t)}><div class="slot-x"><select class="ci" data-ra="${vid}" data-rd="${d}" data-fk="ra:${d}:${vid}" aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))} 피지원 지사(배정받은 지사 중)">${opts}</select>${cur ? tIn(rec.times[0], 0, false, false) : ""}</div>${flag}</div>`;
+      return `<div class="slot${changed ? " changed" : ""}"${hvA(t)}><div class="slot-x"><select class="ci" data-ra="${vid}" data-rd="${d}" data-fk="ra:${d}:${vid}" aria-label="${esc(vname(v))} ${esc(fmtMD(d))} 피지원 지사(배정받은 지사 중)">${opts}</select>${cur ? tIn(rec.times[0], 0, false, false) : ""}</div>${flag}</div>`;
     }
     if (!stops.length) return offSel ? `<div class="slot">${offSel}</div>` : `<span class="muted">-</span>`;
     return `<div class="slot${changed ? " changed" : ""}"${hvA(t)}>${stops.map((x, j) => `<div class="sl-x slot-x"><span class="sl-n">${esc(bn(x))}</span>${timeEd ? tIn(rec.times[j], j, false, false) : cont(j) ? ` <small>연속지원</small>` : rec.times[j] ? ` <small>${esc(rec.times[j])}</small>` : ""}</div>`).join("")}${flag}${offSel}</div>`;
   }
   // 표 위 [최초 지원] = 이 기준일자에 편성 확정된 지사만 / [수정본] = 모든 지사 (한 번에 적용)
-  const choices = S.revisedMode ? S.order : confirmed, off = st.status !== "O", ids = new Set(choices.map(b => b.id)), pend = S.revisedMode ? [] : pendingChoices();
+  const home = isPool(v) ? v.home_branch : null;                       // 지역본부 장비는 자기(출발) 지사로 못 보냄 → 목록에서 뺌
+  const choices = (S.revisedMode ? S.order : confirmed).filter(b => b.id !== home), off = st.status !== "O", ids = new Set(choices.map(b => b.id)), pend = S.revisedMode ? [] : pendingChoices().filter(b => b.id !== home);
   const opts = (cur, j) => `<option value="">지사 선택</option>` + S.hqs.map(h => { const l = choices.filter(b => b.hq_id === h.id); return l.length ? `<optgroup label="${esc(h.name)}">${l.map(b => `<option value="${b.id}" ${cur === b.id ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</optgroup>` : ""; }).join("") +
     (cur && !ids.has(cur) ? `<option value="${esc(cur)}" selected>${esc(bn(cur))} (편성 확정 전)</option>` : "") +
     (pend.length ? `<optgroup label="편성 확정 전(요청만) — 고를 수 없음">${pend.map(b => `<option disabled>${esc(b.name)}</option>`).join("")}</optgroup>` : "") +
-    (later && j === 0 ? `<option value="__off">지원 불가(이날부터)</option>` : "") + `<option value="__del">지우기</option>`;
-  const sel = (cur, j, extra) => `<select class="ci" data-rv="${vid}" data-rd="${d}" data-fk="${extra ? "rn" : "r"}:${d}:${vid}:${j}" ${off ? "disabled" : ""} aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))} 피지원 지사 ${j + 1}">${opts(cur, extra ? 1 : j)}</select>` +
+    (later && j === 0 && !home ? `<option value="__off">지원 불가(이날부터)</option>` : "") + `<option value="__del">지우기</option>`;
+  const sel = (cur, j, extra) => `<select class="ci" data-rv="${vid}" data-rd="${d}" data-fk="${extra ? "rn" : "r"}:${d}:${vid}:${j}" ${off ? "disabled" : ""} aria-label="${esc(vname(v))} ${esc(fmtMD(d))} 피지원 지사 ${j + 1}">${opts(cur, extra ? 1 : j)}</select>` +
     tIn(extra ? "" : rec.times[j], j, extra, off);
   const extra = S.extraStop.has(k), list = stops.length ? stops : [""];
-  const plus = `<button type="button" class="btn sm" data-stop-add="${esc(k)}" ${off || !stops.length ? "disabled" : ""} aria-label="${esc(vval(v, "plate"))} ${esc(fmtMD(d))}에 들르는 지사 추가">＋</button>`;
+  const plus = `<button type="button" class="btn sm" data-stop-add="${esc(k)}" ${off || !stops.length ? "disabled" : ""} aria-label="${esc(vname(v))} ${esc(fmtMD(d))}에 들르는 지사 추가">＋</button>`;
   return `<div class="slot${changed ? " changed" : ""}"${hvA(t)}>${list.map((x, j) => `<div class="slot-x">${sel(x, j, false)}${j === list.length - 1 && !extra ? plus : ""}</div>`).join("")}${extra ? `<div class="slot-x">${sel("", list.length, true)}</div>` : ""}${flag}</div>`;
 }
 // 칸 안의 줄(지사 + 도착 예상 시각)을 모아 경로 기록으로. 지사를 고치면 구분 = 표 위 [최초 지원]/[수정본], 시각만 고치면 구분은 그대로
@@ -744,7 +807,7 @@ async function confirmFleet() {
   const status = [...S.sdraft].map(([vehicle_id, x]) => ({ vehicle_id, status: x.status, off_from: x.off_from || null }));
   if (!vehicles.length && !routes.length && !status.length) return;
   if ((routes.length || status.length) && !S.round) return toast("기준일자가 없어 지원 여부·경로를 확정할 수 없습니다. 지사별 요청·편성에서 기준일자를 먼저 만드세요.", true);
-  const what = [routes.length ? `경로 ${routes.length}칸` : "", status.length ? `지원 여부 ${status.length}대` : "", vehicles.length ? `장비 ${vehicles.length}대(도공번호·블로워)` : ""].filter(Boolean).join(", ");
+  const what = [routes.length ? `경로 ${routes.length}칸` : "", status.length ? `지원 여부 ${status.length}대` : "", vehicles.length ? `장비 ${vehicles.length}대(번호·블로워)` : ""].filter(Boolean).join(", ");
   if (!confirm(`${what} 변경을 확정할까요?\n지원 여부는 기준일자 ${fmtMD(curRound().start_date)} 것으로 저장되고, 경로는 날짜별로 남습니다.`)) return;
   busy("fleet", true);
   const r = await Api.saveFleet(vehicles, routes, S.round, status);
@@ -762,27 +825,45 @@ function resetFleet() {          // 보이는 장비의 지원 여부(고른 기
   const vs = fleetRows().filter(canVeh), cr = curRound(), ds = windowDates().filter(d => cr && (govRound(d) || {}).id === cr.id);
   if (!vs.length || !canRoute() || !cr) return;
   if (!confirm(`보이는 장비 ${vs.length}대의 지원 여부와 ${ds.length ? `지원일 ${fmtMD(ds[0])} ~ ${fmtMD(ds[ds.length - 1])} 경로를` : "경로를"} 모두 비울까요?\n[확정]을 눌러야 서버에 반영되고, 그 전에는 [되돌리기]로 돌아갈 수 있습니다.`)) return;
-  vs.forEach(v => { ds.forEach(d => setRoute(d, v.id, EMPTY)); setStat(v.id, { status: "" }); });
+  vs.forEach(v => { ds.forEach(d => setRoute(d, v.id, EMPTY)); if (!isPool(v)) setStat(v.id, { status: "" }); });      // 지역본부 장비의 지원 여부는 늘 '지원'(경로만 비움)
   S.extraStop.clear(); refresh(); toast("입력을 비웠습니다. [확정]을 눌러야 저장됩니다.");
 }
 async function addVehicle() {
-  const num = $("nvPlate").value.replace(/\s/g, ""), org = $("nvOrg").value, plate = org + num;
-  if (!NUM_RE.test(num)) return toast("도공번호는 숫자만 넣으세요 (예: 901 → " + org + "901)", true);
-  if (S.vehicles.some(v => vval(v, "plate") === plate)) return toast("같은 도공번호가 이미 있습니다", true);
+  const num = $("nvPlate").value.replace(/\s/g, ""), org = $("nvOrg").value;
+  if (org.startsWith("B:")) return addPoolVehicle(org.slice(2), num);
+  const plate = org + num;
+  if (!NUM_RE.test(num)) return toast("도공번호는 숫자만 넣으세요 (예: 901 → " + org + "901호)", true);
+  if (S.vehicles.some(v => !isPool(v) && vval(v, "plate") === plate)) return toast("같은 도공번호가 이미 있습니다", true);
   if (!can("equip.edit.all") && org !== S.me.org) return toast("자기 기관 장비만 추가할 수 있습니다", true);
   if (S.preview) return toast("미리보기에서는 장비를 추가할 수 없습니다.", true);
   const seq = Math.max(0, ...S.vehicles.map(v => +v.id.slice(1) || 0)) + 1;
   const v = { id: "V" + String(seq).padStart(3, "0"), org, type: $("nvType").value, plate, sort: Math.max(0, ...S.vehicles.map(x => x.sort || 0)) + 10 };
   const r = await Api.addVehicle(v);
   if (!r.ok) return toast(r.message, true);
-  S.vehicles.push(r.vehicle); sortVehicles(); await loadAudit(); refresh(); toast(`장비를 추가했습니다 (${plate})`);
+  S.vehicles.push(r.vehicle); sortVehicles(); await loadAudit(); refresh(); toast(`장비를 추가했습니다 (${vname(r.vehicle)})`);
+}
+// 지역본부 장비 등록: 그 지사 계정과 관리자. 그 기준일자에 지원 가능 대수가 확정된 지사만(서버도 같은 검사). 장비 번호(id)는 서버가 매김
+async function addPoolVehicle(bid, num) {
+  const b = S.brById[bid], r = curRound(), rented = !!($("nvRent") || {}).checked;
+  if (!b || !r) return;
+  if (!NUM_RE.test(num)) return toast(`번호는 숫자만 넣으세요 (예: 252 → ${b.name} ${rented ? "임차 " : ""}252호)`, true);
+  if (!(can("equip.edit.all") || (canPoolAdd() && S.me.branch_id === bid))) return toast("자기 지사의 장비만 등록할 수 있습니다", true);
+  if (!offerOk(bid)) return toast(`${b.name} 지사의 '타지사 지원 가능' 대수가 확정된 뒤에 등록할 수 있습니다`, true);
+  const plate = poolPlate(bid, rented, num);
+  if (poolVehs().some(v => vval(v, "plate") === plate)) return toast("이 기준일자에 같은 이름의 장비가 이미 있습니다", true);
+  if (S.preview) return toast("미리보기에서는 장비를 등록할 수 없습니다.", true);
+  const res = await Api.addVehicle({ org: POOL, type: "제설차", plate, round_id: r.id, home_branch: bid, rented });
+  if (!res.ok) return toast(res.message, true);
+  S.vehicles.push(res.vehicle); sortVehicles();
+  S.rstat.set(r.id + "|" + res.vehicle.id, { status: "O", off_from: null, updated_at: new Date().toISOString() });   // 서버가 지원 여부 '지원'을 함께 만듦
+  await loadAudit(); refresh(); toast(`장비를 등록했습니다 (${vname(res.vehicle)})`);
 }
 async function deleteVehicle(id) {
-  const v = vehById(id); if (!v || !canRoute()) return;       // 장비 삭제는 관리자(equip.edit.all)만. 경로 기록이 있는 장비는 서버가 거절(숨기기를 써야 함)
+  const v = vehById(id); if (!v || !(canRoute() || (isPool(v) && canVeh(v)))) return;       // 장비 삭제는 관리자(equip.edit.all), 지역본부 장비는 그 지사 계정도. 경로 기록이 있는 장비는 서버가 거절
   if (S.preview) return toast("미리보기에서는 장비를 지울 수 없습니다.", true);
-  if (!confirm(`${v.plate} (${v.org} ${v.type})를 지울까요?`)) return;
+  if (!confirm(`${vname(v)} (${v.org} ${v.type})를 지울까요?`)) return;
   const r = await Api.deleteVehicle(id);
-  if (!r.ok) return toast(r.message, true);
+  if (!r.ok) return toast(isPool(v) && r.code === "23503" ? "경로가 있는 장비는 지울 수 없습니다. 관리자가 이 장비의 경로를 먼저 지워야 합니다." : r.message, true);
   S.vehicles = S.vehicles.filter(x => x.id !== id); S.vdraft.delete(id); S.sdraft.delete(id);
   [...S.draft.keys()].filter(k => k.endsWith("|" + id)).forEach(k => S.draft.delete(k)); [...S.routes.keys()].filter(k => k.endsWith("|" + id)).forEach(k => S.routes.delete(k));
   [...S.rstat.keys()].filter(k => k.endsWith("|" + id)).forEach(k => S.rstat.delete(k));
@@ -793,13 +874,13 @@ async function hideVehicle(id, show) {
   const v = vehById(id); if (!v || !canRoute()) return;
   if (S.preview) return toast("미리보기에서는 바꿀 수 없습니다.", true);
   const after = show ? null : addDays((curRound() || {}).start_date || todayISO(), -1);
-  if (!show && !confirm(`${v.plate} 장비를 숨길까요?`)) return;
+  if (!show && !confirm(`${vname(v)} 장비를 숨길까요?`)) return;
   const r = await Api.hideVehicle(id, after);
   if (!r.ok) return toast(r.message, true);
   v.hidden_after = after;
   if (!show) { S.vdraft.delete(id); S.sdraft.delete(id); [...S.draft.keys()].filter(k => k.endsWith("|" + id)).forEach(k => S.draft.delete(k)); }
   if (!hiddenNow().length) S.unhideOpen = false;
-  await loadAudit(); refresh(); toast(show ? `${v.plate} 숨김을 취소했습니다` : `${v.plate} 장비를 숨겼습니다`);
+  await loadAudit(); refresh(); toast(show ? `${vname(v)} 숨김을 취소했습니다` : `${vname(v)} 장비를 숨겼습니다`);
 }
 
 /* ============================================================
@@ -816,10 +897,10 @@ function arriveCell(b, ed, t) {          // ed = 입력칸을 보일지(고칠 �
     `<select class="ci" data-arr="${b.id}" data-part="h" data-fk="ah:${b.id}" ${d && !lk ? "" : "disabled"} aria-label="${esc(b.name)} 도착 시">${HOURS.map(x => `<option ${x === (hh || "00") ? "selected" : ""}>${x}</option>`).join("")}</select>시 ` +
     `<select class="ci" data-arr="${b.id}" data-part="m" data-fk="am:${b.id}" ${d && !lk ? "" : "disabled"} aria-label="${esc(b.name)} 도착 분">${mins.map(x => `<option ${x === (mm || "00") ? "selected" : ""}>${x}</option>`).join("")}</select>분</span>`;
 }
-const HQ_SUM_KEYS = ["req_truck", "req_blower", "assigned_truck", "assigned_blower", "confirmed"];
+const HQ_SUM_KEYS = ["req_truck", "req_blower", "offer_truck", "assigned_truck", "assigned_blower", "confirmed"];
 function hqSums(hid) {
   const rows = S.order.filter(b => b.hq_id === hid), sum = f => rows.reduce((a, b) => a + (+rval(b.id, f) || 0), 0);
-  return { req_truck: sum("req_truck"), req_blower: sum("req_blower"), assigned_truck: sum("assigned_truck"), assigned_blower: sum("assigned_blower"), confirmed: rows.filter(b => rval(b.id, "confirmed")).length || "" };
+  return { req_truck: sum("req_truck"), req_blower: sum("req_blower"), offer_truck: sum("offer_truck"), assigned_truck: sum("assigned_truck"), assigned_blower: sum("assigned_blower"), confirmed: rows.filter(b => rval(b.id, "confirmed")).length || "" };
 }
 function afterReq(id) {          // 지사 요청 칸을 고친 뒤: 그 줄 표시·최종 대수·본부 합계·도착 시각 칸 잠금만 고침(입력 중인 칸은 그대로)
   const b = S.brById[id], tr = document.querySelector(`#branchTable tr[data-b="${id}"]`);
@@ -850,37 +931,43 @@ function renderBranch() {
     (can("req.confirm") ? `<span class="sep"></span><label class="ctl">새 기준일자 <input class="ci" type="date" id="newRoundDate" value="${esc(nextRoundMin() > todayISO() ? nextRoundMin() : todayISO())}" min="${esc(nextRoundMin())}"></label><button type="button" class="btn" id="roundMake">만들기</button>` : "") + reloadBtn();
   $("branchCtl").innerHTML = r ? `<div class="tb-row"><span class="tb-label">보기</span><button type="button" class="chip" id="onlyActive" aria-pressed="${S.bview === "req"}">요청 있는 지사만</button>` +
     `<button type="button" class="chip" id="onlyFixed" aria-pressed="${S.bview === "fixed"}">편성 확정된 지사만</button>` +
+    `<button type="button" class="chip" id="onlyOffer" aria-pressed="${S.bview === "offer"}">지원 가능 지사만</button>` +
     `<span class="tb-right"></span>` +
     (S.me.role === "admin" ? `<button type="button" class="btn sm" id="zoneMgr">특보구역 관리</button>` : "") + `</div>` : "";
   if (!r) { $("branchTable").innerHTML = `<tbody><tr><td class="empty">기준일자가 없습니다.</td></tr></tbody>`; return; }
   const conf = can("req.confirm");
-  let h = `<thead><tr><th class="l" rowspan="2">지사</th><th colspan="3" class="fch">24시 강설 <small class="fcbase" id="fcBaseHead" data-bt="fc" tabindex="0">${esc(fcBase())}</small></th><th colspan="2" class="fch tmh">최저기온</th><th colspan="3" class="wh">대설특보 발표 <small class="fcbase" id="wBaseHead" data-bt="warn" tabindex="0">${esc(warnBase())}</small></th><th class="wxh" rowspan="2">기상현황<br>직접입력</th><th colspan="2">지사 요청</th><th colspan="2">편성</th><th>확정</th><th class="l" rowspan="2">도착 요청</th></tr>
-    <tr><th class="fch">적설<small class="thsub">cm</small></th><th class="fch">강수<small class="thsub">mm</small></th><th class="fch">확률<small class="thsub">%</small></th><th class="fch tmh">기온<small class="thsub">℃</small></th><th class="fch tmh">시각</th><th class="wh">종류</th><th class="wh">발표</th><th class="wh">발효</th><th>제설차</th><th>제설기</th><th>제설차</th><th>제설기</th><th class="cf">${conf ? bulkCell(null) : ""}</th></tr></thead><tbody>`;
+  // 칸 순서: 지사 | 기상(24시 강설·최저기온·대설특보·직접입력) | 지사 요청 | 도착 요청 | 타지사 지원 가능 ║ 편성 | 확정
+  // ║ 왼쪽 = 지사가 넣는 칸, 오른쪽(adm) = 관리자가 넣는 칸(굵은 경계선 + 옅은 바탕)
+  let h = `<thead><tr><th class="l" rowspan="2">지사</th><th colspan="3" class="fch">24시 강설 <small class="fcbase" id="fcBaseHead" data-bt="fc" tabindex="0">${esc(fcBase())}</small></th><th colspan="2" class="fch tmh">최저기온</th><th colspan="3" class="wh">대설특보 발표 <small class="fcbase" id="wBaseHead" data-bt="warn" tabindex="0">${esc(warnBase())}</small></th><th class="wxh" rowspan="2">기상현황<br>직접입력</th><th colspan="2">지사 요청</th><th class="l" rowspan="2">도착 요청</th><th class="ofh" rowspan="2">타지사<br>지원 가능<small class="thsub">제설차</small></th><th colspan="2" class="adm adm0">편성</th><th class="adm">확정</th></tr>
+    <tr><th class="fch c-sn">적설<small class="thsub">cm</small></th><th class="fch c-sn">강수<small class="thsub">mm</small></th><th class="fch">확률<small class="thsub">%</small></th><th class="fch tmh c-sn">기온<small class="thsub">℃</small></th><th class="fch tmh c-ta">시각</th><th class="wh c-wk">종류</th><th class="wh c-wt">발표</th><th class="wh c-wt c-we">발효</th><th>제설차</th><th>제설기</th><th class="adm adm0">제설차</th><th class="adm">제설기</th><th class="cf adm">${conf ? bulkCell(null) : ""}</th></tr></thead><tbody>`;
   const has = b => hasReq(b.id) || S.rdraft.has(b.id);                  // 요청 있음(입력 중 포함)
   const mine = b => (m.branch_id === b.id) || (can("req.edit.hq") && !can("req.confirm") && b.hq_id === m.hq_id);
+  const view = b => S.bview === "req" ? has(b) : S.bview === "fixed" ? isFixed(b.id) : hasOffer(b.id);
   S.hqs.forEach(hq => {
     if (hq.is_private) return;                                   // 민자는 지사별 요청·편성에 나오지 않음
-    const rows = S.order.filter(b => b.hq_id === hq.id), shown = rows.filter(b => S.bview === "all" || mine(b) || (S.bview === "req" ? has(b) : isFixed(b.id)));
+    const rows = S.order.filter(b => b.hq_id === hq.id), shown = rows.filter(b => S.bview === "all" || mine(b) || view(b));
     if (!shown.length) return;
-    const closed = S.closedHq.has(hq.id), hsum = hqSums(hq.id);
+    const closed = S.closedHq.has(hq.id), hsum = hqSums(hq.id), sc = (k, cls = "") => `<td${cls ? ` class="${cls}"` : ""} data-s="${k}">${hsum[k]}</td>`;
     h += `<tr class="hq ${closed ? "closed" : ""}" data-hq="${hq.id}" tabindex="0"><td class="l">${esc(hq.name)}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
-      ${HQ_SUM_KEYS.map(k => k === "confirmed" && conf ? `<td class="cf">${bulkCell(hq.id)}</td>` : `<td data-s="${k}">${hsum[k]}</td>`).join("")}<td></td></tr>`;
+      ${sc("req_truck")}${sc("req_blower")}<td></td>${sc("offer_truck")}${sc("assigned_truck", "adm adm0")}${sc("assigned_blower", "adm")}${conf ? `<td class="cf adm">${bulkCell(hq.id)}</td>` : sc("confirmed", "adm")}</tr>`;
     if (closed) return;
     shown.forEach(b => {
       const ed = canReq(b), t = `round_requests:${S.round},${b.id}`, on = has(b), d0 = dis(b.id);      // ed = 입력칸을 보임, 확정한 줄이면 비활성(d0)
-      const num = (f, lab, editable) => editable ? `<input class="ci num" type="number" inputmode="numeric" min="0" max="999" data-rq="${b.id}" data-f="${f}" data-fk="q:${b.id}:${f}" value="${esc(rval(b.id, f) ?? 0)}" aria-label="${esc(b.name)} ${lab}"${hvA(t, f)}${d0}>`
-        : (on ? H(t, f, esc(rval(b.id, f) ?? 0)) : "-");
+      const num = (f, lab, editable, max = 999, show = on) => editable ? `<input class="ci num" type="number" inputmode="numeric" min="0" max="${max}" data-rq="${b.id}" data-f="${f}" data-fk="q:${b.id}:${f}" value="${esc(rval(b.id, f) ?? 0)}" aria-label="${esc(b.name)} ${lab}"${hvA(t, f)}${d0}>`
+        : (show ? H(t, f, esc(rval(b.id, f) ?? 0)) : "-");
       const ok = rval(b.id, "confirmed");
       h += `<tr class="${on ? "active" : ""} ${m.branch_id === b.id ? "mine" : ""} ${S.rdraft.has(b.id) ? "changed" : ""} ${isConf(b.id) ? "locked" : ""}" data-b="${b.id}"><td class="l">${esc(b.name)}${m.branch_id === b.id ? ' <span class="tag">내 지사</span>' : ""}</td>
         <td class="${isManual(b.id) ? "wxe" : ""}" data-fcell="${b.id}">${fcInner(b.id, "snow")}</td><td class="${isManual(b.id) ? "wxe" : ""}" data-pcell="${b.id}">${fcInner(b.id, "pcp")}</td><td data-ocell="${b.id}">${fcInner(b.id, "pop")}</td>
         <td class="${isManual(b.id) ? "wxe" : ""}" data-tcell="${b.id}">${fcInner(b.id, "tmin")}</td><td class="tat ${isManual(b.id) ? "wxe" : ""}" data-tacell="${b.id}">${fcInner(b.id, "tmin_at")}</td>
         ${warnCells(b.id)}
         <td class="wxm">${ed ? `<input type="checkbox" data-rq="${b.id}" data-f="wx_manual" data-fk="q:${b.id}:wx_manual"${isManual(b.id) ? " checked" : ""} aria-label="${esc(b.name)} 기상현황 직접입력"${hvA(t, "wx_manual")}${d0}>` : (isManual(b.id) ? H(t, "wx_manual", "✓") : '<span class="muted">-</span>')}</td>
-        <td>${num("req_truck", "요청 제설차", ed)}</td><td>${num("req_blower", "요청 제설기", ed)}</td><td>${num("assigned_truck", "편성 제설차", ed && conf)}</td><td>${num("assigned_blower", "편성 제설기", ed && conf)}</td>
-        <td class="cf">${conf ? H(t, "confirmed", ok ? `<span class="status go">확정됨</span> <button type="button" class="btn sm" data-unconfirm="${b.id}">취소</button>`
+        <td>${num("req_truck", "요청 제설차", ed)}</td><td>${num("req_blower", "요청 제설기", ed)}</td>
+        <td class="l">${arriveCell(b, ed, t)}</td>
+        <td class="ofc" data-ofcell="${b.id}">${num("offer_truck", "타지사 지원 가능 제설차", ed, 99, hasOffer(b.id))}</td>
+        <td class="adm adm0">${num("assigned_truck", "편성 제설차", ed && conf)}</td><td class="adm">${num("assigned_blower", "편성 제설기", ed && conf)}</td>
+        <td class="cf adm">${conf ? H(t, "confirmed", ok ? `<span class="status go">확정됨</span> <button type="button" class="btn sm" data-unconfirm="${b.id}">취소</button>`
                                                      : `<button type="button" class="btn sm primary" data-confirm="${b.id}">확정</button>`)
                                  : (ok ? H(t, "confirmed", '<span class="status go">확정</span>') : '<span class="muted">-</span>')}</td>
-        <td class="l">${arriveCell(b, ed, t)}</td>
 </tr>`;
     });
   });
@@ -937,7 +1024,9 @@ function confirmAll(hq) {             // 아직 확정 안 된 지사를 모두 
 function confirmBranch(id, on) {
   const b = S.brById[id]; if (!b || !can("req.confirm")) return;
   const more = S.rdraft.has(id) ? "\n이 지사 줄에서 고친 값도 함께 저장됩니다." : "";
-  if (!confirm(on ? `${b.name} 지사의 편성을 확정할까요? 바로 저장되고, 기관별 장비에서 이 지사를 고를 수 있습니다.\n확정하면 [취소]하기 전까지 이 줄은 고칠 수 없습니다.${more}` : `${b.name} 지사의 확정을 취소할까요? 기관별 장비 선택지에서 빠집니다(이미 넣은 경로는 그대로).${more}`)) return;
+  const of = +rval(id, "offer_truck") || 0, reg = poolVehs(id).length;      // 타지사 지원 가능 대수도 같은 [확정]으로 함께 확정·잠금
+  const ofOn = of ? `\n타지사 지원 가능 ${of}대도 함께 확정됩니다(이 지사가 지역본부 장비를 등록할 수 있게 됩니다).` : "", ofOff = offerOk(id) ? `\n타지사 지원 가능 ${offerOf(id)}대 확정도 함께 취소됩니다${reg ? ` — 이미 등록한 장비 ${reg}대와 경로는 그대로 남고, 새 등록만 막힙니다` : ""}.` : "";
+  if (!confirm(on ? `${b.name} 지사의 편성을 확정할까요? 바로 저장되고, 기관별 장비에서 이 지사를 고를 수 있습니다.\n확정하면 [취소]하기 전까지 이 줄은 고칠 수 없습니다.${ofOn}${more}` : `${b.name} 지사의 확정을 취소할까요? 기관별 장비 선택지에서 빠집니다(이미 넣은 경로는 그대로).${ofOff}${more}`)) return;
   saveBranchRows([id], { confirmed: on }, on ? `${b.name} 지사를 확정했습니다` : `${b.name} 지사 확정을 취소했습니다`);
 }
 async function makeRound() {
@@ -965,7 +1054,7 @@ async function deleteRound() {
 }
 async function switchRound(id, force) {
   if (!force && anyDirty() && !confirm("확정·저장하지 않은 변경이 있습니다. 버리고 기준일자를 바꿀까요?")) { refresh(); return; }
-  S.rdraft.clear(); S.draft.clear(); S.vdraft.clear(); S.sdraft.clear(); S.adraft.clear(); S.extraStop.clear(); S.unhideOpen = false; S.round = +id || null;   // 지원 여부·경로 변경은 기준일자마다 따로라 버림
+  S.rdraft.clear(); S.draft.clear(); S.vdraft.clear(); S.sdraft.clear(); S.adraft.clear(); S.extraStop.clear(); S.unhideOpen = false; S.nvSel = ""; S.nvRent = false; S.round = +id || null;   // 지원 여부·경로 변경은 기준일자마다 따로라 버림
   const r = curRound(); if (r) S.day1 = r.start_date;               // 기준일자를 고르면 지원일 1도 그 날짜로
   await Promise.all([loadReqs(), ensureRoutes(), loadWarn(), loadAlloc()]); refresh();
 }
@@ -974,27 +1063,29 @@ async function switchRound(id, force) {
    [6-2] 기관별 배정 — 관리자: 편성이 확정된 지사에 기관별 제설차·제설기 대수. 기준일자 전체에 한 번(지원일 1 기준)
    ============================================================ */
 function renderAlloc() {
-  const r = curRound(), ed = can("equip.edit.all") && !!r;
+  const r = curRound(), ed = can("equip.edit.all") && !!r, AO = [...S.orgs, POOL];        // 칸: 기계화부 4곳(제설차·제설기) + 지역본부(제설차만)
   banner("perm-alloc");
-  $("allocRound").innerHTML = roundSel("roundSelAlloc") + `<span class="hint">${r ? "편성이 확정된 지사에 어느 기관이 제설차·제설기를 몇 대 보낼지 정합니다. 기관(기계화부)은 이 대수 안에서 지원일 1의 장비별 지사를 고릅니다(기관별 장비). 이동정비차는 배정하지 않습니다." : "기준일자가 없습니다."}</span>` + reloadBtn();
-  const rows = r ? S.order.filter(b => isFixed(b.id) || S.orgs.some(o => { const a = aval(o, b.id); return a.truck + a.blower > 0; })) : [];
+  $("allocRound").innerHTML = roundSel("roundSelAlloc") + `<span class="hint">${r ? "편성이 확정된 지사에 어느 기관이 제설차·제설기를 몇 대 보낼지 정합니다. 기관(기계화부)은 이 대수 안에서 지원일 1의 장비별 지사를 고릅니다(기관별 장비). 지역본부 장비는 관리자가 장비별 지사를 정하고, 여기 대수를 넘기면 '배정 초과'로 표시됩니다. 이동정비차는 배정하지 않습니다." : "기준일자가 없습니다."}</span>` + reloadBtn();
+  const rows = r ? S.order.filter(b => isFixed(b.id) || AO.some(o => { const a = aval(o, b.id); return a.truck + a.blower > 0; })) : [];
   if (!rows.length) { $("allocTable").innerHTML = `<tbody><tr><td class="empty">${r ? "편성이 확정된 지사가 없습니다. 지사별 요청·편성에서 편성 대수를 넣고 [확정]하면 여기에 나옵니다." : "기준일자가 없습니다."}</td></tr></tbody>`; return; }
-  const sum = (bid, f) => S.orgs.reduce((n, o) => n + (aval(o, bid)[f] || 0), 0), osum = (o, f) => rows.reduce((n, b) => n + (aval(o, b.id)[f] || 0), 0);
+  const sum = (bid, f) => AO.reduce((n, o) => n + (aval(o, bid)[f] || 0), 0), osum = (o, f) => rows.reduce((n, b) => n + (aval(o, b.id)[f] || 0), 0);
   const availN = (o, t) => S.vehicles.filter(v => v.org === o && v.type === t && shownIn(v, r) && stOf(r.id, v.id).status === "O").length;
+  const poolCap = offerBranches().reduce((n, b) => n + offerOf(b.id), 0);                    // 지역본부의 '지원 가능' = 확정된 타지사 지원 가능 대수 합계
   // 배정 / 기준: 같으면 초록, 모자라면 주황, 넘으면 빨강
   const cmp = (got, want, tip) => `<span class="${got === want ? "al-ok" : got < want ? "al-short" : "al-over"}" title="${got === want ? "맞음" : got < want ? `${want - got}대 모자람` : `${got - want}대 초과`}${tip || ""}">${got} / ${want}</span>`;
   const cell = (o, b, f, lab) => { const v = aval(o, b.id)[f] || 0, k = ak(o, b.id);
     return ed && isFixed(b.id) ? `<input class="ci num" type="number" inputmode="numeric" min="0" max="99" data-al="${esc(k)}" data-f="${f}" data-fk="al:${esc(k)}:${f}" value="${v}" aria-label="${esc(o)} → ${esc(b.name)} ${lab}">` : (v ? String(v) : '<span class="muted">-</span>'); };
-  const head = `<thead><tr><th class="l" rowspan="2">피지원 지사</th>${S.orgs.map(o => `<th colspan="2">${esc(o)}</th>`).join("")}<th colspan="2">배정 / 편성</th></tr>` +
-    `<tr>${S.orgs.map(() => "<th>제설차</th><th>제설기</th>").join("")}<th>제설차</th><th>제설기</th></tr></thead>`;
-  const body = rows.map(b => `<tr class="${S.orgs.some(o => S.adraft.has(ak(o, b.id))) ? "changed" : ""}" data-ab="${b.id}"><td class="l">${esc(b.name)}${isFixed(b.id) ? "" : ' <span class="tag warn">확정 취소됨</span>'}</td>` +
-    S.orgs.map(o => `<td>${cell(o, b, "truck", "제설차")}</td><td>${cell(o, b, "blower", "제설기")}</td>`).join("") +
+  const head = `<thead><tr><th class="l" rowspan="2">피지원 지사</th>${S.orgs.map(o => `<th colspan="2">${esc(o)}</th>`).join("")}<th class="al-pool">${POOL}</th><th colspan="2">배정 / 편성</th></tr>` +
+    `<tr>${S.orgs.map(() => "<th>제설차</th><th>제설기</th>").join("")}<th class="al-pool">제설차</th><th>제설차</th><th>제설기</th></tr></thead>`;
+  const body = rows.map(b => `<tr class="${AO.some(o => S.adraft.has(ak(o, b.id))) ? "changed" : ""}" data-ab="${b.id}"><td class="l">${esc(b.name)}${isFixed(b.id) ? "" : ' <span class="tag warn">확정 취소됨</span>'}</td>` +
+    S.orgs.map(o => `<td>${cell(o, b, "truck", "제설차")}</td><td>${cell(o, b, "blower", "제설기")}</td>`).join("") + `<td class="al-pool">${cell(POOL, b, "truck", "제설차")}</td>` +
     `<td data-asum="truck">${cmp(sum(b.id, "truck"), +rbase(b.id, "assigned_truck") || 0)}</td><td data-asum="blower">${cmp(sum(b.id, "blower"), +rbase(b.id, "assigned_blower") || 0)}</td></tr>`).join("");
   const tot = f => rows.reduce((n, b) => n + sum(b.id, f), 0), want = f => rows.reduce((n, b) => n + (isFixed(b.id) ? +rbase(b.id, f) || 0 : 0), 0);
-  const avc = (o, f, t) => { const got = osum(o, f), av = availN(o, t); return `<td><span class="${got > av ? "al-over" : ""}" title="배정 ${got}대 / 지원 가능 ${av}대">${got} / ${av}</span></td>`; };
-  const foot = `<tfoot><tr class="al-sum"><th class="l">배정 합계</th>${S.orgs.map(o => `<td>${osum(o, "truck")}</td><td>${osum(o, "blower")}</td>`).join("")}<td>${cmp(tot("truck"), want("assigned_truck"))}</td><td>${cmp(tot("blower"), want("assigned_blower"))}</td></tr>` +
-    `<tr class="al-av"><th class="l">배정 / 지원 가능</th>${S.orgs.map(o => avc(o, "truck", "제설차") + avc(o, "blower", "제설기")).join("")}<td></td><td></td></tr>` +
-    `<tr class="al-done"><th class="l">장비 지정(기계화부)</th>${S.orgs.map(o => { const a = orgAllocSummary(o); return `<td colspan="2" data-adone="${esc(o)}">${a.total ? `${a.done} / ${a.total} ` + (a.over ? '<span class="tag warn">배정 초과</span>' : a.done === a.total ? '<span class="status go">완료</span>' : "") : '<span class="muted">-</span>'}</td>`; }).join("")}<td></td><td></td></tr></tfoot>`;
+  const avc = (o, f, t) => { const got = osum(o, f), av = o === POOL ? poolCap : availN(o, t); return `<td${o === POOL ? ' class="al-pool" data-apool="av"' : ""}><span class="${got > av ? "al-over" : ""}" title="배정 ${got}대 / ${o === POOL ? "확정된 타지사 지원 가능" : "지원 가능"} ${av}대">${got} / ${av}</span></td>`; };
+  const done = (o, span) => { const a = orgAllocSummary(o); return `<td${span ? ' colspan="2"' : ' class="al-pool"'} data-adone="${esc(o)}">${a.total ? `${a.done} / ${a.total} ` + (a.over ? '<span class="tag warn">배정 초과</span>' : a.done === a.total ? '<span class="status go">완료</span>' : "") : '<span class="muted">-</span>'}</td>`; };
+  const foot = `<tfoot><tr class="al-sum"><th class="l">배정 합계</th>${S.orgs.map(o => `<td>${osum(o, "truck")}</td><td>${osum(o, "blower")}</td>`).join("")}<td class="al-pool">${osum(POOL, "truck")}</td><td>${cmp(tot("truck"), want("assigned_truck"))}</td><td>${cmp(tot("blower"), want("assigned_blower"))}</td></tr>` +
+    `<tr class="al-av"><th class="l">배정 / 지원 가능</th>${S.orgs.map(o => avc(o, "truck", "제설차") + avc(o, "blower", "제설기")).join("")}${avc(POOL, "truck", "제설차")}<td></td><td></td></tr>` +
+    `<tr class="al-done"><th class="l" title="기계화부 장비는 기계화부가, 지역본부 장비는 관리자가 지원일 1의 지사를 정한 대수">장비 지정</th>${S.orgs.map(o => done(o, true)).join("")}${done(POOL, false)}<td></td><td></td></tr></tfoot>`;
   $("allocTable").innerHTML = head + `<tbody>${body}</tbody>` + foot;
   stickHead($("allocTable"));
 }
@@ -1054,9 +1145,9 @@ let lastFocus = null;
 async function openSheet(vid) {
   const v = vehById(vid); if (!v) return;
   const g = govRound(S.date), st = g ? stOf(g.id, v.id).status : "", [cls, label] = STATUS[st] || STATUS[""], rec = effRec(S.date, v.id), cur = rec.stops;   // 지원 여부 = 그 날짜를 맡은 기준일자의 값
-  sheet.innerHTML = `<button type="button" class="sheet-close" id="sheetClose">닫기</button><span class="plate" style="font-size:18px">${esc(vval(v, "plate"))}</span>
+  sheet.innerHTML = `<button type="button" class="sheet-close" id="sheetClose">닫기</button><span class="plate" style="font-size:18px">${esc(vname(v))}</span>
     <h2 id="sheetTitle">${esc(v.org)} ${esc(v.type)}${hasBlower(v) ? ` · 블로워 ${esc(blowerText(v))}` : ""}</h2>${g ? `<span class="status ${cls}">${label}</span>` : ""}
-    <section><h3>${esc(fmtMD(S.date))} 이동</h3><dl class="kv"><dt>지원기관</dt><dd>${esc(v.org)} 기계화부</dd>
+    <section><h3>${esc(fmtMD(S.date))} 이동</h3><dl class="kv"><dt>지원기관</dt><dd>${isPool(v) ? POOL : esc(v.org) + " 기계화부"}</dd>
       <dt>들르는 지사</dt><dd>${cur.length ? cur.map(x => esc(bn(x))).join(" → ") + "" : "-"}</dd>
       <dt>도착 예상</dt><dd>${cur.length ? cur.map((x, j) => `${esc(bn(x))} ${esc(j === 0 && isCont(v.id, S.date, x) ? "연속지원" : rec.times[j] ? fmtMD(S.date) + " " + rec.times[j] : "미정")}`).join("<br>") : "-"}</dd></dl></section>
     <section><h3>날짜별 경로 기록</h3><div id="vhist" class="muted">불러오는 중…</div></section>`;
@@ -1141,7 +1232,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !sheet.hid
 function busy(t, on) { const bar = $("save-" + t); bar.classList.toggle("busy", on); bar.querySelectorAll("button").forEach(b => { b.disabled = on || b.disabled; }); }
 function updateSavebars() {
   const fb = $("save-fleet"), bb = $("save-branch"), ab = $("save-alloc");
-  fb.hidden = !canAnyVeh(); bb.hidden = !canAnyReq() || !S.round; ab.hidden = !can("equip.edit.all") || !S.round;
+  fb.hidden = !(can("equip.edit.all") || can("equip.edit.own") || myPoolN() > 0 || (canPoolAdd() && fleetDirty())); bb.hidden = !canAnyReq() || !S.round; ab.hidden = !can("equip.edit.all") || !S.round;
   const fd = fleetDirty(), bd = branchDirty(), ad = allocDirty();
   fb.classList.toggle("dirty", fd); bb.classList.toggle("dirty", bd); ab.classList.toggle("dirty", ad);
   ab.querySelector(".save-state").textContent = ad ? `확정하지 않은 변경: ${S.adraft.size}칸` + (S.preview ? " (미리보기 — 확정 불가)" : "") : "변경 사항 없음";
@@ -1217,12 +1308,21 @@ document.addEventListener("change", async e => {
     const v = vehById(t.dataset.vb); if (!v || !canVeh(v) || v.type !== "제설기") return refresh();
     setVeh(v.id, t.dataset.bf, t.checked); return patchVehicle(v.id);
   }
-  if (t.id === "nvOrg") { $("nvPfx").textContent = t.value; return; }
-  if (t.dataset.vp) {                       // 도공번호: 숫자만 받아 기관 이름을 붙임(예: 901 → 서울경기901), 중복 검사
+  if (t.id === "nvOrg" || t.id === "nvRent") {      // 장비 추가 줄: 기관(또는 지역본부 지사)·임차를 바꾸면 줄 모양이 바뀜(넣던 숫자는 그대로)
+    if (t.id === "nvOrg") S.nvSel = t.value; else S.nvRent = t.checked;
+    const n = ($("nvPlate") || {}).value || ""; renderFleet(); if ($("nvPlate")) $("nvPlate").value = n; const f = $(t.id); if (f) f.focus(); return;
+  }
+  if (t.dataset.vr) {                       // 지역본부 장비의 임차 체크: 이름(저장 값)도 함께 바뀜(인천252 ↔ 인천임차252)
+    const v = vehById(t.dataset.vr); if (!v || !isPool(v) || !canVeh(v)) return refresh();
+    const val = poolPlate(v.home_branch, t.checked, poolNum(v));
+    if (poolVehs().some(x => x.id !== v.id && vval(x, "plate") === val)) { toast("이 기준일자에 같은 이름의 장비가 이미 있습니다", true); return refresh(); }
+    setVeh(v.id, "rented", t.checked); setVeh(v.id, "plate", val); return patchVehicle(v.id);
+  }
+  if (t.dataset.vp) {                       // 도공번호: 숫자만 받아 기관 이름을 붙임(예: 901 → 서울경기901), 중복 검사. 지역본부 장비는 지사 이름 + [임차] + 숫자
     const v = vehById(t.dataset.vp), num = t.value.replace(/\s/g, ""); if (!v || !canVeh(v)) return refresh();
-    if (!NUM_RE.test(num)) { toast("도공번호는 숫자만 넣으세요 (예: 901 → " + v.org + "901)", true); return refresh(); }
-    const val = v.org + num;
-    if (S.vehicles.some(x => x.id !== v.id && vval(x, "plate") === val)) { toast("같은 도공번호가 이미 있습니다", true); return refresh(); }
+    if (!NUM_RE.test(num)) { toast(isPool(v) ? "번호는 숫자만 넣으세요 (예: 252)" : "도공번호는 숫자만 넣으세요 (예: 901 → " + v.org + "901호)", true); return refresh(); }
+    const val = isPool(v) ? poolPlate(v.home_branch, vval(v, "rented"), num) : v.org + num;
+    if ((isPool(v) ? poolVehs() : S.vehicles.filter(x => !isPool(x))).some(x => x.id !== v.id && vval(x, "plate") === val)) { toast(isPool(v) ? "이 기준일자에 같은 이름의 장비가 이미 있습니다" : "같은 도공번호가 이미 있습니다", true); return refresh(); }
     setVeh(v.id, "plate", val); const tr = t.closest("tr"); if (tr) tr.classList.toggle("changed", S.vdraft.has(v.id)); return afterAnyChange();
   }
   if (t.dataset.arr) {                      // 도착 요청: 날짜 + 시(00~23) + 분(10분 단위)
@@ -1247,7 +1347,7 @@ document.addEventListener("change", async e => {
     if (f === "confirmed") v = t.checked;
     else if (f === "wx_snow" || f === "wx_pcp") v = t.value === "" ? null : Math.max(0, Math.min(999, Math.round(+t.value * 10) / 10 || 0));
     else if (f === "reason") v = t.value.trim() || null;
-    else v = t.value === "" ? 0 : Math.max(0, Math.min(999, Math.floor(+t.value) || 0));
+    else v = t.value === "" ? 0 : Math.max(0, Math.min(f === "offer_truck" ? 99 : 999, Math.floor(+t.value) || 0));
     setReq(b.id, f, v); return afterReq(b.id);
   }
 });
@@ -1322,9 +1422,13 @@ document.addEventListener("click", e => {
   if ((x = c("[data-fb]"))) return openForecast(x.dataset.fb);
   if ((x = c("[data-wtab]"))) { S.wtab = x.dataset.wtab; return renderWarnNow(); }
   if (c("#zaddBtn")) { const v = ($("zadd") || {}).value; return v ? setZone(v, true) : toast("더할 구역을 고르세요", true); }
-  if (c("#onlyActive")) { S.bview = S.bview === "req" ? "all" : "req"; return renderBranch(); }      // 두 보기 중 하나만, 다시 누르면 모든 지사
+  if (c("#onlyActive")) { S.bview = S.bview === "req" ? "all" : "req"; return renderBranch(); }      // 세 보기 중 하나만, 다시 누르면 모든 지사
   if (c("#onlyFixed")) { S.bview = S.bview === "fixed" ? "all" : "fixed"; return renderBranch(); }
-  if ((x = c("[data-fo]"))) { S.fleetOrg = x.dataset.fo; return renderFleet(); }
+  if (c("#onlyOffer")) { S.bview = S.bview === "offer" ? "all" : "offer"; return renderBranch(); }
+  if ((x = c("[data-fo]"))) {               // 기관 버튼: 여러 개 고르기. '모든 기관'을 누르거나 고른 것을 모두 풀면 모든 기관
+    const o = x.dataset.fo; if (o === "전체") S.fleetOrgs.clear(); else if (S.fleetOrgs.has(o)) S.fleetOrgs.delete(o); else S.fleetOrgs.add(o);
+    return renderFleet();
+  }
   if ((x = c("[data-org]"))) { S.org = x.dataset.org; renderFilters(); return renderDest(); }
   if ((x = c("[data-type]")) && x.classList.contains("chip")) { S.type = x.dataset.type; renderFilters(); return renderDest(); }
   if ((x = c("[data-lk]"))) { S.logKind = x.dataset.lk; return renderLog(); }
