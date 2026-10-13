@@ -393,7 +393,7 @@ def t_round_delete(p):
     check("지웠습니다" in toast(p) and ev(p, f"S.rounds.some(x => x.id === {r})") is False, "경로 없는 마지막 기준일자는 삭제")
     check(ev(p, "curRound().start_date") == day(p, 0), "남은 기준일자로 바뀜")
     check(ev(p, "S.routes.size") > 0, "장비 경로 기록은 남음")
-    tab(p, "log"); check("기준일자" in p.locator("#logTable tbody tr").first.inner_text(), "삭제 기록")
+    tab(p, "log"); row = p.locator("#logTable tbody tr").first.inner_text(); check("기준일자" in row and "삭제" in row, f"삭제 기록(맨 위 줄 = 기준일자 삭제): {row}")
     as_user(p, "br1"); tab(p, "branch"); check(p.locator("#roundDel").count() == 0, "권한 없으면 버튼 없음")
 
 def t_pending_branches_shown_grey(p):
@@ -1006,7 +1006,28 @@ def t_fleet_only_go(p):
     confirm_fleet(p); check("확정했습니다" in toast(p) and "V014" not in rows() and len(rows()) == len(go) - 1, "확정하면 목록에서 빠짐: " + toast(p))
     p.click("#onlyGo"); p.wait_for_timeout(150); check(len(rows()) == total and p.locator("#onlyGo").get_attribute("aria-pressed") == "false", "다시 누르면 모든 장비")
 
-TESTS = [t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+def t_pool_round_delete(p):
+    """(코드 검토 2026-10-13, 마이그레이션 45) 앞 기준일자의 지역본부 장비 경로가 새 기준일자 기간에 남아 있어도 새 기준일자를 지울 수 있음.
+    그 장비는 새 기준일자 화면에 안 나오고 앞 기준일자 화면에서는 그 날짜가 잠겨, 예전에는 경로를 지울 방법이 없어 잘못 만든 기준일자를 지울 수 없었음"""
+    ic, dg, d4 = bid(p, "인천"), bid(p, "대관령"), day(p, 4)
+    v = ev(p, f"""(async () => {{ await Api.saveRequests(S.round, [{{ branch_id: '{ic}', offer_truck: 1, confirmed: true }}]);
+        const a = await Api.addVehicle({{ org: '지역본부', type: '제설차', plate: '인천252', round_id: S.round, home_branch: '{ic}', rented: false }});
+        const r = await Api.saveFleet([], [{{ date: '{d4}', vehicle_id: 'V001', stops: [], revised: false, times: null }}, {{ date: '{d4}', vehicle_id: a.vehicle.id, stops: ['{dg}'], revised: false, times: null }}], S.round, []);
+        return r.ok ? a.vehicle.id : null }})()""")
+    check(v, "준비: 인천 252호를 닷새째에 대관령으로(그날 기계화부 경로는 비움)")
+    tab(p, "branch"); p.click("#panel-branch [data-reload]"); p.wait_for_timeout(500); old = ev(p, "S.round"); check(route(p, v, d4) == ["대관령"], "앞 기준일자에서 보임")
+    p.fill("#newRoundDate", d4); p.click("#roundMake"); p.wait_for_timeout(400); new = ev(p, "S.round")
+    check(new != old and ev(p, f"effRec('{d4}', '{v}').stops.length") == 0 and ev(p, f"recOf('{d4}', '{v}').stops.length") == 1, "새 기준일자가 그날을 맡아 경로는 숨겨짐(기록은 남음)")
+    tab(p, "fleet"); check(p.locator("#eqTable tr.pool").count() == 0, "새 기준일자 화면에는 그 장비가 없어 경로를 지울 칸이 없음")
+    tab(p, "branch"); p.click("#roundDel"); p.wait_for_timeout(400)
+    check("지웠습니다" in toast(p) and ev(p, "S.round") == old, "그래도 새 기준일자를 지울 수 있음: " + toast(p))
+    check(route(p, v, d4) == ["대관령"] and ev(p, f"effRec('{d4}', '{v}').stops.length") == 1, "지우면 앞 기준일자가 다시 맡아 경로가 그대로 되살아남")
+    # 기계화부 장비의 경로가 그 기간에 있으면 예전처럼 막음
+    ev(p, f"Api.saveFleet([], [{{ date: '{d4}', vehicle_id: 'V001', stops: ['{dg}'], revised: false, times: null }}], S.round, [])"); p.click("#panel-branch [data-reload]"); p.wait_for_timeout(500)
+    p.fill("#newRoundDate", d4); p.click("#roundMake"); p.wait_for_timeout(400); p.click("#roundDel"); p.wait_for_timeout(400)
+    check("경로가 있어" in toast(p) and ev(p, "S.round") != old, "기계화부 장비 경로가 있으면 여전히 거절: " + toast(p))
+
+TESTS = [t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
@@ -1023,6 +1044,15 @@ def server_page(b, mock, user):
     p = b.new_page(viewport={"width": 1440, "height": 1000}); p.on("dialog", lambda d: d.accept())
     p.on("pageerror", lambda e: errors.append(f"[server] {e}"))
     install(p, mock, user); p.goto(SERVER_URL); p.wait_for_selector("#matrix tbody tr", timeout=15000); return p
+
+def t_server_many_vehicles(b):
+    """(코드 검토 2026-10-13) 장비가 1,000줄을 넘어도 모두 읽음: 서버는 한 번에 1,000줄만 주고, 지역본부 장비(sort 0)가 앞에 와서 예전에는 기계화부 장비가 잘려 사라졌음"""
+    m = Mock(); mech = len(m.vehicles)
+    m.vehicles = [{"id": "V%05d" % (10000 + i), "org": "지역본부", "type": "제설차", "plate": "인천%d" % i, "status": "", "sort": 0, "active": True, "round_id": 999, "home_branch": "B001", "rented": False} for i in range(1005)] + m.vehicles
+    p = server_page(b, m, "admin-01")
+    check(ev(p, "S.vehicles.length") == 1005 + mech and ev(p, "S.vehicles.filter(v => !isPool(v)).length") == mech, f"장비 {1005 + mech}줄을 모두 읽음: {ev(p, 'S.vehicles.length')}")
+    tab(p, "fleet"); check(p.locator("#eqTable tbody tr[data-vrow]").count() == mech and p.locator("#eqTable tr.pool").count() == 0, "기계화부 장비가 그대로 보이고, 다른 기준일자의 지역본부 장비는 안 보임")
+    p.close()
 
 def t_server_equip_confirm(b):
     """지원장비 계정(서울경기)으로 로그인: 자기 기관 장비만, [확정]은 save_fleet 에 바뀐 칸만 보냄. 접속 아이디(데모·미리보기) 선택은 없음"""
@@ -1088,7 +1118,7 @@ def t_server_lock_and_confirm_all(b):
     check(p.locator("tr[data-b='B019']").locator("input:not([disabled]), select:not([disabled])").count() == 0, "다시 읽어 그 줄 비활성")
     p.close()
 
-SERVER_TESTS = [t_server_equip_confirm, t_server_branch_save, t_server_warning, t_server_lock_and_confirm_all]
+SERVER_TESTS = [t_server_many_vehicles, t_server_equip_confirm, t_server_branch_save, t_server_warning, t_server_lock_and_confirm_all]
 
 if __name__ == "__main__":
     only = sys.argv[1:]

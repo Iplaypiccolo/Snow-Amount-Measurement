@@ -74,7 +74,7 @@ class Mock:
                  ("exincheon", "인천지사", "B001", "H01"), ("exsiheung", "시흥지사", "B002", "H01"), ("exgunpo", "군포지사", "B003", "H01"), ("exhwaseong", "화성지사", "B004", "H01")]
         for u, d, b, h in names: self.add(u, d, "branch", b, TEMP_PW, must_change=True)
         self.add("equip-01", "지원장비", "equip", None, "Equip#Pass-8821xY", org="서울경기")
-        self.orgs = ["서울경기", "충북", "전북", "대구경북"]
+        self.orgs = ["서울경기", "충북", "전북", "대구경북", "지역본부"]      # 실제 서버처럼 '지역본부'도 들어 있음(장비·배정용 — 계정 소속으로는 화면이 빼야 함)
         # 장비 지원(마이그레이션 16·17): 장비, 날짜별 경로, 기준일자, 지사 요청. 저장 함수 호출은 eq_calls 에 기록
         import datetime as _dt
         self.today = _dt.date.today().isoformat()
@@ -321,7 +321,9 @@ class Mock:
                 v.update(body); return send(200, [{"id": vid, "hidden_after": v.get("hidden_after")}])
             if tbl in ("vehicles", "vehicle_routes", "support_rounds", "round_requests") and req.method == "GET":
                 if not self.usable(u): return send(200, [])
-                if tbl == "vehicles": return send(200, self.vehicles)
+                if tbl == "vehicles":                                  # 실제 서버처럼 한 번에 최대 1000줄(limit·offset 으로 나눠 읽어야 다 받음)
+                    off, lim = int(q.get("offset", ["0"])[0]), int(q.get("limit", ["1000"])[0])
+                    return send(200, self.vehicles[off: off + min(lim, 1000)])
                 if tbl == "support_rounds": return send(200, self.rounds)
                 if tbl == "round_requests": return send(200, [r for r in self.round_reqs if "eq.%d" % r["round_id"] in q.get("round_id", [""])])
                 rows = self.routes; dates = q.get("date", [])

@@ -88,7 +88,6 @@ const can = p => !!S.me && (S.me.role === "admin" || (S.me.perms || []).includes
 // 지역본부 장비는 그 지사 계정(자기 지사 요청 권한 req.edit.own)과 관리자만 고침. 본부·기계화부 계정은 못 함
 const canPoolAdd = () => !!S.me && !can("equip.edit.all") && can("req.edit.own") && !!S.me.branch_id;
 const canVeh = v => can("equip.edit.all") || (isPool(v) ? canPoolAdd() && v.home_branch === S.me.branch_id : can("equip.edit.own") && v.org === S.me.org);
-const canAnyVeh = () => can("equip.edit.all") || can("equip.edit.own") || canPoolAdd();
 const canReq = b => can("req.confirm") || (can("req.edit.own") && S.me.branch_id === b.id) || (can("req.edit.hq") && b.hq_id === S.me.hq_id);
 const canAnyReq = () => can("req.confirm") || can("req.edit.own") || can("req.edit.hq");
 const bn = id => (S.brById[id] || {}).name || id;
@@ -96,6 +95,12 @@ const vehById = id => S.vehicles.find(v => v.id === id);
 // 화면에 보이는 장비 이름(저장 값 plate 는 그대로): 기계화부 '서울경기901호' / 지역본부 '인천 252호'·'인천 임차 1호'
 const poolNum = v => { const m = /(\d{1,5})$/.exec(vval(v, "plate") || ""); return m ? m[1] : ""; };
 const poolPlate = (bid, rented, num) => bn(bid) + (rented ? "임차" : "") + num;
+// 지역본부 장비의 저장 이름을 만들고 같은 기준일자 안에서 겹치는지 검사(등록·번호 고치기·임차 바꾸기가 함께 씀). 겹치면 안내하고 null
+function poolPlateFree(bid, rented, num, exceptId) {
+  const plate = poolPlate(bid, rented, num);
+  if (poolVehs().some(x => x.id !== exceptId && vval(x, "plate") === plate)) { toast("이 기준일자에 같은 이름의 장비가 이미 있습니다", true); return null; }
+  return plate;
+}
 const vname = v => !v ? "" : isPool(v) ? `${bn(v.home_branch)} ${vval(v, "rented") ? "임차 " : ""}${poolNum(v)}호` : vval(v, "plate") + (plateNum(v) ? "호" : "");
 const plateOf = id => { const v = vehById(id); return v ? vname(v) : id; };
 const curRound = () => S.rounds.find(r => r.id === S.round) || null;
@@ -611,7 +616,6 @@ const fleetRows = () => S.vehicles.filter(v => (!S.fleetOrgs.size || S.fleetOrgs
 const nextRoundMin = () => S.rounds.length ? addDays(S.rounds[0].start_date, 1) : "2000-01-01";       // 새 기준일자는 마지막 기준일자보다 뒤
 const hiddenNow = () => S.vehicles.filter(v => v.hidden_after && !shownIn(v, curRound()));          // 지금 고른 기준일자에서 숨겨진 장비(숨김 취소 목록)
 const canRoute = () => can("equip.edit.all");                      // 날짜별 경로·장비 삭제·지원일 1·초기화 = 관리자(모든 장비 권한 equip.edit.all)만
-const canAddVeh = () => can("equip.edit.all") || can("equip.edit.own"); // 장비 추가: 관리자(모든 기관) / 지원장비(자기 기관)
 const NUM_RE = /^\d{1,5}$/;                                           // 도공번호 = 출발 기관 이름 + 숫자(예: 서울경기901). 입력은 숫자만
 const plateNum = v => { const p = vval(v, "plate") || ""; return p.startsWith(v.org) ? p.slice(v.org.length) : ""; };
 function renderFleet() {
@@ -627,7 +631,7 @@ function renderFleet() {
     return `<button type="button" class="chip" data-fo="${esc(o)}" aria-pressed="${on}"${none ? ' disabled title="이 기준일자에 장비가 없습니다"' : ""}>${o === "전체" ? "모든 기관" : esc(o)}</button>`; };
   // 장비 추가: 관리자 = 기관 4곳 ─ 경계선 ─ 지원 가능이 확정된 지사 / 기계화부 = 자기 기관 / 지사 = 자기 지사(지원 가능 확정 뒤)
   const orgOpts = all ? S.orgs : can("equip.edit.own") ? S.orgs.filter(o => o === S.me.org) : [];
-  const myB = canPoolAdd() ? S.me.branch_id : null, brOpts = !r ? [] : all ? offerBranches() : myB && offerOk(myB) ? [S.brById[myB]] : [];
+  const myB = canPoolAdd() ? S.me.branch_id : null, brOpts = !r ? [] : all ? offerBranches() : myB && offerOk(myB) && S.brById[myB] ? [S.brById[myB]] : [];
   const vals = [...orgOpts, ...brOpts.map(b => "B:" + b.id)];
   if (!vals.includes(S.nvSel)) S.nvSel = vals[0] || "";
   const pb = S.nvSel.startsWith("B:") ? S.nvSel.slice(2) : null;      // 지사를 골랐으면 그 지사 번호(지역본부 장비 등록)
@@ -840,9 +844,8 @@ async function addVehicle() {
   if (S.vehicles.some(v => !isPool(v) && vval(v, "plate") === plate)) return toast("같은 도공번호가 이미 있습니다", true);
   if (!can("equip.edit.all") && org !== S.me.org) return toast("자기 기관 장비만 추가할 수 있습니다", true);
   if (S.preview) return toast("미리보기에서는 장비를 추가할 수 없습니다.", true);
-  const seq = Math.max(0, ...S.vehicles.map(v => +v.id.slice(1) || 0)) + 1;
-  const v = { id: "V" + String(seq).padStart(3, "0"), org, type: $("nvType").value, plate, sort: Math.max(0, ...S.vehicles.map(x => x.sort || 0)) + 10 };
-  const r = await Api.addVehicle(v);
+  // 장비 번호(id)는 보내지 않음 — 서버가 매김(화면이 가진 목록이 낡았을 때 다른 계정이 그사이 넣은 장비와 번호가 겹치던 문제, 2026-10-13)
+  const r = await Api.addVehicle({ org, type: $("nvType").value, plate, sort: Math.max(0, ...S.vehicles.map(x => x.sort || 0)) + 10 });
   if (!r.ok) return toast(r.message, true);
   S.vehicles.push(r.vehicle); sortVehicles(); await loadAudit(); refresh(); toast(`장비를 추가했습니다 (${vname(r.vehicle)})`);
 }
@@ -853,8 +856,7 @@ async function addPoolVehicle(bid, num) {
   if (!NUM_RE.test(num)) return toast(`번호는 숫자만 넣으세요 (예: ${rented ? `1 → ${b.name} 임차 1호` : `252 → ${b.name} 252호`})`, true);
   if (!(can("equip.edit.all") || (canPoolAdd() && S.me.branch_id === bid))) return toast("자기 지사의 장비만 등록할 수 있습니다", true);
   if (!offerOk(bid)) return toast(`${b.name} 지사의 '타지사 지원 가능' 대수가 확정된 뒤에 등록할 수 있습니다`, true);
-  const plate = poolPlate(bid, rented, num);
-  if (poolVehs().some(v => vval(v, "plate") === plate)) return toast("이 기준일자에 같은 이름의 장비가 이미 있습니다", true);
+  const plate = poolPlateFree(bid, rented, num); if (!plate) return;
   if (S.preview) return toast("미리보기에서는 장비를 등록할 수 없습니다.", true);
   const res = await Api.addVehicle({ org: POOL, type: "제설차", plate, round_id: r.id, home_branch: bid, rented });
   if (!res.ok) return toast(res.message, true);
@@ -1049,11 +1051,12 @@ async function deleteRound() {
   if (S.preview) return toast("미리보기에서는 지울 수 없습니다.", true);
   const n = Object.keys(S.reqs).length;
   if (S.rounds[0] && S.rounds[0].id !== r.id) return toast("가장 마지막 기준일자만 지울 수 있습니다", true);
-  if ([...S.routes.keys()].some(k => { const d = k.split("|")[0]; return d >= r.start_date && d <= roundEnd(r); })) return toast("이 기준일자 기간에 경로가 있어 지울 수 없습니다. 경로를 먼저 비우세요.", true);
+  // 다른 기준일자에 딸린 지역본부 장비의 경로는 세지 않음(이 기준일자 화면에서는 지울 수 없는 경로 — 이 기준일자를 지우면 앞 기준일자가 다시 맡아 그대로 되살아남, 마이그레이션 45)
+  if ([...S.routes.keys()].some(k => { const [d, vid] = k.split("|"), v = vehById(vid); return d >= r.start_date && d <= roundEnd(r) && !(isPool(v) && v.round_id !== r.id); })) return toast("이 기준일자 기간에 경로가 있어 지울 수 없습니다. 경로를 먼저 비우세요.", true);
   if (!confirm(`기준일자 ${r.start_date}를 지울까요?\n이 기준일자의 지사 요청·편성 ${n}건과 장비 지원 여부도 함께 지워집니다(지운 내용은 수정 기록에 남음).`)) return;
   const res = await Api.deleteRound(r.id);
   if (!res.ok) return toast(res.message, true);
-  S.rounds = S.rounds.filter(x => x.id !== r.id); S.stLoaded.delete(r.id); [...S.rstat.keys()].filter(k => k.startsWith(r.id + "|")).forEach(k => S.rstat.delete(k));
+  S.rounds = S.rounds.filter(x => x.id !== r.id); S.stLoaded.delete(r.id); S.vehicles = S.vehicles.filter(v => v.round_id !== r.id);      // 그 기준일자에 딸린 지역본부 장비는 서버가 함께 지움 [...S.rstat.keys()].filter(k => k.startsWith(r.id + "|")).forEach(k => S.rstat.delete(k));
   await loadAudit(); await switchRound(pickRound(), true); toast("기준일자를 지웠습니다");
 }
 async function switchRound(id, force) {
@@ -1318,15 +1321,14 @@ document.addEventListener("change", async e => {
   }
   if (t.dataset.vr) {                       // 지역본부 장비의 임차 체크: 이름(저장 값)도 함께 바뀜(인천252 ↔ 인천임차252)
     const v = vehById(t.dataset.vr); if (!v || !isPool(v) || !canVeh(v)) return refresh();
-    const val = poolPlate(v.home_branch, t.checked, poolNum(v));
-    if (poolVehs().some(x => x.id !== v.id && vval(x, "plate") === val)) { toast("이 기준일자에 같은 이름의 장비가 이미 있습니다", true); return refresh(); }
+    const val = poolPlateFree(v.home_branch, t.checked, poolNum(v), v.id); if (!val) return refresh();
     setVeh(v.id, "rented", t.checked); setVeh(v.id, "plate", val); return patchVehicle(v.id);
   }
   if (t.dataset.vp) {                       // 도공번호: 숫자만 받아 기관 이름을 붙임(예: 901 → 서울경기901), 중복 검사. 지역본부 장비는 지사 이름 + [임차] + 숫자
     const v = vehById(t.dataset.vp), num = t.value.replace(/\s/g, ""); if (!v || !canVeh(v)) return refresh();
     if (!NUM_RE.test(num)) { toast(isPool(v) ? "번호는 숫자만 넣으세요 (예: 252)" : "도공번호는 숫자만 넣으세요 (예: 901 → " + v.org + "901호)", true); return refresh(); }
-    const val = isPool(v) ? poolPlate(v.home_branch, vval(v, "rented"), num) : v.org + num;
-    if ((isPool(v) ? poolVehs() : S.vehicles.filter(x => !isPool(x))).some(x => x.id !== v.id && vval(x, "plate") === val)) { toast(isPool(v) ? "이 기준일자에 같은 이름의 장비가 이미 있습니다" : "같은 도공번호가 이미 있습니다", true); return refresh(); }
+    const val = isPool(v) ? poolPlateFree(v.home_branch, vval(v, "rented"), num, v.id) : v.org + num; if (!val) return refresh();
+    if (!isPool(v) && S.vehicles.some(x => !isPool(x) && x.id !== v.id && vval(x, "plate") === val)) { toast("같은 도공번호가 이미 있습니다", true); return refresh(); }
     setVeh(v.id, "plate", val); const tr = t.closest("tr"); if (tr) tr.classList.toggle("changed", S.vdraft.has(v.id)); return afterAnyChange();
   }
   if (t.dataset.arr) {                      // 도착 요청: 날짜 + 시(00~23) + 분(10분 단위)

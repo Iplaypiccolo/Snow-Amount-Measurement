@@ -668,7 +668,6 @@ table.alloc { min-width: 760px; }
 .org { min-width: 0; }
 .org.off { opacity: .5; }
 .org.off h3::after { content: "지원 없음"; margin-left: 8px; font-size: 12px; font-weight: 500; color: var(--ink-soft); }
-.org.pool h3 { color: var(--ink); }
 .chip:disabled { opacity: .4; cursor: not-allowed; }
 /* 장비 이름: 지사 + [임차] + 숫자 + '호' */
 .pnum .sfx { font-weight: 700; font-size: 13px; margin-left: 1px; }
