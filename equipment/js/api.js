@@ -19,7 +19,8 @@ const Api = (() => {
     "SA001": "관리자가 이 기관에 배정하지 않은 지사입니다. 기관별 배정을 확인해 주세요.", "SA002": "배정받은 대수보다 많은 장비를 같은 지사로 보낼 수 없습니다.",
     "SA003": "지원일 1의 피지원 지사 한 곳만 고를 수 있습니다(둘째 날부터·하루 여러 곳·수정본·관리자가 정한 경로는 관리자가 고칩니다).",
     // 지역본부 장비(마이그레이션 44)
-    "SA004": "이 지사의 '타지사 지원 가능' 대수가 확정된 뒤에 장비를 등록할 수 있습니다.", "SA005": "지역본부 장비는 자기(출발) 지사로 보낼 수 없습니다." };
+    "SA004": "이 지사의 '타지사 지원 가능' 대수가 확정된 뒤에 장비를 등록할 수 있습니다.", "SA005": "지역본부 장비는 자기(출발) 지사로 보낼 수 없습니다.",
+    "SA006": "기관별 배정 합계는 그 지사의 편성 대수(제설차·제설기 각각)보다 많을 수 없습니다." };
   const POOL = "지역본부", VCOLS = "id,org,type,plate,status,sort,active,blower_s,blower_l,hidden_after,round_id,home_branch,rented";
   // over = 이 요청에서만 쓰는 오류 설명(예: { "23503": "…" }) — 같은 오류 번호라도 상황마다 뜻이 달라서
   const fail = (r, fallback, over) => { const c = r && r.json && r.json.code; return { ok: false, message: (over && over[c]) || ERR[c] || fallback || "저장하지 못했습니다. 잠시 후 다시 시도해 주세요.", code: c }; };
@@ -67,7 +68,7 @@ const Api = (() => {
       return SSAuth.rest(`vehicle_routes?select=date,vehicle_id,stops,revised,times&vehicle_id=eq.${encodeURIComponent(vid)}&order=date.desc&limit=400`).then(r => r.ok ? { ok: true, rows: r.json } : fail(r)).catch(NET);
     },
     requests(round) {
-      return SSAuth.rest(`round_requests?select=round_id,branch_id,req_truck,req_blower,assigned_truck,assigned_blower,offer_truck,arrive_at,reason,confirmed,warn_level,warn_zones,warn_base,warn_at,warn_note,fc_snow,fc_pcp,fc_pop,fc_tmin,fc_tmin_at,fc_tmfc,fc_at,wx_manual,wx_snow,wx_pcp,wx_tmin,wx_tmin_at,wx_level,wx_fc,wx_ef&round_id=eq.${+round}`)
+      return SSAuth.rest(`round_requests?select=round_id,branch_id,req_truck,req_blower,assigned_truck,assigned_blower,offer_truck,saved_at,arrive_at,reason,confirmed,warn_level,warn_zones,warn_base,warn_at,warn_note,fc_snow,fc_pcp,fc_pop,fc_tmin,fc_tmin_at,fc_tmfc,fc_at,wx_manual,wx_snow,wx_pcp,wx_tmin,wx_tmin_at,wx_level,wx_fc,wx_ef&round_id=eq.${+round}`)
         .then(r => r.ok ? { ok: true, rows: r.json } : fail(r, "요청을 불러오지 못했습니다.")).catch(NET);
     },
     allocations(round) {     // 기관별 배정(기준일자, 기관, 지사) → 제설차·제설기 대수
@@ -136,6 +137,14 @@ const Api = (() => {
     const bname = id => (db.branches.find(b => b.id === id) || {}).name || "";
     const poolNameOk = v => { const pfx = bname(v.home_branch) + (v.rented ? "임차" : ""); return !!bname(v.home_branch) && String(v.plate).startsWith(pfx) && /^\d{1,5}$/.test(String(v.plate).slice(pfx.length)); };
     const err = (c, msg) => ({ ok: false, message: msg || ERR[c], code: c });
+    // 서버 흉내(마이그레이션 46): 편성이 확정될 때 배정이 편성보다 많으면 — 편성 0 은 그 종류 배정을 지우고, 한 기관만 배정받았으면 그 기관을 편성 대수로(여러 기관이면 그대로)
+    const followAssign = (rid, q) => [["truck", "assigned_truck"], ["blower", "assigned_blower"]].forEach(([f, af]) => {
+      const mine = db.allocations.filter(a => a.round_id === rid && a.branch_id === q.branch_id && a[f] > 0), cap = q[af] || 0, sum = mine.reduce((n, a) => n + a[f], 0);
+      if (sum <= cap || (cap > 0 && mine.length !== 1)) return;
+      mine.forEach(a => { const t = `round_allocations:${rid},${a.org},${a.branch_id}`, was = a[f]; a[f] = cap === 0 ? 0 : cap;
+        if (!a.truck && !a.blower) { db.allocations.splice(db.allocations.indexOf(a), 1); log("삭제", "round_allocations", t, { [f]: was }, null); }
+        else log("수정", "round_allocations", t, { [f]: was }, { [f]: a[f] }); });
+    });
     const nextId = () => "V" + String(Math.max(0, ...db.vehicles.map(x => +x.id.slice(1) || 0)) + 1).padStart(3, "0");      // 서버 트리거 흉내: 가장 큰 번호 + 1(1000번부터는 네 자리)
     const log = (kind, tab, target, from_val, to_val) => db.audit.push({ at: new Date().toISOString(), username: actor.username || actor.label, ip: "-", kind, tab, target, from_val, to_val });
     const done = x => Promise.resolve(x);
@@ -173,6 +182,8 @@ const Api = (() => {
         if (!can("equip.edit.all")) return done({ ok: false, message: ERR["42501"], code: "42501" });
         if (rows.some(x => x.org === POOL && x.blower)) return done(err("23514", "지역본부는 제설차만 배정합니다."));
         if (rows.some(x => (x.truck || x.blower) && !db.requests.some(q => q.round_id === +round && q.branch_id === x.branch_id && q.confirmed))) return done({ ok: false, message: ALLOC_ERR["23514"], code: "23514" });
+        const sums = bid => db.allocations.filter(a => a.round_id === +round && a.branch_id === bid).reduce((m, a) => ({ t: m.t + a.truck, b: m.b + a.blower }), { t: 0, b: 0 });
+        const bids = [...new Set(rows.map(x => x.branch_id))], before = Object.fromEntries(bids.map(b => [b, sums(b)])), keep = clone(db.allocations);
         rows.forEach(x => {
           const i = db.allocations.findIndex(a => a.round_id === +round && a.org === x.org && a.branch_id === x.branch_id), t = `round_allocations:${round},${x.org},${x.branch_id}`, old = i >= 0 ? db.allocations[i] : null;
           const nv = { round_id: +round, org: x.org, branch_id: x.branch_id, truck: x.truck || 0, blower: x.blower || 0 };
@@ -180,6 +191,10 @@ const Api = (() => {
           else if (!old) { db.allocations.push(nv); log("추가", "round_allocations", t, null, clone(nv)); }
           else if (old.truck !== nv.truck || old.blower !== nv.blower) { log("수정", "round_allocations", t, { truck: old.truck, blower: old.blower }, { truck: nv.truck, blower: nv.blower }); db.allocations[i] = nv; }
         });
+        // 서버 흉내(마이그레이션 46): 저장 뒤 합계가 편성을 넘고, 저장 전보다 늘었으면 전부 취소(SA006)
+        const bad = bids.some(b => { const q = db.requests.find(x => x.round_id === +round && x.branch_id === b) || {}, a = sums(b), o = before[b];
+          return (a.t > (q.assigned_truck || 0) && a.t > o.t) || (a.b > (q.assigned_blower || 0) && a.b > o.b); });
+        if (bad) { db.allocations = keep; return done(err("SA006")); }
         return done({ ok: true });
       },
       audit() { return done({ ok: true, rows: can("log.view") ? clone(db.audit) : [] }); },
@@ -276,6 +291,8 @@ const Api = (() => {
             wx_manual: false, wx_snow: null, wx_pcp: null, wx_tmin: null, wx_tmin_at: null, wx_level: null, wx_fc: null, wx_ef: null }; db.requests.push(cur); }
           const was = cur.confirmed;
           Object.keys(p).filter(k => k !== "branch_id").forEach(k => { from[k] = cur[k]; to[k] = p[k]; cur[k] = p[k]; });
+          if (!can("req.confirm")) cur.saved_at = new Date().toISOString();          // 서버 흉내(마이그레이션 46): 지사·본부 계정의 저장 = 저장 완료
+          if (cur.confirmed && !was) followAssign(+round, cur);                         // 편성이 확정되면 배정이 따라감
           if (cur.confirmed && !was) { const w = warnStatus().branches[cur.branch_id]; Object.assign(cur, { warn_level: w ? w.level : null, warn_zones: w ? w.zones : [], warn_base: db.warnBase, warn_at: new Date().toISOString(), warn_note: null }); to.warn_level = cur.warn_level; }   // 서버 트리거 흉내: 확정 순간 특보 고정
           if (cur.confirmed && !was) { const f = db.forecast.find(x => x.branch_id === cur.branch_id); Object.assign(cur, { fc_snow: f ? f.max_snow_24h : null, fc_pcp: f ? f.max_pcp_24h : null, fc_pop: f && f.max_pop_24h != null ? f.max_pop_24h : null, fc_tmin: f ? f.min_tmp : null, fc_tmin_at: f ? f.min_tmp_at : null, fc_tmfc: f ? f.issued_at : null, fc_at: new Date().toISOString() }); }
           if (!cur.confirmed) Object.assign(cur, { warn_level: null, warn_zones: null, warn_base: null, warn_at: null, warn_note: null, fc_snow: null, fc_pcp: null, fc_pop: null, fc_tmin: null, fc_tmin_at: null, fc_tmfc: null, fc_at: null });

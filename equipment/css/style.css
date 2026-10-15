@@ -322,7 +322,6 @@ table.branch { min-width: 1080px; }
 @keyframes eqJust { from { background-color: color-mix(in srgb, var(--plow) 40%, var(--surface)); } }
 .panel { animation: eqFade .15s ease-out; }
 .toast { animation: eqToast .2s ease-out; }
-.tpop { animation: eqPop .15s ease-out; }
 .sheet-backdrop { animation: eqFade .2s ease-out; }
 .btn, .tab, .chip { transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease; }
 .btn:not(:disabled):active { transform: translateY(1px); }
@@ -528,7 +527,6 @@ table.matrix { font-size: 15px; min-width: 900px; }
 :root[data-theme="dark"] .fcv.cold { color: #8fbaff; } :root[data-theme="dark"] .fcv.cold2 { color: #b9d3ff; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .fcv.cold { color: #8fbaff; } :root:not([data-theme="light"]) .fcv.cold2 { color: #b9d3ff; } }
 .fcv.at { font-weight: 600; font-size: 12px; }
-#branchTable td.tat { white-space: nowrap; }
 .wb:focus-visible { outline: 2px solid var(--plow); outline-offset: 2px; }
 .zlist { list-style: none; margin: 6px 0 12px; padding: 0; }
 .zlist li { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); }
@@ -570,25 +568,6 @@ table.matrix { font-size: 15px; min-width: 900px; }
 .user-box[hidden] { display: none; }
 
 /* 최저기온 시각 고르기(기상현황 직접입력): 단추 + 달력 팝업(시만, 분은 00) */
-#branchTable .tpick { min-width: 84px; padding: 4px 8px; text-align: center; cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums; }
-#branchTable .tpick.empty { color: var(--ink-soft); }
-.tpop { position: fixed; z-index: 60; width: 248px; padding: 10px; background: var(--surface, #fff); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(16,36,58, .18); font-size: 13px; }
-.tpop[hidden] { display: none; }
-.tp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.tp-head button { border: 0; background: none; font-size: 18px; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; color: var(--ink); }
-.tp-head button:hover { background: var(--bg); }
-.tp-week, .tp-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
-.tp-week span { font-size: 11px; color: var(--ink-soft); padding: 2px 0; }
-.tp-week span:first-child { color: #c0392b; }
-.tp-days button { border: 0; background: none; height: 28px; border-radius: 6px; cursor: pointer; color: var(--ink); font-variant-numeric: tabular-nums; }
-.tp-days button:hover { background: var(--bg); }
-.tp-days button.sun { color: #c0392b; }
-.tp-days button.rd { box-shadow: inset 0 0 0 1px var(--plow); }
-.tp-days button.on { background: var(--plow); color: #1b1300; font-weight: 700; }
-.tp-hour { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
-.tp-hour select { width: 64px; }
-.tp-sel { font-weight: 700; font-size: 12.5px; }
-.tp-btns { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
 
 /* 기관별 장비 표의 블로워(소·대) 체크 / 이동 현황의 블로워 표시 */
 .blw { display: inline-flex; gap: 10px; align-items: center; white-space: nowrap; }
@@ -688,13 +667,11 @@ table.alloc { min-width: 760px; }
    칸이 하나(타지사 지원 가능) 늘어도 표 전체 폭이 예전과 같도록 숫자칸·도착 요청·여백도 조금씩 줄임 */
 #branchTable th, #branchTable td { padding-left: 4px; padding-right: 4px; }
 #branchTable th.c-sn { min-width: 56px; }
-#branchTable th.c-ta { min-width: 86px; }
 #branchTable th.c-wk { min-width: 92px; }
 #branchTable th.c-wt { min-width: 102px; }
 #branchTable .wef { display: inline-block; max-width: 94px; white-space: normal; line-height: 1.25; vertical-align: middle; }      /* 발효: 예비특보의 '10/12 오후(12~18시)'는 두 줄로(칸 폭은 발표와 같게) */
 #branchTable input.ci.num.wxn { width: 48px; padding-left: 2px; padding-right: 2px; font-size: 13px; text-align: center; -moz-appearance: textfield; appearance: textfield; }
 #branchTable .wxn::-webkit-outer-spin-button, #branchTable .wxn::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-#branchTable .tpick { min-width: 0; width: 78px; padding: 4px 2px; font-size: 12.5px; }
 #branchTable td.wxe select { max-width: none; }
 #branchTable td[data-wcell].wxe select { width: 84px; padding-left: 4px; padding-right: 0; font-size: 12.5px; }
 #branchTable .hm select { width: 43px; padding-left: 3px; padding-right: 0; font-size: 12.5px; }
@@ -704,3 +681,8 @@ table.alloc { min-width: 760px; }
 /* 기관별 배정의 지역본부 칸 */
 .alloc th.al-pool, .alloc td.al-pool { border-left: 2px solid var(--line); border-right: 2px solid var(--line); }
 .tb-sep { width: 1px; align-self: stretch; min-height: 24px; background: var(--line); margin: 0 4px; }      /* 기관 버튼들 | [지원 장비만] */
+/* 저장 칸(지사·본부의 [저장] / 저장 완료) */
+#branchTable th.svh { font-size: 12px; min-width: 64px; }
+#branchTable td.svc { white-space: nowrap; }
+#branchTable td.svc .sv { font-size: 12px; padding: 2px 6px; }
+#branchTable td.svc .btn { min-height: 28px; padding-left: 10px; padding-right: 10px; }

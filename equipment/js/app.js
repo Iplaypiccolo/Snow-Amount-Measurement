@@ -8,10 +8,10 @@
      ⚠ 화면의 권한 검사는 보기 좋게 정리하는 용도이고, 실제로 막는 것은 서버 규칙(RLS·트리거)입니다.
    - 경로는 (날짜, 장비)마다 한 줄로 서버에 남습니다. 다른 날짜를 확정해도 지난 날짜 경로는 지워지지 않습니다.
    - 특보: 서버가 10분마다 기상청에서 받아 둔 것(warning_status)을 자동 표시. 확정한 지사는 확정 순간 값을 서버가 남김(warn_* 열)
-     24시 강설 [적설 | 강수 | 확률]: 확률 = 지사 격자의 24시간 중 가장 높은 강수확률(%, branch_forecast.max_pop_24h — 시각 없이 값만. 직접입력 줄은 '-').
-     24시 강설 [적설 | 강수]: 기상청 단기예보 격자의 1시간 신적설(cm)·1시간 강수량(mm) 24시간 합 중 지사 격자의 가장 큰 값(branch_forecast).
+     24시 예보 [적설 | 강수 | 확률 | 기온](2026-10-15 '24시 강설'에서 이름 바꿈, 최저기온 묶음을 합침): 확률 = 지사 격자의 24시간 중 가장 높은 강수확률(%, branch_forecast.max_pop_24h — 시각 없이 값만. 직접입력 줄은 '-').
+     적설·강수: 기상청 단기예보 격자의 1시간 신적설(cm)·1시간 강수량(mm) 24시간 합 중 지사 격자의 가장 큰 값(branch_forecast).
      확정하면 서버가 그 순간 값을 남김(fc_* 열). 값을 누르면 강설량 측정 → 기관별 24시간 예보의 그 지사로 이동. 확정한 지사 줄은 바탕이 노랑
-     최저기온 [기온 | 시각]: 같은 예보의 1시간 기온 24시간 중 가장 낮은 값과 그 시각(지사 격자 중 가장 추운 곳, branch_forecast.min_tmp·min_tmp_at)
+     기온: 같은 예보의 1시간 기온 24시간 중 가장 낮은 값(지사 격자 중 가장 추운 곳, branch_forecast.min_tmp). 그 시각 칸은 2026-10-15 뺌
      [기상현황 직접입력]을 켜면 적설·강수·최저기온·대설특보(종류·발표·발효)를 지사가 직접 넣음(wx_* 열) — 자동 값 대신 보이고, 눌러도 예보로 가지 않음
      지사별 요청·편성은 대설특보(예비·주의보·경보)만: [종류 | 발표 | 발효] 세 칸. 다른 특보는 관리자 [특보구역 관리] 아래 종류별 탭에서만
    - 지역본부 장비(마이그레이션 44): 다른 지사를 도울 수 있는 지사가 '타지사 지원 가능' 대수를 내고 관리자가 확정하면, 그 지사(와 관리자)가 그 기준일자에 보낼 제설차를 등록.
@@ -70,7 +70,7 @@ const S = {
   rstat: new Map(), stLoaded: new Set(), sdraft: new Map(), unhideOpen: false,   // rstat: "기준일자|장비" → 지원 여부 {status, off_from, updated_at} / sdraft: 고른 기준일자의 아직 확정 안 한 지원 여부(장비 → 값)
   draft: new Map(), vdraft: new Map(), rdraft: new Map(), revisedMode: false,   // revisedMode: 표 위 [최초 지원]/[수정본] — 고르는 지사 목록과 저장 구분          // 아직 확정·저장하지 않은 변경(경로 / 장비 / 지사 요청)
   date: todayISO(), day1: todayISO(), cols: 4, round: null,
-  org: "전체", type: "전체", fleetOrgs: new Set(), bview: "req", closedHq: new Set(), extraStop: new Set(),   // fleetOrgs: 기관별 장비에서 고른 기관들(비어 있으면 모든 기관) / bview: 지사별 요청·편성 보기 = req(요청 있는 지사만) / fixed(편성 확정된 지사만) / offer(지원 가능 지사만) / all
+  org: "전체", type: "전체", fleetOrgs: new Set(), bview: "all", closedHq: new Set(), extraStop: new Set(),   // fleetOrgs: 기관별 장비에서 고른 기관들(비어 있으면 모든 기관) / bview: 지사별 요청·편성 보기 = all(기본, 아무 버튼도 안 눌림) / req(요청 있는 지사만) / fixed(편성 확정된 지사만) / offer(지원 가능 지사만) / unsaved(저장 안 한 지사만)
   fleetGo: false,                                                                  // 기관별 장비 [지원 장비만]: 고른 기준일자에서 지원 여부가 '지원'인 장비만 보기
   nvSel: "", nvRent: false,                                                         // 장비 추가 줄에서 고른 기관(또는 "B:지사번호")·임차 체크
   logUser: "전체", logKind: "전체", logToday: false,
@@ -136,6 +136,9 @@ const shownIn = (v, r) => isPool(v) ? !!r && v.round_id === r.id : (!v.hidden_af
 const ak = (org, bid) => org + "|" + bid, A0 = { truck: 0, blower: 0 }, AF = { "제설차": "truck", "제설기": "blower" };
 const aval = (org, bid) => S.adraft.get(ak(org, bid)) || S.alloc.get(ak(org, bid)) || A0;      // 배정 탭에 보이는 값(고치는 중 포함)
 const allocDirty = () => S.adraft.size > 0;
+// 기관별 배정 합계(그 지사, 모든 기관 — 고치는 중 포함)와 편성 대수(저장된 것). 배정 합계는 편성을 넘을 수 없음(마이그레이션 46)
+const asg = (bid, f) => +rbase(bid, f === "truck" ? "assigned_truck" : "assigned_blower") || 0;
+const allocSum = (bid, f, except) => [...S.orgs, POOL].reduce((n, o) => n + (o === except ? 0 : aval(o, bid)[f] || 0), 0);
 const orgHasAlloc = org => [...S.alloc.keys()].some(k => k.startsWith(org + "|"));               // 이 기준일자에 그 기관 배정이 하나라도 있는지(저장된 것)
 // 저장된 배정 대수. 이동정비차는 배정하지 않으므로 '배정받은 지사이면 1 이상'
 const allocCap = (org, type, bid) => { const a = S.alloc.get(ak(org, bid)); return !a ? 0 : type === "이동정비차" ? a.truck + a.blower : a[AF[type]] || 0; };
@@ -151,7 +154,7 @@ function orgAllocSummary(org) {     // 기관별: 배정 합계·기계화부가
     const used = allocUsed(org, t, b.id); items.push({ bid: b.id, type: t, cap, used }); total += cap; done += Math.min(used, cap); if (used > cap) over = true; }));
   return { items, total, done, over };
 }
-const REQ_DEF = { req_truck: 0, req_blower: 0, assigned_truck: 0, assigned_blower: 0, offer_truck: 0, arrive_at: null, reason: null, confirmed: false,
+const REQ_DEF = { req_truck: 0, req_blower: 0, assigned_truck: 0, assigned_blower: 0, offer_truck: 0, arrive_at: null, reason: null, confirmed: false, saved_at: null,
   wx_manual: false, wx_snow: null, wx_pcp: null, wx_tmin: null, wx_tmin_at: null, wx_level: null, wx_fc: null, wx_ef: null };
 const rbase = (b, f) => { const r = S.reqs[b]; return r ? r[f] : REQ_DEF[f]; };
 const rval = (b, f) => { const d = S.rdraft.get(b); return d && f in d ? d[f] : rbase(b, f); };
@@ -167,7 +170,10 @@ const offerOf = bid => +rbase(bid, "offer_truck") || 0;
 const offerOk = bid => isConf(bid) && offerOf(bid) > 0;
 const offerBranches = () => S.order.filter(b => offerOk(b.id));
 const poolVehs = bid => S.vehicles.filter(v => isPool(v) && shownIn(v, curRound()) && (!bid || v.home_branch === bid));   // 고른 기준일자의 지역본부 장비
-const canEdit = b => canReq(b) && !isConf(b.id);                         // 확정한 줄은 [취소]하기 전까지 아무도 못 고침(서버도 막음, 마이그레이션 35)
+const canEdit = b => canReq(b) && !isConf(b.id);
+// 저장 완료(마이그레이션 46): 지사·본부 계정이 그 줄을 저장한 적이 있음(요청·지원 가능이 0이어도). 관리자는 확정으로 충분해 [저장] 칸이 없음
+const isSaved = bid => !!rbase(bid, "saved_at");
+const canMarkSave = b => canEdit(b) && !can("req.confirm");                         // 확정한 줄은 [취소]하기 전까지 아무도 못 고침(서버도 막음, 마이그레이션 35)
 const dis = bid => isConf(bid) ? " disabled" : "";                       // 확정한 줄의 입력칸 = 비활성(보이기만)
 /* ---------- 특보 — 지사 관할 특보구역 중 가장 높은 단계. 확정한 지사는 확정 순간 값(서버가 고정), 자료가 없으면 특보 없음 ---------- */
 const WLV = { "예비": ["w1", "예비특보"], "주의": ["w2", "대설주의보"], "경보": ["w3", "대설경보"] };
@@ -233,18 +239,16 @@ function fcOf(bid) {      // { snow, pcp, pop, tmin, tmin_at, tmfc, start, end, 
 const fmtCm = v => v == null ? "-" : (Math.round(v * 10) / 10).toFixed(1);
 const fmtTmp = v => v == null ? "-" : String(Math.round(v * 10) / 10);                        // 기온(℃): -5, 1.5
 const fmtHM = iso => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? `${p2(d.getHours())}:${p2(d.getMinutes())}` : "-"; };   // 직접입력 특보 시각(시:분)
-const fmtAt = iso => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? `${d.getMonth() + 1}/${d.getDate()} ${p2(d.getHours())}시` : "-"; };
-// k = "snow"(적설 cm) / "pcp"(강수 mm) / "pop"(강수확률 % — 예보 값만, 직접입력 줄은 '-') / "tmin"(최저기온 ℃) / "tmin_at"(그 시각). 값을 누르면 기관별 24시간 예보의 그 지사로.
+// k = "snow"(적설 cm) / "pcp"(강수 mm) / "pop"(강수확률 % — 예보 값만, 직접입력 줄은 '-') / "tmin"(최저기온 ℃). 값을 누르면 기관별 24시간 예보의 그 지사로.
 // 직접입력이면 입력칸(고칠 수 없으면 값만, 누를 수 없음)
-const WX_FIELD = { snow: "wx_snow", pcp: "wx_pcp", tmin: "wx_tmin", tmin_at: "wx_tmin_at" };
-const fcText = (k, v) => k === "tmin_at" ? fmtAt(v) : k === "tmin" ? fmtTmp(v) : k === "pop" ? String(Math.round(v)) : fmtCm(v);
+const WX_FIELD = { snow: "wx_snow", pcp: "wx_pcp", tmin: "wx_tmin" };      // 최저기온 시각 칸은 2026-10-15 사용자 요청으로 뺌(값은 서버에 그대로)
+const fcText = (k, v) => k === "tmin" ? fmtTmp(v) : k === "pop" ? String(Math.round(v)) : fmtCm(v);
 function fcInner(bid, k = "snow") {
   const f = fcOf(bid), v = f && !f.none ? f[k] : null;
   if (f && f.manual) {
     if (k === "pop") return `<span class="muted">-</span>`;          // 강수확률은 직접 넣지 않음
     const b = S.brById[bid], fld = WX_FIELD[k];
     if (b && canReq(b)) {
-      if (k === "tmin_at") return `<button type="button" class="ci tpick${v ? "" : " empty"}" data-tpick="${esc(bid)}" aria-label="${esc(b.name)} 최저기온 시각 고르기"${dis(bid)}>${v ? esc(fmtAt(v)) : "시각 선택"}</button>`;   // 누르면 달력 + 시
       const rng = k === "tmin" ? 'min="-60" max="50"' : 'min="0" max="999"';
       return `<input class="ci num wxn" type="number" inputmode="decimal" step="0.1" ${rng} data-rq="${esc(bid)}" data-f="${fld}" data-fk="q:${esc(bid)}:${fld}" value="${esc(v ?? "")}" aria-label="${esc(b.name)} ${{ snow: "적설(cm)", pcp: "강수(mm)", tmin: "최저기온(℃)" }[k]}"${dis(bid)}>`;
     }
@@ -277,7 +281,6 @@ function paintWarn() {                // 자동 값만 새로 그림(직접입�
   document.querySelectorAll("[data-pcell]").forEach(td => { if (!isManual(td.dataset.pcell)) td.innerHTML = fcInner(td.dataset.pcell, "pcp"); });
   document.querySelectorAll("[data-ocell]").forEach(td => { if (!isManual(td.dataset.ocell)) td.innerHTML = fcInner(td.dataset.ocell, "pop"); });
   document.querySelectorAll("[data-tcell]").forEach(td => { if (!isManual(td.dataset.tcell)) td.innerHTML = fcInner(td.dataset.tcell, "tmin"); });
-  document.querySelectorAll("[data-tacell]").forEach(td => { if (!isManual(td.dataset.tacell)) td.innerHTML = fcInner(td.dataset.tacell, "tmin_at"); });
   const fb = document.getElementById("fcBaseHead"); if (fb) fb.textContent = fcBase();
   const wb = document.getElementById("wBaseHead"); if (wb) wb.textContent = warnBase();
   document.querySelectorAll("tr[data-b]").forEach(tr => {
@@ -912,6 +915,7 @@ function afterReq(id) {          // 지사 요청 칸을 고친 뒤: 그 줄 표
   const b = S.brById[id], tr = document.querySelector(`#branchTable tr[data-b="${id}"]`);
   if (tr) {
     tr.classList.toggle("changed", S.rdraft.has(id)); tr.classList.add("active");
+    const sv = tr.querySelector("[data-svcell]"); if (sv && b) sv.innerHTML = saveCell(b);          // 고치면 다시 [저장]
     const hasDate = !!rval(id, "arrive_at"); tr.querySelectorAll('[data-arr][data-part="h"], [data-arr][data-part="m"]').forEach(x => { x.disabled = !hasDate || isConf(id); });
   }
   const hr = b && document.querySelector(`#branchTable tr.hq[data-hq="${b.hq_id}"]`);
@@ -938,24 +942,25 @@ function renderBranch() {
   $("branchCtl").innerHTML = r ? `<div class="tb-row"><span class="tb-label">보기</span><button type="button" class="chip" id="onlyActive" aria-pressed="${S.bview === "req"}">요청 있는 지사만</button>` +
     `<button type="button" class="chip" id="onlyFixed" aria-pressed="${S.bview === "fixed"}">편성 확정된 지사만</button>` +
     `<button type="button" class="chip" id="onlyOffer" aria-pressed="${S.bview === "offer"}">지원 가능 지사만</button>` +
+    `<button type="button" class="chip" id="onlyUnsaved" aria-pressed="${S.bview === "unsaved"}">저장 안 한 지사만</button>` +
     `<span class="tb-right"></span>` +
     (S.me.role === "admin" ? `<button type="button" class="btn sm" id="zoneMgr">특보구역 관리</button>` : "") + `</div>` : "";
   if (!r) { $("branchTable").innerHTML = `<tbody><tr><td class="empty">기준일자가 없습니다.</td></tr></tbody>`; return; }
   const conf = can("req.confirm");
-  // 칸 순서: 지사 | 기상(24시 강설·최저기온·대설특보·직접입력) | 지사 요청 | 도착 요청 | 타지사 지원 가능 ║ 편성 | 확정
+  // 칸 순서: 지사 | 기상(24시 예보[적설·강수·확률·기온]·대설특보·직접입력) | 지사 요청 | 도착 요청 | 타지사 지원 가능 | 저장 ║ 편성 | 확정
   // ║ 왼쪽 = 지사가 넣는 칸, 오른쪽(adm) = 관리자가 넣는 칸(굵은 경계선 + 옅은 바탕)
-  let h = `<thead><tr><th class="l" rowspan="2">지사</th><th colspan="3" class="fch">24시 강설 <small class="fcbase" id="fcBaseHead" data-bt="fc" tabindex="0">${esc(fcBase())}</small></th><th colspan="2" class="fch tmh">최저기온</th><th colspan="3" class="wh">대설특보 발표 <small class="fcbase" id="wBaseHead" data-bt="warn" tabindex="0">${esc(warnBase())}</small></th><th class="wxh" rowspan="2">기상현황<br>직접입력</th><th colspan="2">지사 요청</th><th class="l" rowspan="2">도착 요청</th><th class="ofh" rowspan="2">타지사<br>지원 가능<small class="thsub">제설차</small></th><th colspan="2" class="adm adm0">편성</th><th class="adm">확정</th></tr>
-    <tr><th class="fch c-sn">적설<small class="thsub">cm</small></th><th class="fch c-sn">강수<small class="thsub">mm</small></th><th class="fch">확률<small class="thsub">%</small></th><th class="fch tmh c-sn">기온<small class="thsub">℃</small></th><th class="fch tmh c-ta">시각</th><th class="wh c-wk">종류</th><th class="wh c-wt">발표</th><th class="wh c-wt c-we">발효</th><th>제설차</th><th>제설기</th><th class="adm adm0">제설차</th><th class="adm">제설기</th><th class="cf adm">${conf ? bulkCell(null) : ""}</th></tr></thead><tbody>`;
+  let h = `<thead><tr><th class="l" rowspan="2">지사</th><th colspan="4" class="fch">24시 예보 <small class="fcbase" id="fcBaseHead" data-bt="fc" tabindex="0">${esc(fcBase())}</small></th><th colspan="3" class="wh">대설특보 발표 <small class="fcbase" id="wBaseHead" data-bt="warn" tabindex="0">${esc(warnBase())}</small></th><th class="wxh" rowspan="2">기상현황<br>직접입력</th><th colspan="2">지사 요청</th><th class="l" rowspan="2">도착 요청</th><th class="ofh" rowspan="2">타지사<br>지원 가능<small class="thsub">제설차</small></th><th class="svh" rowspan="2">저장</th><th colspan="2" class="adm adm0">편성</th><th class="adm">확정</th></tr>
+    <tr><th class="fch c-sn">적설<small class="thsub">cm</small></th><th class="fch c-sn">강수<small class="thsub">mm</small></th><th class="fch">확률<small class="thsub">%</small></th><th class="fch tmh c-sn" title="24시간 중 가장 낮은 기온">기온<small class="thsub">최저 ℃</small></th><th class="wh c-wk">종류</th><th class="wh c-wt">발표</th><th class="wh c-wt c-we">발효</th><th>제설차</th><th>제설기</th><th class="adm adm0">제설차</th><th class="adm">제설기</th><th class="cf adm">${conf ? bulkCell(null) : ""}</th></tr></thead><tbody>`;
   const has = b => hasReq(b.id) || S.rdraft.has(b.id);                  // 요청 있음(입력 중 포함)
   const mine = b => (m.branch_id === b.id) || (can("req.edit.hq") && !can("req.confirm") && b.hq_id === m.hq_id);
-  const view = b => S.bview === "req" ? has(b) : S.bview === "fixed" ? isFixed(b.id) : hasOffer(b.id);
+  const view = b => S.bview === "req" ? has(b) : S.bview === "fixed" ? isFixed(b.id) : S.bview === "offer" ? hasOffer(b.id) : !isSaved(b.id);
   S.hqs.forEach(hq => {
     if (hq.is_private) return;                                   // 민자는 지사별 요청·편성에 나오지 않음
     const rows = S.order.filter(b => b.hq_id === hq.id), shown = rows.filter(b => S.bview === "all" || mine(b) || view(b));
     if (!shown.length) return;
     const closed = S.closedHq.has(hq.id), hsum = hqSums(hq.id), sc = (k, cls = "") => `<td${cls ? ` class="${cls}"` : ""} data-s="${k}">${hsum[k]}</td>`;
-    h += `<tr class="hq ${closed ? "closed" : ""}" data-hq="${hq.id}" tabindex="0"><td class="l">${esc(hq.name)}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
-      ${sc("req_truck")}${sc("req_blower")}<td></td>${sc("offer_truck")}${sc("assigned_truck", "adm adm0")}${sc("assigned_blower", "adm")}${conf ? `<td class="cf adm">${bulkCell(hq.id)}</td>` : sc("confirmed", "adm")}</tr>`;
+    h += `<tr class="hq ${closed ? "closed" : ""}" data-hq="${hq.id}" tabindex="0"><td class="l">${esc(hq.name)}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+      ${sc("req_truck")}${sc("req_blower")}<td></td>${sc("offer_truck")}<td></td>${sc("assigned_truck", "adm adm0")}${sc("assigned_blower", "adm")}${conf ? `<td class="cf adm">${bulkCell(hq.id)}</td>` : sc("confirmed", "adm")}</tr>`;
     if (closed) return;
     shown.forEach(b => {
       const ed = canReq(b), t = `round_requests:${S.round},${b.id}`, on = has(b), d0 = dis(b.id);      // ed = 입력칸을 보임, 확정한 줄이면 비활성(d0)
@@ -964,12 +969,13 @@ function renderBranch() {
       const ok = rval(b.id, "confirmed");
       h += `<tr class="${on ? "active" : ""} ${m.branch_id === b.id ? "mine" : ""} ${S.rdraft.has(b.id) ? "changed" : ""} ${isConf(b.id) ? "locked" : ""}" data-b="${b.id}"><td class="l">${esc(b.name)}${m.branch_id === b.id ? ' <span class="tag">내 지사</span>' : ""}</td>
         <td class="${isManual(b.id) ? "wxe" : ""}" data-fcell="${b.id}">${fcInner(b.id, "snow")}</td><td class="${isManual(b.id) ? "wxe" : ""}" data-pcell="${b.id}">${fcInner(b.id, "pcp")}</td><td data-ocell="${b.id}">${fcInner(b.id, "pop")}</td>
-        <td class="${isManual(b.id) ? "wxe" : ""}" data-tcell="${b.id}">${fcInner(b.id, "tmin")}</td><td class="tat ${isManual(b.id) ? "wxe" : ""}" data-tacell="${b.id}">${fcInner(b.id, "tmin_at")}</td>
+        <td class="${isManual(b.id) ? "wxe" : ""}" data-tcell="${b.id}">${fcInner(b.id, "tmin")}</td>
         ${warnCells(b.id)}
         <td class="wxm">${ed ? `<input type="checkbox" data-rq="${b.id}" data-f="wx_manual" data-fk="q:${b.id}:wx_manual"${isManual(b.id) ? " checked" : ""} aria-label="${esc(b.name)} 기상현황 직접입력"${hvA(t, "wx_manual")}${d0}>` : (isManual(b.id) ? H(t, "wx_manual", "✓") : '<span class="muted">-</span>')}</td>
         <td>${num("req_truck", "요청 제설차", ed)}</td><td>${num("req_blower", "요청 제설기", ed)}</td>
         <td class="l">${arriveCell(b, ed, t)}</td>
         <td class="ofc" data-ofcell="${b.id}">${num("offer_truck", "타지사 지원 가능 제설차", ed, 99, hasOffer(b.id))}</td>
+        <td class="svc" data-svcell="${b.id}">${saveCell(b)}</td>
         <td class="adm adm0">${num("assigned_truck", "편성 제설차", ed && conf)}</td><td class="adm">${num("assigned_blower", "편성 제설기", ed && conf)}</td>
         <td class="cf adm">${conf ? H(t, "confirmed", ok ? `<span class="status go">확정됨</span> <button type="button" class="btn sm" data-unconfirm="${b.id}">취소</button>`
                                                      : `<button type="button" class="btn sm primary" data-confirm="${b.id}">확정</button>`)
@@ -979,6 +985,11 @@ function renderBranch() {
   });
   $("branchTable").innerHTML = h + "</tbody>";
   stickHead($("branchTable"));
+}
+// [저장] 칸: 지사·본부 계정은 아직 저장하지 않았거나 고친 값이 있으면 [저장](0이어도 저장 가능 — "요청 안 함"도 알림), 저장했으면 '저장 완료'
+function saveCell(b) {
+  if (canMarkSave(b) && (!isSaved(b.id) || S.rdraft.has(b.id))) return `<button type="button" class="btn sm" data-rsave="${esc(b.id)}" aria-label="${esc(b.name)} 지사 줄 저장">저장</button>`;
+  return isSaved(b.id) ? `<span class="status go sv">저장 완료</span>` : '<span class="muted">-</span>';
 }
 // 지사 줄 저장(바뀐 열만). extra 는 그 줄에 더할 값(확정 버튼: { confirmed: true/false })
 async function saveBranchRows(ids, extra, msg) {
@@ -994,7 +1005,8 @@ async function saveBranchRows(ids, extra, msg) {
     return toast(`${(done.length ? done : ids).map(bn).join(", ")} 지사는 이미 확정되어 고칠 수 없습니다. 확정이 취소된 뒤에 고쳐 주세요.`, true);
   }
   if (!r.ok) return toast(r.message, true);
-  list.forEach(({ o, f }) => { S.reqs[o.branch_id] = { ...REQ_DEF, round_id: S.round, branch_id: o.branch_id, ...(S.reqs[o.branch_id] || {}), ...f }; S.rdraft.delete(o.branch_id); });
+  const mark = !can("req.confirm") ? { saved_at: new Date().toISOString() } : {};      // 지사·본부 계정의 저장 = 저장 완료(서버도 같은 때 남김)
+  list.forEach(({ o, f }) => { S.reqs[o.branch_id] = { ...REQ_DEF, round_id: S.round, branch_id: o.branch_id, ...(S.reqs[o.branch_id] || {}), ...f, ...mark }; S.rdraft.delete(o.branch_id); });
   if (extra && "confirmed" in extra) {                // 확정하면 서버가 그 순간 대설 특보·예보를 남김 → 다시 읽어 표시
     await loadReqs();
     if (extra.confirmed && ids.length === 1) { const f = fcOf(ids[0]); msg += ` (대설특보: ${wlabel(warnOf(ids[0]).level, "대설")}, 적설 ${f && f.snow != null ? fmtCm(f.snow) + "cm" : "없음"}·강수 ${f && f.pcp != null ? fmtCm(f.pcp) + "mm" : "없음"}·최저 ${f && f.tmin != null ? fmtTmp(f.tmin) + "℃" : "없음"})`; }
@@ -1081,10 +1093,11 @@ function renderAlloc() {
   // 배정 / 기준: 같으면 초록, 모자라면 주황, 넘으면 빨강
   const cmp = (got, want, tip) => `<span class="${got === want ? "al-ok" : got < want ? "al-short" : "al-over"}" title="${got === want ? "맞음" : got < want ? `${want - got}대 모자람` : `${got - want}대 초과`}${tip || ""}">${got} / ${want}</span>`;
   const cell = (o, b, f, lab) => { const v = aval(o, b.id)[f] || 0, k = ak(o, b.id);
-    return ed && isFixed(b.id) ? `<input class="ci num" type="number" inputmode="numeric" min="0" max="99" data-al="${esc(k)}" data-f="${f}" data-fk="al:${esc(k)}:${f}" value="${v}" aria-label="${esc(o)} → ${esc(b.name)} ${lab}">` : (v ? String(v) : '<span class="muted">-</span>'); };
+    return ed && isFixed(b.id) && (asg(b.id, f) > 0 || v > 0) ? `<input class="ci num" type="number" inputmode="numeric" min="0" max="99" data-al="${esc(k)}" data-f="${f}" data-fk="al:${esc(k)}:${f}" value="${v}" aria-label="${esc(o)} → ${esc(b.name)} ${lab}">` : (v ? String(v) : '<span class="muted">-</span>'); };
   const head = `<thead><tr><th class="l" rowspan="2">피지원 지사</th>${S.orgs.map(o => `<th colspan="2">${esc(o)}</th>`).join("")}<th class="al-pool">${POOL}</th><th colspan="2">배정 / 편성</th></tr>` +
     `<tr>${S.orgs.map(() => "<th>제설차</th><th>제설기</th>").join("")}<th class="al-pool">제설차</th><th>제설차</th><th>제설기</th></tr></thead>`;
-  const body = rows.map(b => `<tr class="${AO.some(o => S.adraft.has(ak(o, b.id))) ? "changed" : ""}" data-ab="${b.id}"><td class="l">${esc(b.name)}${isFixed(b.id) ? "" : ' <span class="tag warn">확정 취소됨</span>'}</td>` +
+  const over = b => ["truck", "blower"].some(f => allocSum(b.id, f) > asg(b.id, f));       // 편성보다 많이 배정됨(여러 기관에 나뉜 채 편성을 줄인 경우 — 자동으로 안 줄임)
+  const body = rows.map(b => `<tr class="${AO.some(o => S.adraft.has(ak(o, b.id))) ? "changed" : ""}" data-ab="${b.id}"><td class="l">${esc(b.name)}${isFixed(b.id) ? (over(b) ? ' <span class="tag warn al-overasg">편성보다 많음 — 줄여 주세요</span>' : "") : ' <span class="tag warn">확정 취소됨</span>'}</td>` +
     S.orgs.map(o => `<td>${cell(o, b, "truck", "제설차")}</td><td>${cell(o, b, "blower", "제설기")}</td>`).join("") + `<td class="al-pool">${cell(POOL, b, "truck", "제설차")}</td>` +
     `<td data-asum="truck">${cmp(sum(b.id, "truck"), +rbase(b.id, "assigned_truck") || 0)}</td><td data-asum="blower">${cmp(sum(b.id, "blower"), +rbase(b.id, "assigned_blower") || 0)}</td></tr>`).join("");
   const tot = f => rows.reduce((n, b) => n + sum(b.id, f), 0), want = f => rows.reduce((n, b) => n + (isFixed(b.id) ? +rbase(b.id, f) || 0 : 0), 0);
@@ -1230,7 +1243,6 @@ async function setZone(code, include) {   // include: true 더함 / false 자동
 }
 function closeSheet() { sheet.hidden = true; backdrop.hidden = true; hideTip(); if (lastFocus) lastFocus.focus(); lastFocus = null; }
 backdrop.onclick = closeSheet;
-document.addEventListener("keydown", e => { if (e.key === "Escape" && TP.bid) tpClose(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !sheet.hidden) closeSheet(); });
 
 /* ============================================================
@@ -1290,7 +1302,10 @@ document.addEventListener("change", async e => {
   }
   if (t.dataset.al) {                       // 기관별 배정(관리자): 칸 하나 = (기관, 지사)의 제설차 또는 제설기 대수
     const [org, bid] = t.dataset.al.split("|"), f = t.dataset.f, b = S.brById[bid]; if (!b || !can("equip.edit.all") || !isFixed(bid) || !["truck", "blower"].includes(f)) return refresh();
-    const nv = { ...aval(org, bid), [f]: t.value === "" ? 0 : Math.max(0, Math.min(99, Math.floor(+t.value) || 0)) }, base = S.alloc.get(ak(org, bid)) || A0;
+    let want = t.value === "" ? 0 : Math.max(0, Math.min(99, Math.floor(+t.value) || 0));
+    const old = aval(org, bid)[f] || 0, room = asg(bid, f) - allocSum(bid, f, org);          // 편성 - 다른 기관 배정 = 이 칸에 넣을 수 있는 최대
+    if (want > old && want > room) { want = Math.max(old, room); toast(`${b.name} 편성(${f === "truck" ? "제설차" : "제설기"} ${asg(bid, f)}대)보다 많이 배정할 수 없습니다`, true); }
+    const nv = { ...aval(org, bid), [f]: want }, base = S.alloc.get(ak(org, bid)) || A0;
     if (nv.truck === base.truck && nv.blower === base.blower) S.adraft.delete(ak(org, bid)); else S.adraft.set(ak(org, bid), nv);
     keepFocus(() => renderAlloc()); return updateSavebars();
   }
@@ -1357,53 +1372,10 @@ document.addEventListener("change", async e => {
     setReq(b.id, f, v); return afterReq(b.id);
   }
 });
-/* ---------- 최저기온 시각 고르기(기상현황 직접입력): 달력 + 시(분은 00) ---------- */
-const TP = { bid: null, y: 0, m: 0, day: null, hh: "06" };
-function tpOpen(btn) {
-  const bid = btn.dataset.tpick, b = S.brById[bid]; if (!b || !canEdit(b)) return;
-  const v = rval(bid, "wx_tmin_at"), d = v ? new Date(v) : null, base = d && !isNaN(d) ? d : new Date(((curRound() || {}).start_date || todayISO()) + "T00:00");
-  Object.assign(TP, { bid, y: base.getFullYear(), m: base.getMonth(), day: d && !isNaN(d) ? localInput(v).slice(0, 10) : null, hh: d && !isNaN(d) ? p2(d.getHours()) : TP.hh });
-  let pop = $("tpop"); if (!pop) { pop = document.createElement("div"); pop.id = "tpop"; pop.className = "tpop"; pop.setAttribute("role", "dialog"); document.body.appendChild(pop); }
-  tpRender();
-  const r = btn.getBoundingClientRect(), w = 248, h = pop.offsetHeight || 300;
-  pop.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left)) + "px";
-  pop.style.top = (r.bottom + h + 8 > innerHeight ? Math.max(8, r.top - h - 4) : r.bottom + 4) + "px";
-}
-function tpClose() { const pop = $("tpop"); if (pop) pop.hidden = true; TP.bid = null; }
-function tpRender() {
-  const pop = $("tpop"), first = new Date(TP.y, TP.m, 1), n = new Date(TP.y, TP.m + 1, 0).getDate(), lead = first.getDay();
-  const ymd = d => `${TP.y}-${p2(TP.m + 1)}-${p2(d)}`, rd = (curRound() || {}).start_date;
-  let cells = ""; for (let k = 0; k < lead; k++) cells += "<span></span>";
-  for (let d = 1; d <= n; d++) { const id = ymd(d); cells += `<button type="button" data-tp-day="${id}" class="${id === TP.day ? "on" : ""}${id === rd ? " rd" : ""}${(lead + d - 1) % 7 === 0 ? " sun" : ""}">${d}</button>`; }
-  pop.innerHTML = `<div class="tp-head"><button type="button" data-tp-nav="-1" aria-label="이전 달">‹</button><b>${TP.y}년 ${TP.m + 1}월</b><button type="button" data-tp-nav="1" aria-label="다음 달">›</button></div>` +
-    `<div class="tp-week">${[..."일월화수목금토"].map(w => `<span>${w}</span>`).join("")}</div><div class="tp-days">${cells}</div>` +
-    `<div class="tp-hour"><label>시 <select class="ci" data-tp-hour aria-label="시">${HOURS.map(x => `<option${x === TP.hh ? " selected" : ""}>${x}</option>`).join("")}</select> : 00</label>` +
-    `<span class="tp-sel">${TP.day ? `${+TP.day.slice(5, 7)}/${+TP.day.slice(8)} ${TP.hh}시` : "날짜를 고르세요"}</span></div>` +
-    `<div class="tp-btns"><button type="button" class="btn sm" data-tp-clear>지우기</button><button type="button" class="btn sm" data-tp-cancel>닫기</button><button type="button" class="btn sm primary" data-tp-ok${TP.day ? "" : " disabled"}>확인</button></div>`;
-  pop.hidden = false;
-}
-function tpSet(val) {
-  const bid = TP.bid; if (!bid) return; tpClose();
-  setReq(bid, "wx_tmin_at", val);
-  const td = document.querySelector(`#branchTable td[data-tacell="${bid}"]`); if (td) td.innerHTML = fcInner(bid, "tmin_at");
-  afterReq(bid);
-}
-document.addEventListener("change", e => { if (e.target.matches && e.target.matches("[data-tp-hour]")) { TP.hh = e.target.value; tpRender(); } });
-addEventListener("scroll", e => { if (TP.bid && !(e.target.closest && e.target.closest("#tpop"))) tpClose(); }, true);
 document.addEventListener("click", e => {
   const c = sel => e.target.closest && e.target.closest(sel);
   let x;
   if ((x = c(".mnum"))) return jumpToDetail(x.dataset);
-  if (c("#tpop")) {                          // 달력 안
-    if ((x = c("[data-tp-nav]"))) { const d = new Date(TP.y, TP.m + +x.dataset.tpNav, 1); TP.y = d.getFullYear(); TP.m = d.getMonth(); return tpRender(); }
-    if ((x = c("[data-tp-day]"))) { TP.day = x.dataset.tpDay; return tpRender(); }
-    if (c("[data-tp-ok]")) return TP.day ? tpSet(new Date(`${TP.day}T${TP.hh}:00`).toISOString()) : null;
-    if (c("[data-tp-clear]")) return tpSet(null);
-    if (c("[data-tp-cancel]")) return tpClose();
-    return;
-  }
-  if ((x = c("[data-tpick]"))) return TP.bid === x.dataset.tpick ? tpClose() : tpOpen(x);
-  if (TP.bid) tpClose();                     // 바깥을 누르면 닫힘
   if ((x = c("[data-stop-add]"))) { S.extraStop.add(x.dataset.stopAdd); const [d, vid] = x.dataset.stopAdd.split("|"); patchCell(vid, d); const n = [...document.querySelectorAll("[data-fk]")].find(i => i.dataset.fk.startsWith(`rn:${d}:${vid}:`)); if (n) n.focus(); return; }
   if (c("[data-reload]")) return reloadAll();
   if ((x = c("[data-save]"))) return x.dataset.save === "fleet" ? confirmFleet() : x.dataset.save === "alloc" ? saveAlloc() : saveBranch();
@@ -1428,9 +1400,11 @@ document.addEventListener("click", e => {
   if ((x = c("[data-fb]"))) return openForecast(x.dataset.fb);
   if ((x = c("[data-wtab]"))) { S.wtab = x.dataset.wtab; return renderWarnNow(); }
   if (c("#zaddBtn")) { const v = ($("zadd") || {}).value; return v ? setZone(v, true) : toast("더할 구역을 고르세요", true); }
-  if (c("#onlyActive")) { S.bview = S.bview === "req" ? "all" : "req"; return renderBranch(); }      // 세 보기 중 하나만, 다시 누르면 모든 지사
+  if (c("#onlyActive")) { S.bview = S.bview === "req" ? "all" : "req"; return renderBranch(); }      // 네 보기 중 하나만, 다시 누르면 모든 지사(기본)
   if (c("#onlyFixed")) { S.bview = S.bview === "fixed" ? "all" : "fixed"; return renderBranch(); }
   if (c("#onlyOffer")) { S.bview = S.bview === "offer" ? "all" : "offer"; return renderBranch(); }
+  if (c("#onlyUnsaved")) { S.bview = S.bview === "unsaved" ? "all" : "unsaved"; return renderBranch(); }
+  if ((x = c("[data-rsave]"))) { const b = S.brById[x.dataset.rsave]; return b && canMarkSave(b) ? saveBranchRows([b.id], null, `${b.name} 지사를 저장했습니다`) : null; }
   if (c("#onlyGo")) { S.fleetGo = !S.fleetGo; return renderFleet(); }
   if ((x = c("[data-fo]"))) {               // 기관 버튼: 여러 개 고르기. '모든 기관'을 누르거나 고른 것을 모두 풀면 모든 기관
     const o = x.dataset.fo; if (o === "전체") S.fleetOrgs.clear(); else if (S.fleetOrgs.has(o)) S.fleetOrgs.delete(o); else S.fleetOrgs.add(o);

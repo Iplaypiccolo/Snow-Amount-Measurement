@@ -179,7 +179,7 @@ def t_branch_permissions(p):
     check(ins == {b}, f"대관령 행만 입력: {ins}")
     check(p.locator(f"[data-rq={b}][data-f=assigned_truck]").count() == 0 and p.locator("[data-confirm], [data-unconfirm]").count() == 0, "편성·확정은 못 고침")
     check(p.locator("#roundMake").count() == 0, "기준일자 만들기 없음")
-    as_user(p, "hq-gw"); tab(p, "branch"); p.click("#onlyActive"); p.wait_for_timeout(150)
+    as_user(p, "hq-gw"); tab(p, "branch")
     ins = set(x.get_attribute("data-rq") for x in p.locator("#branchTable [data-rq]:not([disabled])").all())
     check(ins == set(ev(p, "S.branches.filter(b => b.hq_id === S.hqs.find(h => h.name === '강원').id && !(S.reqs[b.id] || {}).confirmed).map(b => b.id)")), f"강원본부 지사들만(확정된 양양은 잠김): {ins}")
     as_user(p, "viewer"); tab(p, "branch")
@@ -208,7 +208,7 @@ def t_round_create(p):
     p.fill("#newRoundDate", d); p.click("#roundMake"); p.wait_for_timeout(300)
     check("기준일자를 만들었습니다" in toast(p), toast(p))
     check(p.locator("#roundSelBranch").input_value() == str(ev(p, "S.round")) and ev(p, "curRound().start_date") == d, "새 기준일자 선택됨")
-    check(p.locator("#branchTable tbody tr").count() == 0, "새 기준일자는 요청 없음")
+    check(ev(p, "Object.keys(S.reqs).length") == 0 and p.locator("#branchTable tr.active").count() == 0, "새 기준일자는 요청 없음(기본 보기는 모든 지사라 줄은 보임)")
     tab(p, "fleet"); check(p.locator("#day1In").input_value() == d, "지원일 1 = 새 기준일자")
     check(ev(p, "S.vehicles.every(v => stOf(S.round, v.id).status === (stOf(S.rounds[1].id, v.id).status))"), "전체 장비 지원 여부를 이전 기준일자에서 이어받음")
     tab(p, "branch"); p.fill("#newRoundDate", d); p.click("#roundMake"); p.wait_for_timeout(200); check("뒤 날짜" in toast(p), "같은 날짜(마지막보다 앞·같음) 거절")
@@ -367,7 +367,7 @@ def t_no_driver_info_anywhere(p):
 
 def t_typing_then_clicking_next_input_keeps_both(p):
     """(사용자 신고 2026-10-04) 한 칸에 입력하고 바로 다른 칸을 눌러 입력해도 두 값이 모두 남아야 함(예전에는 표 전체를 다시 그려 두 번째 칸이 사라짐)"""
-    tab(p, "branch"); p.click("#onlyActive"); p.wait_for_timeout(150); b = bid(p, "인천")
+    tab(p, "branch"); b = bid(p, "인천")
     p.click(f"[data-rq={b}][data-f=req_blower]"); p.keyboard.press("Control+A"); p.keyboard.type("1")
     p.click(f"[data-arr={b}][data-part=d]", position={"x": 10, "y": 12}); p.keyboard.type("10042026"); p.wait_for_timeout(200)      # 날짜 칸의 맨 앞(월)부터 입력 — 칸 폭이 바뀌어도 같은 자리
     p.select_option(f"[data-arr={b}][data-part=h]", "16"); p.wait_for_timeout(150)
@@ -478,7 +478,7 @@ def t_date_in_title(p):
 
 def t_branch_header_stays_on_top(p):
     """지사별 요청·편성 표를 스크롤해도 두 줄 제목이 겹치지 않고(둘째 줄은 첫 줄 아래), 입력칸이 제목 위로 올라오지 않음"""
-    tab(p, "branch"); p.click("#onlyActive"); p.wait_for_timeout(200)
+    tab(p, "branch")
     p.evaluate("document.querySelector('#panel-branch .table-wrap').scrollTop = 500"); p.wait_for_timeout(200)
     r = p.evaluate("""(() => { const w = document.querySelector('#panel-branch .table-wrap'), wr = w.getBoundingClientRect(), rows = [...document.querySelectorAll('#branchTable thead tr')];
       const h1 = rows[0].getBoundingClientRect().height;
@@ -539,7 +539,7 @@ def t_zone_manager(p):
 
 def t_private_hq_hidden_in_branch_tab(p):
     """민자는 지사별 요청·편성에 나오지 않음('요청 있는 지사만'을 꺼도)"""
-    tab(p, "branch"); p.click("#onlyActive"); p.wait_for_timeout(200)
+    tab(p, "branch")
     hqs = [x.strip() for x in p.locator("#branchTable tr.hq td.l").all_inner_texts()]
     check("민자" not in hqs and len(hqs) == ev(p, "S.hqs.filter(h => !h.is_private).length"), f"본부 줄에 민자 없음: {hqs}")
     check(p.locator(f"#branchTable tr[data-b='{bid(p, '민자')}']").count() == 0, "민자 지사 줄 없음")
@@ -547,14 +547,14 @@ def t_private_hq_hidden_in_branch_tab(p):
 def t_snow_forecast(p):
     """24시 강설 [적설 | 강수] = 기상청 단기예보 24시간 합의 지사 최댓값, 제목 옆 발표 기준, 확정하면 그 값(빨간 네모), 누르면 기관별 24시간 예보로"""
     tab(p, "branch"); head = p.locator("#branchTable thead").inner_text()
-    check(p.locator("[data-f=snow_cm]").count() == 0 and "24시 강설" in head and "적설" in head and "강수" in head and "발표 기준" in head, "24시 강설 아래 적설·강수, 발표 기준: " + head)
+    check(p.locator("[data-f=snow_cm]").count() == 0 and "24시 예보" in head and "적설" in head and "강수" in head and "기온" in head and "발표 기준" in head and "시각" not in head, "24시 예보 아래 적설·강수·확률·기온(시각 칸 없음), 발표 기준: " + head)
     check(p.locator(f"td[data-pcell='{bid(p, '춘천')}']").inner_text() == "6.2", "춘천 강수 6.2mm")
     fc = lambda n: p.locator(f"td[data-fcell='{bid(p, n)}']").inner_text().replace(chr(10), "")
     check(fc("춘천") == "3.5" and fc("대관령") == "12.1" and fc("양양") == "8.0", f"확정 전 = 지금 예보, 확정 = 확정 때 값: {fc('춘천')} {fc('대관령')} {fc('양양')}")
     th = [x.strip().replace("\n", "") for x in p.locator("#branchTable thead tr").first.locator("th").all_inner_texts()]
-    check(th[1].startswith("24시 강설") and th[2] == "최저기온" and th[3].startswith("대설특보 발표") and "사유" not in th, f"24시 강설 → 최저기온 → 대설특보, 사유 열 없음: {th}")
-    tm = lambda n: p.locator(f"td[data-tcell='{bid(p, n)}']").inner_text(); ta = lambda n: p.locator(f"td[data-tacell='{bid(p, n)}']").inner_text()
-    check(tm("춘천") == "-7" and tm("대관령") == "-10" and ta("춘천").endswith("시"), f"최저기온(확정 전 = 지금, 확정 = 확정 때): {tm('춘천')} {tm('대관령')} {ta('춘천')}")
+    check(th[1].startswith("24시 예보") and th[2].startswith("대설특보 발표") and "최저기온" not in th and "사유" not in th, f"24시 예보 → 대설특보, 최저기온 묶음·사유 열 없음: {th}")
+    tm = lambda n: p.locator(f"td[data-tcell='{bid(p, n)}']").inner_text()
+    check(tm("춘천") == "-7" and tm("대관령") == "-10" and p.locator("td[data-tacell]").count() == 0, f"기온(확정 전 = 지금, 확정 = 확정 때), 시각 칸 없음: {tm('춘천')} {tm('대관령')}")
     check("cold" in p.locator(f"td[data-tcell='{bid(p, '춘천')}'] .fcv").get_attribute("class") and "locked" in p.locator(f"tr[data-b='{bid(p, '대관령')}']").get_attribute("class"), "영하는 파랑, 확정은 빨간 네모")
     check("locked" in (p.locator(f"tr[data-b='{bid(p, '대관령')}']").get_attribute("class") or "") and "locked" in (p.locator(f"tr[data-b='{bid(p, '대관령')}']").get_attribute("class") or "") and not "locked" in (p.locator(f"tr[data-b='{bid(p, '춘천')}']").get_attribute("class") or ""), "확정한 지사 적설·강수 칸 = 빨간 네모")
     p.hover(f"td[data-fcell='{bid(p, '춘천')}'] [data-fb]"); p.wait_for_timeout(100)
@@ -577,10 +577,10 @@ def t_weather_manual(p):
     i = [k for k, x in enumerate(th) if x.startswith("대설특보 발표")][0]
     check(th[i + 1] == "기상현황직접입력" and th[i + 2] == "지사 요청", f"대설특보 발표와 지사 요청 사이: {th}")
     cj = bid(p, "춘천"); row = p.locator(f"tr[data-b='{cj}']")
-    check(row.locator("[data-fb]").count() == 5 and row.locator("input[data-f=wx_snow]").count() == 0, "처음엔 자동 값 5개(적설·강수·확률·최저기온·시각, 누르면 예보로)")
+    check(row.locator("[data-fb]").count() == 4 and row.locator("input[data-f=wx_snow]").count() == 0, "처음엔 자동 값 4개(적설·강수·확률·기온, 누르면 예보로)")
     # 강수확률(2026-10-10, 마이그레이션 42): 24시 강설 아래 소제목 '확률' — 지사 격자의 24시간 최고 %(시각 없이 값만), 직접입력 줄은 '-'
     sub = [x.strip().replace("\n", "") for x in p.locator("#branchTable thead tr").nth(1).locator("th").all_inner_texts()]
-    check(sub[:3] == ["적설cm", "강수mm", "확률%"] and p.locator("#branchTable thead tr").first.locator("th.fch").first.get_attribute("colspan") == "3", f"24시 강설 = 적설·강수·확률: {sub[:5]}")
+    check(sub[:4] == ["적설cm", "강수mm", "확률%", "기온최저 ℃"] and p.locator("#branchTable thead tr").first.locator("th.fch").first.get_attribute("colspan") == "4", f"24시 예보 = 적설·강수·확률·기온: {sub[:5]}")
     check(row.locator(f"td[data-ocell='{cj}']").inner_text() == "60" and p.locator(f"td[data-ocell='{bid(p, '대관령')}']").inner_text() == "90", "확률 칸: 예보 값(춘천 60) / 확정한 지사는 확정 때 값(대관령 90)")
     check(p.locator("#branchTable tr.hq").first.locator("td").count() == p.locator(f"tr[data-b='{cj}'] td").count(), "본부 줄과 지사 줄의 칸 수가 같음")
     row.locator("input[data-f=wx_manual]").check(); p.wait_for_timeout(200); row = p.locator(f"tr[data-b='{cj}']")
@@ -590,18 +590,7 @@ def t_weather_manual(p):
     row.locator("input[data-f=wx_snow]").fill("7.5"); row.locator("input[data-f=wx_snow]").dispatch_event("change")
     row.locator("input[data-f=wx_pcp]").fill("10"); row.locator("input[data-f=wx_pcp]").dispatch_event("change")
     row.locator("input[data-f=wx_tmin]").fill("-8.5"); row.locator("input[data-f=wx_tmin]").dispatch_event("change")
-    rd = ev(p, "curRound().start_date"); tp = row.locator("[data-tpick]")
-    check(tp.inner_text() == "시각 선택", "최저기온 시각 = 단추(처음엔 '시각 선택')")
-    tp.click(); p.wait_for_timeout(150); pop = p.locator("#tpop")
-    check(pop.is_visible() and pop.locator("[data-tp-day]").count() >= 28 and pop.locator("[data-tp-hour] option").all_inner_texts() == [f"{i:02d}" for i in range(24)] and pop.locator("[data-tp-ok]").is_disabled(),
-          "누르면 달력 + 시(00~23), 날짜를 고르기 전엔 확인 잠김")
-    pop.locator(f"[data-tp-day='{rd}']").click(); pop.locator("[data-tp-hour]").select_option("06"); p.wait_for_timeout(100)
-    check("06시" in pop.locator(".tp-sel").inner_text(), "고른 날짜·시 미리 보기: " + pop.locator(".tp-sel").inner_text())
-    pop.locator("[data-tp-ok]").click(); p.wait_for_timeout(150)
-    check(not p.locator("#tpop").is_visible() and tp.inner_text().endswith("06시"), "확인하면 닫히고 단추에 날짜·시: " + tp.inner_text())
-    tp.click(); p.wait_for_timeout(100); p.locator("#tpop [data-tp-nav='1']").click(); p.wait_for_timeout(100)
-    check(p.locator("#tpop .tp-head b").inner_text() != "", "다음 달로 넘기기"); p.mouse.click(5, 5); p.wait_for_timeout(100)
-    check(not p.locator("#tpop").is_visible(), "바깥을 누르면 닫힘(고친 값 그대로)")
+    rd = ev(p, "curRound().start_date"); check(row.locator("[data-tpick]").count() == 0, "최저기온 시각 넣는 칸 없음(2026-10-15)")
     row = p.locator(f"tr[data-b='{cj}']")
     row.locator("select[data-f=wx_level]").select_option("주의")
     hs = row.locator("select[data-wxt][data-f=wx_fc][data-part=h] option").all_inner_texts(); ms = row.locator("select[data-wxt][data-f=wx_fc][data-part=m] option").all_inner_texts()
@@ -612,7 +601,7 @@ def t_weather_manual(p):
     row.locator("select[data-wxt][data-f=wx_ef][data-part=h]").select_option("18"); p.wait_for_timeout(100)
     save_branch(p)
     r = ev(p, f"S.reqs['{cj}']")
-    check(r["wx_tmin"] == -8.5 and ev(p, f"localInput(S.reqs['{cj}'].wx_tmin_at)") == f"{rd}T06:00", f"최저기온 직접입력 저장(분 00): {r}")
+    check(r["wx_tmin"] == -8.5, f"최저기온 직접입력 저장: {r}")
     check(r["wx_manual"] is True and r["wx_snow"] == 7.5 and r["wx_pcp"] == 10 and r["wx_level"] == "주의" and ev(p, f"fmtHM(S.reqs['{cj}'].wx_fc)") == "15:30" and ev(p, f"fmtHM(S.reqs['{cj}'].wx_ef)") == "18:00"
           and ev(p, f"localInput(S.reqs['{cj}'].wx_fc).slice(0, 10)") == ev(p, "curRound().start_date"), f"저장(날짜 = 기준일자): {r}")
     p.click(f"[data-confirm='{cj}']"); p.wait_for_timeout(300); row = p.locator(f"tr[data-b='{cj}']")
@@ -622,7 +611,7 @@ def t_weather_manual(p):
     if card.count(): check("(직접입력)" in card.inner_text() and card.locator("[data-fb]").count() == 0, "이동 현황 카드: 직접입력 표시, 누를 수 없음")
     as_user(p, "br2"); tab(p, "branch"); row = p.locator(f"tr[data-b='{cj}']")
     check(row.locator(f"td[data-fcell='{cj}']").inner_text() == "7.5" and row.locator("input").count() == 0 and row.locator("[data-fb]").count() == 0, "다른 지사 계정: 숫자만(입력·이동 없음)")
-    check(row.locator(f"td[data-tcell='{cj}']").inner_text() == "-8.5" and row.locator(f"td[data-tacell='{cj}']").inner_text() == f"{int(rd[5:7])}/{int(rd[8:])} 06시", "직접 넣은 최저기온·시각")
+    check(row.locator(f"td[data-tcell='{cj}']").inner_text() == "-8.5", "직접 넣은 최저기온")
     check(row.locator("td[data-wcell] .wb").inner_text() == "대설주의보" and row.locator("td[data-wfc]").inner_text() == "15:30" and row.locator("td[data-wef]").inner_text() == "18:00", row.inner_text())
     check(p.locator(f"tr[data-b='{bid(p, '양양')}']").locator("input:not([disabled]), select:not([disabled])").count() == 0, "확정된 자기 지사(양양)는 비활성")
 
@@ -654,7 +643,7 @@ def t_confirmed_row_locked(p):
 
 def t_confirm_all_by_hq(p):
     """본부 줄의 [일괄 확정] = 그 본부 지사 모두(요청을 저장하지 않은 지사도). 맨 위 [일괄 확정]도 저장 여부와 관계없이 모두"""
-    tab(p, "branch"); p.click("#onlyActive"); p.wait_for_timeout(150)            # 요청 없는 지사도 보이게
+    tab(p, "branch")                                                           # 기본 = 모든 지사
     gw = ev(p, "S.hqs.find(h => h.name === '강원').id"); cb = ev(p, "S.hqs.find(h => h.name === '충북').id")
     hq = p.locator(f"#branchTable tr.hq[data-hq='{gw}']")
     check(hq.locator("[data-confirm-hq]").inner_text() == "일괄 확정" and hq.locator("[data-s=confirmed]").count() == 0, "본부 줄: 확정 개수 대신 [일괄 확정]")
@@ -680,7 +669,8 @@ def t_confirm_all_by_hq(p):
 def t_views_and_choices_after_confirm_all(p):
     """(2026-10-06) 일괄 확정 뒤에도: '요청 있는 지사만' = 요청 1대 이상, '편성 확정된 지사만' = 확정 + 편성 1대 이상.
     기관별 장비 [최초 지원] 선택지 = 편성 확정된 지사만(일괄 확정으로 편성 0대인 지사는 안 나옴), 모든 지사는 [수정본]에서만"""
-    tab(p, "branch"); p.click("#onlyActive"); p.wait_for_timeout(150)          # 모든 지사 보기 → 일괄 확정
+    tab(p, "branch")                                                         # 기본 = 모든 지사(2026-10-15) → 일괄 확정
+    check(p.locator("#branchCtl .chip[aria-pressed=true]").count() == 0, "처음엔 보기 버튼이 하나도 안 눌림")
     p.click("#confirmAll"); p.wait_for_timeout(500)
     shown = lambda: [x.get_attribute("data-b") for x in p.locator("#branchTable tr[data-b]").all()]
     total = ev(p, "S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private).length")
@@ -877,10 +867,10 @@ def t_pool_vehicles(p):
     # ── 지사별 요청·편성: 칸 순서, 관리자 영역 경계선, 보기 버튼 3개, 직접입력을 켜도 칸 폭 그대로
     tab(p, "branch")
     heads = [x.replace("\n", " ").strip() for x in p.locator("#branchTable thead tr:first-child th").all_inner_texts()]
-    check([h.split(" ")[0] for h in heads] == ["지사", "24시", "최저기온", "대설특보", "기상현황", "지사", "도착", "타지사", "편성", "확정"] and "지원 가능" in heads[7], f"칸 순서: {heads}")
+    check([h.split(" ")[0] for h in heads] == ["지사", "24시", "대설특보", "기상현황", "지사", "도착", "타지사", "저장", "편성", "확정"] and "지원 가능" in heads[6], f"칸 순서: {heads}")
     check(ev(p, "getComputedStyle(document.querySelector('#branchTable tbody td.adm0')).borderLeftWidth") == "3px" and p.locator("#branchTable thead th.adm").count() == 5, "편성·확정 앞 굵은 경계선")
     check(ev(p, f"(() => {{ const tr = document.querySelector(\"#branchTable tr[data-b='{cj}']\"), bg = c => getComputedStyle(tr.querySelector(c)).backgroundColor; return bg('td.adm') !== bg('td.ofc') }})()"), "관리자 칸은 바탕이 다름")
-    check([x.strip() for x in p.locator("#branchCtl .chip").all_inner_texts()] == ["요청 있는 지사만", "편성 확정된 지사만", "지원 가능 지사만"], "보기 버튼 순서")
+    check([x.strip() for x in p.locator("#branchCtl .chip").all_inner_texts()] == ["요청 있는 지사만", "편성 확정된 지사만", "지원 가능 지사만", "저장 안 한 지사만"], "보기 버튼 순서(저장 안 한 지사만은 맨 오른쪽)")
     widths = lambda: ev(p, "[...document.querySelectorAll('#branchTable thead tr:nth-child(2) th')].map(th => Math.round(th.getBoundingClientRect().width * 2) / 2)")
     w0 = widths(); p.check(f"input[data-rq={cj}][data-f=wx_manual]"); p.wait_for_timeout(200); w1 = widths()
     check(p.locator(f"#branchTable tr[data-b='{cj}'] input.wxn").count() == 3 and w0 == w1, f"직접입력을 켜도 칸 폭이 같아야 함: {w0} → {w1}")
@@ -1027,7 +1017,69 @@ def t_pool_round_delete(p):
     p.fill("#newRoundDate", d4); p.click("#roundMake"); p.wait_for_timeout(400); p.click("#roundDel"); p.wait_for_timeout(400)
     check("경로가 있어" in toast(p) and ev(p, "S.round") != old, "기계화부 장비 경로가 있으면 여전히 거절: " + toast(p))
 
-TESTS = [t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+def t_branch_saved(p):
+    """(2026-10-15, 마이그레이션 46) 지사·본부는 요청·지원 가능이 0이어도 [저장] → '저장 완료'(타지사 지원 가능 다음 칸). 관리자 저장·확정은 남기지 않음.
+    보기 버튼은 처음에 아무것도 안 눌림, [저장 안 한 지사만]은 맨 오른쪽"""
+    tab(p, "branch"); dg, yy, cj = bid(p, "대관령"), bid(p, "양양"), bid(p, "춘천")
+    cell = lambda b: p.locator(f"#branchTable td[data-svcell='{b}']")
+    check(p.locator("#branchCtl .chip[aria-pressed=true]").count() == 0 and p.locator("#branchCtl .chip").last.inner_text() == "저장 안 한 지사만", "기본 보기 = 아무 버튼도 안 눌림, 저장 안 한 지사만은 맨 오른쪽")
+    check(cell(cj).locator("button").count() == 0 and cell(cj).inner_text().strip() == "-", "관리자에게는 [저장] 버튼 없음(확정하면 그만)")
+    as_user(p, "br2"); tab(p, "branch")                                       # 양양지사(확정된 줄)
+    check(cell(yy).locator("button").count() == 0, "확정된 줄은 [저장] 없음")
+    as_user(p, "br1"); tab(p, "branch")                                       # 대관령지사: 확정된 줄 → 관리자가 취소해야 저장 가능
+    as_user(p, "admin1"); tab(p, "branch"); p.click(f"[data-unconfirm={dg}]"); p.wait_for_timeout(300)
+    as_user(p, "hq-gw"); tab(p, "branch")
+    check(cell(cj).locator("[data-rsave]").count() == 1 and cell(dg).locator("[data-rsave]").count() == 1, "본부: 자기 본부 지사 줄마다 [저장]")
+    check(ev(p, f"rval('{cj}', 'req_truck')") == 2, "춘천은 요청 있음(그대로 저장)")
+    p.click(f"[data-rsave='{cj}']"); p.wait_for_timeout(300)
+    check("춘천 지사를 저장했습니다" in toast(p) and cell(cj).inner_text().strip() == "저장 완료" and ev(p, f"!!S.reqs['{cj}'].saved_at"), "바꾼 것 없이 눌러도 저장 → 저장 완료: " + toast(p))
+    # 요청 0 인 지사: 0 그대로 저장 가능
+    wj = bid(p, "원주"); check(ev(p, f"rval('{wj}', 'req_truck') + rval('{wj}', 'req_blower') + rval('{wj}', 'offer_truck')") == 0, "원주는 요청·지원 가능 모두 0")
+    p.click(f"[data-rsave='{wj}']"); p.wait_for_timeout(300); check(cell(wj).inner_text().strip() == "저장 완료", "0이어도 저장 → 저장 완료(요청 안 함도 알림)")
+    # 고치면 다시 [저장], 아래 [저장]으로 저장해도 저장 완료
+    i = f"[data-rq={wj}][data-f=offer_truck]"; p.fill(i, "1"); p.press(i, "Tab"); p.wait_for_timeout(150)
+    check(cell(wj).locator("[data-rsave]").count() == 1, "저장한 뒤 고치면 다시 [저장]")
+    save_branch(p); check(cell(wj).inner_text().strip() == "저장 완료" and ev(p, f"S.reqs['{wj}'].offer_truck") == 1, "아래 [저장]도 저장 완료")
+    # 관리자: 저장 안 한 지사만 / 관리자 저장은 저장 완료가 아님
+    as_user(p, "admin1"); tab(p, "branch"); p.click("#onlyUnsaved"); p.wait_for_timeout(150)
+    shown = ev(p, "[...document.querySelectorAll('#branchTable tr[data-b]')].map(r => r.dataset.b)")
+    check(cj not in shown and wj not in shown and dg in shown and len(shown) > 10 and p.locator("#onlyUnsaved").get_attribute("aria-pressed") == "true", f"저장 안 한 지사만: {len(shown)}줄")
+    i = f"[data-rq={dg}][data-f=req_truck]"; p.fill(i, "5"); p.press(i, "Tab"); save_branch(p)
+    check(not ev(p, f"!!S.reqs['{dg}'].saved_at") and dg in ev(p, "[...document.querySelectorAll('#branchTable tr[data-b]')].map(r => r.dataset.b)"), "관리자가 고쳐 저장해도 저장 완료가 아님")
+    p.click("#onlyUnsaved"); p.wait_for_timeout(150); check(p.locator("#branchCtl .chip[aria-pressed=true]").count() == 0, "다시 누르면 모든 지사")
+
+def t_alloc_follow_assign(p):
+    """(2026-10-15, 마이그레이션 46) 기관별 배정 합계는 편성보다 많을 수 없음. 편성을 줄여 다시 확정하면 — 한 기관만 배정받았으면 그 기관이 편성에 맞춰 줄고,
+    여러 기관이면 그대로 두고 '편성보다 많음' 표시, 편성 0이면 배정을 지움. 확정만 취소한 동안에는 그대로"""
+    dg, yy = bid(p, "대관령"), bid(p, "양양")                                  # 대관령 편성 제설차 6·제설기 4, 양양 8·2 (확정됨)
+    tab(p, "alloc"); inp = lambda o, b, f: f"[data-al='{o}|{b}'][data-f={f}]"
+    setv = lambda sel, v: (p.fill(sel, str(v)), p.press(sel, "Tab"), p.wait_for_timeout(150))
+    setv(inp("서울경기", dg, "truck"), 9); check(p.locator(inp("서울경기", dg, "truck")).input_value() == "6" and "많이 배정할 수 없습니다" in toast(p), "편성(6)보다 많이 넣으면 6으로: " + toast(p))
+    setv(inp("충북", dg, "truck"), 2); check(p.locator(inp("충북", dg, "truck")).input_value() == "0", "다른 기관 몫까지 합쳐 6을 넘을 수 없음")
+    setv(inp("서울경기", dg, "truck"), 4); setv(inp("충북", dg, "truck"), 2); setv(inp("서울경기", yy, "truck"), 8); setv(inp("서울경기", yy, "blower"), 2)
+    p.click("#save-alloc [data-save]"); p.wait_for_timeout(300); check("확정했습니다" in toast(p), toast(p))
+    check(ev(p, f"Api.saveAllocations(S.round, [{{ org: '충북', branch_id: '{dg}', truck: 3, blower: 0 }}]).then(r => r.code)") == "SA006", "서버도 편성보다 많은 배정은 거절(SA006)")
+    # 편성을 줄여 다시 확정: 양양(서울경기 한 곳) 8→5 → 자동으로 5, 대관령(두 기관) 6→3 → 그대로 + 표시, 제설기 0 → 지움
+    tab(p, "branch")
+    for b, f, v in ((yy, "assigned_truck", 5), (yy, "assigned_blower", 0), (dg, "assigned_truck", 3)):
+        p.click(f"[data-unconfirm={b}]") if p.locator(f"[data-unconfirm={b}]").count() else None; p.wait_for_timeout(300)
+        sel = f"[data-rq={b}][data-f={f}]"; p.fill(sel, str(v)); p.press(sel, "Tab"); p.wait_for_timeout(100)
+    tab(p, "alloc"); check(ev(p, f"(S.alloc.get('서울경기|{yy}') || {{}}).truck") == 8, "확정을 취소한 동안에는 배정 그대로")
+    tab(p, "branch"); p.click(f"[data-confirm={yy}]"); p.wait_for_timeout(350); p.click(f"[data-confirm={dg}]"); p.wait_for_timeout(350)
+    tab(p, "alloc"); p.click("#panel-alloc [data-reload]"); p.wait_for_timeout(500)
+    check(ev(p, f"JSON.stringify(S.alloc.get('서울경기|{yy}'))") == '{"truck":5,"blower":0}', f"한 기관만 → 편성에 맞춰 줄고 제설기(편성 0)는 지워짐: {ev(p, f'JSON.stringify(S.alloc.get(\"서울경기|{yy}\"))')}")
+    check(ev(p, f"(S.alloc.get('서울경기|{dg}') || {{}}).truck") == 4 and ev(p, f"(S.alloc.get('충북|{dg}') || {{}}).truck") == 2, "여러 기관 → 자동으로 안 줄임")
+    check("편성보다 많음" in p.locator(f"#allocTable tr[data-ab='{dg}']").inner_text() and "편성보다 많음" not in p.locator(f"#allocTable tr[data-ab='{yy}']").inner_text(), "여러 기관이면 '편성보다 많음' 표시")
+    setv(inp("충북", dg, "truck"), 0); p.click("#save-alloc [data-save]"); p.wait_for_timeout(300)
+    check("확정했습니다" in toast(p) and "편성보다 많음" in p.locator(f"#allocTable tr[data-ab='{dg}']").inner_text(), "아직 넘어도 줄이는 저장은 됨(4 > 3): " + toast(p))
+    # 편성 0 으로 확정 → 배정이 지워져 표에서 빠짐(예전에는 '확정 취소됨'으로 잠겨 고칠 수 없었음)
+    tab(p, "branch"); p.click(f"[data-unconfirm={dg}]"); p.wait_for_timeout(300)
+    for f in ("assigned_truck", "assigned_blower"): sel = f"[data-rq={dg}][data-f={f}]"; p.fill(sel, "0"); p.press(sel, "Tab"); p.wait_for_timeout(100)
+    p.click(f"[data-confirm={dg}]"); p.wait_for_timeout(350)
+    tab(p, "alloc"); p.click("#panel-alloc [data-reload]"); p.wait_for_timeout(500)
+    check(ev(p, f"[...S.alloc.keys()].some(k => k.endsWith('|{dg}'))") is False and p.locator(f"#allocTable tr[data-ab='{dg}']").count() == 0, "편성 0 확정 → 배정 지움, 표에서 빠짐")
+
+TESTS = [t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
@@ -1097,7 +1149,7 @@ def t_server_lock_and_confirm_all(b):
     """서버 모드(로그인 화면): 확정하면 그 줄 비활성, 본부 [일괄 확정]은 요청 없는 지사까지, 지사 화면이 모른 채 저장하면 '이미 확정' 안내"""
     m = Mock(); m.users["exchungju"]["profile"]["must_change"] = False
     m.round_reqs[0]["confirmed"] = False
-    p = server_page(b, m, "admin-01"); tab(p, "branch"); p.click("#onlyActive"); p.wait_for_timeout(200)
+    p = server_page(b, m, "admin-01"); tab(p, "branch")
     row = p.locator("tr[data-b='B019']"); en = "input:not([disabled]), select:not([disabled])"
     check(row.locator(en).count() > 3, "확정 전: 입력 가능")
     p.click("[data-confirm='B019']"); p.wait_for_timeout(500)
