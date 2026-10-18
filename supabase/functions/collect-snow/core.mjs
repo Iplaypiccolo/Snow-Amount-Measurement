@@ -10,6 +10,7 @@
 //  * 시험 호출 {"probe":"YYYYMMDD","sd":"day","mi":"00"}: 그날 00~23시(분 = mi)를 받아 저장하지 않고 요약만 돌려줌 — 값이 매시 바뀌는지(1시간 간격인지),
 //    시각이 지나며 줄어드는 일이 있는지 확인용(2026-10-18). sd = day(일 신적설) / 3hr / 24h / tot(적설)
 //    "raw":true,"hh":"06" 이면 그 한 시각의 원문 머리말·자료 몇 줄(어떤 칸이 오는지 확인용, 2026-10-19)
+//  * 비교 {"compare":"YYYYMMDD"}: 기간 조회(kma_snow2) 하루치 한 번 ↔ 서버 snow_daily 그날 값(관측소별). 저장하지 않음(2026-10-19)
 //  * 순수 로직은 Node 로 시험: tests/test_collect_snow.mjs
 // ============================================================
 export const SNOW_URL = 'https://apihub.kma.go.kr/api/typ01/url/kma_snow1.php';
@@ -48,6 +49,43 @@ export function seriesStats(byHour) {
   return { stations: stns.size, present: byHour.map((m) => (m ? Object.keys(m).length : null)), up, down, top };
 }
 
+// 기간 조회(kma_snow2) 글 → 줄마다 { tm, stn, tot, day, d01, h01 }. 칸: TM STN STN_KO LON LAT STN_SP SD_TOT SD_DAY SD_HR3 SD_D01 SD_H03 SD_H24 SD_H01(빈칸으로 나뉨, -999 = 자료 없음)
+export function parseSnow2(text) {
+  if (typeof text !== 'string' || !text.includes('#START7777')) return null;
+  const out = [], v = (x) => { const n = Number(x); return Number.isFinite(n) && n > -90 ? n : null; };
+  for (const line of text.split(/\r?\n/)) {
+    if (!line || line[0] === '#') continue;
+    const p = line.trim().split(/\s+/); if (p.length < 13 || !/^\d{12}$/.test(p[0]) || !/^\d{1,6}$/.test(p[1])) continue;
+    const k = p.length - 7;                                              // 지점 이름에 빈칸이 있어도 뒤에서부터 셈
+    out.push({ tm: p[0], stn: p[1], tot: v(p[k]), day: v(p[k + 1]), d01: v(p[k + 3]), h01: v(p[k + 6]) });
+  }
+  return out;
+}
+// 하루치(00~23시) 기간 조회 줄과 서버의 일자별 값(ours: { 관측소: 값 }) 비교 — 관측소마다 그날 SD_DAY 최댓값 / SD_D01 최댓값 / SD_H01 합을 각각 우리 값과
+//   same(0.1cm 단위로 같음, zero = 둘 다 0) / diff / onlyOurs(우리만 값 있음, 기상청 그 칸 하루 내내 없음) / onlyOurs0(그중 우리 값 0) / onlyKma
+export function compareDay(rows, ours) {
+  const st = {};
+  for (const r of rows) {
+    const s = st[r.stn] || (st[r.stn] = { day: null, d01: null, h01: null });
+    for (const f of ['day', 'd01']) if (r[f] != null) s[f] = s[f] == null ? r[f] : Math.max(s[f], r[f]);
+    if (r.h01 != null) s.h01 = (s.h01 || 0) + r.h01;
+  }
+  const r1 = (x) => Math.round(x * 10) / 10, out = { stations: Object.keys(st).length, ours: Object.keys(ours).length };
+  for (const f of ['day', 'd01', 'h01']) {
+    const c = { same: 0, zero: 0, diff: 0, higher: 0, onlyOurs: 0, onlyOurs0: 0, onlyKma: 0 }, diffs = [];
+    for (const stn of new Set([...Object.keys(st), ...Object.keys(ours)])) {
+      const k = st[stn] ? st[stn][f] : null, o = ours[stn];
+      if (o == null && k == null) continue;
+      if (o == null) { c.onlyKma++; continue; }
+      if (k == null) { if (o) c.onlyOurs++; else c.onlyOurs0++; continue; }
+      if (r1(o) === r1(k)) { c.same++; if (!o) c.zero++; } else { c.diff++; if (k > o) c.higher++; diffs.push([stn, o, r1(k)]); }   // higher = 기상청 쪽이 큼
+    }
+    diffs.sort((a, b) => Math.abs(b[1] - b[2]) - Math.abs(a[1] - a[2]));
+    out[f] = { ...c, top: diffs.slice(0, 6) };
+  }
+  return out;
+}
+
 async function allowed(req, deps) {
   const t = req.headers.get('x-collector-token');
   if (t) return { ok: await deps.store.tokenOk(t), admin: false };
@@ -70,16 +108,27 @@ export async function handle(req, deps) {
   const key = String(deps.env('KMA_AUTH_KEY') || '').trim();
   if (!key) return json(200, { ok: false, error: 'no_key' });
 
+  if (typeof body.compare === 'string' && /^\d{8}$/.test(body.compare)) {      // 비교(저장 없음): 그날 기간 조회 한 번 ↔ 서버의 일자별 값(2026-10-19)
+    const d = body.compare, rows = [];
+    for (const [a, z] of [['00', '05'], ['06', '11'], ['12', '17'], ['18', '23']]) {         // 한 번에 하루치는 커서(약 1.5MB) 6시간씩 네 번
+      const r = await deps.fetchText(`${SNOW_URL.replace('kma_snow1.php', 'kma_snow2.php')}?tm=${d}${z}00&tm_st=${d}${a}00&snow=2&help=0&authKey=${encodeURIComponent(key)}`);
+      const part = r.status === 200 ? parseSnow2(r.text) : null;
+      if (!part) return json(200, { ok: false, compare: d, error: `${a}~${z}시 HTTP ${r.status}` });
+      rows.push(...part); await deps.sleep(GAP_MS);
+    }
+    const { data: ours } = await deps.store.daily(`${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`);
+    return json(200, { ok: true, compare: d, lines: rows.length, ...compareDay(rows, ours || {}) });
+  }
   if (typeof body.probe === 'string' && /^\d{8}$/.test(body.probe)) {          // 시험 호출: 저장 없이 요약만
     const sd = ['day', '3hr', '24h', 'tot'].includes(body.sd) ? body.sd : 'day', mi = /^[0-5]\d$/.test(body.mi || '') ? body.mi : '00';
     if (body.raw === true) {                                        // 원문 한 시각: 머리말(#)과 자료 몇 줄만(어떤 칸이 오는지 확인용, 키가 든 줄은 뺌)
       const hh = /^([01]\d|2[0-3])$/.test(body.hh || '') ? body.hh : '06', tm = body.probe + hh + mi;
       // api: snow1(시각 하나, 기본) / snow2(기간 — tm_st~tm, 칸이 더 많을 수 있음) / day(최심적설·최심신적설)
       const api = { snow1: 'kma_snow1.php', snow2: 'kma_snow2.php', day: 'kma_snow_day.php' }[body.api] || 'kma_snow1.php';
-      const st = /^\d{12}$/.test(body.tm_st || '') ? `&tm_st=${body.tm_st}` : '', sn = /^[012]$/.test(String(body.snow ?? '')) ? `&snow=${body.snow}` : '';
-      const r = await deps.fetchText(`${SNOW_URL.replace('kma_snow1.php', api)}?sd=${sd}&tm=${tm}${st}${sn}&help=1&authKey=${encodeURIComponent(key)}`);
+      const st = /^\d{12}$/.test(body.tm_st || '') ? `&tm_st=${body.tm_st}` : '', sn = /^[012]$/.test(String(body.snow ?? '')) ? `&snow=${body.snow}` : '', sp = /^\d{1,6}(:\d{1,6})*$/.test(body.stn || '') ? `&stn=${body.stn}` : '';
+      const r = await deps.fetchText(`${SNOW_URL.replace('kma_snow1.php', api)}?sd=${sd}&tm=${tm}${st}${sn}${sp}&help=1&authKey=${encodeURIComponent(key)}`);
       const lines = (r.text || '').split(/\r?\n/).filter((l) => l && !/authKey/i.test(l));
-      return json(200, { ok: true, probe: body.probe, api, sd, tm, status: r.status, head: lines.filter((l) => l[0] === '#').slice(0, 40), rows: lines.filter((l) => l[0] !== '#').slice(0, 8) });
+      return json(200, { ok: true, probe: body.probe, api, sd, tm, status: r.status, head: lines.filter((l) => l[0] === '#').slice(0, 40), rows: lines.filter((l) => l[0] !== '#' && (!Array.isArray(body.pick) || body.pick.includes(l.trim().split(/[\s,]+/)[1]))).slice(0, 8) });   // pick = 이 관측소 줄만
     }
     const t0 = deps.now(), byHour = []; let lastErr = null;
     for (let h = 0; h < 24; h++) {

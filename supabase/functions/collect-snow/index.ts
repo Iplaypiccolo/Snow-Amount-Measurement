@@ -26,6 +26,10 @@ const deps = {
     async put(p_date: string, p_hour: number, p_vals: Record<string, number>, p_dry: boolean) {
       const { data, error } = await admin.rpc('snow_put', { p_date, p_hour, p_vals, p_dry }); if (error) console.error('snow_put', error.message); return { data, error };
     },
+    async daily(d: string) {         // 비교용: 그날 서버 일자별 값 { 관측소: 값 }
+      const { data, error } = await admin.from('snow_daily').select('station_id,value').eq('date', d).limit(5000);
+      return { data: error ? null : Object.fromEntries((data ?? []).map((x: { station_id: number; value: number }) => [String(x.station_id), x.value])), error };
+    },
     async finish(p_date: string, p_hours: number, p_written: number, p_note: string) {
       const { error } = await admin.rpc('snow_finish', { p_date, p_hours, p_written, p_note }); if (error) console.error('snow_finish', error.message);
     },
