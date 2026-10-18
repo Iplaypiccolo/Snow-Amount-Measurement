@@ -9,6 +9,7 @@
 //  * 기상청 키는 함수 비밀값 KMA_AUTH_KEY 에만. 키가 들어간 주소는 오류·기록에 남기지 않는다.
 //  * 시험 호출 {"probe":"YYYYMMDD","sd":"day","mi":"00"}: 그날 00~23시(분 = mi)를 받아 저장하지 않고 요약만 돌려줌 — 값이 매시 바뀌는지(1시간 간격인지),
 //    시각이 지나며 줄어드는 일이 있는지 확인용(2026-10-18). sd = day(일 신적설) / 3hr / 24h / tot(적설)
+//    "raw":true,"hh":"06" 이면 그 한 시각의 원문 머리말·자료 몇 줄(어떤 칸이 오는지 확인용, 2026-10-19)
 //  * 순수 로직은 Node 로 시험: tests/test_collect_snow.mjs
 // ============================================================
 export const SNOW_URL = 'https://apihub.kma.go.kr/api/typ01/url/kma_snow1.php';
@@ -71,6 +72,15 @@ export async function handle(req, deps) {
 
   if (typeof body.probe === 'string' && /^\d{8}$/.test(body.probe)) {          // 시험 호출: 저장 없이 요약만
     const sd = ['day', '3hr', '24h', 'tot'].includes(body.sd) ? body.sd : 'day', mi = /^[0-5]\d$/.test(body.mi || '') ? body.mi : '00';
+    if (body.raw === true) {                                        // 원문 한 시각: 머리말(#)과 자료 몇 줄만(어떤 칸이 오는지 확인용, 키가 든 줄은 뺌)
+      const hh = /^([01]\d|2[0-3])$/.test(body.hh || '') ? body.hh : '06', tm = body.probe + hh + mi;
+      // api: snow1(시각 하나, 기본) / snow2(기간 — tm_st~tm, 칸이 더 많을 수 있음) / day(최심적설·최심신적설)
+      const api = { snow1: 'kma_snow1.php', snow2: 'kma_snow2.php', day: 'kma_snow_day.php' }[body.api] || 'kma_snow1.php';
+      const st = /^\d{12}$/.test(body.tm_st || '') ? `&tm_st=${body.tm_st}` : '', sn = /^[012]$/.test(String(body.snow ?? '')) ? `&snow=${body.snow}` : '';
+      const r = await deps.fetchText(`${SNOW_URL.replace('kma_snow1.php', api)}?sd=${sd}&tm=${tm}${st}${sn}&help=1&authKey=${encodeURIComponent(key)}`);
+      const lines = (r.text || '').split(/\r?\n/).filter((l) => l && !/authKey/i.test(l));
+      return json(200, { ok: true, probe: body.probe, api, sd, tm, status: r.status, head: lines.filter((l) => l[0] === '#').slice(0, 40), rows: lines.filter((l) => l[0] !== '#').slice(0, 8) });
+    }
     const t0 = deps.now(), byHour = []; let lastErr = null;
     for (let h = 0; h < 24; h++) {
       const tm = body.probe + String(h).padStart(2, '0') + mi;
