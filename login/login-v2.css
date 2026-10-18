@@ -16,11 +16,6 @@ html.ss-v2 #ssScene{position:fixed;inset:0;z-index:9997;overflow:hidden;pointer-
   background:radial-gradient(120% 70% at 78% 8%,#ffffff 0%,rgba(255,255,255,0) 60%),linear-gradient(180deg,#e3ecf3 0%,var(--snow) 58%,#edf2f6 100%)}
 html.ss-v2 body.authed #ssScene{display:none}
 html.ss-v2 .ss-snow{position:absolute;inset:0;width:100%;height:100%;filter:drop-shadow(0 1px 1.5px rgba(82,106,124,.35))}
-html.ss-v2 .ss-road{position:absolute;left:0;right:0;bottom:0;width:100%;height:46vh;transform:translate3d(calc(var(--px) * -14px),0,0);transition:transform .6s var(--glide)}
-html.ss-v2 .ss-road path{fill:none;stroke:var(--frost);stroke-width:1.4;vector-effect:non-scaling-stroke}
-html.ss-v2 .ss-road .ss-road-hz{stroke:var(--ice)}
-html.ss-v2 .ss-road .ss-road-lane{stroke:var(--mist);stroke-dasharray:14 22;animation:ssLane 1.6s linear infinite}
-@keyframes ssLane{to{stroke-dashoffset:-36}}
 
 /* 로그인 잠금 화면(auth/gate.js 의 상자 구조는 그대로, 모양만) */
 html.ss-v2 .ss-gate{background:transparent;justify-content:flex-end;align-items:center;padding:24px clamp(24px,9vw,160px) 24px 24px;color:var(--ink)}
@@ -55,7 +50,6 @@ html.ss-v2 .ss-spin{border-color:var(--ice);border-top-color:var(--beacon)}
 
 /* 인트로 중: 로그인 상자는 숨겨 두고(칸은 잠금), 끝나면 차례로 등장 */
 html.ss-v2.ss-intro-on .ss-gate{opacity:0;visibility:hidden}
-html.ss-v2.ss-reveal .ss-road{animation:ssFade 1.2s var(--glide) both}
 html.ss-v2.ss-reveal .ss-card{animation:ssRise .85s var(--spring) .12s both}
 html.ss-v2.ss-reveal .ss-card form>*{animation:ssUpS .6s var(--glide) both}
 html.ss-v2.ss-reveal .ss-card form>:nth-child(1){animation-delay:.24s}
@@ -88,7 +82,6 @@ body.authed .ss-intro{display:none}
 
 /* 휴대폰·좁은 화면: 위아래 한 줄 */
 @media (max-width:760px){
-  html.ss-v2 .ss-road{height:34vh}
   html.ss-v2 .ss-gate{justify-content:center;align-items:flex-start;padding:28px 16px 24px}
   html.ss-v2 .ss-card{padding:24px 22px 20px}
 }

@@ -21,14 +21,10 @@
   var mobile = Math.min(root.innerWidth, (root.screen && root.screen.width) || 9999) < 700;
   html.classList.add('ss-v2');
 
-  // ── 배경 장면: 눈 내리는 하늘 · 원근 도로 (장식이라 화면 낭독기에서는 숨김) ──
+  // ── 배경 장면: 눈 내리는 하늘 (장식이라 화면 낭독기에서는 숨김) ──
   var scene = doc.createElement('div'); scene.id = 'ssScene'; scene.setAttribute('aria-hidden', 'true');
   scene.innerHTML =
-    '<canvas class="ss-snow"></canvas>' +
-    '<svg class="ss-road" viewBox="0 0 1000 400" preserveAspectRatio="xMidYMax slice">' +
-      '<path class="ss-road-edge" d="M-120 400 L470 92 M1120 400 L530 92"/>' +
-      '<path class="ss-road-lane" d="M500 400 L500 92"/>' +
-      '<path class="ss-road-hz" d="M0 92 H1000"/></svg>';
+    '<canvas class="ss-snow"></canvas>';
   doc.body.insertBefore(scene, doc.body.firstChild);
   snow(scene.querySelector('.ss-snow'));
   pointerFx();
