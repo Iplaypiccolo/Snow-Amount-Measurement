@@ -1,7 +1,7 @@
 /* ============================================================
    login/login-v2.css — 새 로그인 화면(겨울 색감)  [미리보기 전용: html.ss-v2 일 때만 적용]
    색: 눈(바탕) · 얼음(선) · 먹색(글자) · 강철(보조 글자) · 제설차 경광등 주황(강조 하나)
-   배치: 큰 제목은 왼쪽, 로그인 상자는 오른쪽 아래로 비켜 둔 비대칭. 휴대폰(760px 미만)에서는 위아래 한 줄.
+   배치: 로그인 상자는 화면 위쪽(중상단) 가운데, 인트로가 끝난 친구들은 작아진 채 화면 아래 줄에 남음. 이름·제목 글자는 두지 않음.
    움직임: 등장 순서(제목 → 상자 → 칸), 눈 내림, 포인터 시차, 자석 버튼. '움직임 줄이기' 설정이면 모두 끔.
    ============================================================ */
 html.ss-v2{
@@ -11,7 +11,7 @@ html.ss-v2{
   --px:0; --py:0;
 }
 /* 바탕 장면 */
-html.ss-v2 #ssScene{position:fixed;inset:0;z-index:9998;overflow:hidden;pointer-events:none;
+html.ss-v2 #ssScene{position:fixed;inset:0;z-index:9997;overflow:hidden;pointer-events:none;
   background:radial-gradient(120% 70% at 78% 8%,#ffffff 0%,rgba(255,255,255,0) 60%),linear-gradient(180deg,#e3ecf3 0%,var(--snow) 58%,#edf2f6 100%)}
 html.ss-v2 body.authed #ssScene{display:none}
 html.ss-v2 .ss-snow{position:absolute;inset:0;width:100%;height:100%;filter:drop-shadow(0 1px 1.5px rgba(82,106,124,.35))}
@@ -20,26 +20,16 @@ html.ss-v2 .ss-road path{fill:none;stroke:var(--frost);stroke-width:1.4;vector-e
 html.ss-v2 .ss-road .ss-road-hz{stroke:var(--ice)}
 html.ss-v2 .ss-road .ss-road-lane{stroke:var(--mist);stroke-dasharray:14 22;animation:ssLane 1.6s linear infinite}
 @keyframes ssLane{to{stroke-dashoffset:-36}}
-html.ss-v2 .ss-hero{position:absolute;left:clamp(24px,7vw,120px);top:clamp(40px,14vh,150px);max-width:min(54vw,760px);
-  transform:translate3d(calc(var(--px) * 10px),calc(var(--py) * 6px),0);transition:transform .7s var(--glide);color:var(--ink);font-family:"Pretendard",-apple-system,"Malgun Gothic","Noto Sans KR",sans-serif}
-html.ss-v2 .ss-kicker{display:flex;gap:14px;align-items:center;margin:0 0 18px;font:600 12px/1 ui-monospace,"SFMono-Regular",Consolas,monospace;letter-spacing:.14em;color:var(--steel)}
-html.ss-v2 .ss-kicker span:first-child{color:var(--beacon-dk)}
-html.ss-v2 .ss-kicker span+span::before{content:"";display:inline-block;width:28px;height:1px;background:var(--frost);vertical-align:middle;margin-right:14px}
-html.ss-v2 .ss-title{margin:0;font-weight:700;font-size:clamp(46px,7.4vw,118px);line-height:.98;letter-spacing:-.045em}
-html.ss-v2 .ss-title .ln{display:block;overflow:hidden;padding-bottom:.06em}
-html.ss-v2 .ss-title .ln>span{display:inline-block}
-html.ss-v2 .ss-title .ln:nth-child(2){color:var(--steel);font-weight:600;margin-left:.9em}
-html.ss-v2 .ss-date{margin:26px 0 0 .1em;font:500 13px/1 ui-monospace,"SFMono-Regular",Consolas,monospace;color:var(--mist);letter-spacing:.08em}
 
 /* 로그인 잠금 화면(auth/gate.js 의 상자 구조는 그대로, 모양만) */
-html.ss-v2 .ss-gate{background:transparent;justify-content:flex-end;align-items:flex-end;padding:clamp(18px,4vw,64px) clamp(18px,8vw,140px) clamp(28px,11vh,120px);color:var(--ink)}
+html.ss-v2 .ss-gate{background:transparent;justify-content:center;align-items:flex-start;padding:clamp(24px,12vh,140px) 18px 24px;color:var(--ink)}
 html.ss-v2 .ss-card{position:relative;width:min(392px,100%);padding:30px 30px 24px;border-radius:20px;background:rgba(255,255,255,.86);
   -webkit-backdrop-filter:blur(14px) saturate(1.1);backdrop-filter:blur(14px) saturate(1.1);
   border:1px solid rgba(255,255,255,.9);box-shadow:0 1px 0 var(--ice) inset,0 30px 70px -28px rgba(19,33,44,.28),0 0 0 1px rgba(185,203,216,.55)}
 html.ss-v2 .ss-card::after{content:"";position:absolute;left:30px;right:30px;top:0;height:3px;border-radius:0 0 3px 3px;background:linear-gradient(90deg,var(--beacon) 0 22%,transparent 22%)}
 html.ss-v2 .ss-badge{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-html.ss-v2 .ss-card h1{margin:0 0 18px;font-size:13px;font-weight:600;color:var(--steel);letter-spacing:.02em}
-html.ss-v2 .ss-card h1::after{content:"로그인";display:block;margin-top:4px;font-size:26px;font-weight:700;color:var(--ink);letter-spacing:-.03em}
+html.ss-v2 .ss-card h1{margin:0 0 20px;font-size:0;line-height:0}   /* 시스템 이름은 화면에서 지움(화면 낭독기는 그대로 읽음) */
+html.ss-v2 .ss-card h1::after{content:"로그인";display:block;font-size:26px;line-height:1.2;font-weight:700;color:var(--ink);letter-spacing:-.03em}
 html.ss-v2 .ss-sub{color:var(--steel)}
 html.ss-v2 .ss-card label{gap:7px;font-size:12px;font-weight:600;color:var(--steel);margin-bottom:14px;letter-spacing:.01em}
 html.ss-v2 .ss-card input[type=text],html.ss-v2 .ss-card input[type=password]{height:48px;padding:0 14px;border:1px solid var(--ice);border-radius:12px;background:var(--snow);font-size:15px;color:var(--ink);
@@ -62,11 +52,8 @@ html.ss-v2 .ss-btn.alt:hover{background:var(--snow)}
 html.ss-v2 .ss-msg{border-radius:10px}
 html.ss-v2 .ss-spin{border-color:var(--ice);border-top-color:var(--beacon)}
 
-/* 인트로 중: 제목·로그인 상자는 숨겨 두고(칸은 잠금), 끝나면 차례로 등장 */
-html.ss-v2.ss-intro-on .ss-hero,html.ss-v2.ss-intro-on .ss-gate{opacity:0;visibility:hidden}
-html.ss-v2.ss-reveal .ss-title .ln>span{animation:ssUp .9s var(--glide) both}
-html.ss-v2.ss-reveal .ss-title .ln:nth-child(2)>span{animation-delay:.08s}
-html.ss-v2.ss-reveal .ss-kicker,html.ss-v2.ss-reveal .ss-date{animation:ssFade .8s var(--glide) .18s both}
+/* 인트로 중: 로그인 상자는 숨겨 두고(칸은 잠금), 끝나면 차례로 등장 */
+html.ss-v2.ss-intro-on .ss-gate{opacity:0;visibility:hidden}
 html.ss-v2.ss-reveal .ss-road{animation:ssFade 1.2s var(--glide) both}
 html.ss-v2.ss-reveal .ss-card{animation:ssRise .85s var(--spring) .12s both}
 html.ss-v2.ss-reveal .ss-card form>*{animation:ssUpS .6s var(--glide) both}
@@ -81,10 +68,13 @@ html.ss-v2.ss-reveal .ss-card form>:nth-child(5){animation-delay:.46s}
 @keyframes ssRise{from{opacity:0;transform:translateY(36px) scale(.97)}to{opacity:1;transform:none}}
 
 /* 인트로 무대 */
-.ss-intro{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity .45s var(--glide,ease)}
+.ss-intro{position:fixed;inset:0;z-index:10000;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;cursor:pointer;opacity:0;transition:opacity .45s var(--glide,ease)}
 .ss-intro.on{opacity:1}
-.ss-intro.out{opacity:0;pointer-events:none;transition-duration:.6s}
-.ss-intro-stage{position:relative;width:min(100vw,calc(100vh * 1000 / 600));aspect-ratio:1000/600}
+/* 인트로가 끝난 뒤: 친구들은 아래 줄에 남고, 로그인 상자보다 뒤·배경보다 앞. 클릭·입력은 로그인 상자로 */
+.ss-intro.rest{z-index:9998;pointer-events:none;cursor:auto}
+.ss-intro.rest .ss-skip{display:none}
+body.authed .ss-intro{display:none}
+.ss-intro-stage{position:relative;flex:none;width:min(100vw,calc(100vh * 1000 / 600));aspect-ratio:1000/600;transform-origin:50% 100%;transition:transform .9s var(--glide,ease)}
 .ss-intro-stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .ss-skip{position:fixed;right:clamp(14px,3vw,36px);bottom:clamp(14px,4vh,40px);display:inline-flex;gap:8px;align-items:center;padding:10px 14px 10px 16px;border-radius:999px;border:1px solid rgba(185,203,216,.9);
   background:rgba(255,255,255,.82);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:#13212c;font:600 13px/1 "Pretendard",-apple-system,"Malgun Gothic",sans-serif;cursor:pointer;
@@ -97,16 +87,12 @@ html.ss-v2.ss-reveal .ss-card form>:nth-child(5){animation-delay:.46s}
 
 /* 휴대폰·좁은 화면: 위아래 한 줄 */
 @media (max-width:760px){
-  html.ss-v2 .ss-hero{left:22px;right:22px;top:28px;max-width:none}
-  html.ss-v2 .ss-kicker{margin-bottom:12px;font-size:11px}
-  html.ss-v2 .ss-title{font-size:clamp(38px,12vw,58px)}
-  html.ss-v2 .ss-title .ln:nth-child(2){margin-left:.5em}
-  html.ss-v2 .ss-date{margin-top:14px}
   html.ss-v2 .ss-road{height:34vh}
-  html.ss-v2 .ss-gate{justify-content:center;align-items:flex-start;padding:212px 16px 24px}
+  html.ss-v2 .ss-gate{padding:28px 16px 24px}
+  .ss-intro.rest .ss-intro-stage{transform:scale(1.6)}   /* 좁은 화면: 아래 줄 친구들이 너무 작지 않게 키움 */
   html.ss-v2 .ss-card{padding:24px 22px 20px}
 }
-@media (max-height:640px) and (min-width:761px){html.ss-v2 .ss-gate{align-items:center;padding-bottom:18px}}
+@media (max-height:640px) and (min-width:761px){html.ss-v2 .ss-gate{padding-top:20px}}
 @media (prefers-reduced-motion:reduce){
   html.ss-v2 *,html.ss-v2 *::before{animation:none !important;transition:none !important}
   html.ss-v2 .ss-btn{transform:none}

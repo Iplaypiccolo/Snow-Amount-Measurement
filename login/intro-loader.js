@@ -3,8 +3,9 @@
    - 지금은 주소에 ?intro=preview 가 있을 때만 동작합니다. 없으면 아무것도 하지 않아 기존 로그인 화면 그대로입니다.
    - 로그인 판단(auth/auth.js·auth/gate.js)은 건드리지 않습니다. 화면 장식과 인트로만 얹습니다.
    - 자동 로그인으로 들어오는 사람(저장된 로그인 열쇠가 있는 경우)은 인트로를 보지 않습니다.
-   - 인트로: 매번 재생. 건너뛰기 버튼·화면 아무 곳 클릭·Esc/Enter/Space 로 바로 로그인 화면.
-     그림을 5초 안에 다 불러오지 못하거나 오류가 나면 인트로 없이 바로 로그인 화면.
+   - 인트로: 매번 재생. 건너뛰기 버튼·화면 아무 곳 클릭·Esc/Enter/Space 로 바로 로그인 화면(친구들은 곧바로 아래 줄 자리로).
+     인트로가 끝나면 친구들은 작아진 채 화면 아래 줄에 남아 대기 동작을 이어 감(로그인 상자는 위쪽). 로그인하면 사라짐.
+     그림을 5초 안에 다 불러오지 못하면 로그인 화면부터 보여 주고, 늦게라도 다 불러오면 친구들을 아래 줄에 바로 세움. 오류면 친구들 없이.
    - 인트로 동안 로그인 칸은 잠가 둡니다(inert) → 보이지 않는 칸에 글자가 입력되는 일이 없음.
    - 비밀번호 칸은 어떤 키·몇 글자를 입력하는지에 반응하지 않습니다(움직임 효과는 포인터 위치에만 반응).
    - 인트로 파일(login/intro/)은 tools/build_login_intro.py 가 차로차로 저장소에서 옮겨 옵니다. 아래 V 는 그 도구가 갱신하는 파일 지문.
@@ -19,19 +20,14 @@
   var mobile = Math.min(root.innerWidth, (root.screen && root.screen.width) || 9999) < 700;
   html.classList.add('ss-v2');
 
-  // ── 배경 장면: 눈 내리는 하늘 · 큰 제목 · 원근 도로 (장식이라 화면 낭독기에서는 숨김) ──
+  // ── 배경 장면: 눈 내리는 하늘 · 원근 도로 (장식이라 화면 낭독기에서는 숨김) ──
   var scene = doc.createElement('div'); scene.id = 'ssScene'; scene.setAttribute('aria-hidden', 'true');
-  var d = new Date(), W = ['일', '월', '화', '수', '목', '금', '토'];
-  var date = d.getFullYear() + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '.' + ('0' + d.getDate()).slice(-2) + ' ' + W[d.getDay()];
   scene.innerHTML =
     '<canvas class="ss-snow"></canvas>' +
     '<svg class="ss-road" viewBox="0 0 1000 400" preserveAspectRatio="xMidYMax slice">' +
       '<path class="ss-road-edge" d="M-120 400 L470 92 M1120 400 L530 92"/>' +
       '<path class="ss-road-lane" d="M500 400 L500 92"/>' +
-      '<path class="ss-road-hz" d="M0 92 H1000"/></svg>' +
-    '<div class="ss-hero"><p class="ss-kicker"><span>EX-SNOW-NET</span><span>고속도로 제설 지원</span></p>' +
-      '<p class="ss-title"><span class="ln"><span>제설</span></span><span class="ln"><span>업무 시스템</span></span></p>' +
-      '<p class="ss-date">' + date + '</p></div>';
+      '<path class="ss-road-hz" d="M0 92 H1000"/></svg>';
   doc.body.insertBefore(scene, doc.body.firstChild);
   snow(scene.querySelector('.ss-snow'));
   pointerFx();
@@ -58,13 +54,16 @@
     ov.innerHTML = '<div class="ss-intro-stage"><canvas role="img" aria-label="차로차로 친구들이 달려와 환영하는 인트로"></canvas></div>' +
       '<button type="button" class="ss-skip">건너뛰기 <kbd>Esc</kbd></button><p class="ss-sr" aria-live="polite"></p>';
     doc.body.appendChild(ov);
-    var done = false, intro = null, timer = root.setTimeout(function () { finish(); }, LOAD_LIMIT);
-    function finish() {
+    var done = false, started = false, intro = null, timer = root.setTimeout(function () { finish(); }, LOAD_LIMIT);
+    function finish() {          // 로그인 화면으로: 친구들은 아래 줄에 남김(인트로 중이면 끝 자리로 바로)
       if (done) return; done = true; root.clearTimeout(timer);
-      root.removeEventListener('keydown', onKey, true);
-      ov.classList.add('out'); reveal();
-      root.setTimeout(function () { if (intro) intro.destroy(); if (ov.parentNode) ov.parentNode.removeChild(ov); }, 700);
+      root.removeEventListener('keydown', onKey, true); ov.removeEventListener('click', finish);
+      if (started && intro) intro.skip();
+      ov.classList.add('rest'); reveal();
     }
+    function drop() { root.clearTimeout(timer); if (intro) intro.destroy(); if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    // 로그인하면 친구들도 정리(화면 아래 그리기를 멈춤)
+    new root.MutationObserver(function (l, ob) { if (doc.body.classList.contains('authed')) { ob.disconnect(); drop(); } }).observe(doc.body, { attributes: true, attributeFilter: ['class'] });
     function onKey(e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); finish(); } }
     root.addEventListener('keydown', onKey, true);
     ov.addEventListener('click', finish);
@@ -80,11 +79,15 @@
         canvas: ov.querySelector('canvas'), duration: C.duration, cast: C.cast, phases: C.phases, reduce: reduce, fx: fx,
         onWelcome: function () { ov.querySelector('.ss-sr').textContent = '환영합니다!'; },
         onEnd: function () { root.setTimeout(finish, 350); },
-        onError: function () { finish(); }
+        onError: function () { finish(); drop(); }
       });
       root.__ssIntro = intro;
-      return intro.ready.then(function () { if (done) return; root.clearTimeout(timer); ov.classList.add('on'); intro.start(); });
-    }).catch(function () { finish(); });
+      return intro.ready.then(function () {
+        if (!ov.parentNode) return;
+        root.clearTimeout(timer); ov.classList.add('on'); started = true;
+        return intro.start().then(function () { if (done) intro.skip(); });   // 이미 로그인 화면이면(늦게 불러옴) 바로 끝 자리
+      });
+    }).catch(function () { finish(); drop(); });
   }
 
   function load(files) {

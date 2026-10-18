@@ -1,6 +1,6 @@
 """
 로그인 인트로·새 로그인 화면(미리보기 ?intro=preview) 자동 테스트 — 브라우저로 직접 열어 봅니다. (Supabase 는 가짜 서버 tests/_sb_mock.py)
-확인하는 것: 주소에 ?intro=preview 가 없으면 예전 화면 그대로(인트로 파일도 안 받음) / 있으면 인트로 → 새 로그인 화면 / 인트로 중 칸 잠금 /
+확인하는 것: 주소에 ?intro=preview 가 없으면 예전 화면 그대로(인트로 파일도 안 받음) / 있으면 인트로 → 새 로그인 화면(친구들은 아래 줄에 남고 상자는 그 위) / 인트로 중 칸 잠금 /
              건너뛰기(Esc·버튼) / 자동 로그인 사람은 인트로 없음 / 인트로 파일을 못 받으면 바로 로그인 화면 / 비밀번호 입력에 화면이 반응하지 않음 /
              움직임 줄이기 / 새 화면에서도 로그인이 그대로 됨 / 보안 정책(CSP) 아래에서 오류 없음
 실행 (저장소 맨 위 폴더에서):  python tests/test_login_intro.py
@@ -49,19 +49,27 @@ def t_preview_intro_then_login(b, ctx, m):
     p.keyboard.type("abc"); check(p.input_value("#ssU") == "", "인트로 중 입력이 아이디 칸에 들어가면 안 됨")
     wait_js(p, "!!(window.__ssIntro && __ssIntro.info().state === 'play')")
     check(len([u for u in intro_reqs(reqs) if "/chars/" in u]) == 6, "캐릭터 파일 6개를 받아야 함")
-    p.wait_for_selector("#ssIntro", state="detached", timeout=12000)
+    p.wait_for_selector("#ssIntro.rest", state="attached", timeout=12000)
+    check(p.evaluate("__ssIntro.info().state") == "wait", "인트로가 끝나면 친구들은 아래 줄에서 대기 동작")
+    lu = p.evaluate("(()=>{const L=__ssIntro.info().last;return Object.keys(L).filter(k=>k!=='__order').map(k=>L[k].view[5]/L[k].view[0])})()")
+    check(len(lu) == 6, "친구 6명이 남아 있어야 함")
+    box = p.evaluate("(()=>{const c=document.querySelector('#ssIntro canvas').getBoundingClientRect(),k=document.querySelector('.ss-card').getBoundingClientRect();return [k.bottom, c.top + c.height * 503 / 600]})()")
+    check(box[0] < box[1], f"로그인 상자는 친구들 줄보다 위에 있어야 함(상자 아래 {box[0]:.0f} < 친구들 위 {box[1]:.0f})")
+    check(p.evaluate("getComputedStyle(document.getElementById('ssIntro')).pointerEvents") == "none", "남은 친구들이 클릭을 막으면 안 됨")
     check(p.evaluate("document.getElementById('ssGate').inert") is False, "인트로가 끝나면 칸 잠금이 풀려야 함")
     check(p.evaluate("document.activeElement && document.activeElement.id") == "ssU", "끝나면 아이디 칸에 커서")
     check(p.evaluate("document.documentElement.classList.contains('ss-reveal')"), "새 로그인 화면 등장")
     G.typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".topnav", state="visible")
     check(p.locator("#ssScene").is_hidden(), "로그인하면 배경 장면은 숨겨져야 함")
+    p.wait_for_selector("#ssIntro", state="detached", timeout=3000)
 
 def t_skip(b, ctx, m):
     p = open_preview(ctx, m); p.wait_for_timeout(700); p.keyboard.press("Escape")
-    p.wait_for_selector("#ssIntro", state="detached", timeout=2000)
+    p.wait_for_selector("#ssIntro.rest", state="attached", timeout=2000)
     check(p.evaluate("document.activeElement.id") == "ssU", "Esc 로 건너뛰면 바로 아이디 칸")
+    check(p.evaluate("__ssIntro.info().state") == "wait", "건너뛰면 친구들은 바로 아래 줄 자리로")
     q = open_preview(ctx, m); q.wait_for_timeout(900); q.click(".ss-skip")
-    q.wait_for_selector("#ssIntro", state="detached", timeout=2000)
+    q.wait_for_selector("#ssIntro.rest", state="attached", timeout=2000)
     check(q.evaluate("document.getElementById('ssGate').inert") is False, "버튼으로 건너뛰어도 칸 잠금이 풀려야 함")
 
 def t_auto_login_no_intro(b, ctx, m):
@@ -87,7 +95,7 @@ def t_reduced_motion(b, ctx, m):
     rc = b.new_context(reduced_motion="reduce"); p = open_preview(rc, m)
     wait_js(p, "!!(window.__ssIntro && __ssIntro.info().state === 'play')")
     check(p.evaluate("__ssIntro.info().reduce") is True, "움직임 줄이기면 간소화한 인트로")
-    p.keyboard.press("Escape"); p.wait_for_selector("#ssIntro", state="detached", timeout=2000); rc.close()
+    p.keyboard.press("Escape"); p.wait_for_selector("#ssIntro.rest", state="attached", timeout=2000); rc.close()
 
 TESTS = [t_default_unchanged, t_preview_intro_then_login, t_skip, t_auto_login_no_intro, t_intro_files_missing, t_password_no_reaction, t_reduced_motion]
 if __name__ == "__main__":
