@@ -1,0 +1,83 @@
+{
+ "title": {
+  "file": "assets/title.webp",
+  "w": 1120,
+  "h": 348,
+  "anchor": [
+   560.0,
+   173.89
+  ],
+  "bytes": 79406
+ },
+ "ray_y": {
+  "file": "assets/ray_y.webp",
+  "w": 55,
+  "h": 180,
+  "anchor": [
+   30.58,
+   179.03
+  ],
+  "bytes": 3576
+ },
+ "ray_p": {
+  "file": "assets/ray_p.webp",
+  "w": 56,
+  "h": 180,
+  "anchor": [
+   16.56,
+   179.01
+  ],
+  "bytes": 3560
+ },
+ "ray_s": {
+  "file": "assets/ray_s.webp",
+  "w": 61,
+  "h": 180,
+  "anchor": [
+   26.67,
+   178.96
+  ],
+  "bytes": 3708
+ },
+ "conf_y": {
+  "file": "assets/conf_y.webp",
+  "w": 26,
+  "h": 48,
+  "anchor": [
+   13.1,
+   24.0
+  ],
+  "bytes": 300
+ },
+ "conf_p": {
+  "file": "assets/conf_p.webp",
+  "w": 28,
+  "h": 48,
+  "anchor": [
+   13.97,
+   24.0
+  ],
+  "bytes": 286
+ },
+ "conf_s": {
+  "file": "assets/conf_s.webp",
+  "w": 27,
+  "h": 48,
+  "anchor": [
+   13.49,
+   24.0
+  ],
+  "bytes": 316
+ },
+ "bg": {
+  "file": "assets/bg.webp",
+  "w": 1400,
+  "h": 790,
+  "bytes": 202114,
+  "source": [
+   1670,
+   942
+  ],
+  "vanishing_point_source": null
+ }
+}
