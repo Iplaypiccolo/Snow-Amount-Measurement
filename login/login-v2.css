@@ -1,7 +1,8 @@
 /* ============================================================
    login/login-v2.css — 새 로그인 화면(겨울 색감)  [미리보기 전용: html.ss-v2 일 때만 적용]
    색: 눈(바탕) · 얼음(선) · 먹색(글자) · 강철(보조 글자) · 제설차 경광등 주황(강조 하나)
-   배치: 로그인 상자는 화면 위쪽(중상단) 가운데, 인트로가 끝난 친구들은 작아진 채 화면 아래 줄에 남음. 이름·제목 글자는 두지 않음.
+   배치: 인트로는 화면 가운데. 끝나면 친구들 줄은 왼쪽으로 옮겨 가 남고(intro-loader.js 가 화면 크기에 맞춰 자리 계산), 로그인 상자는 오른쪽에 나타남.
+         휴대폰(760px 미만)은 상자를 위에, 친구들 줄은 가운데에서 조금 아래로. 이름·제목 글자는 두지 않음.
    움직임: 등장 순서(제목 → 상자 → 칸), 눈 내림, 포인터 시차, 자석 버튼. '움직임 줄이기' 설정이면 모두 끔.
    ============================================================ */
 html.ss-v2{
@@ -22,7 +23,7 @@ html.ss-v2 .ss-road .ss-road-lane{stroke:var(--mist);stroke-dasharray:14 22;anim
 @keyframes ssLane{to{stroke-dashoffset:-36}}
 
 /* 로그인 잠금 화면(auth/gate.js 의 상자 구조는 그대로, 모양만) */
-html.ss-v2 .ss-gate{background:transparent;justify-content:center;align-items:flex-start;padding:clamp(24px,12vh,140px) 18px 24px;color:var(--ink)}
+html.ss-v2 .ss-gate{background:transparent;justify-content:flex-end;align-items:center;padding:24px clamp(24px,9vw,160px) 24px 24px;color:var(--ink)}
 html.ss-v2 .ss-card{position:relative;width:min(392px,100%);padding:30px 30px 24px;border-radius:20px;background:rgba(255,255,255,.86);
   -webkit-backdrop-filter:blur(14px) saturate(1.1);backdrop-filter:blur(14px) saturate(1.1);
   border:1px solid rgba(255,255,255,.9);box-shadow:0 1px 0 var(--ice) inset,0 30px 70px -28px rgba(19,33,44,.28),0 0 0 1px rgba(185,203,216,.55)}
@@ -68,13 +69,13 @@ html.ss-v2.ss-reveal .ss-card form>:nth-child(5){animation-delay:.46s}
 @keyframes ssRise{from{opacity:0;transform:translateY(36px) scale(.97)}to{opacity:1;transform:none}}
 
 /* 인트로 무대 */
-.ss-intro{position:fixed;inset:0;z-index:10000;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;cursor:pointer;opacity:0;transition:opacity .45s var(--glide,ease)}
+.ss-intro{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;opacity:0;transition:opacity .45s var(--glide,ease)}
 .ss-intro.on{opacity:1}
 /* 인트로가 끝난 뒤: 친구들은 아래 줄에 남고, 로그인 상자보다 뒤·배경보다 앞. 클릭·입력은 로그인 상자로 */
 .ss-intro.rest{z-index:9998;pointer-events:none;cursor:auto}
 .ss-intro.rest .ss-skip{display:none}
 body.authed .ss-intro{display:none}
-.ss-intro-stage{position:relative;flex:none;width:min(100vw,calc(100vh * 1000 / 600));aspect-ratio:1000/600;transform-origin:50% 100%;transition:transform .9s var(--glide,ease)}
+.ss-intro-stage{position:relative;flex:none;width:min(100vw,calc(100vh * 1000 / 600));aspect-ratio:1000/600;transform-origin:0 0;transition:transform 1s var(--glide,ease)}
 .ss-intro-stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .ss-skip{position:fixed;right:clamp(14px,3vw,36px);bottom:clamp(14px,4vh,40px);display:inline-flex;gap:8px;align-items:center;padding:10px 14px 10px 16px;border-radius:999px;border:1px solid rgba(185,203,216,.9);
   background:rgba(255,255,255,.82);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:#13212c;font:600 13px/1 "Pretendard",-apple-system,"Malgun Gothic",sans-serif;cursor:pointer;
@@ -88,11 +89,9 @@ body.authed .ss-intro{display:none}
 /* 휴대폰·좁은 화면: 위아래 한 줄 */
 @media (max-width:760px){
   html.ss-v2 .ss-road{height:34vh}
-  html.ss-v2 .ss-gate{padding:28px 16px 24px}
-  .ss-intro.rest .ss-intro-stage{transform:scale(1.6)}   /* 좁은 화면: 아래 줄 친구들이 너무 작지 않게 키움 */
+  html.ss-v2 .ss-gate{justify-content:center;align-items:flex-start;padding:28px 16px 24px}
   html.ss-v2 .ss-card{padding:24px 22px 20px}
 }
-@media (max-height:640px) and (min-width:761px){html.ss-v2 .ss-gate{padding-top:20px}}
 @media (prefers-reduced-motion:reduce){
   html.ss-v2 *,html.ss-v2 *::before{animation:none !important;transition:none !important}
   html.ss-v2 .ss-btn{transform:none}

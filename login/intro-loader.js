@@ -4,7 +4,8 @@
    - 로그인 판단(auth/auth.js·auth/gate.js)은 건드리지 않습니다. 화면 장식과 인트로만 얹습니다.
    - 자동 로그인으로 들어오는 사람(저장된 로그인 열쇠가 있는 경우)은 인트로를 보지 않습니다.
    - 인트로: 매번 재생. 건너뛰기 버튼·화면 아무 곳 클릭·Esc/Enter/Space 로 바로 로그인 화면(친구들은 곧바로 아래 줄 자리로).
-     인트로가 끝나면 친구들은 작아진 채 화면 아래 줄에 남아 대기 동작을 이어 감(로그인 상자는 위쪽). 로그인하면 사라짐.
+     인트로는 화면 가운데에서 재생. 끝나면 친구들 줄이 왼쪽으로 옮겨 가 대기 동작을 이어 가고, 로그인 상자는 오른쪽에 나타남.
+     휴대폰(760px 미만)은 상자가 위, 친구들 줄은 가운데에서 조금 아래. 로그인하면 친구들도 사라짐.
      그림을 5초 안에 다 불러오지 못하면 로그인 화면부터 보여 주고, 늦게라도 다 불러오면 친구들을 아래 줄에 바로 세움. 오류면 친구들 없이.
    - 인트로 동안 로그인 칸은 잠가 둡니다(inert) → 보이지 않는 칸에 글자가 입력되는 일이 없음.
    - 비밀번호 칸은 어떤 키·몇 글자를 입력하는지에 반응하지 않습니다(움직임 효과는 포인터 위치에만 반응).
@@ -59,8 +60,26 @@
       if (done) return; done = true; root.clearTimeout(timer);
       root.removeEventListener('keydown', onKey, true); ov.removeEventListener('click', finish);
       if (started && intro) intro.skip();
-      ov.classList.add('rest'); reveal();
+      ov.classList.add('rest'); reveal(); place();
     }
+    // 끝난 뒤 친구들 줄의 자리: 무대(1000×600) 안 줄의 범위 LINE 을 화면의 빈 곳에 맞춰 옮기고 키움(무대 전체를 transform)
+    var LINE = [222, 498, 788, 587];   // 정렬한 친구 6명의 보이는 그림 범위(논리 좌표, intro-cast.js 정렬 값 기준·여유 4px)
+    function place() {
+      var st = ov.querySelector('.ss-intro-stage'), card = doc.querySelector('#ssGate .ss-card');
+      if (!st || !ov.classList.contains('rest')) return;
+      var k = st.offsetWidth / 1000, lw = (LINE[2] - LINE[0]) * k, lh = (LINE[3] - LINE[1]) * k, vw = root.innerWidth, vh = root.innerHeight;
+      var cb = card ? card.offsetTop + card.offsetHeight : 0, cl = card ? card.offsetLeft : vw, s, cx, cy;
+      if (vw < 761) {                 // 휴대폰: 상자 아래, 화면 가운데보다 조금 아래
+        s = Math.min((vw - 32) / lw, 2.2); cx = vw / 2; cy = Math.max(vh * 0.62, cb + 28 + lh * s / 2); cy = Math.min(cy, vh - 16 - lh * s / 2);
+      } else {                        // PC: 상자 왼쪽 빈 곳의 가운데
+        var left = Math.max(24, vw * 0.04), right = cl - Math.max(32, vw * 0.04);
+        s = Math.min((right - left) / lw, (vh * 0.5) / lh, 2.6); cx = (left + right) / 2; cy = vh * 0.52;
+      }
+      var x0 = st.offsetLeft + LINE[0] * k, y0 = st.offsetTop + LINE[1] * k;   // 줄 왼쪽 위(옮기기 전 화면 위치)
+      var tx = cx - lw * s / 2 - st.offsetLeft - (x0 - st.offsetLeft) * s, ty = cy - lh * s / 2 - st.offsetTop - (y0 - st.offsetTop) * s;
+      st.style.transform = 'translate(' + tx.toFixed(1) + 'px,' + ty.toFixed(1) + 'px) scale(' + s.toFixed(3) + ')';
+    }
+    root.addEventListener('resize', function () { root.requestAnimationFrame(place); });
     function drop() { root.clearTimeout(timer); if (intro) intro.destroy(); if (ov.parentNode) ov.parentNode.removeChild(ov); }
     // 로그인하면 친구들도 정리(화면 아래 그리기를 멈춤)
     new root.MutationObserver(function (l, ob) { if (doc.body.classList.contains('authed')) { ob.disconnect(); drop(); } }).observe(doc.body, { attributes: true, attributeFilter: ['class'] });
