@@ -7,6 +7,8 @@
 //  * 기상청이 가끔 응답이 늦거나 504(30초 시간 초과)를 줌: 정상 응답은 1초 안팎이라 15초 넘게 걸리면 끊고 1초 뒤 한 번 더.
 //    함수 한 번은 약 115초 안에 끝냄(무료 플랜 최대 150초). 못 받은 시각은 다음 예약(30분마다, 11:40까지) 때 그 시각만.
 //  * 기상청 키는 함수 비밀값 KMA_AUTH_KEY 에만. 키가 들어간 주소는 오류·기록에 남기지 않는다.
+//  * 시험 호출 {"probe":"YYYYMMDD","sd":"day","mi":"00"}: 그날 00~23시(분 = mi)를 받아 저장하지 않고 요약만 돌려줌 — 값이 매시 바뀌는지(1시간 간격인지),
+//    시각이 지나며 줄어드는 일이 있는지 확인용(2026-10-18). sd = day(일 신적설) / 3hr / 24h / tot(적설)
 //  * 순수 로직은 Node 로 시험: tests/test_collect_snow.mjs
 // ============================================================
 export const SNOW_URL = 'https://apihub.kma.go.kr/api/typ01/url/kma_snow1.php';
@@ -32,6 +34,19 @@ export function parseSnow(text, tm) {
   return n ? out : null;
 }
 
+// 시험 호출 요약: byHour = 시각마다 { 관측소: 값 } 또는 null → 관측소 수, 시각마다 값이 바뀐 관측소 수(늘어남·줄어듦), 값이 가장 큰 관측소 6곳의 24시각 값
+export function seriesStats(byHour) {
+  const stns = new Set(); byHour.forEach((m) => m && Object.keys(m).forEach((k) => stns.add(k)));
+  const up = Array(byHour.length).fill(0), down = Array(byHour.length).fill(0), series = {};
+  for (const s of stns) {
+    const v = byHour.map((m) => (m && s in m ? m[s] : null)); series[s] = v;
+    for (let h = 1; h < v.length; h++) { if (v[h] == null || v[h - 1] == null || v[h] === v[h - 1]) continue; (v[h] > v[h - 1] ? up : down)[h]++; }
+  }
+  const peak = (s) => Math.max(...series[s].map((x) => (x == null ? -1 : x)));
+  const top = [...stns].sort((a, b) => peak(b) - peak(a)).slice(0, 6).map((s) => [s, series[s]]);
+  return { stations: stns.size, present: byHour.map((m) => (m ? Object.keys(m).length : null)), up, down, top };
+}
+
 async function allowed(req, deps) {
   const t = req.headers.get('x-collector-token');
   if (t) return { ok: await deps.store.tokenOk(t), admin: false };
@@ -54,6 +69,18 @@ export async function handle(req, deps) {
   const key = String(deps.env('KMA_AUTH_KEY') || '').trim();
   if (!key) return json(200, { ok: false, error: 'no_key' });
 
+  if (typeof body.probe === 'string' && /^\d{8}$/.test(body.probe)) {          // 시험 호출: 저장 없이 요약만
+    const sd = ['day', '3hr', '24h', 'tot'].includes(body.sd) ? body.sd : 'day', mi = /^[0-5]\d$/.test(body.mi || '') ? body.mi : '00';
+    const t0 = deps.now(), byHour = []; let lastErr = null;
+    for (let h = 0; h < 24; h++) {
+      const tm = body.probe + String(h).padStart(2, '0') + mi;
+      if (deps.now() - t0 + CALL_MS > BUDGET_MS) { lastErr = 'budget'; break; }
+      const r = await deps.fetchText(`${SNOW_URL}?sd=${sd}&tm=${tm}&help=0&authKey=${encodeURIComponent(key)}`);
+      const vals = r.status === 200 ? parseSnow(r.text, tm) : null; if (!vals) lastErr = `${tm} ${r.status === 200 ? '형식' : 'HTTP ' + r.status}`;
+      byHour.push(vals); await deps.sleep(GAP_MS);
+    }
+    return json(200, { ok: true, probe: body.probe, sd, mi, hours: byHour.length, error: lastErr, ...seriesStats(byHour) });
+  }
   const { data: plan, error } = await deps.store.plan(date ? date.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3') : null);
   if (error || !plan) return json(500, { ok: false, error: 'db' });
   if (!plan.in_season) return json(200, { ok: true, skipped: 'out_of_season', date: plan.date });
