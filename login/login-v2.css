@@ -11,6 +11,10 @@ html.ss-v2{
   --spring:cubic-bezier(.2,1.24,.32,1); --glide:cubic-bezier(.16,1,.3,1);
   --px:0; --py:0;
 }
+/* 이 파일 다음에 오는 login/intro-loader.js 가 실행되기 전 잠깐 동안 예전 모양의 로그인 상자가 번쩍 보이지 않게 가려 둠.
+   그 스크립트가 html 에 ss-ready 를 붙이면 바로 풀리고, 스크립트를 못 받아도 3초 뒤에는 저절로 보임(로그인을 막지 않음). */
+html:not(.ss-ready) .ss-gate{visibility:hidden;animation:ssShowGate 0s linear 3s forwards}
+@keyframes ssShowGate{to{visibility:visible}}
 /* 바탕 장면 */
 html.ss-v2 #ssScene{position:fixed;inset:0;z-index:9997;overflow:hidden;pointer-events:none;
   background:radial-gradient(120% 70% at 78% 8%,#ffffff 0%,rgba(255,255,255,0) 60%),linear-gradient(180deg,#e3ecf3 0%,var(--snow) 58%,#edf2f6 100%)}

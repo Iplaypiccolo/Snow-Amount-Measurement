@@ -1,12 +1,12 @@
 /* ============================================================
-   login/intro-loader.js — 새 로그인 화면(겨울 색감) + 차로차로 친구들 인트로  [미리보기 전용]
-   - 지금은 주소에 ?intro=preview 가 있을 때만 동작합니다. 없으면 아무것도 하지 않아 기존 로그인 화면 그대로입니다.
+   login/intro-loader.js — 새 로그인 화면(겨울 색감) + 차로차로 친구들 인트로  (2026-10-19 기본 화면으로 적용)
+   - 주소에 ?intro=off 를 붙이면 아무것도 하지 않아 예전 로그인 화면이 나옵니다(문제가 생겼을 때의 비상용).
    - 로그인 판단(auth/auth.js·auth/gate.js)은 건드리지 않습니다. 화면 장식과 인트로만 얹습니다.
    - 자동 로그인으로 들어오는 사람(저장된 로그인 열쇠가 있는 경우)은 인트로를 보지 않습니다.
    - 인트로: 매번 재생. 건너뛰기 버튼·화면 아무 곳 클릭·Esc/Enter/Space 로 바로 로그인 화면.
      인트로는 화면 가운데에서 재생. 정렬 단계(5.15~5.85초)에 친구들이 작아지며 최종 자리(PC: 왼쪽 / 휴대폰: 상자 아래)로 한 번에 이동하고,
      그 순간 로그인 상자가 오른쪽(휴대폰: 위)에 나타남. 건너뛰면 정렬 단계부터 이어 재생. 로그인하면 친구들도 사라짐.
-     그림을 5초 안에 다 불러오지 못하면 로그인 화면부터 보여 주고, 늦게라도 다 불러오면 친구들을 아래 줄에 바로 세움. 오류면 친구들 없이.
+     그림을 5초 안에 다 불러오지 못하면 로그인 화면부터 보여 주고, 늦게라도 다 불러오면 친구들을 최종 자리에 바로 세움. 오류면 친구들 없이.
    - 인트로 동안 로그인 칸은 잠가 둡니다(inert) → 보이지 않는 칸에 글자가 입력되는 일이 없음.
    - 비밀번호 칸은 어떤 키·몇 글자를 입력하는지에 반응하지 않습니다(움직임 효과는 포인터 위치에만 반응).
    - 인트로 파일(login/intro/)은 tools/build_login_intro.py 가 차로차로 저장소에서 옮겨 옵니다. 아래 V 는 그 도구가 갱신하는 파일 지문.
@@ -14,7 +14,8 @@
 (function (root) {
   'use strict';
   var doc = root.document, html = doc.documentElement;
-  if (!/[?&]intro=preview(&|$)/.test(root.location.search)) return;
+  html.classList.add('ss-ready');   // 이 파일이 실행됨 → login-v2.css 의 '잠깐 가리기'를 품(아래 CSS 설명)
+  if (/[?&]intro=off(&|$)/.test(root.location.search)) return;   // 비상용: 주소 끝에 ?intro=off 를 붙이면 예전 로그인 화면(인트로 없음)
   var V = /*@@V@@*/{"charo-pet.js":"3751917b","charo-intro.js":"ed786731","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charocharo":"d1d52d02","chumdani":"828cfe2c","giltong":"78da0fa0","tira":"677a53d8","tarotaro":"9de44863","doroduck":"742a9c73","fx":"99ec5eb7"};
   var BASE = 'login/intro/', LOAD_LIMIT = 5000;
   var reduce = false; try { reduce = root.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}

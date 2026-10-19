@@ -38,7 +38,7 @@ SUITES = [
     ('화면 파일 꼬리표(캐시)', 'tests/test_asset_stamps.py', 'py'),
     ('관리 콘솔 화면', 'tests/test_admin_ui.py', 'ui'),
     ('로그인 잠금 화면', 'tests/test_login_gate.py', 'ui'),
-    ('로그인 인트로(미리보기)', 'tests/test_login_intro.py', 'ui'),
+    ('로그인 인트로·새 로그인 화면', 'tests/test_login_intro.py', 'ui'),
     ('관할 화면', 'tests/test_jurisdiction_ui.py', 'ui'),
     ('구간 변경 요청 화면', 'tests/test_jurisdiction_requests.py', 'ui'),
     ('격자 편입 화면', 'tests/test_grid_ui.py', 'ui'),
