@@ -22,6 +22,16 @@
  *     다른 모든 반응보다 우선 — 첫 프레임에 감은 눈, 마우스 반응·시선·깜빡임·타자는 끔. 비밀번호 칸의 input/keydown 은 듣지 않음.
  *   · 전환은 직전 자세에서 0.16초 동안 이어 붙임(눈·입 그림은 바로 바뀜). 마우스용 얼굴(m_ 파츠)은 키보드 동작 중 숨기고 p.keys.unbase 로 원래 얼굴을 켬.
  *   · 움직임 줄이기: 타자 동작 없음, 비밀번호 때 감은 눈(그림만)만.
+ *
+ * 터치·클릭 반응(opt.tap 이 false 가 아니면, 2026-10-20): 캐릭터 파일의 mt_press·mt_tap·mt_cancel
+ *   · 친구 그림(불투명한 부분, 손가락 여유 6px) 위에서 시작한 주 포인터 하나만. 입력칸·버튼·로그인 상자 위는 무시.
+ *   · 0.08초 넘게 누르고 있으면 작은 준비 자세(mt_press), 0.45초 안에 12px 이하로 움직이고 떼면 큰 동작(mt_tap) 한 번.
+ *     12px 넘게 쓸기·오래 누르기·pointercancel·두 번째 손가락·탭 숨김 → 취소(mt_cancel). 시간은 performance.now.
+ *   · preventDefault 를 하지 않음(스크롤·확대는 브라우저 그대로). click 은 듣지 않으므로 두 번 재생되지 않음.
+ *   · 큰 동작은 한 번에 한 친구만. 재생 중 다시 누르면 작은 원만(다시 시작·예약·높이 누적 없음).
+ *   · 우선순위: 비밀번호 > 터치 > 아이디 타자 > 마우스·대기. 비밀번호 칸에 있는 동안 터치는 아무것도 하지 않음.
+ *   · 첨다니 공중제비(360도)는 끝나고 돌아올 때 각도를 가까운 쪽으로 맞춰 거꾸로 돌지 않음.
+ *   · 움직임 줄이기: 움직임을 12%로, 공중제비·불꽃 없음.
  */
 (function (global) {
   'use strict';
@@ -35,6 +45,7 @@
     if (opt.mouse === false) hover = false;   // 마우스 반응만 끔(키보드 반응은 그대로)
     var ptr = { x: -1e4, y: -1e4, inside: false, t: 0 }, typingAt = -1e9, intro = null, frameAt = -1, frameNow = 0, acting = null, lastNow = 0;
     var st = {};   // 친구별 상태
+    var TAP = opt.tap !== false, tap = { ptr: null, busyUntil: -1e9, last: {} }, live = false, masks = {};
     var KEYS = opt.keys !== false, kbOn = false, composing = false, kb = { mode: 'idle', pwAt: -1e9, outAt: -1e9, lastHero: -1e9, lastEcho: -1e9, leader: 0, order: [] };
     function now() { return global.performance.now() / 1000; }
     function onMove(e) { if (e.pointerType && e.pointerType !== 'mouse') return; ptr.x = e.clientX; ptr.y = e.clientY; ptr.inside = true; ptr.t = now(); }
@@ -53,25 +64,92 @@
       doc.addEventListener('input', function (e) { if (isUser(e) && !composing && !e.isComposing) signal(); }, true);
     }
     function clipOf(c, id) { return c.P && CP.findClip(c.P, id); }
+    // ── 터치·클릭 ──
+    function maskOf(P, asset) {   // 그림의 불투명한 곳(작게 줄인 알파). 아직 안 불러왔으면 null(사각형으로 판정)
+      if (masks[asset] !== undefined) return masks[asset];
+      var im = CP.imgFor(P, asset); if (!im || !im.complete || !im.naturalWidth) return null;
+      try {
+        var k = Math.min(1, 96 / Math.max(im.naturalWidth, im.naturalHeight)), w = Math.max(1, Math.round(im.naturalWidth * k)), h = Math.max(1, Math.round(im.naturalHeight * k));
+        var cv = doc.createElement('canvas'); cv.width = w; cv.height = h; var x = cv.getContext('2d'); x.drawImage(im, 0, 0, w, h);
+        var d = x.getImageData(0, 0, w, h).data, a = new Uint8Array(w * h); for (var i = 0; i < w * h; i++) a[i] = d[i * 4 + 3];
+        masks[asset] = { w: w, h: h, a: a };
+      } catch (e) { masks[asset] = null; }
+      return masks[asset];
+    }
+    function hitPart(c, L, px, py) {   // 캔버스 픽셀 좌표가 이 친구의 보이는 그림 위인지(맨 앞 파츠부터)
+      var P = c.P, W = CP.worldMatrices(P, L.fp);
+      for (var i = P.parts.length - 1; i >= 0; i--) {
+        var pt = P.parts[i], f = L.fp[pt.id]; if (!f || f.op <= 0.05) continue; var v = pt.images[f.img] || pt.images[0]; if (!v) continue;
+        var q = CP.apply(CP.inv(CP.mul(L.view, W[pt.id])), px, py), u = (q[0] - v.x) / v.w, w = (q[1] - v.y) / v.h;
+        if (u < 0 || u >= 1 || w < 0 || w >= 1) continue;
+        var m = maskOf(P, v.asset); if (!m) return true;
+        if (m.a[Math.floor(w * m.h) * m.w + Math.floor(u * m.w)] > 40) return true;
+      }
+      return false;
+    }
+    function hitAt(x, y) {
+      if (!intro) return null;
+      var info = intro.info(), order = (info.last.__order || []).slice().reverse(), cv = opt.canvas, r = cv.getBoundingClientRect(), k = cv.clientWidth ? cv.width / cv.clientWidth : 1;
+      var R = [[0, 0], [6, 0], [-6, 0], [0, 6], [0, -6]];   // 손가락 여유 6px
+      for (var j = 0; j < R.length; j++) for (var i = 0; i < order.length; i++) {
+        var c = intro.cast.filter(function (z) { return z.id === order[i]; })[0], L = info.last[order[i]];
+        if (c && c.P && L && hitPart(c, L, (x + R[j][0] - r.left) * k, (y + R[j][1] - r.top) * k)) return c;
+      }
+      return null;
+    }
+    function dot(x, y) {   // 작은 원(눌렀다는 표시)
+      var el = doc.createElement('div'); el.className = opt.dotClass || 'charo-tap-dot'; el.setAttribute('aria-hidden', 'true');
+      el.style.left = x + 'px'; el.style.top = y + 'px'; doc.body.appendChild(el);
+      global.setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 500);
+    }
+    function tapRunning(t) { return t < tap.busyUntil; }
+    function cancelTap() {
+      var p = tap.ptr; if (!p) return; tap.ptr = null;
+      var s = S(p.c); if (p.pressed && s.tap && s.tap.hold) { var cl = clipOf(p.c, 'mt_cancel'); s.tap = cl ? { clip: cl, t0: now() } : null; }
+    }
+    function playTap(c) {
+      var t = now(), s = S(c), cl = clipOf(c, 'mt_tap');
+      if (!cl || tapRunning(t) || t - (tap.last[c.id] || -1e9) < 0.25) return false;
+      s.tap = { clip: cl, t0: t }; s.kb = null; tap.last[c.id] = t; tap.busyUntil = t + cl.dur + 0.15; return true;
+    }
+    function interactive(el) { return el && el.closest && el.closest('input,button,select,textarea,a,label,[role=button],.ss-card,.ss-skip'); }
+    if (TAP) {
+      doc.addEventListener('pointerdown', function (e) {
+        if (!e.isPrimary) { cancelTap(); return; }               // 두 번째 손가락
+        if (!live || kb.mode === 'pw' || tap.ptr || (e.pointerType === 'mouse' && e.button !== 0) || interactive(e.target)) return;
+        var c = hitAt(e.clientX, e.clientY); if (!c) return;
+        dot(e.clientX, e.clientY);
+        tap.ptr = { id: e.pointerId, c: c, x: e.clientX, y: e.clientY, w0: now(), pressed: false };
+      }, { capture: true, passive: true });
+      doc.addEventListener('pointermove', function (e) { var p = tap.ptr; if (p && p.id === e.pointerId && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 12) cancelTap(); }, { capture: true, passive: true });
+      doc.addEventListener('pointerup', function (e) {
+        var p = tap.ptr; if (!p || p.id !== e.pointerId) return;
+        var ok = now() - p.w0 <= 0.45 && Math.hypot(e.clientX - p.x, e.clientY - p.y) <= 12 && kb.mode !== 'pw';
+        if (ok && playTap(p.c)) { tap.ptr = null; return; }
+        cancelTap();
+      }, { capture: true, passive: true });
+      doc.addEventListener('pointercancel', function (e) { if (tap.ptr && tap.ptr.id === e.pointerId) cancelTap(); }, true);
+      doc.addEventListener('visibilitychange', function () { if (doc.hidden) cancelTap(); });
+    }
     function signal() {
       var t = now(); typingAt = t;
       if (!kbOn || reduce || kb.mode === 'pw' || t - kb.outAt < 0.65 || (opt.busy && opt.busy())) return;
       var L = kb.order, n = L.length; if (!n) return;
       if (t - kb.lastHero >= 2.2) {
         var h = L[kb.leader % n], sh = S(h), cl = clipOf(h, 'kb_type');
-        if (cl) { sh.kb = { clip: cl, t0: t }; kb.lastHero = t; }
+        if (cl && !sh.tap) { sh.kb = { clip: cl, t0: t }; kb.lastHero = t; }
         kb.leader = (kb.leader + 1) % n;
       }
       if (t - kb.lastEcho > 0.7) {
         var e = L[(kb.leader + 1) % n], se = S(e), ce = clipOf(e, 'kb_echo');
-        if (ce && !(se.kb && t - se.kb.t0 < se.kb.clip.dur)) se.kb = { clip: ce, t0: t };
+        if (ce && !se.tap && !(se.kb && t - se.kb.t0 < se.kb.clip.dur)) se.kb = { clip: ce, t0: t };
         kb.lastEcho = t;
       }
     }
     function blocked() {
       var a = doc.activeElement;
       return { gaze: !hover || !ptr.inside || (a && a.id === opt.passField), act: !hover || reduce || !ptr.inside || (a && a.id === opt.passField) ||
-        now() - typingAt < 1.2 || kb.mode === 'pw' || now() - kb.outAt < 0.65 || (opt.busy && opt.busy()) };
+        now() - typingAt < 1.2 || !!tap.ptr || tapRunning(now()) || kb.mode === 'pw' || now() - kb.outAt < 0.65 || (opt.busy && opt.busy()) };
     }
     function S(c) {
       if (!st[c.id]) st[c.id] = { gx: 0, gy: 0, hr: 0, hy: 0, br: 0, lag: [], blinkAt: 0, dwellAt: 0, dwellX: 0, dwellY: 0, played: false, lastStart: -1e9, act: null, ret: null, dir: 'L', box: null };
@@ -94,11 +172,16 @@
 
     // 한 프레임에 한 번: 누가 반응할지 정함
     function tick(t, list) {
-      var dt = lastNow ? Math.min(0.1, t - lastNow) : 0; lastNow = t;
+      var dt = lastNow ? Math.min(0.1, t - lastNow) : 0; lastNow = t; live = true;
+      if (tap.ptr) {   // 누르는 중: 0.08초 뒤 준비 자세, 0.45초 넘으면 오래 누르기라 취소
+        var tp = tap.ptr, sp = S(tp.c);
+        if (t - tp.w0 > 0.45) cancelTap();
+        else if (!tp.pressed && t - tp.w0 >= 0.08 && !tapRunning(t)) { var pc = clipOf(tp.c, 'mt_press'); if (pc) { sp.tap = { clip: pc, t0: t, hold: true }; sp.kb = null; } tp.pressed = true; }
+      }
       if (KEYS) {   // 비밀번호 칸에 있는지(포커스만), 주연 순서(화면 왼쪽부터)
         kbOn = true;
         var ae = doc.activeElement, pw = !!(ae && ae.id === opt.passField);
-        if (pw && kb.mode !== 'pw') { kb.mode = 'pw'; kb.pwAt = t; list.forEach(function (c) { var s0 = S(c); s0.kb = null; if (s0.act) { s0.act = null; s0.ret = null; s0.endAt = t; } }); acting = null; }
+        if (pw && kb.mode !== 'pw') { kb.mode = 'pw'; kb.pwAt = t; tap.ptr = null; tap.busyUntil = -1e9; list.forEach(function (c) { var s0 = S(c); s0.kb = null; s0.tap = null; if (s0.act) { s0.act = null; s0.ret = null; s0.endAt = t; } }); acting = null; }
         else if (!pw && kb.mode === 'pw') { kb.mode = 'idle'; kb.outAt = t; }
         kb.order = list.filter(function (c) { return S(c).box; }).sort(function (a, b) { var A = S(a).box, B2 = S(b).box; return (A.x0 + A.x1) - (B2.x0 + B2.x1); });
       }
@@ -131,14 +214,20 @@
           if (cl) { s.act = { clip: cl, t0: t, gx: s.dir === 'L' ? -0.8 : 0.8, gy: -0.2 }; s.ret = null; s.played = true; s.endAt = 0; s.lastStart = t; acting = best; }
         }
       }
-      list.forEach(function (c) { var s = S(c); c.depthBoost = (s.act || s.ret || (s.kb && s.kb.clip.id === 'kb_type' && t - s.kb.t0 < s.kb.clip.dur)) ? 10 : 0; });
+      list.forEach(function (c) { var s = S(c); c.depthBoost = (s.act || s.ret || s.tap || (s.kb && s.kb.clip.id === 'kb_type' && t - s.kb.t0 < s.kb.clip.dur)) ? 10 : 0; });
     }
     function cancel(c, s, t) { if (!s.act) return; s.ret = { t0: t, dur: 0.42, from: s.last }; s.act = null; s.endAt = t; }
 
     // 키보드 동작: 지금 이 친구가 재생할 kb_ 클립과 그 안의 시각
     function kbNow(c, s, t) {
-      if (!KEYS) return null;
       var d;
+      if (s.tap && kb.mode !== 'pw') {   // 터치(비밀번호 다음으로 우선)
+        d = t - s.tap.t0;
+        if (s.tap.hold) return { id: s.tap.clip.id, tt: Math.min(d, s.tap.clip.dur), key: 'press@' + s.tap.t0, tap: true };
+        if (d < s.tap.clip.dur) return { id: s.tap.clip.id, tt: d, key: s.tap.clip.id + '@' + s.tap.t0, tap: true };
+        s.tap = null;
+      }
+      if (!KEYS) return null;
       if (kb.mode === 'pw') { d = t - kb.pwAt; return d < 0.65 ? { id: 'kb_private_in', tt: d, key: 'in' } : { id: 'kb_private_hold', tt: (d - 0.65) % 3, key: 'hold' }; }
       d = t - kb.outAt; if (d < 0.65) return { id: 'kb_private_out', tt: d, key: 'out' };
       if (s.kb) { d = t - s.kb.t0; if (d < s.kb.clip.dur) return { id: s.kb.clip.id, tt: d, key: s.kb.clip.id + '@' + s.kb.t0 }; s.kb = null; }
@@ -147,7 +236,12 @@
     function snapAll(off) { var o = {}; for (var id in off) { var a = off[id], b = {}; PROPS.forEach(function (k) { b[k] = a[k]; }); o[id] = b; } return o; }
     function blendFrom(off, from, u) {   // 이전 자세에서 이어 붙이기(위치·회전·배율만, 투명도·그림은 바로)
       var e = smooth(u);
-      for (var id in from) { var o = off[id], f = from[id]; if (!o) continue; ['x', 'y', 'rot', 'sx', 'sy'].forEach(function (k) { o[k] = f[k] + (o[k] - f[k]) * e; }); }
+      for (var id in from) {
+        var o = off[id], f = from[id]; if (!o) continue;
+        ['x', 'y', 'sx', 'sy'].forEach(function (k) { o[k] = f[k] + (o[k] - f[k]) * e; });
+        var fr = f.rot; while (fr - o.rot > 180) fr -= 360; while (o.rot - fr > 180) fr += 360;   // 360도(공중제비 끝) ↔ 0도: 가까운 쪽으로(거꾸로 돌지 않게)
+        o.rot = fr + (o.rot - fr) * e;
+      }
     }
     function applyKeys(c, s, off, t, K) {
       var P = c.P, cl = CP.findClip(P, K.id); if (!cl) return false;
@@ -157,13 +251,17 @@
       var pose = CP.clipPose(P, cl, K.tt);
       for (var pid in pose) {
         var o = off[pid]; if (!o) continue; var q = pose[pid];
+        if (reduce && K.tap) {   // 움직임 줄이기(터치): 움직임 12%, 공중제비 없음, 새로 켜지는 그림(불꽃) 없음
+          ['x', 'y', 'rot'].forEach(function (k) { if (q[k] != null && !(pid === 'flip' && k === 'rot')) o[k] += (q[k] - o[k]) * 0.12; });
+          if (q.op != null && q.op < o.op) o.op = q.op; if (q.img) o.img = q.img; continue;
+        }
         if (reduce) { if (q.img) o.img = q.img; continue; }   // 움직임 줄이기: 그림(감은 눈)만
         for (var j = 0; j < PROPS.length; j++) { var k = PROPS[j]; if (q[k] != null) o[k] = q[k]; }
         if (q.img) o.img = q.img;
       }
       if (reduce) for (var r in off) if (/^k_/.test(r)) off[r].op = 0;
       if (K.key !== s.kbKey) { s.kbTr = s.kbSnap ? { from: s.kbSnap, t0: t } : null; s.kbKey = K.key; s.kbId = K.id; }
-      if (s.kbTr && !s.kbTr.back && !reduce) { var uu = (t - s.kbTr.t0) / 0.16; if (uu < 1) blendFrom(off, s.kbTr.from, uu); else s.kbTr = null; }
+      if (s.kbTr && !s.kbTr.back && (!reduce || K.tap)) { var uu = (t - s.kbTr.t0) / 0.16; if (uu < 1) blendFrom(off, s.kbTr.from, uu); else s.kbTr = null; }
       else s.kbTr = null;
       s.kbSnap = snapAll(off);
       return true;
@@ -182,7 +280,7 @@
         s.gx = s.gy = s.hr = s.hy = s.br = 0; s.lag = [];
         return off;
       }
-      if (s.kbKey) { s.kbTr = s.kbSnap && !reduce ? { from: s.kbSnap, t0: t, back: true } : null; s.kbKey = null; s.kbSnap = null; }   // 끝남 → 기본으로 이어 붙이기
+      if (s.kbKey) { s.kbTr = s.kbSnap ? { from: s.kbSnap, t0: t, back: true } : null; s.kbKey = null; s.kbSnap = null; }   // 끝남 → 기본으로 이어 붙이기
       if (s.kbTr && s.kbTr.back) { var ub2 = (t - s.kbTr.t0) / 0.2; if (ub2 < 1) blendFrom(off, s.kbTr.from, ub2); else s.kbTr = null; }
       // 반응 동작
       if (s.act) {
@@ -238,7 +336,7 @@
         if (T !== frameAt) { frameAt = T; frameNow = now(); tick(frameNow, intro ? intro.cast.filter(function (x) { return x.P && x.P.mouse; }) : []); }   // 한 프레임(같은 T)에 한 번
         return apply(c, off, frameNow);
       },
-      state: function () { var o = {}; for (var k in st) o[k] = { act: !!st[k].act, ret: !!st[k].ret, played: st[k].played, gx: +st[k].gx.toFixed(3), dir: st[k].dir, kb: st[k].kbKey ? st[k].kbId : null }; o.__acting = acting && acting.id; o.__keys = { mode: kb.mode, order: kb.order.map(function (c) { return c.id; }) }; return o; },
+      state: function () { var o = {}; for (var k in st) o[k] = { act: !!st[k].act, ret: !!st[k].ret, played: st[k].played, gx: +st[k].gx.toFixed(3), dir: st[k].dir, kb: st[k].kbKey ? st[k].kbId : null, tap: st[k].tap ? st[k].tap.clip.id : null }; o.__acting = acting && acting.id; o.__keys = { mode: kb.mode, order: kb.order.map(function (c) { return c.id; }) }; o.__tap = { tracking: tap.ptr && tap.ptr.c.id, busy: tapRunning(now()) }; return o; },
       hover: hover
     };
     return api;

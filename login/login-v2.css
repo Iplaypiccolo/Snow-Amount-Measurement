@@ -82,6 +82,10 @@ body.authed .ss-intro{display:none}
 @media (hover:none){.ss-skip kbd{display:none}}
 .ss-skip:focus-visible{outline:3px solid rgba(222,106,38,.35);outline-offset:2px}
 .ss-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+/* 친구를 톡 했을 때 작은 원(눌렀다는 표시). 클릭을 막지 않음 */
+.ss-tap-dot{position:fixed;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:2px solid rgba(222,106,38,.65);pointer-events:none;z-index:9999;
+  animation:ssTapDot .45s cubic-bezier(.16,1,.3,1) forwards}
+@keyframes ssTapDot{from{transform:scale(.45);opacity:1}to{transform:scale(2);opacity:0}}
 
 /* 휴대폰·좁은 화면: 위아래 한 줄 */
 @media (max-width:760px){

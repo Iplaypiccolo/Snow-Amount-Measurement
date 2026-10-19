@@ -17,7 +17,7 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / 'login' / 'intro'
 SRC = Path(sys.argv[1] if len(sys.argv) > 1 else '../Charocharo').resolve()
-KB = ['kb_type', 'kb_echo', 'kb_private_in', 'kb_private_hold', 'kb_private_out']   # 키보드 반응(차로차로 저장소 intro/tools/add_keys.js)
+KB = ['kb_type', 'kb_echo', 'kb_private_in', 'kb_private_hold', 'kb_private_out', 'mt_press', 'mt_tap', 'mt_cancel']   # 키보드·터치 반응(차로차로 저장소 intro/tools/add_keys.js)
 CHARS = {   # 인트로 배치표의 id: (차로차로 저장소 안 파일, 남길 동작)
     'charocharo': ('charo-pet.json', ['c_breath', 'i_charo', 'i_charo_r', 'm_mouse_L', 'm_mouse_R'] + KB),
     'chumdani': ('chumdani/chumdani.json', ['c_idle', 'c_run_i', 'c_jump_i', 'c_welcome', 'c_flip', 'm_mouse_L', 'm_mouse_R'] + KB),

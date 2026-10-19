@@ -4,7 +4,8 @@
              건너뛰기(Esc·버튼) / 자동 로그인 사람은 인트로 없음 / 인트로 파일을 못 받으면 바로 로그인 화면 / 비밀번호 입력에 화면이 반응하지 않음 /
              움직임 줄이기 / 새 화면에서도 로그인이 그대로 됨 / 보안 정책(CSP) 아래에서 오류 없음 /
              친구들 마우스 반응(머무르면 반응·한 명만·방향·계속 머무르면 간격 두고 반복) / 키보드 반응(아이디 입력 = 화면 왼쪽부터 한 명씩 2.2초 간격·한글 조합 묶음,
-             비밀번호 칸 = 여섯 모두 첫 프레임에 감은 눈·마우스 반응 없음·입력 글자 수와 무관, 움직임 줄이기, ?keys=off, 휴대폰 입력 중 배치 고정)
+             비밀번호 칸 = 여섯 모두 첫 프레임에 감은 눈·마우스 반응 없음·입력 글자 수와 무관, 움직임 줄이기, ?keys=off, 휴대폰 입력 중 배치 고정) /
+             터치 반응(톡 = 그 친구 큰 동작 한 번·한 번에 한 명·연타 무시·쓸기/오래 누르기 취소·입력칸 무시·비밀번호 중 무시·첨다니 역회전 없음·움직임 줄이기·?tap=off)
 실행 (저장소 맨 위 폴더에서):  python tests/test_login_intro.py
 """
 import sys
@@ -180,8 +181,8 @@ def t_mouse_blocked(b, ctx, m):
     q.goto(T.URL + "?mouse=off"); q.wait_for_selector("#ssGate", state="attached", timeout=20000); wait_js(q, "!!(window.__ssIntro && __ssIntro.info().state === 'play')")
     check(q.evaluate("!!window.__ssMouse && __ssMouse.hover === false"), "?mouse=off 면 마우스 반응만 꺼짐(키보드 반응 때문에 파일은 받음)")
     q = ctx.new_page(); q.set_viewport_size({"width": 1400, "height": 900}); q.route("**/*", T.route); q.route(SBM.SB + "/**", m.handle)
-    q.goto(T.URL + "?mouse=off&keys=off"); q.wait_for_selector("#ssGate", state="attached", timeout=20000); wait_js(q, "!!(window.__ssIntro && __ssIntro.info().state === 'play')")
-    check(q.evaluate("!window.__ssMouse && !window.CharoLoginMouse"), "?mouse=off&keys=off 면 반응 파일을 받지 않음(인트로는 그대로)")
+    q.goto(T.URL + "?mouse=off&keys=off&tap=off"); q.wait_for_selector("#ssGate", state="attached", timeout=20000); wait_js(q, "!!(window.__ssIntro && __ssIntro.info().state === 'play')")
+    check(q.evaluate("!window.__ssMouse && !window.CharoLoginMouse"), "?mouse=off&keys=off&tap=off 면 반응 파일을 받지 않음(인트로는 그대로)")
 
 def t_mouse_all(b, ctx, m):
     """여섯 친구 모두: 그 친구 근처에 머무르면 그 친구가(한 명만) 반응, 커서 방향(왼쪽/오른쪽) 동작, 로그인 대기 얼굴(티라·타로타로 마우스용 눈, 도로덕 팻말 숨김)"""
@@ -301,7 +302,70 @@ def t_keys_mobile_lock(b, ctx, m):
     check(p.evaluate(lay) == L0, "원래 크기로 돌아오면 같은 배치")
     mc.close()
 
-TESTS = [t_off_switch, t_preview_intro_then_login, t_single_move, t_skip, t_auto_login_no_intro, t_intro_files_missing, t_loader_missing, t_password_no_reaction, t_reduced_motion, t_mouse_giltong, t_mouse_blocked, t_mouse_all, t_keys_type, t_keys_password, t_keys_reduced_off, t_keys_mobile_lock]
+def tsd(p): return p.evaluate("(()=>{const s=__ssMouse.state(),o={};for(const k in s)if(k[0]!=='_')o[k]=s[k].tap;return o})()")
+def center(p, cid):
+    g = p.evaluate(GBOX, cid); return (g[0] + g[2]) / 2, g[1] + (g[3] - g[1]) * 0.55
+
+def t_tap_all(b, ctx, m):
+    """휴대폰에서 여섯 친구를 하나씩 톡: 그 친구만 큰 동작, 끝나면 대기 / 작은 원 표시 / 첨다니 공중제비 뒤 거꾸로 돌지 않음"""
+    mc = b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+    p = mc.new_page(); p.on("pageerror", lambda e: errors.append(str(e))); p.route("**/*", T.route); p.route(SBM.SB + "/**", m.handle)
+    p.goto(T.URL); p.wait_for_selector("#ssGate", state="attached", timeout=20000)
+    wait_js(p, "!!(window.__ssIntro && __ssIntro.info().state === 'play')"); p.evaluate("__ssIntro.jump(5.15)"); wait_js(p, "__ssIntro.info().state === 'wait'", 4000); p.wait_for_timeout(1200)
+    for cid in ORDER:
+        x, y = center(p, cid); p.touchscreen.tap(x, y); frames(p)
+        k = tsd(p); check(k[cid] == "mt_tap" and sum(1 for v in k.values() if v) == 1, f"{cid}: 톡 하면 그 친구만 큰 동작 {k}")
+        check(p.locator(".ss-tap-dot").count() >= 1, f"{cid}: 작은 원 표시")
+        check(p.evaluate("__ssIntro.info().last.__order.slice(-1)[0]") == cid, f"{cid}: 동작하는 친구가 맨 앞")
+        if cid == "chumdani":
+            rots = []
+            for _ in range(90):
+                rots.append(p.evaluate("[__ssIntro.info().last.chumdani.fp.flip.rot, __ssMouse.state().chumdani.tap]")); p.wait_for_timeout(45)
+            mid = [r for r, t in rots if t] ; after = [r for r, t in rots if not t]
+            check(max(mid) > 300, f"첨다니: 한 바퀴 돎(최대 {max(mid):.0f}도)")
+            bad = [r for r in after if 20 < (r % 360) < 340]
+            check(after and not bad, f"첨다니: 끝난 뒤 거꾸로 돌지 않음 {[round(r) for r in after[:8]]}")
+        else:
+            wait_js(p, f"!__ssMouse.state()['{cid}'].tap", 4500)
+        p.wait_for_timeout(450)
+    mc.close()
+
+def t_tap_rules(b, ctx, m):
+    """연타는 다시 시작·예약 없음, 큰 동작은 한 명씩 / 12px 넘게 쓸면 취소 / 오래 누르면 취소 / 입력칸 누르기는 무시 / 비밀번호 칸에 있으면 톡 무시 / ?tap=off"""
+    p = open_mouse(ctx, m); p.mouse.move(700, 60)
+    x, y = center(p, "giltong"); x2, y2 = center(p, "doroduck")
+    p.mouse.click(x, y); frames(p); check(tsd(p)["giltong"] == "mt_tap", "클릭(톡)으로 큰 동작")
+    t0 = p.evaluate("__ssMouse.state().__tap.busy")
+    p.wait_for_timeout(300); p.mouse.click(x, y); p.mouse.click(x2, y2); frames(p)
+    k = tsd(p); check(k["giltong"] == "mt_tap" and not k["doroduck"], f"재생 중 다시 눌러도 다시 시작·다른 친구 시작 없음 {k}")
+    wait_js(p, "!__ssMouse.state().giltong.tap && !__ssMouse.state().__tap.busy", 4500)
+    check(all(v is None for v in tsd(p).values()), "끝난 뒤 쌓아 둔 동작 없음")
+    p.mouse.move(x, y); p.mouse.down(); p.wait_for_timeout(200)
+    check(tsd(p)["giltong"] == "mt_press", "누르고 있으면 준비 자세")
+    p.mouse.move(x + 30, y, steps=3); frames(p, 3); check(tsd(p)["giltong"] in ("mt_cancel", None), "12px 넘게 쓸면 취소")
+    p.mouse.up(); p.wait_for_timeout(400); check(all(v is None for v in tsd(p).values()), "쓸고 떼도 큰 동작 없음")
+    p.mouse.move(x, y); p.mouse.down(); p.wait_for_timeout(700); p.mouse.up(); frames(p)
+    check(tsd(p)["giltong"] != "mt_tap", "0.45초 넘게 누르면 큰 동작 없음")
+    p.wait_for_timeout(400)
+    p.click("#ssU"); frames(p); check(all(v is None for v in tsd(p).values()), "입력칸 누르기는 친구 톡이 아님")
+    p.focus("#ssP"); p.wait_for_timeout(300); p.mouse.click(x, y); frames(p)
+    check(all(v is None for v in tsd(p).values()) and p.evaluate(FACE)["giltong"][:2] == [1, 1], "비밀번호 칸에 있으면 톡 무시·눈 감은 그대로")
+    p.click("#ssU"); p.wait_for_timeout(900)
+    q = ctx.new_page(); q.set_viewport_size({"width": 1440, "height": 900}); q.route("**/*", T.route); q.route(SBM.SB + "/**", m.handle)
+    q.goto(T.URL + "?tap=off"); q.wait_for_selector("#ssGate", state="attached", timeout=20000)
+    wait_js(q, "!!(window.__ssIntro && __ssIntro.info().state === 'play')"); q.keyboard.press("Escape"); wait_js(q, "__ssIntro.info().state === 'wait'", 4000); q.wait_for_timeout(300)
+    q.mouse.click(*center(q, "giltong")); frames(q); check(all(v is None for v in tsd(q).values()), "?tap=off 면 톡 반응 없음")
+
+def t_tap_reduced(b, ctx, m):
+    """움직임 줄이기: 톡 하면 작게만, 첨다니 공중제비 없음"""
+    rc = b.new_context(reduced_motion="reduce"); p = open_mouse(rc, m); p.mouse.move(700, 60)
+    p.mouse.click(*center(p, "chumdani")); frames(p); check(tsd(p)["chumdani"] == "mt_tap", "움직임 줄이기에도 톡 반응")
+    rots = []
+    for _ in range(30): rots.append(abs(p.evaluate("__ssIntro.info().last.chumdani.fp.flip.rot"))); p.wait_for_timeout(60)
+    check(max(rots) < 1, f"움직임 줄이기: 공중제비 없음(최대 {max(rots):.1f}도)")
+    rc.close()
+
+TESTS = [t_off_switch, t_preview_intro_then_login, t_single_move, t_skip, t_auto_login_no_intro, t_intro_files_missing, t_loader_missing, t_password_no_reaction, t_reduced_motion, t_mouse_giltong, t_mouse_blocked, t_mouse_all, t_keys_type, t_keys_password, t_keys_reduced_off, t_keys_mobile_lock, t_tap_all, t_tap_rules, t_tap_reduced]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()

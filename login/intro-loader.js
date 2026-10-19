@@ -16,10 +16,11 @@
   var doc = root.document, html = doc.documentElement;
   html.classList.add('ss-ready');   // 이 파일이 실행됨 → login-v2.css 의 '잠깐 가리기'를 품(아래 CSS 설명)
   if (/[?&]intro=off(&|$)/.test(root.location.search)) return;   // 비상용: 주소 끝에 ?intro=off 를 붙이면 예전 로그인 화면(인트로 없음)
-  var V = /*@@V@@*/{"charo-pet.js":"1626ec8b","charo-intro.js":"d8279735","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"649393d5","charocharo":"9da233de","chumdani":"ca7e8b57","giltong":"7a1cd468","tira":"4c8365d4","tarotaro":"1ac50481","doroduck":"092da81a","fx":"99ec5eb7"};
+  var V = /*@@V@@*/{"charo-pet.js":"1626ec8b","charo-intro.js":"d8279735","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"4667ca5b","charocharo":"4ef69eb8","chumdani":"3b23e4ee","giltong":"d07bfe3a","tira":"b1c48866","tarotaro":"3d1e3366","doroduck":"4a5a32e3","fx":"99ec5eb7"};
   var BASE = 'login/intro/', LOAD_LIMIT = 5000;
   var MOUSE = !/[?&]mouse=off(&|$)/.test(root.location.search);   // 친구들 마우스 반응: 2026-10-19 기본으로 켬. 비상용 ?mouse=off 면 끔
   var KEYS = !/[?&]keys=off(&|$)/.test(root.location.search);     // 친구들 키보드 반응(아이디 입력·비밀번호 칸): 2026-10-20. 비상용 ?keys=off 면 끔
+  var TAP = !/[?&]tap=off(&|$)/.test(root.location.search);       // 친구 터치·클릭 반응(톡 하면 큰 동작): 2026-10-20. 비상용 ?tap=off 면 끔
   var reduce = false; try { reduce = root.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
   var mobile = Math.min(root.innerWidth, (root.screen && root.screen.width) || 9999) < 700;
   html.classList.add('ss-v2');
@@ -116,14 +117,14 @@
     function onKey(e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); skip(); } }
     root.addEventListener('keydown', onKey, true);
     ov.addEventListener('click', skip);
-    load(['charo-pet.js', 'charo-intro.js', 'welcome-fx.js', 'intro-cast.js'].concat(MOUSE || KEYS ? ['charo-mouse.js'] : [])).then(function () {
+    load(['charo-pet.js', 'charo-intro.js', 'welcome-fx.js', 'intro-cast.js'].concat(MOUSE || KEYS || TAP ? ['charo-mouse.js'] : [])).then(function () {
       return fetch(BASE + 'assets/fx-assets.json?v=' + (V.fx || ''), { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error('fx ' + r.status); return r.json(); });
     }).then(function (meta) {
       C = root.CharoIntroCast;
       C.cast.forEach(function (c) { c.file = BASE + 'chars/' + c.id + '.json?v=' + (V[c.id] || ''); });
       Object.keys(meta).forEach(function (k) { if (meta[k] && meta[k].file) meta[k].file += '?v=' + (V.fx || ''); });
       var fx = root.CharoWelcomeFX.create({ meta: meta, base: BASE, slow: C.slow, reduce: reduce, mobile: mobile });
-      var mouse = (MOUSE || KEYS) && root.CharoLoginMouse ? root.CharoLoginMouse.create({ canvas: ov.querySelector('canvas'), reduce: reduce, userField: 'ssU', passField: 'ssP', mouse: MOUSE, keys: KEYS,
+      var mouse = (MOUSE || KEYS || TAP) && root.CharoLoginMouse ? root.CharoLoginMouse.create({ canvas: ov.querySelector('canvas'), reduce: reduce, userField: 'ssU', passField: 'ssP', mouse: MOUSE, keys: KEYS, tap: TAP, dotClass: 'ss-tap-dot',
         busy: function () { var b = doc.getElementById('ssGo'); return !!(b && b.disabled); } }) : null;   // 로그인 확인 중이면 반응 안 함
       intro = root.CharoIntro.create({
         canvas: ov.querySelector('canvas'), center: true, duration: C.duration, cast: C.cast, phases: C.phases, reduce: reduce, fx: fx,
