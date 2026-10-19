@@ -16,7 +16,7 @@
   var doc = root.document, html = doc.documentElement;
   html.classList.add('ss-ready');   // 이 파일이 실행됨 → login-v2.css 의 '잠깐 가리기'를 품(아래 CSS 설명)
   if (/[?&]intro=off(&|$)/.test(root.location.search)) return;   // 비상용: 주소 끝에 ?intro=off 를 붙이면 예전 로그인 화면(인트로 없음)
-  var V = /*@@V@@*/{"charo-pet.js":"3751917b","charo-intro.js":"d8279735","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"f2fce7c5","charocharo":"d1d52d02","chumdani":"828cfe2c","giltong":"acfdedaa","tira":"677a53d8","tarotaro":"9de44863","doroduck":"742a9c73","fx":"99ec5eb7"};
+  var V = /*@@V@@*/{"charo-pet.js":"3751917b","charo-intro.js":"d8279735","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"4a064b30","charocharo":"d1d52d02","chumdani":"828cfe2c","giltong":"7979d37e","tira":"677a53d8","tarotaro":"9de44863","doroduck":"742a9c73","fx":"99ec5eb7"};
   var BASE = 'login/intro/', LOAD_LIMIT = 5000;
   var MOUSE = /[?&]mouse=preview(&|$)/.test(root.location.search);   // 친구들 마우스 반응: 지금은 미리보기 주소에서만(확인 후 기본으로)
   var reduce = false; try { reduce = root.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}

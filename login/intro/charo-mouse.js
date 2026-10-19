@@ -1,7 +1,8 @@
 /*!
  * 로그인 화면 마우스 반응 (charo-mouse.js) — 인트로가 끝나 친구들이 자리 잡은 뒤에만 동작
  * - 인트로 재생기(charo-intro.js)의 afterPose 연결 고리로 '대기 자세 위에' 덧붙입니다. 인트로 데이터·재생은 그대로.
- * - 캐릭터 파일의 p.mouse 설정을 읽음: { clip, dwell(초), gap(초), gaze: {파츠: 최대 이동(원본 좌표)}, head, headMax(도), dir }
+ * - 캐릭터 파일의 p.mouse 설정을 읽음: { clip, dwell(초), gap(초), gaze: {파츠: 최대 이동 또는 [가로, 세로](원본 좌표)}, head, headMax(도), headShift:[가로,세로],
+ *   body, bodyMax(도), blink:{parts, every:[최소,최대 초]}, dir }
  *   · 시선: 눈(과 눈썹)을 커서 쪽으로 조금, 머리는 최대 headMax 도. 시간 기반으로 부드럽게(화면 주사율과 무관)
  *   · 반응 동작: 친구 주변(0.25H 여유)에 커서가 dwell 초 머무르면 clip 을 한 번 재생(키가 있는 속성만 대기 자세 위에 덮어씀).
  *     dir:true 인 친구는 커서가 왼쪽이면 clip+'_L', 오른쪽이면 clip+'_R'(시작할 때 방향 고정, 가운데면 직전 방향, 처음이면 왼쪽).
@@ -39,7 +40,7 @@
         now() - typingAt < 1.2 || (opt.busy && opt.busy()) };
     }
     function S(c) {
-      if (!st[c.id]) st[c.id] = { gx: 0, gy: 0, hr: 0, dwellAt: 0, dwellX: 0, dwellY: 0, played: false, lastStart: -1e9, act: null, ret: null, dir: 'L', box: null };
+      if (!st[c.id]) st[c.id] = { gx: 0, gy: 0, hr: 0, hy: 0, br: 0, blinkAt: 0, dwellAt: 0, dwellX: 0, dwellY: 0, played: false, lastStart: -1e9, act: null, ret: null, dir: 'L', box: null };
       return st[c.id];
     }
     // 화면(CSS px) 위 그림 범위: 지난 프레임의 자세·위치로 계산
@@ -67,9 +68,10 @@
         // 시선 목표(-1~1): 친구 가운데 기준, 범위는 친구 크기
         var cx = (b.x0 + b.x1) / 2, cy = b.y0 + H * 0.3, tx = 0, ty = 0;
         if (!B.gaze) { tx = clamp((ptr.x - cx) / Math.max(60, (b.x1 - b.x0) * 1.5), -1, 1); ty = clamp((ptr.y - cy) / Math.max(60, H * 1.2), -1, 1); }
-        if (s.act) { tx = s.act.gx; ty = s.act.gy; }                       // 반응 중에는 시작 방향으로 고정
+        if (s.act) { tx = s.act.gx + tx * 0.35; ty = s.act.gy + ty * 0.35; }   // 반응 중에는 시작 방향 중심으로, 커서를 좁게만 따라감
         var a = 1 - Math.exp(-dt / 0.14), ah = 1 - Math.exp(-dt / 0.24);  // 눈 먼저, 머리는 조금 늦게
-        s.gx += (tx - s.gx) * a; s.gy += (ty - s.gy) * a; s.hr += ((s.act ? 0 : tx) - s.hr) * ah;
+        var ab = 1 - Math.exp(-dt / 0.4);   // 몸은 더 늦게
+        s.gx += (tx - s.gx) * a; s.gy += (ty - s.gy) * a; s.hr += ((s.act ? 0 : tx) - s.hr) * ah; s.hy += ((s.act ? 0 : ty) - s.hy) * ah; s.br += ((s.act ? 0 : tx) - s.br) * ab;
         if (!inZone) { s.played = false; s.dwellAt = 0; if (s.act) cancel(c, s, t); return; }
         if (s.act && B.act) { cancel(c, s, t); return; }
         if (Math.hypot(ptr.x - s.dwellX, ptr.y - s.dwellY) > 14 || !s.dwellAt) { s.dwellAt = t; s.dwellX = ptr.x; s.dwellY = ptr.y; }
@@ -119,9 +121,21 @@
         }
       }
       // 시선(움직임 줄이기면 절반)
+      // gaze 값: 숫자(가로 최대, 세로는 0.6배) 또는 [가로 최대, 세로 최대] — 원본 좌표
       var g = M.gaze || {}, red = reduce ? 0.5 : 1;
-      for (var gp in g) { var og = off[gp]; if (!og) continue; og.x += s.gx * g[gp] * red; og.y += s.gy * g[gp] * 0.6 * red; }
-      if (M.head && off[M.head] && !reduce) off[M.head].rot += s.hr * (M.headMax || 0);
+      for (var gp in g) { var og = off[gp]; if (!og) continue; var gv = g[gp], gxm = gv.length ? gv[0] : gv, gym = gv.length ? gv[1] : gv * 0.6; og.x += s.gx * gxm * red; og.y += s.gy * gym * red; }
+      if (!reduce) {
+        var oh = M.head && off[M.head];
+        if (oh) { oh.rot += s.hr * (M.headMax || 0); if (M.headShift) { oh.x += s.hr * M.headShift[0]; oh.y += s.hy * M.headShift[1]; } }   // 머리: 커서 쪽으로 기울고 살짝 옮김
+        var ob = M.body && off[M.body]; if (ob) ob.rot += s.br * (M.bodyMax || 0);                                                      // 몸: 더 늦게 조금
+      }
+      // 깜빡임(가끔, 0.14초): 눈 세로를 잠깐 눌렀다 폄. 반응 동작 중에는 동작의 눈을 그대로 둠
+      if (M.blink && !s.act) {
+        if (!s.blinkAt) s.blinkAt = t + 1 + Math.random() * 2;
+        var bt = t - s.blinkAt;
+        if (bt > 0.14) s.blinkAt = t + M.blink.every[0] + Math.random() * (M.blink.every[1] - M.blink.every[0]);
+        else if (bt >= 0) { var sq = 1 - 0.88 * Math.sin(Math.PI * bt / 0.14); M.blink.parts.forEach(function (id) { if (off[id]) off[id].sy *= sq; }); }
+      }
       return off;
     }
     function snapshot(off, pose) { var o = {}; for (var id in pose) if (off[id]) { var a = off[id], b = {}; PROPS.forEach(function (k) { if (pose[id][k] != null) b[k] = a[k]; }); if (pose[id].img) b.img = a.img; o[id] = b; } return o; }
