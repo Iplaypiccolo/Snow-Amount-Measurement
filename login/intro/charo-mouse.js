@@ -2,7 +2,7 @@
  * 로그인 화면 마우스 반응 (charo-mouse.js) — 인트로가 끝나 친구들이 자리 잡은 뒤에만 동작
  * - 인트로 재생기(charo-intro.js)의 afterPose 연결 고리로 '대기 자세 위에' 덧붙입니다. 인트로 데이터·재생은 그대로.
  * - 캐릭터 파일의 p.mouse 설정을 읽음: { clip, dwell(초), gap(초), gaze: {파츠: 최대 이동 또는 [가로, 세로](원본 좌표)}, head, headMax(도), headShift:[가로,세로],
- *   body, bodyMax(도), blink:{parts, every:[최소,최대 초]}, dir }
+ *   body, bodyMax(도), lag:[{part, rot, x, y, tau}], blink:{parts, every:[최소,최대 초]}, base:{파츠:{op,img}}, dir }
  *   · 시선: 눈(과 눈썹)을 커서 쪽으로 조금, 머리는 최대 headMax 도. 시간 기반으로 부드럽게(화면 주사율과 무관)
  *   · 반응 동작: 친구 주변(0.25H 여유)에 커서가 dwell 초 머무르면 clip 을 한 번 재생(키가 있는 속성만 대기 자세 위에 덮어씀).
  *     dir:true 인 친구는 커서가 왼쪽이면 clip+'_L', 오른쪽이면 clip+'_R'(시작할 때 방향 고정, 가운데면 직전 방향, 처음이면 왼쪽).
@@ -40,7 +40,7 @@
         now() - typingAt < 1.2 || (opt.busy && opt.busy()) };
     }
     function S(c) {
-      if (!st[c.id]) st[c.id] = { gx: 0, gy: 0, hr: 0, hy: 0, br: 0, blinkAt: 0, dwellAt: 0, dwellX: 0, dwellY: 0, played: false, lastStart: -1e9, act: null, ret: null, dir: 'L', box: null };
+      if (!st[c.id]) st[c.id] = { gx: 0, gy: 0, hr: 0, hy: 0, br: 0, lag: [], blinkAt: 0, dwellAt: 0, dwellX: 0, dwellY: 0, played: false, lastStart: -1e9, act: null, ret: null, dir: 'L', box: null };
       return st[c.id];
     }
     // 화면(CSS px) 위 그림 범위: 지난 프레임의 자세·위치로 계산
@@ -72,6 +72,7 @@
         var a = 1 - Math.exp(-dt / 0.14), ah = 1 - Math.exp(-dt / 0.24);  // 눈 먼저, 머리는 조금 늦게
         var ab = 1 - Math.exp(-dt / 0.4);   // 몸은 더 늦게
         s.gx += (tx - s.gx) * a; s.gy += (ty - s.gy) * a; s.hr += ((s.act ? 0 : tx) - s.hr) * ah; s.hy += ((s.act ? 0 : ty) - s.hy) * ah; s.br += ((s.act ? 0 : tx) - s.br) * ab;
+        (c.P.mouse.lag || []).forEach(function (L, i) { var al = 1 - Math.exp(-dt / (L.tau || 0.3)); s.lag[i] = (s.lag[i] || 0) + ((s.act ? 0 : tx) - (s.lag[i] || 0)) * al; });   // 귀·꼬리·안테나 등 늦게 따라오는 파츠
         if (!inZone) { s.played = false; s.dwellAt = 0; if (s.act) cancel(c, s, t); return; }
         if (s.act && B.act) { cancel(c, s, t); return; }
         if (Math.hypot(ptr.x - s.dwellX, ptr.y - s.dwellY) > 14 || !s.dwellAt) { s.dwellAt = t; s.dwellX = ptr.x; s.dwellY = ptr.y; }
@@ -94,6 +95,8 @@
 
     function apply(c, off, t) {
       var s = S(c), M = c.P.mouse, P = c.P;
+      // 로그인 대기 기본 상태(인트로가 끝난 뒤에만): 마우스용 얼굴 켜기·팻말 숨기기 등 { 파츠: {op, img} }
+      if (M.base) for (var bp in M.base) { var ob0 = off[bp], bv = M.base[bp]; if (!ob0) continue; if (bv.op != null) ob0.op = bv.op; if (bv.img != null) ob0.img = { img: bv.img, prev: bv.img, mix: 1 }; }
       // 반응 동작
       if (s.act) {
         var tt = t - s.act.t0, cl = s.act.clip;
@@ -123,11 +126,12 @@
       // 시선(움직임 줄이기면 절반)
       // gaze 값: 숫자(가로 최대, 세로는 0.6배) 또는 [가로 최대, 세로 최대] — 원본 좌표
       var g = M.gaze || {}, red = reduce ? 0.5 : 1;
-      for (var gp in g) { var og = off[gp]; if (!og) continue; var gv = g[gp], gxm = gv.length ? gv[0] : gv, gym = gv.length ? gv[1] : gv * 0.6; og.x += s.gx * gxm * red; og.y += s.gy * gym * red; }
+      for (var gp in g) { var og = off[gp]; if (!og) continue; var gv = g[gp], gxm = gv.length ? gv[0] : gv, gym = gv.length ? (gv.length > 2 && s.gy > 0 ? gv[2] : gv[1]) : gv * 0.6; og.x += s.gx * gxm * red; og.y += s.gy * gym * red; }   // [가로, 위(세로), 아래] 세 값이면 아래쪽은 따로(부리와 간격)
       if (!reduce) {
         var oh = M.head && off[M.head];
         if (oh) { oh.rot += s.hr * (M.headMax || 0); if (M.headShift) { oh.x += s.hr * M.headShift[0]; oh.y += s.hy * M.headShift[1]; } }   // 머리: 커서 쪽으로 기울고 살짝 옮김
         var ob = M.body && off[M.body]; if (ob) ob.rot += s.br * (M.bodyMax || 0);                                                      // 몸: 더 늦게 조금
+        (M.lag || []).forEach(function (L, i) { var ol = off[L.part]; if (!ol) return; var v = s.lag[i] || 0; if (L.rot) ol.rot += v * L.rot; if (L.x) ol.x += v * L.x; if (L.y) ol.y += v * L.y; });
       }
       // 깜빡임(가끔, 0.14초): 눈 세로를 잠깐 눌렀다 폄. 반응 동작 중에는 동작의 눈을 그대로 둠
       if (M.blink && !s.act) {

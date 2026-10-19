@@ -18,12 +18,12 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / 'login' / 'intro'
 SRC = Path(sys.argv[1] if len(sys.argv) > 1 else '../Charocharo').resolve()
 CHARS = {   # 인트로 배치표의 id: (차로차로 저장소 안 파일, 남길 동작)
-    'charocharo': ('charo-pet.json', ['c_breath', 'i_charo', 'i_charo_r']),
-    'chumdani': ('chumdani/chumdani.json', ['c_idle', 'c_run_i', 'c_jump_i', 'c_welcome', 'c_flip']),
+    'charocharo': ('charo-pet.json', ['c_breath', 'i_charo', 'i_charo_r', 'm_mouse_L', 'm_mouse_R']),
+    'chumdani': ('chumdani/chumdani.json', ['c_idle', 'c_run_i', 'c_jump_i', 'c_welcome', 'c_flip', 'm_mouse_L', 'm_mouse_R']),
     'giltong': ('giltong/giltong.json', ['g_idle', 'g_run_i', 'g_welcome', 'g_finish', 'm_mouse']),
-    'tira': ('tira_v3/tira_v3.json', ['t_idle', 't_intro', 't_intro_r']),
-    'tarotaro': ('tarotaro/tarotaro.json', ['tt_idle', 'tt_intro', 'tt_intro_r']),
-    'doroduck': ('doroduck/doroduck.json', ['d_idle', 'd_run_i', 'd_welcome', 'd_finish_i']),
+    'tira': ('tira_v3/tira_v3.json', ['t_idle', 't_intro', 't_intro_r', 'm_mouse_L', 'm_mouse_R']),
+    'tarotaro': ('tarotaro/tarotaro.json', ['tt_idle', 'tt_intro', 'tt_intro_r', 'm_mouse_L', 'm_mouse_R']),
+    'doroduck': ('doroduck/doroduck.json', ['d_idle', 'd_run_i', 'd_welcome', 'd_finish_i', 'm_mouse_L', 'm_mouse_R']),
 }
 JS = {'charo-pet.js': 'charo-pet.js', 'charo-intro.js': 'intro/charo-intro.js', 'welcome-fx.js': 'intro/welcome-fx.js', 'intro-cast.js': 'intro/intro-cast.js', 'charo-mouse.js': 'intro/charo-mouse.js'}
 

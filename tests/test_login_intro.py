@@ -171,7 +171,32 @@ def t_mouse_blocked(b, ctx, m):
     q = open_preview(ctx, m); wait_js(q, "!!(window.__ssIntro && __ssIntro.info().state === 'play')")
     check(q.evaluate("!window.__ssMouse && !window.CharoLoginMouse"), "?mouse=preview 가 없으면 마우스 반응 파일도 안 받음")
 
-TESTS = [t_off_switch, t_preview_intro_then_login, t_single_move, t_skip, t_auto_login_no_intro, t_intro_files_missing, t_loader_missing, t_password_no_reaction, t_reduced_motion, t_mouse_giltong, t_mouse_blocked]
+def t_mouse_all(b, ctx, m):
+    """여섯 친구 모두: 그 친구 근처에 머무르면 그 친구가(한 명만) 반응, 커서 방향(왼쪽/오른쪽) 동작, 로그인 대기 얼굴(티라·타로타로 마우스용 눈, 도로덕 팻말 숨김)"""
+    p = open_mouse(ctx, m)
+    base = p.evaluate("""(()=>{const L=__ssIntro.info().last;return {tira:[L.tira.fp.m_eyeL.op,L.tira.fp.m_face.op,L.tira.fp.sign14.op],taro:[L.tarotaro.fp.m_eyeL.op,L.tarotaro.fp.eyes.op,L.tarotaro.fp.excl.op],duck:[L.doroduck.fp.sign.op,L.doroduck.fp.wingRf.op]}})()""")
+    check(base["tira"][0] > 0.99 and base["tira"][1] > 0.99 and base["tira"][2] < 0.01, f"티라: 마우스용 얼굴 켜짐·팻말 숨김 {base['tira']}")
+    check(base["taro"][0] > 0.99 and base["taro"][1] < 0.01 and base["taro"][2] < 0.01, f"타로타로: 점눈 켜짐·감은 눈/느낌표 숨김 {base['taro']}")
+    check(base["duck"][0] < 0.01 and base["duck"][1] < 0.01, f"도로덕: 팻말·겹친 날개 숨김 {base['duck']}")
+    for cid in ["chumdani", "tira", "tarotaro", "giltong", "charocharo", "doroduck"]:
+        g = p.evaluate(GBOX, cid); cx, cy = (g[0] + g[2]) / 2, g[1] + (g[3] - g[1]) * 0.4
+        for side in (-1, 1):
+            p.mouse.move(700, 80); p.wait_for_timeout(500)
+            p.mouse.move(cx + side * (g[2] - g[0]) * 0.3, cy, steps=4)
+            ok = False
+            for _ in range(20):
+                p.wait_for_timeout(100)
+                if p.evaluate("__ssMouse.state().__acting") == cid: ok = True; break
+            check(ok, f"{cid}: 머무르면 반응해야 함({'왼' if side < 0 else '오른'}쪽)")
+            st = p.evaluate("__ssMouse.state()")
+            check(sum(1 for k, v in st.items() if k != "__acting" and v.get("act")) == 1, f"{cid}: 한 명만 반응 {st}")
+            if cid != "giltong": check(st[cid]["dir"] == ("L" if side < 0 else "R"), f"{cid}: 커서 방향 동작 {st[cid]}")
+            p.mouse.move(700, 80); p.wait_for_timeout(700)
+            check(not p.evaluate("(id)=>__ssMouse.state()[id].act", cid), f"{cid}: 벗어나면 복귀")
+            if cid == "giltong": break
+            p.wait_for_timeout(6200 if side < 0 else 0)   # 같은 친구의 다음 시작은 간격(최대 6초) 뒤
+
+TESTS = [t_off_switch, t_preview_intro_then_login, t_single_move, t_skip, t_auto_login_no_intro, t_intro_files_missing, t_loader_missing, t_password_no_reaction, t_reduced_motion, t_mouse_giltong, t_mouse_blocked, t_mouse_all]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()
