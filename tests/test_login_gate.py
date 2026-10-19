@@ -30,6 +30,13 @@ def typed_login(p, user, pw, remember=None, auto=None):
     if auto is not None: p.set_checked("#ssAuto", auto)
     p.click("#ssGo"); p.wait_for_timeout(500)
 
+def wait_js(p, expr, timeout=60000):
+    """첫 화면은 CSP 가 있어 wait_for_function(문자열)이 시험이 바쁠 때 'unsafe-eval' 오류로 실패함 → 직접 반복 확인"""
+    for _ in range(timeout // 100):
+        if p.evaluate(expr): return
+        p.wait_for_timeout(100)
+    raise AssertionError("시간 안에 안 됨: " + expr)
+
 def ls(p, k): return p.evaluate("k => localStorage.getItem(k)", k)
 def ss(p, k): return p.evaluate("k => sessionStorage.getItem(k)", k)
 def in_app(p): return p.evaluate("document.body.classList.contains('authed')")
@@ -64,7 +71,7 @@ def t_login_session_only(b, ctx, m):
     typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".topnav", state="visible")
     check(in_app(p) and p.locator("#ssGate").is_hidden(), "로그인 뒤 화면이 열려야 함")
     check("관리자1" in p.locator("#ssUser").inner_text() and p.locator("#ssUser a").count() == 1 and p.locator("#ssLogout").count() == 1, p.locator("#ssUser").inner_text())
-    p.wait_for_function("window.GridUI && GridUI._state().inited", timeout=60000)
+    wait_js(p, "!!(window.GridUI && GridUI._state().inited)")
     check(len(data_fetched(reqs)) >= 5, "로그인 뒤에는 자료를 불러와야 함")
     check(ss(p, "ss_session") and ls(p, "ss_session") is None and ls(p, "ss_saved_user") is None, "기본은 탭을 닫으면 사라지는 저장소에만 저장")
     p.reload(); p.wait_for_selector("body.authed", timeout=20000); check(p.locator(".topnav").is_visible(), "새로고침해도 로그인 유지(같은 탭)")
@@ -88,7 +95,7 @@ def t_auto_login(b, ctx, m):
     check(s["persist"] is True and 6.9 < left <= 7.01, f"관리자는 7일: {left:.2f}일"); check(ss(p, "ss_session") is None, "자동 로그인은 탭을 닫아도 남는 저장소에")
     check("password" not in json.dumps(s).lower() and SBM.ADMIN_PW not in json.dumps(s), "비밀번호가 저장되면 안 됨")
     reqs = []; p2 = open_site(ctx, m, reqs=reqs); p2.wait_for_selector("body.authed", timeout=20000)
-    check(p2.locator("#ssGate").is_hidden() and "관리자1" in p2.locator("#ssUser").inner_text(), "새 탭에서 비밀번호 없이 바로 들어가야 함"); p2.wait_for_function("window.GridUI && GridUI._state().inited", timeout=60000)
+    check(p2.locator("#ssGate").is_hidden() and "관리자1" in p2.locator("#ssUser").inner_text(), "새 탭에서 비밀번호 없이 바로 들어가야 함"); wait_js(p2, "!!(window.GridUI && GridUI._state().inited)")
     ctx2 = b.new_context()
     try: p3 = open_site(ctx2, m); check(p3.locator("#ssGate").is_visible() and not in_app(p3), "다른 브라우저(다른 컴퓨터)에서는 로그인해야 함")
     finally: ctx2.close()
@@ -124,7 +131,7 @@ def t_branch_set_by_admin_enters_main_directly(b, ctx, m):
     x = m.users["exchungju"]; x["password"] = "Snow#Ride-2030k"; x["profile"]["must_change"] = False
     reqs = []; p = open_site(ctx, m, reqs=reqs); typed_login(p, "exchungju", "Snow#Ride-2030k"); p.wait_for_selector(".topnav", state="visible")
     check(in_app(p) and "충주지사" in p.locator("#ssUser").inner_text() and "새 비밀번호를 먼저" not in p.locator("body").inner_text(), "변경 요구 없이 바로 들어가야 함")
-    p.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)      # 지사 계정에는 예보 격자 편입 화면이 없으므로 관할 화면으로 확인
+    wait_js(p, "!!(window.JurisdictionUI && JurisdictionUI._state().inited)")      # 지사 계정에는 예보 격자 편입 화면이 없으므로 관할 화면으로 확인
     check(p.locator("#tabGridBtn").count() == 0, "지사 계정에는 예보 격자 편입 탭이 없어야 함")
 
 def t_cross_tab_logout(b, ctx, m):
