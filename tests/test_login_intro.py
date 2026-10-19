@@ -1,6 +1,6 @@
 """
 로그인 인트로·새 로그인 화면(미리보기 ?intro=preview) 자동 테스트 — 브라우저로 직접 열어 봅니다. (Supabase 는 가짜 서버 tests/_sb_mock.py)
-확인하는 것: 주소에 ?intro=preview 가 없으면 예전 화면 그대로(인트로 파일도 안 받음) / 있으면 인트로 → 새 로그인 화면(친구들 줄은 왼쪽·상자는 오른쪽, 휴대폰은 상자 아래 줄) / 인트로 중 칸 잠금 /
+확인하는 것: 정렬 단계에서 크기·위치가 한 번에 바뀜(PC·휴대폰) / 주소에 ?intro=preview 가 없으면 예전 화면 그대로(인트로 파일도 안 받음) / 있으면 인트로 → 새 로그인 화면(친구들 줄은 왼쪽·상자는 오른쪽, 휴대폰은 상자 아래 줄) / 인트로 중 칸 잠금 /
              건너뛰기(Esc·버튼) / 자동 로그인 사람은 인트로 없음 / 인트로 파일을 못 받으면 바로 로그인 화면 / 비밀번호 입력에 화면이 반응하지 않음 /
              움직임 줄이기 / 새 화면에서도 로그인이 그대로 됨 / 보안 정책(CSP) 아래에서 오류 없음
 실행 (저장소 맨 위 폴더에서):  python tests/test_login_intro.py
@@ -50,14 +50,15 @@ def t_preview_intro_then_login(b, ctx, m):
     wait_js(p, "!!(window.__ssIntro && __ssIntro.info().state === 'play')")
     check(len([u for u in intro_reqs(reqs) if "/chars/" in u]) == 6, "캐릭터 파일 6개를 받아야 함")
     p.wait_for_selector("#ssIntro.rest", state="attached", timeout=12000)
-    check(p.evaluate("__ssIntro.info().state") == "wait", "인트로가 끝나면 친구들은 아래 줄에서 대기 동작")
+    T = p.evaluate("__ssIntro.info().T"); check(5.1 <= T < 5.9, f"로그인 상자는 친구들이 정렬 이동을 시작할 때(5.15초) 나타나야 함: {T:.2f}초")
+    wait_js(p, "__ssIntro.info().state === 'wait'", 3000)
     lu = p.evaluate("(()=>{const L=__ssIntro.info().last;return Object.keys(L).filter(k=>k!=='__order').map(k=>L[k].view[5]/L[k].view[0])})()")
     check(len(lu) == 6, "친구 6명이 남아 있어야 함")
-    LB = "(()=>{const c=document.querySelector('#ssIntro canvas').getBoundingClientRect(),k=document.querySelector('.ss-card').getBoundingClientRect(),f=c.width/1000;return [c.left+222*f,c.top+498*f,c.left+788*f,c.top+587*f,k.left,k.top,k.right,k.bottom]})()"
-    p.wait_for_timeout(1300); b = p.evaluate(LB)      # 친구들 줄이 자리로 옮겨 간 뒤
+    LB = "(()=>{const a=__ssLayout,k=document.querySelector('.ss-card').getBoundingClientRect();return [a.cx-a.lw/2,a.cy-a.lh/2,a.cx+a.lw/2,a.cy+a.lh/2,k.left,k.top,k.right,k.bottom]})()"
+    p.wait_for_timeout(900); b = p.evaluate(LB)       # 상자 등장 움직임이 끝난 뒤
     check(b[2] <= b[4] and b[0] >= 0, f"PC: 친구들 줄은 왼쪽, 로그인 상자는 오른쪽(줄 오른쪽 끝 {b[2]:.0f} ≤ 상자 왼쪽 {b[4]:.0f})")
-    p.set_viewport_size({"width": 390, "height": 844}); p.wait_for_timeout(1400); b = p.evaluate(LB)
-    check(b[1] >= b[7] and b[3] <= 844 and b[0] >= 0 and b[2] <= 390, f"휴대폰: 상자 아래에 친구들 줄(줄 위 {b[1]:.0f} ≥ 상자 아래 {b[7]:.0f}, 화면 안)")
+    p.set_viewport_size({"width": 390, "height": 844}); p.wait_for_timeout(600); b = p.evaluate(LB)
+    check(b[1] >= b[7] + 47 and b[3] <= 844 and b[0] >= 0 and b[2] <= 390, f"휴대폰: 상자 아래 48px 이상 떨어져 친구들 줄(줄 위 {b[1]:.0f}, 상자 아래 {b[7]:.0f}, 화면 안)")
     p.set_viewport_size({"width": 1400, "height": 900}); p.wait_for_timeout(300)
     check(p.evaluate("getComputedStyle(document.getElementById('ssIntro')).pointerEvents") == "none", "남은 친구들이 클릭을 막으면 안 됨")
     check(p.evaluate("document.getElementById('ssGate').inert") is False, "인트로가 끝나면 칸 잠금이 풀려야 함")
@@ -67,11 +68,25 @@ def t_preview_intro_then_login(b, ctx, m):
     check(p.locator("#ssScene").is_hidden(), "로그인하면 배경 장면은 숨겨져야 함")
     p.wait_for_selector("#ssIntro", state="detached", timeout=3000)
 
+def t_single_move(b, ctx, m):
+    """정렬 단계에서 크기가 한 번만(계속 줄어들기만) 바뀌고, 끝난 뒤에는 그대로인지 — PC·휴대폰"""
+    for vp in ({"width": 1440, "height": 900}, {"width": 390, "height": 844}):
+        p = open_preview(ctx, m); p.set_viewport_size(vp); wait_js(p, "!!(window.__ssIntro && __ssIntro.info().state === 'play')")
+        p.wait_for_timeout(300)
+        seq = []
+        for i in range(0, 15):
+            t = 5.10 + i * 0.06
+            seq.append(p.evaluate("(t)=>{__ssIntro.seek(t);return new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>{const L=__ssIntro.info().last;r(['chumdani','tira','tarotaro','giltong','charocharo','doroduck'].map(k=>L[k].view[0]))})))}", t))
+        for j in range(6):
+            col = [r[j] for r in seq]
+            check(all(b2 <= a2 + 1e-6 for a2, b2 in zip(col, col[1:])), f"{vp['width']}: {j}번째 친구 크기가 줄었다 커졌다 함: {[round(x, 3) for x in col]}")
+        p.close()
+
 def t_skip(b, ctx, m):
     p = open_preview(ctx, m); p.wait_for_timeout(700); p.keyboard.press("Escape")
     p.wait_for_selector("#ssIntro.rest", state="attached", timeout=2000)
     check(p.evaluate("document.activeElement.id") == "ssU", "Esc 로 건너뛰면 바로 아이디 칸")
-    check(p.evaluate("__ssIntro.info().state") == "wait", "건너뛰면 친구들은 바로 아래 줄 자리로")
+    p.wait_for_timeout(1500); check(p.evaluate("__ssIntro.info().state") == "wait", "건너뛰면 친구들은 정렬 단계부터 이어 재생해 최종 자리로")
     q = open_preview(ctx, m); q.wait_for_timeout(900); q.click(".ss-skip")
     q.wait_for_selector("#ssIntro.rest", state="attached", timeout=2000)
     check(q.evaluate("document.getElementById('ssGate').inert") is False, "버튼으로 건너뛰어도 칸 잠금이 풀려야 함")
@@ -101,7 +116,7 @@ def t_reduced_motion(b, ctx, m):
     check(p.evaluate("__ssIntro.info().reduce") is True, "움직임 줄이기면 간소화한 인트로")
     p.keyboard.press("Escape"); p.wait_for_selector("#ssIntro.rest", state="attached", timeout=2000); rc.close()
 
-TESTS = [t_default_unchanged, t_preview_intro_then_login, t_skip, t_auto_login_no_intro, t_intro_files_missing, t_password_no_reaction, t_reduced_motion]
+TESTS = [t_default_unchanged, t_preview_intro_then_login, t_single_move, t_skip, t_auto_login_no_intro, t_intro_files_missing, t_password_no_reaction, t_reduced_motion]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()

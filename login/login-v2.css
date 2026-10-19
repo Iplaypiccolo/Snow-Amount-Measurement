@@ -1,7 +1,7 @@
 /* ============================================================
    login/login-v2.css — 새 로그인 화면(겨울 색감)  [미리보기 전용: html.ss-v2 일 때만 적용]
    색: 눈(바탕) · 얼음(선) · 먹색(글자) · 강철(보조 글자) · 제설차 경광등 주황(강조 하나)
-   배치: 인트로는 화면 가운데. 끝나면 친구들 줄은 왼쪽으로 옮겨 가 남고(intro-loader.js 가 화면 크기에 맞춰 자리 계산), 로그인 상자는 오른쪽에 나타남.
+   배치: 인트로는 화면 가운데. 정렬 단계에 친구들 줄이 왼쪽 최종 자리로 한 번에 이동(intro-loader.js 가 화면 크기에 맞춰 도착점 계산), 로그인 상자는 오른쪽에 나타남.
          휴대폰(760px 미만)은 상자를 위에, 친구들 줄은 가운데에서 조금 아래로. 이름·제목 글자는 두지 않음.
    움직임: 등장 순서(제목 → 상자 → 칸), 눈 내림, 포인터 시차, 자석 버튼. '움직임 줄이기' 설정이면 모두 끔.
    ============================================================ */
@@ -69,8 +69,7 @@ html.ss-v2.ss-reveal .ss-card form>:nth-child(5){animation-delay:.46s}
 .ss-intro.rest{z-index:9998;pointer-events:none;cursor:auto}
 .ss-intro.rest .ss-skip{display:none}
 body.authed .ss-intro{display:none}
-.ss-intro-stage{position:relative;flex:none;width:min(100vw,calc(100vh * 1000 / 600));aspect-ratio:1000/600;transform-origin:0 0;transition:transform 1s var(--glide,ease)}
-.ss-intro-stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.ss-intro canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .ss-skip{position:fixed;right:clamp(14px,3vw,36px);bottom:clamp(14px,4vh,40px);display:inline-flex;gap:8px;align-items:center;padding:10px 14px 10px 16px;border-radius:999px;border:1px solid rgba(185,203,216,.9);
   background:rgba(255,255,255,.82);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:#13212c;font:600 13px/1 "Pretendard",-apple-system,"Malgun Gothic",sans-serif;cursor:pointer;
   opacity:0;animation:ssFade .4s ease .6s forwards}

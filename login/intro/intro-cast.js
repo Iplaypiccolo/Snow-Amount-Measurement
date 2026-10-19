@@ -13,7 +13,7 @@
   'use strict';
   var DUR = 6.3, SLOW = [2.30, 3.90], LS = 0.55, L0 = 5.15, L1 = 5.85;
   var VP = [500, 336];                      // 소실점 = 겨울 배경 그림의 도로가 모이는 점(배경을 무대 폭에 맞춰 그렸을 때)
-  var ROW = 585, X = { chumdani: 280, tira: 358, tarotaro: 430, giltong: 521, charocharo: 634, doroduck: 740 };   // 6인: 보이는 그림 사이 14px, 줄 가운데 = 문구 가운데(505)
+  var ROW = 585, X = { chumdani: 279.5, tira: 356.5, tarotaro: 427.8, giltong: 530.7, charocharo: 656.1, doroduck: 749.7 };   // 6인: 보이는 그림 사이 14px, 줄 가운데 = 문구 가운데(505)
   // 대형(슬로모션) 자리 = 구도 참고 사진의 위치·크기를 무대 좌표로 옮긴 값(사진 폭 1670 → 무대 1000, 배경과 같은 비율).
   // 가로는 티라 왼쪽 끝~도로덕 오른쪽 끝의 가운데가 '환영합니다!' 가운데(505)에 오도록 DX만큼 함께 옮김
   var DX = -65;   // 측정: 티라 왼쪽 끝 249 ~ 도로덕 오른쪽 끝 890 → 가운데 570 → 505로
@@ -23,8 +23,9 @@
             chumLane: at(512, GY, 137), chumPerch: at(684, 390, 137) };
   // 슬로모션 뒤 '자리 잡기'(첨다니가 티라 왼쪽에 내려앉을 자리를 위해 다 같이 조금 오른쪽으로)
   var S = { tira: at(296, GY, 133), giltong: at(530, GY, 290), charocharo: at(720, GY, 157), doroduck: at(860, GY, 113), chumSide: at(195, GY, 137) };   // 6인: 티라는 제자리, 길통이·차로차로·도로덕이 오른쪽으로 비켜 타로타로 착지 자리를 냄
-  var HF = { chumdani: 69, tira: 66, tarotaro: 74,   // 티라: 처음 크기(133)에 타로타로와 같은 비율(74/150≈0.49)
-              giltong: 113, charocharo: 76, doroduck: 82 };   // 최종 줄 크기(로그인 대기)
+  // 최종 줄 크기(로그인 대기) = 대형(슬로모션) 키 × 같은 비율 LR — 여섯 명이 모두 같은 비율로 한 번 줄어듦(2026-10-19)
+  var LR = 0.49, FH = { chumdani: 137, tira: 133, tarotaro: 150, giltong: 290, charocharo: 157, doroduck: 113 }, HF = {};
+  Object.keys(FH).forEach(function (k) { HF[k] = Math.round(FH[k] * LR * 10) / 10; });
   // 원근 달리기: 지평선의 점(배율 s0)에서 제자리(배율 1)까지. 배율은 지수적으로 커짐(일정한 속도로 다가올 때처럼)
   function run(f, t0, t1, s0, drift, dm) {   // dm: 같은 거리일 때 앞뒤 순서 보정(길통이가 차로차로 날개 앞)
     dm = dm || 1;
@@ -126,5 +127,5 @@
                 [4.3, '첨다니 공중제비 → 티라 옆', '첨다니가 친구들 머리 위로 공중제비를 돌아 티라 왼쪽에 착지. 타로타로는 그 아래에서 짧게 엣헴(표정 C) 후 다시 빵긋.'],
                 [5.15, '정렬 · 축소', '여섯이 함께 작아지며 아래 줄로: 첨다니–티라–타로타로–길통이–차로차로–도로덕.'],
                 [5.85, '로그인 대기로', '정렬한 자리에서 대기 동작으로 이어짐(이후 로그인 화면).']];
-  global.CharoIntroCast = { duration: DUR, cast: cast, phases: phases, lineupRow: ROW, lineupX: X, slow: SLOW, vanishingPoint: VP, formation: F, settle: S, DX: DX, tarotaro: TT };
+  global.CharoIntroCast = { duration: DUR, cast: cast, phases: phases, lineupRow: ROW, lineupX: X, lineupH: HF, lineupRatio: LR, lineupT: [L0, L1], slow: SLOW, vanishingPoint: VP, formation: F, settle: S, DX: DX, tarotaro: TT };
 })(window);

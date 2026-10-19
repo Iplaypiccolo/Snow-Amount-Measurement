@@ -3,9 +3,9 @@
    - 지금은 주소에 ?intro=preview 가 있을 때만 동작합니다. 없으면 아무것도 하지 않아 기존 로그인 화면 그대로입니다.
    - 로그인 판단(auth/auth.js·auth/gate.js)은 건드리지 않습니다. 화면 장식과 인트로만 얹습니다.
    - 자동 로그인으로 들어오는 사람(저장된 로그인 열쇠가 있는 경우)은 인트로를 보지 않습니다.
-   - 인트로: 매번 재생. 건너뛰기 버튼·화면 아무 곳 클릭·Esc/Enter/Space 로 바로 로그인 화면(친구들은 곧바로 아래 줄 자리로).
-     인트로는 화면 가운데에서 재생. 끝나면 친구들 줄이 왼쪽으로 옮겨 가 대기 동작을 이어 가고, 로그인 상자는 오른쪽에 나타남.
-     휴대폰(760px 미만)은 상자가 위, 친구들 줄은 가운데에서 조금 아래. 로그인하면 친구들도 사라짐.
+   - 인트로: 매번 재생. 건너뛰기 버튼·화면 아무 곳 클릭·Esc/Enter/Space 로 바로 로그인 화면.
+     인트로는 화면 가운데에서 재생. 정렬 단계(5.15~5.85초)에 친구들이 작아지며 최종 자리(PC: 왼쪽 / 휴대폰: 상자 아래)로 한 번에 이동하고,
+     그 순간 로그인 상자가 오른쪽(휴대폰: 위)에 나타남. 건너뛰면 정렬 단계부터 이어 재생. 로그인하면 친구들도 사라짐.
      그림을 5초 안에 다 불러오지 못하면 로그인 화면부터 보여 주고, 늦게라도 다 불러오면 친구들을 아래 줄에 바로 세움. 오류면 친구들 없이.
    - 인트로 동안 로그인 칸은 잠가 둡니다(inert) → 보이지 않는 칸에 글자가 입력되는 일이 없음.
    - 비밀번호 칸은 어떤 키·몇 글자를 입력하는지에 반응하지 않습니다(움직임 효과는 포인터 위치에만 반응).
@@ -15,7 +15,7 @@
   'use strict';
   var doc = root.document, html = doc.documentElement;
   if (!/[?&]intro=preview(&|$)/.test(root.location.search)) return;
-  var V = /*@@V@@*/{"charo-pet.js":"3751917b","charo-intro.js":"8b9feee5","welcome-fx.js":"5ded5479","intro-cast.js":"9d864092","charocharo":"d1d52d02","chumdani":"828cfe2c","giltong":"78da0fa0","tira":"677a53d8","tarotaro":"9de44863","doroduck":"742a9c73","fx":"99ec5eb7"};
+  var V = /*@@V@@*/{"charo-pet.js":"3751917b","charo-intro.js":"ed786731","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charocharo":"d1d52d02","chumdani":"828cfe2c","giltong":"78da0fa0","tira":"677a53d8","tarotaro":"9de44863","doroduck":"742a9c73","fx":"99ec5eb7"};
   var BASE = 'login/intro/', LOAD_LIMIT = 5000;
   var reduce = false; try { reduce = root.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
   var mobile = Math.min(root.innerWidth, (root.screen && root.screen.width) || 9999) < 700;
@@ -48,61 +48,75 @@
     html.classList.add('ss-intro-on');
     gate.inert = true; gate.setAttribute('inert', '');
     var ov = doc.createElement('div'); ov.id = 'ssIntro'; ov.className = 'ss-intro';
-    ov.innerHTML = '<div class="ss-intro-stage"><canvas role="img" aria-label="차로차로 친구들이 달려와 환영하는 인트로"></canvas></div>' +
+    ov.innerHTML = '<canvas role="img" aria-label="차로차로 친구들이 달려와 환영하는 인트로"></canvas>' +
       '<button type="button" class="ss-skip">건너뛰기 <kbd>Esc</kbd></button><p class="ss-sr" aria-live="polite"></p>';
     doc.body.appendChild(ov);
-    var done = false, started = false, intro = null, timer = root.setTimeout(function () { finish(); }, LOAD_LIMIT);
-    function finish() {          // 로그인 화면으로: 친구들은 아래 줄에 남김(인트로 중이면 끝 자리로 바로)
+    var done = false, started = false, intro = null, C = null, timer = root.setTimeout(showLogin, LOAD_LIMIT);
+    // 로그인 상자 보이기: 친구들이 정렬 이동을 시작하는 순간(5.15초)에. 친구들은 그대로 최종 자리까지 한 번에 이동
+    function showLogin() {
       if (done) return; done = true; root.clearTimeout(timer);
-      root.removeEventListener('keydown', onKey, true); ov.removeEventListener('click', finish);
-      if (started && intro) intro.skip();
-      ov.classList.add('rest'); reveal(); place();
+      root.removeEventListener('keydown', onKey, true); ov.removeEventListener('click', skip);
+      ov.classList.add('rest'); reveal();
     }
-    // 끝난 뒤 친구들 줄의 자리: 무대(1000×600) 안 줄의 범위 LINE 을 화면의 빈 곳에 맞춰 옮기고 키움(무대 전체를 transform)
-    var LINE = [222, 498, 788, 587];   // 정렬한 친구 6명의 보이는 그림 범위(논리 좌표, intro-cast.js 정렬 값 기준·여유 4px)
-    function place() {
-      var st = ov.querySelector('.ss-intro-stage'), card = doc.querySelector('#ssGate .ss-card');
-      if (!st || !ov.classList.contains('rest')) return;
-      var k = st.offsetWidth / 1000, lw = (LINE[2] - LINE[0]) * k, lh = (LINE[3] - LINE[1]) * k, vw = root.innerWidth, vh = root.innerHeight;
-      var cb = card ? card.offsetTop + card.offsetHeight : 0, cl = card ? card.offsetLeft : vw, s, cx, cy;
-      if (vw < 761) {                 // 휴대폰: 상자 아래, 화면 가운데보다 조금 아래
-        s = Math.min((vw - 32) / lw, 2.2); cx = vw / 2; cy = Math.max(vh * 0.62, cb + 28 + lh * s / 2); cy = Math.min(cy, vh - 16 - lh * s / 2);
+    // 건너뛰기: 정렬 이동 전이면 그 단계(5.15초)로 바로 가서 이어 재생 → 친구들은 한 번에 미끄러지듯 최종 자리로
+    function skip() {
+      if (!done && started && intro && intro.info().T < C.lineupT[0]) intro.jump(C.lineupT[0]);
+      showLogin();
+    }
+    function watch() {
+      if (done || !intro) return;
+      var i = intro.info(); if (i.state === 'wait' || (i.state === 'play' && i.T >= C.lineupT[0])) { showLogin(); return; }
+      root.requestAnimationFrame(watch);
+    }
+    // 최종 자리: 인트로 정렬 단계의 도착점(정렬 키)을 화면의 빈 곳으로 바꿔 넣음(크기·위치가 한 번에 바뀌게).
+    // ROWB = 원래 도착점에서 친구 6명의 보이는 그림 범위(무대 좌표, 여유 3px). 무대는 화면 가운데(1000×600을 화면에 맞춤).
+    var ROWB = [236, 439, 774, 588];
+    function relayout() {
+      if (!C) return;
+      var vw = root.innerWidth, vh = root.innerHeight, sc = Math.min(vw / 1000, vh / 600), ox = (vw - 1000 * sc) / 2, oy = (vh - 600 * sc) / 2;
+      var lw = (ROWB[2] - ROWB[0]) * sc, lh = (ROWB[3] - ROWB[1]) * sc, CAP = 0.92 / C.lineupRatio;   // CAP: 모두가 슬로모션 때 키보다 조금 작게 끝나도록
+      var card = doc.querySelector('#ssGate .ss-card'), cb = card ? card.offsetTop + card.offsetHeight : 0, cl = card ? card.offsetLeft : vw, s, cx, cy;
+      if (vw < 761) {                 // 휴대폰: 상자 아래 빈 곳의 60% 높이, 상자와 48px 이상 떨어뜨림, 폭은 화면의 85%
+        var top = cb + 48, avail = vh - 16 - top;
+        s = Math.min(vw * 0.85 / lw, CAP); if (lh * s > avail) s = Math.max(0.3, avail / lh);
+        cx = vw / 2; cy = top + Math.max(lh * s / 2, Math.min(avail - lh * s / 2, avail * 0.6));
       } else {                        // PC: 상자 왼쪽 빈 곳의 가운데
         var left = Math.max(24, vw * 0.04), right = cl - Math.max(32, vw * 0.04);
-        s = Math.min((right - left) / lw, (vh * 0.5) / lh, 2.6); cx = (left + right) / 2; cy = vh * 0.52;
+        s = Math.min((right - left) / lw, vh * 0.5 / lh, CAP); cx = (left + right) / 2; cy = vh * 0.52;
       }
-      var x0 = st.offsetLeft + LINE[0] * k, y0 = st.offsetTop + LINE[1] * k;   // 줄 왼쪽 위(옮기기 전 화면 위치)
-      var tx = cx - lw * s / 2 - st.offsetLeft - (x0 - st.offsetLeft) * s, ty = cy - lh * s / 2 - st.offsetTop - (y0 - st.offsetTop) * s;
-      st.style.transform = 'translate(' + tx.toFixed(1) + 'px,' + ty.toFixed(1) + 'px) scale(' + s.toFixed(3) + ')';
+      var tx = (cx - ox) / sc, ty = (cy - oy) / sc, rx = (ROWB[0] + ROWB[2]) / 2, ry = (ROWB[1] + ROWB[3]) / 2, L1 = C.lineupT[1];
+      C.cast.forEach(function (c) {
+        var x = tx + (C.lineupX[c.id] - rx) * s, y = ty + (C.lineupRow - ry) * s, h = C.lineupH[c.id] * s;
+        [c.place, c.reducedPlace].forEach(function (keys) { (keys || []).forEach(function (k) { if (k[0] >= L1 - 1e-6) { k[1] = x; k[2] = y; k[3] = h; } }); });
+      });
+      root.__ssLayout = { s: s, cx: cx, cy: cy, lw: lw * s, lh: lh * s };   // 시험용
     }
-    root.addEventListener('resize', function () { root.requestAnimationFrame(place); });
+    root.addEventListener('resize', function () { root.requestAnimationFrame(relayout); });
     function drop() { root.clearTimeout(timer); if (intro) intro.destroy(); if (ov.parentNode) ov.parentNode.removeChild(ov); }
-    // 로그인하면 친구들도 정리(화면 아래 그리기를 멈춤)
+    // 로그인하면 친구들도 정리(그리기를 멈춤)
     new root.MutationObserver(function (l, ob) { if (doc.body.classList.contains('authed')) { ob.disconnect(); drop(); } }).observe(doc.body, { attributes: true, attributeFilter: ['class'] });
-    function onKey(e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); finish(); } }
+    function onKey(e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); skip(); } }
     root.addEventListener('keydown', onKey, true);
-    ov.addEventListener('click', finish);
+    ov.addEventListener('click', skip);
     load(['charo-pet.js', 'charo-intro.js', 'welcome-fx.js', 'intro-cast.js']).then(function () {
       return fetch(BASE + 'assets/fx-assets.json?v=' + (V.fx || ''), { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error('fx ' + r.status); return r.json(); });
     }).then(function (meta) {
-      if (done) return;
-      var C = root.CharoIntroCast;
+      C = root.CharoIntroCast;
       C.cast.forEach(function (c) { c.file = BASE + 'chars/' + c.id + '.json?v=' + (V[c.id] || ''); });
       Object.keys(meta).forEach(function (k) { if (meta[k] && meta[k].file) meta[k].file += '?v=' + (V.fx || ''); });
       var fx = root.CharoWelcomeFX.create({ meta: meta, base: BASE, slow: C.slow, reduce: reduce, mobile: mobile });
       intro = root.CharoIntro.create({
-        canvas: ov.querySelector('canvas'), duration: C.duration, cast: C.cast, phases: C.phases, reduce: reduce, fx: fx,
+        canvas: ov.querySelector('canvas'), center: true, duration: C.duration, cast: C.cast, phases: C.phases, reduce: reduce, fx: fx,
         onWelcome: function () { ov.querySelector('.ss-sr').textContent = '환영합니다!'; },
-        onEnd: function () { root.setTimeout(finish, 350); },
-        onError: function () { finish(); drop(); }
+        onError: function () { showLogin(); drop(); }
       });
       root.__ssIntro = intro;
       return intro.ready.then(function () {
         if (!ov.parentNode) return;
-        root.clearTimeout(timer); ov.classList.add('on'); started = true;
-        return intro.start().then(function () { if (done) intro.skip(); });   // 이미 로그인 화면이면(늦게 불러옴) 바로 끝 자리
+        root.clearTimeout(timer); relayout(); ov.classList.add('on'); started = true;
+        return intro.start().then(function () { if (done) intro.skip(); else watch(); });   // 이미 로그인 화면이면(늦게 불러옴) 친구들은 바로 최종 자리
       });
-    }).catch(function () { finish(); drop(); });
+    }).catch(function () { showLogin(); drop(); });
   }
 
   function load(files) {

@@ -56,13 +56,15 @@
     var cv = opt.canvas, ctx = cv.getContext('2d');
     var W = opt.width || 1000, Hh = opt.height || 600, DUR = opt.duration;
     var cast = opt.cast, reduce = !!opt.reduce;
-    var welcomed = false, state = 'loading', T = 0, t0 = 0, endAt = 0, raf = 0, paused = false, ready = null, scale = 1, err = null;
+    var welcomed = false, state = 'loading', T = 0, t0 = 0, endAt = 0, raf = 0, paused = false, ready = null, scale = 1, ox = 0, oy = 0, err = null;
+    var center = !!opt.center;   // true: 그림판이 무대(1000×600)보다 넓거나 높으면 무대를 가운데에 놓고 남는 곳에도 그림(무대 밖 좌표도 보임)
 
     function fit() {
       var r = cv.getBoundingClientRect(), dpr = global.devicePixelRatio || 1;
       var w = Math.max(1, Math.round(r.width * dpr)), h = Math.max(1, Math.round(r.height * dpr));
       if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
       scale = Math.min(w / W, h / Hh);   // 창 크기가 바뀌어도 논리 좌표(1000×600)는 그대로 → 배치가 변하지 않음
+      ox = center ? (w - W * scale) / 2 : 0; oy = center ? (h - Hh * scale) / 2 : 0;
     }
 
     function segsOf(c) { return (reduce && c.reducedSegs) ? c.reducedSegs : c.segs; }
@@ -97,7 +99,7 @@
 
     function viewOf(c, T) {
       var pl = samplePlace(placeOf(c), Math.min(T, DUR)), s = pl[3] / c.stageH * scale;
-      return [s, 0, 0, s, (pl[1] - c.anchor[0] * pl[3] / c.stageH) * scale, (pl[2] - c.anchor[1] * pl[3] / c.stageH) * scale];
+      return [s, 0, 0, s, (pl[1] - c.anchor[0] * pl[3] / c.stageH) * scale + ox, (pl[2] - c.anchor[1] * pl[3] / c.stageH) * scale + oy];
     }
 
     var last = {};
@@ -105,8 +107,8 @@
       fit();
       var after = state === 'wait';
       ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
-      if (opt.fx) { ctx.save(); ctx.setTransform(scale, 0, 0, scale, 0, 0); opt.fx.drawBack(ctx, after ? DUR : T, api); ctx.restore(); }
-      if (opt.drawBack) { ctx.save(); ctx.setTransform(scale, 0, 0, scale, 0, 0); opt.drawBack(ctx, after ? DUR : T, api); ctx.restore(); }
+      if (opt.fx) { ctx.save(); ctx.setTransform(scale, 0, 0, scale, ox, oy); opt.fx.drawBack(ctx, after ? DUR : T, api); ctx.restore(); }
+      if (opt.drawBack) { ctx.save(); ctx.setTransform(scale, 0, 0, scale, ox, oy); opt.drawBack(ctx, after ? DUR : T, api); ctx.restore(); }
       var tt = after ? DUR : T;   // 앞뒤 순서: 바깥 층 depth(원근에서 가까울수록 앞) → 없으면 고정 z
       function dep(c) { var pl = samplePlace(placeOf(c), Math.min(tt, DUR)); return pl[5] != null ? pl[5] : (c.z || 0); }
       var order = cast.slice().sort(function (a, b) { return dep(a) - dep(b) || (a.z || 0) - (b.z || 0); });
@@ -117,8 +119,8 @@
         last[c.id] = { fp: fp, view: v };
       });
       ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
-      if (opt.fx) { ctx.save(); ctx.setTransform(scale, 0, 0, scale, 0, 0); opt.fx.drawFront(ctx, after ? DUR : T, api); ctx.restore(); }
-      if (opt.drawFront) { ctx.save(); ctx.setTransform(scale, 0, 0, scale, 0, 0); opt.drawFront(ctx, after ? DUR : T, api); ctx.restore(); }
+      if (opt.fx) { ctx.save(); ctx.setTransform(scale, 0, 0, scale, ox, oy); opt.fx.drawFront(ctx, after ? DUR : T, api); ctx.restore(); }
+      if (opt.drawFront) { ctx.save(); ctx.setTransform(scale, 0, 0, scale, ox, oy); opt.drawFront(ctx, after ? DUR : T, api); ctx.restore(); }
       if (opt.onWelcome && !welcomed && opt.fx && opt.fx.active(after ? DUR : T) && state === 'play') { welcomed = true; opt.onWelcome(api); }   // 화면 낭독용 알림 한 번
     }
 
@@ -143,13 +145,14 @@
       skip: function () { if (state === 'loading' || state === 'error') return; finish(); },     // 정상 종료와 같은 자리·자세로
       restart: function () { return api.start(); },
       seek: function (t) { if (state === 'loading' || state === 'error') return; state = 'play'; paused = true; T = Math.max(0, Math.min(DUR, t)); },
+      jump: function (t) { if (state === 'loading' || state === 'error' || state === 'wait') return; state = 'play'; paused = false; T = Math.max(0, Math.min(DUR, t)); t0 = global.performance.now() - T * 1000; },   // 그 시점부터 이어서 재생(건너뛰기 → 정렬 단계부터)
       resume: function () { if (paused) { paused = false; t0 = global.performance.now() - T * 1000; } },
       setReduce: function (r) { reduce = !!r; if (opt.fx && opt.fx.setReduce) opt.fx.setReduce(reduce); },
       destroy: function () { global.cancelAnimationFrame(raf); raf = 0; state = 'done'; },
       endState: function () {   // 끝난 직후(대기 0초) 자세와 바깥 층 행렬 — 정상 종료·건너뛰기 비교용
         var o = {}; cast.forEach(function (c) { var e = c.endPose; c.endPose = null; var off = offsetsAt(c, DUR, true); c.endPose = e;
-          o[c.id] = { fp: CP.finalPose(c.P, off, null), view: viewOf(c, DUR).map(function (v) { return v / scale; }) }; }); return o; },
-      info: function () { return { state: state, T: T, paused: paused, reduce: reduce, duplicate: dup, error: err && String(err.message || err), last: last }; },
+          o[c.id] = { fp: CP.finalPose(c.P, off, null), view: viewOf(c, DUR).map(function (v, i) { return (i === 4 ? v - ox : i === 5 ? v - oy : v) / scale; }) }; }); return o; },
+      info: function () { return { state: state, T: T, paused: paused, reduce: reduce, duplicate: dup, error: err && String(err.message || err), last: last, geom: [scale, ox, oy] }; },   // geom: 무대 1단위 = scale 픽셀(그림판 기준), 무대 원점 = (ox, oy)
       phase: function (t) { var ph = opt.phases || [], x = ''; ph.forEach(function (p) { if (t >= p[0]) x = p[1]; }); return x; },
       cast: cast
     };
