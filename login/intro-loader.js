@@ -16,8 +16,9 @@
   var doc = root.document, html = doc.documentElement;
   html.classList.add('ss-ready');   // 이 파일이 실행됨 → login-v2.css 의 '잠깐 가리기'를 품(아래 CSS 설명)
   if (/[?&]intro=off(&|$)/.test(root.location.search)) return;   // 비상용: 주소 끝에 ?intro=off 를 붙이면 예전 로그인 화면(인트로 없음)
-  var V = /*@@V@@*/{"charo-pet.js":"3751917b","charo-intro.js":"ed786731","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charocharo":"d1d52d02","chumdani":"828cfe2c","giltong":"78da0fa0","tira":"677a53d8","tarotaro":"9de44863","doroduck":"742a9c73","fx":"99ec5eb7"};
+  var V = /*@@V@@*/{"charo-pet.js":"3751917b","charo-intro.js":"d8279735","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"f2fce7c5","charocharo":"d1d52d02","chumdani":"828cfe2c","giltong":"acfdedaa","tira":"677a53d8","tarotaro":"9de44863","doroduck":"742a9c73","fx":"99ec5eb7"};
   var BASE = 'login/intro/', LOAD_LIMIT = 5000;
+  var MOUSE = /[?&]mouse=preview(&|$)/.test(root.location.search);   // 친구들 마우스 반응: 지금은 미리보기 주소에서만(확인 후 기본으로)
   var reduce = false; try { reduce = root.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
   var mobile = Math.min(root.innerWidth, (root.screen && root.screen.width) || 9999) < 700;
   html.classList.add('ss-v2');
@@ -99,19 +100,22 @@
     function onKey(e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); skip(); } }
     root.addEventListener('keydown', onKey, true);
     ov.addEventListener('click', skip);
-    load(['charo-pet.js', 'charo-intro.js', 'welcome-fx.js', 'intro-cast.js']).then(function () {
+    load(['charo-pet.js', 'charo-intro.js', 'welcome-fx.js', 'intro-cast.js'].concat(MOUSE ? ['charo-mouse.js'] : [])).then(function () {
       return fetch(BASE + 'assets/fx-assets.json?v=' + (V.fx || ''), { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error('fx ' + r.status); return r.json(); });
     }).then(function (meta) {
       C = root.CharoIntroCast;
       C.cast.forEach(function (c) { c.file = BASE + 'chars/' + c.id + '.json?v=' + (V[c.id] || ''); });
       Object.keys(meta).forEach(function (k) { if (meta[k] && meta[k].file) meta[k].file += '?v=' + (V.fx || ''); });
       var fx = root.CharoWelcomeFX.create({ meta: meta, base: BASE, slow: C.slow, reduce: reduce, mobile: mobile });
+      var mouse = MOUSE && root.CharoLoginMouse ? root.CharoLoginMouse.create({ canvas: ov.querySelector('canvas'), reduce: reduce, userField: 'ssU', passField: 'ssP',
+        busy: function () { var b = doc.getElementById('ssGo'); return !!(b && b.disabled); } }) : null;   // 로그인 확인 중이면 반응 안 함
       intro = root.CharoIntro.create({
         canvas: ov.querySelector('canvas'), center: true, duration: C.duration, cast: C.cast, phases: C.phases, reduce: reduce, fx: fx,
+        afterPose: mouse ? mouse.afterPose : null,
         onWelcome: function () { ov.querySelector('.ss-sr').textContent = '환영합니다!'; },
         onError: function () { showLogin(); drop(); }
       });
-      root.__ssIntro = intro;
+      root.__ssIntro = intro; if (mouse) { mouse.attach(intro); root.__ssMouse = mouse; }
       return intro.ready.then(function () {
         if (!ov.parentNode) return;
         root.clearTimeout(timer); relayout(); ov.classList.add('on'); started = true;

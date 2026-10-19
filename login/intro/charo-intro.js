@@ -110,11 +110,13 @@
       if (opt.fx) { ctx.save(); ctx.setTransform(scale, 0, 0, scale, ox, oy); opt.fx.drawBack(ctx, after ? DUR : T, api); ctx.restore(); }
       if (opt.drawBack) { ctx.save(); ctx.setTransform(scale, 0, 0, scale, ox, oy); opt.drawBack(ctx, after ? DUR : T, api); ctx.restore(); }
       var tt = after ? DUR : T;   // 앞뒤 순서: 바깥 층 depth(원근에서 가까울수록 앞) → 없으면 고정 z
-      function dep(c) { var pl = samplePlace(placeOf(c), Math.min(tt, DUR)); return pl[5] != null ? pl[5] : (c.z || 0); }
+      function dep(c) { var pl = samplePlace(placeOf(c), Math.min(tt, DUR)); return (pl[5] != null ? pl[5] : (c.z || 0)) + (c.depthBoost || 0); }   // depthBoost: 잠깐 맨 앞으로(마우스 반응 중인 친구)
       var order = cast.slice().sort(function (a, b) { return dep(a) - dep(b) || (a.z || 0) - (b.z || 0); });
       last.__order = order.map(function (c) { return c.id; });   // 이번 프레임 그린 순서(뒤 → 앞), 검사용
       order.forEach(function (c) {
-        var off = offsetsAt(c, T, after), fp = CP.finalPose(c.P, off, null), v = viewOf(c, after ? DUR : T);
+        var off = offsetsAt(c, T, after);
+        if (opt.afterPose) off = opt.afterPose(c, off, T, after) || off;   // 바깥에서 자세를 덧붙임(로그인 화면 마우스 반응 등). 인트로 자체는 그대로
+        var fp = CP.finalPose(c.P, off, null), v = viewOf(c, after ? DUR : T);
         CP.render(ctx, c.P, fp, CP.worldMatrices(c.P, fp), v);
         last[c.id] = { fp: fp, view: v };
       });

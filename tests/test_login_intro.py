@@ -124,7 +124,54 @@ def t_reduced_motion(b, ctx, m):
     check(p.evaluate("__ssIntro.info().reduce") is True, "움직임 줄이기면 간소화한 인트로")
     p.keyboard.press("Escape"); p.wait_for_selector("#ssIntro.rest", state="attached", timeout=2000); rc.close()
 
-TESTS = [t_off_switch, t_preview_intro_then_login, t_single_move, t_skip, t_auto_login_no_intro, t_intro_files_missing, t_loader_missing, t_password_no_reaction, t_reduced_motion]
+MOUSE = T.URL + "?mouse=preview"
+GBOX = """(id)=>{const CP=CharoPet,I=__ssIntro,c=I.cast.find(x=>x.id===id),L=I.info().last[id],cv=document.querySelector('#ssIntro canvas'),k=cv.width/cv.clientWidth,r=cv.getBoundingClientRect();
+  const W=CP.worldMatrices(c.P,L.fp);let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;c.P.parts.forEach(pt=>{const f=L.fp[pt.id];if(!f||f.op<=.01)return;const v=pt.images[f.img]||pt.images[0];if(!v)return;const m=CP.mul(L.view,W[pt.id]);
+  [[v.x,v.y],[v.x+v.w,v.y+v.h],[v.x,v.y+v.h],[v.x+v.w,v.y]].forEach(q=>{const a=CP.apply(m,q[0],q[1]);x0=Math.min(x0,a[0]);x1=Math.max(x1,a[0]);y0=Math.min(y0,a[1]);y1=Math.max(y1,a[1])})});return [r.left+x0/k,r.top+y0/k,r.left+x1/k,r.top+y1/k]}"""
+
+def open_mouse(ctx, m):
+    p = ctx.new_page(); p.set_viewport_size({"width": 1440, "height": 900}); p.on("pageerror", lambda e: errors.append(str(e)))
+    p.route("**/*", T.route); p.route(SBM.SB + "/**", m.handle)
+    p.goto(MOUSE); p.wait_for_selector("#ssGate", state="attached", timeout=20000)
+    wait_js(p, "!!(window.__ssIntro && __ssIntro.info().state === 'play')"); p.keyboard.press("Escape")
+    wait_js(p, "__ssIntro.info().state === 'wait'", 4000); p.wait_for_timeout(300)
+    return p
+
+def ms(p, id): return p.evaluate("(id)=>__ssMouse.state()[id] || {}", id)
+
+def t_mouse_giltong(b, ctx, m):
+    """길통이 마우스 반응: 시선 / 0.7초 머무르면 한 번 / 계속 있어도 반복 안 함 / 나갔다 들어오면 다시 / 중간에 나가면 바로 복귀 / 반응 중 맨 앞 / 폼 클릭 됨"""
+    p = open_mouse(ctx, m); g = p.evaluate(GBOX, "giltong"); cx, cy = (g[0] + g[2]) / 2, g[1] + (g[3] - g[1]) * 0.35
+    p.mouse.move(10, 450); p.wait_for_timeout(500); gl = ms(p, "giltong")["gx"]
+    p.mouse.move(cx + 300, cy); p.wait_for_timeout(500); gr = ms(p, "giltong")["gx"]
+    check(gl < -0.3 and gr > 0.3, f"커서 쪽으로 시선: 왼쪽 {gl}, 오른쪽 {gr}")
+    p.mouse.move(cx + 20, cy, steps=4); p.wait_for_timeout(500); check(not ms(p, "giltong").get("act"), "0.7초 전에는 시작 안 함")
+    p.wait_for_timeout(500); check(ms(p, "giltong").get("act"), "0.7초 머무르면 시작")
+    check(p.evaluate("__ssIntro.info().last.__order.slice(-1)[0]") == "giltong", "반응 중인 친구는 맨 앞")
+    p.click("#ssU"); check(p.evaluate("document.activeElement.id") == "ssU", "반응 중에도 로그인 칸을 누를 수 있어야 함")
+    p.mouse.move(cx + 21, cy); p.wait_for_timeout(2600)
+    st = ms(p, "giltong"); check(not st.get("act") and st.get("played"), f"한 번 재생 후 끝: {st}")
+    p.wait_for_timeout(3000); check(not ms(p, "giltong").get("act"), "커서가 그대로면 반복 안 함")
+    p.mouse.move(cx + 600, cy); p.wait_for_timeout(300); p.mouse.move(cx + 20, cy); p.wait_for_timeout(1000)
+    check(ms(p, "giltong").get("act"), "영역을 나갔다 들어오면(간격 3초 지남) 다시 시작")
+    p.wait_for_timeout(300); p.mouse.move(cx + 600, cy); p.wait_for_timeout(120)
+    check(not ms(p, "giltong").get("act"), "중간에 나가면 동작을 멈추고 복귀 시작")
+    p.wait_for_timeout(500); st = ms(p, "giltong"); check(not st.get("ret"), f"0.42초 안에 기본으로 복귀: {st}")
+    hid = p.evaluate("(()=>{const f=__ssIntro.info().last.giltong.fp;return [f.m_armChin.op,f.m_question.op,f.armL.op]})()")
+    check(hid[0] < 0.01 and hid[1] < 0.01 and hid[2] > 0.99, f"복귀 뒤 추가 그림은 숨고 원래 팔: {hid}")
+
+def t_mouse_blocked(b, ctx, m):
+    """비밀번호 칸에 있으면 시선·반응 없음 / 아이디 입력 중이면 반응 안 함 / ?mouse=preview 없으면 반응 기능 자체가 없음"""
+    p = open_mouse(ctx, m); g = p.evaluate(GBOX, "giltong"); cx, cy = (g[0] + g[2]) / 2, g[1] + (g[3] - g[1]) * 0.35
+    p.click("#ssP"); p.mouse.move(cx + 20, cy, steps=3); p.wait_for_timeout(1300)
+    st = ms(p, "giltong"); check(not st.get("act") and abs(st.get("gx", 0)) < 0.05, f"비밀번호 칸에서는 반응·시선 없음: {st}")
+    p.click("#ssU"); p.mouse.move(cx + 22, cy)
+    for _ in range(8): p.keyboard.type("a"); p.wait_for_timeout(150)
+    check(not ms(p, "giltong").get("act"), "아이디 입력 중에는 반응 안 함")
+    q = open_preview(ctx, m); wait_js(q, "!!(window.__ssIntro && __ssIntro.info().state === 'play')")
+    check(q.evaluate("!window.__ssMouse && !window.CharoLoginMouse"), "?mouse=preview 가 없으면 마우스 반응 파일도 안 받음")
+
+TESTS = [t_off_switch, t_preview_intro_then_login, t_single_move, t_skip, t_auto_login_no_intro, t_intro_files_missing, t_loader_missing, t_password_no_reaction, t_reduced_motion, t_mouse_giltong, t_mouse_blocked]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()

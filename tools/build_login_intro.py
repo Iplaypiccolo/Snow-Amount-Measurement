@@ -20,12 +20,12 @@ SRC = Path(sys.argv[1] if len(sys.argv) > 1 else '../Charocharo').resolve()
 CHARS = {   # 인트로 배치표의 id: (차로차로 저장소 안 파일, 남길 동작)
     'charocharo': ('charo-pet.json', ['c_breath', 'i_charo', 'i_charo_r']),
     'chumdani': ('chumdani/chumdani.json', ['c_idle', 'c_run_i', 'c_jump_i', 'c_welcome', 'c_flip']),
-    'giltong': ('giltong/giltong.json', ['g_idle', 'g_run_i', 'g_welcome', 'g_finish']),
+    'giltong': ('giltong/giltong.json', ['g_idle', 'g_run_i', 'g_welcome', 'g_finish', 'm_mouse']),
     'tira': ('tira_v3/tira_v3.json', ['t_idle', 't_intro', 't_intro_r']),
     'tarotaro': ('tarotaro/tarotaro.json', ['tt_idle', 'tt_intro', 'tt_intro_r']),
     'doroduck': ('doroduck/doroduck.json', ['d_idle', 'd_run_i', 'd_welcome', 'd_finish_i']),
 }
-JS = {'charo-pet.js': 'charo-pet.js', 'charo-intro.js': 'intro/charo-intro.js', 'welcome-fx.js': 'intro/welcome-fx.js', 'intro-cast.js': 'intro/intro-cast.js'}
+JS = {'charo-pet.js': 'charo-pet.js', 'charo-intro.js': 'intro/charo-intro.js', 'welcome-fx.js': 'intro/welcome-fx.js', 'intro-cast.js': 'intro/intro-cast.js', 'charo-mouse.js': 'intro/charo-mouse.js'}
 
 
 def webp(uri):
@@ -50,7 +50,7 @@ def main():
         missing = [k for k in keep if not any(c['id'] == k for c in p['clips'])]
         if missing: raise SystemExit(f'{cid}: 동작 없음 {missing}')
         p['clips'] = [c for c in p['clips'] if c['id'] in keep]
-        p['rules'] = []; p.pop('preview', None)
+        p['rules'] = []; p.pop('preview', None)   # p['mouse'](마우스 반응 설정)는 그대로 둠
         p['assets'] = {k: webp(v) if v.startswith('data:image/png') else v for k, v in p['assets'].items()}
         out = OUT / 'chars' / (cid + '.json')
         out.write_text(json.dumps(p, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
