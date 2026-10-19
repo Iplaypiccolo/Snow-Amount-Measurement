@@ -16,9 +16,10 @@
   var doc = root.document, html = doc.documentElement;
   html.classList.add('ss-ready');   // 이 파일이 실행됨 → login-v2.css 의 '잠깐 가리기'를 품(아래 CSS 설명)
   if (/[?&]intro=off(&|$)/.test(root.location.search)) return;   // 비상용: 주소 끝에 ?intro=off 를 붙이면 예전 로그인 화면(인트로 없음)
-  var V = /*@@V@@*/{"charo-pet.js":"3751917b","charo-intro.js":"d8279735","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"2b7e5817","charocharo":"e337eeac","chumdani":"d52185aa","giltong":"7979d37e","tira":"55cd7f39","tarotaro":"089e0a5f","doroduck":"9d1e9be4","fx":"99ec5eb7"};
+  var V = /*@@V@@*/{"charo-pet.js":"1626ec8b","charo-intro.js":"d8279735","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"649393d5","charocharo":"9da233de","chumdani":"ca7e8b57","giltong":"7a1cd468","tira":"4c8365d4","tarotaro":"1ac50481","doroduck":"092da81a","fx":"99ec5eb7"};
   var BASE = 'login/intro/', LOAD_LIMIT = 5000;
   var MOUSE = !/[?&]mouse=off(&|$)/.test(root.location.search);   // 친구들 마우스 반응: 2026-10-19 기본으로 켬. 비상용 ?mouse=off 면 끔
+  var KEYS = !/[?&]keys=off(&|$)/.test(root.location.search);     // 친구들 키보드 반응(아이디 입력·비밀번호 칸): 2026-10-20. 비상용 ?keys=off 면 끔
   var reduce = false; try { reduce = root.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
   var mobile = Math.min(root.innerWidth, (root.screen && root.screen.width) || 9999) < 700;
   html.classList.add('ss-v2');
@@ -93,21 +94,36 @@
       });
       root.__ssLayout = { s: s, cx: cx, cy: cy, lw: lw * s, lh: lh * s };   // 시험용
     }
-    root.addEventListener('resize', function () { root.requestAnimationFrame(relayout); });
+    // 휴대폰에서 입력하는 동안(화면 키보드가 올라와 있음)은 친구들 무대 크기를 고정하고 다시 배치하지 않음 → 줄이 갑자기 움직이지 않음.
+    // 키보드에 가려지면 가려진 대로 둠(입력칸·버튼은 친구들보다 앞이라 가려지지 않음). 입력이 끝나면 다시 맞춤.
+    var touch = true; try { touch = !root.matchMedia('(hover: hover) and (pointer: fine)').matches; } catch (e) {}
+    var locked = false;
+    function isField(a) { return a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA'); }
+    doc.addEventListener('focusin', function (e) {
+      if (!touch || locked || !isField(e.target) || !ov.parentNode) return;
+      locked = true; ov.style.height = ov.clientHeight + 'px'; ov.style.bottom = 'auto';
+    });
+    doc.addEventListener('focusout', function () {
+      root.setTimeout(function () {
+        if (!locked || isField(doc.activeElement)) return;
+        locked = false; ov.style.height = ''; ov.style.bottom = ''; root.requestAnimationFrame(relayout);
+      }, 250);
+    });
+    root.addEventListener('resize', function () { if (!locked) root.requestAnimationFrame(relayout); });
     function drop() { root.clearTimeout(timer); if (intro) intro.destroy(); if (ov.parentNode) ov.parentNode.removeChild(ov); }
     // 로그인하면 친구들도 정리(그리기를 멈춤)
     new root.MutationObserver(function (l, ob) { if (doc.body.classList.contains('authed')) { ob.disconnect(); drop(); } }).observe(doc.body, { attributes: true, attributeFilter: ['class'] });
     function onKey(e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); skip(); } }
     root.addEventListener('keydown', onKey, true);
     ov.addEventListener('click', skip);
-    load(['charo-pet.js', 'charo-intro.js', 'welcome-fx.js', 'intro-cast.js'].concat(MOUSE ? ['charo-mouse.js'] : [])).then(function () {
+    load(['charo-pet.js', 'charo-intro.js', 'welcome-fx.js', 'intro-cast.js'].concat(MOUSE || KEYS ? ['charo-mouse.js'] : [])).then(function () {
       return fetch(BASE + 'assets/fx-assets.json?v=' + (V.fx || ''), { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error('fx ' + r.status); return r.json(); });
     }).then(function (meta) {
       C = root.CharoIntroCast;
       C.cast.forEach(function (c) { c.file = BASE + 'chars/' + c.id + '.json?v=' + (V[c.id] || ''); });
       Object.keys(meta).forEach(function (k) { if (meta[k] && meta[k].file) meta[k].file += '?v=' + (V.fx || ''); });
       var fx = root.CharoWelcomeFX.create({ meta: meta, base: BASE, slow: C.slow, reduce: reduce, mobile: mobile });
-      var mouse = MOUSE && root.CharoLoginMouse ? root.CharoLoginMouse.create({ canvas: ov.querySelector('canvas'), reduce: reduce, userField: 'ssU', passField: 'ssP',
+      var mouse = (MOUSE || KEYS) && root.CharoLoginMouse ? root.CharoLoginMouse.create({ canvas: ov.querySelector('canvas'), reduce: reduce, userField: 'ssU', passField: 'ssP', mouse: MOUSE, keys: KEYS,
         busy: function () { var b = doc.getElementById('ssGo'); return !!(b && b.disabled); } }) : null;   // 로그인 확인 중이면 반응 안 함
       intro = root.CharoIntro.create({
         canvas: ov.querySelector('canvas'), center: true, duration: C.duration, cast: C.cast, phases: C.phases, reduce: reduce, fx: fx,

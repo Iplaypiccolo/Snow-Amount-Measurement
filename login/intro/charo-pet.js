@@ -202,7 +202,12 @@
     for (var i = 0; i < p.parts.length; i++) {
       var part = p.parts[i], f = fp[part.id];
       if (!f || f.op <= 0.001) continue;
-      var m = mul(view, W[part.id]);
+      var m = mul(view, W[part.id]), cl = part.clip;
+      if (cl && W[cl.part]) {   // clip: 다른 파츠 좌표의 사각형 안쪽만 그림(예: 길통이 팔의 얼굴 앞 부분만 다시 그리기)
+        var mc = mul(view, W[cl.part]);
+        ctx.save(); ctx.setTransform(mc[0], mc[1], mc[2], mc[3], mc[4], mc[5]);
+        ctx.beginPath(); ctx.rect(cl.rect[0], cl.rect[1], cl.rect[2], cl.rect[3]); ctx.clip();
+      }
       ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
       if (f.prev !== f.img && f.mix < 1) {
         drawVariant(ctx, p, part, f.prev, f.op * (1 - f.mix));
@@ -210,6 +215,7 @@
       } else {
         drawVariant(ctx, p, part, f.img, f.op);
       }
+      if (cl && W[cl.part]) ctx.restore();
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;

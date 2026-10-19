@@ -2,7 +2,9 @@
 로그인 인트로·새 로그인 화면(기본 화면, 비상용 ?intro=off) 자동 테스트 — 브라우저로 직접 열어 봅니다. (Supabase 는 가짜 서버 tests/_sb_mock.py)
 확인하는 것: 정렬 단계에서 크기·위치가 한 번에 바뀜(PC·휴대폰) / ?intro=off 면 예전 화면(인트로 파일도 안 받음) / 기본은 인트로 → 새 로그인 화면(친구들 줄은 왼쪽·상자는 오른쪽, 휴대폰은 상자 아래 줄) / 인트로 중 칸 잠금 /
              건너뛰기(Esc·버튼) / 자동 로그인 사람은 인트로 없음 / 인트로 파일을 못 받으면 바로 로그인 화면 / 비밀번호 입력에 화면이 반응하지 않음 /
-             움직임 줄이기 / 새 화면에서도 로그인이 그대로 됨 / 보안 정책(CSP) 아래에서 오류 없음
+             움직임 줄이기 / 새 화면에서도 로그인이 그대로 됨 / 보안 정책(CSP) 아래에서 오류 없음 /
+             친구들 마우스 반응(머무르면 반응·한 명만·방향·계속 머무르면 간격 두고 반복) / 키보드 반응(아이디 입력 = 화면 왼쪽부터 한 명씩 2.2초 간격·한글 조합 묶음,
+             비밀번호 칸 = 여섯 모두 첫 프레임에 감은 눈·마우스 반응 없음·입력 글자 수와 무관, 움직임 줄이기, ?keys=off, 휴대폰 입력 중 배치 고정)
 실행 (저장소 맨 위 폴더에서):  python tests/test_login_intro.py
 """
 import sys
@@ -151,7 +153,13 @@ def t_mouse_giltong(b, ctx, m):
     p.click("#ssU"); check(p.evaluate("document.activeElement.id") == "ssU", "반응 중에도 로그인 칸을 누를 수 있어야 함")
     p.mouse.move(cx + 21, cy); p.wait_for_timeout(2600)
     st = ms(p, "giltong"); check(not st.get("act") and st.get("played"), f"한 번 재생 후 끝: {st}")
-    p.wait_for_timeout(3000); check(not ms(p, "giltong").get("act"), "커서가 그대로면 반복 안 함")
+    p.wait_for_timeout(3000); check(not ms(p, "giltong").get("act"), "커서가 그대로면 바로 반복하지는 않음")
+    ok = False
+    for _ in range(80):
+        p.wait_for_timeout(100)
+        if ms(p, "giltong").get("act"): ok = True; break
+    check(ok, "커서를 계속 두면 끝나고 9초(간격 3초+6초) 뒤 한 번 더")
+    p.mouse.move(cx + 600, cy); p.wait_for_timeout(700); p.wait_for_timeout(3000)
     p.mouse.move(cx + 600, cy); p.wait_for_timeout(300); p.mouse.move(cx + 20, cy); p.wait_for_timeout(1000)
     check(ms(p, "giltong").get("act"), "영역을 나갔다 들어오면(간격 3초 지남) 다시 시작")
     p.wait_for_timeout(300); p.mouse.move(cx + 600, cy); p.wait_for_timeout(120)
@@ -168,9 +176,12 @@ def t_mouse_blocked(b, ctx, m):
     p.click("#ssU"); p.mouse.move(cx + 22, cy)
     for _ in range(8): p.keyboard.type("a"); p.wait_for_timeout(150)
     check(not ms(p, "giltong").get("act"), "아이디 입력 중에는 반응 안 함")
-    q = q2 = ctx.new_page(); q.set_viewport_size({"width": 1400, "height": 900}); q.route("**/*", T.route); q.route(SBM.SB + "/**", m.handle)
+    q = ctx.new_page(); q.set_viewport_size({"width": 1400, "height": 900}); q.route("**/*", T.route); q.route(SBM.SB + "/**", m.handle)
     q.goto(T.URL + "?mouse=off"); q.wait_for_selector("#ssGate", state="attached", timeout=20000); wait_js(q, "!!(window.__ssIntro && __ssIntro.info().state === 'play')")
-    check(q.evaluate("!window.__ssMouse && !window.CharoLoginMouse"), "?mouse=off 면 마우스 반응 파일도 안 받음(인트로는 그대로)")
+    check(q.evaluate("!!window.__ssMouse && __ssMouse.hover === false"), "?mouse=off 면 마우스 반응만 꺼짐(키보드 반응 때문에 파일은 받음)")
+    q = ctx.new_page(); q.set_viewport_size({"width": 1400, "height": 900}); q.route("**/*", T.route); q.route(SBM.SB + "/**", m.handle)
+    q.goto(T.URL + "?mouse=off&keys=off"); q.wait_for_selector("#ssGate", state="attached", timeout=20000); wait_js(q, "!!(window.__ssIntro && __ssIntro.info().state === 'play')")
+    check(q.evaluate("!window.__ssMouse && !window.CharoLoginMouse"), "?mouse=off&keys=off 면 반응 파일을 받지 않음(인트로는 그대로)")
 
 def t_mouse_all(b, ctx, m):
     """여섯 친구 모두: 그 친구 근처에 머무르면 그 친구가(한 명만) 반응, 커서 방향(왼쪽/오른쪽) 동작, 로그인 대기 얼굴(티라·타로타로 마우스용 눈, 도로덕 팻말 숨김)"""
@@ -197,7 +208,100 @@ def t_mouse_all(b, ctx, m):
             if cid == "giltong": break
             p.wait_for_timeout(6200 if side < 0 else 0)   # 같은 친구의 다음 시작은 간격(최대 6초) 뒤
 
-TESTS = [t_off_switch, t_preview_intro_then_login, t_single_move, t_skip, t_auto_login_no_intro, t_intro_files_missing, t_loader_missing, t_password_no_reaction, t_reduced_motion, t_mouse_giltong, t_mouse_blocked, t_mouse_all]
+ORDER = ["chumdani", "tira", "tarotaro", "giltong", "charocharo", "doroduck"]   # 화면 왼쪽부터
+def kbs(p): return p.evaluate("(()=>{const s=__ssMouse.state(),o={};for(const k in s)if(k[0]!=='_')o[k]=s[k].kb;return o})()")
+FACE = """(()=>{const L=__ssIntro.info().last,g=L.giltong.fp,c=L.charocharo.fp,t=L.tira.fp,ch=L.chumdani.fp,d=L.doroduck.fp,tt=L.tarotaro.fp;
+  return {giltong:[g.eyeL.img,g.eyeR.img,+(g.k_armLTop.op>.5),+(g.k_armRTop.op>.5)],charocharo:[c.eyeL.img,c.eyeR.img],tira:[t.headImg.img,+(t.m_face.op>.5),+(t.m_eyeL.op>.5)],
+    chumdani:[ch.eyeL.img,ch.eyeR.img],doroduck:[d.eyeL.img,d.eyeR.img],tarotaro:[tt.eyes.img,+(tt.eyes.op>.5),+(tt.m_eyeL.op>.5)]}})()"""
+CLOSED = {"giltong": [1, 1, 1, 1], "charocharo": [2, 2], "tira": [1, 0, 0], "chumdani": [1, 1], "doroduck": [1, 1], "tarotaro": [0, 1, 0]}
+OPEN = {"giltong": [0, 0, 0, 0], "charocharo": [0, 0], "tira": [0, 1, 1], "chumdani": [0, 0], "doroduck": [0, 0], "tarotaro": [0, 0, 1]}
+def frames(p, n=2): p.evaluate("(n)=>new Promise(r=>{let i=0;(function f(){if(++i>n)r();else requestAnimationFrame(f)})()})", n)
+
+def t_keys_type(b, ctx, m):
+    """아이디 입력: 화면 왼쪽부터 한 명씩 타자(2.1초), 2.2초 간격으로 다음 친구, 동시에 큰 동작은 한 명, 작은 동조는 다른 한 명 / 키마다 다시 시작·쌓기 없음 / 멈추면 마무리만 / 한글 조합은 끝날 때 한 번"""
+    p = open_mouse(ctx, m); p.mouse.move(700, 60)
+    check(p.evaluate("__ssMouse.state().__keys.order") == ORDER, f"주연 순서는 화면 왼쪽부터: {p.evaluate('__ssMouse.state().__keys.order')}")
+    p.click("#ssU"); p.keyboard.type("a"); frames(p)
+    k = kbs(p); check(k["chumdani"] == "kb_type" and list(k.values()).count("kb_type") == 1, f"첫 입력: 맨 왼쪽 첨다니 한 명만 타자 {k}")
+    check(list(k.values()).count("kb_echo") == 1 and k["tarotaro"] == "kb_echo", f"작은 동조는 다른 한 명 {k}")
+    check(p.evaluate("__ssIntro.info().last.__order.slice(-1)[0]") == "chumdani", "타자하는 친구가 맨 앞")
+    seen, maxtype = [], 0
+    for i in range(50):                   # 약 6초 동안 빠르게 입력
+        p.keyboard.type("b"); p.wait_for_timeout(110)
+        k = kbs(p); ty = [c for c, v in k.items() if v == "kb_type"]; maxtype = max(maxtype, len(ty))
+        for c in ty:
+            if not seen or seen[-1] != c: seen.append(c)
+    check(maxtype == 1, f"큰 타자 동작은 언제나 한 명: 최대 {maxtype}")
+    check(seen[:3] == ORDER[:3], f"2.2초마다 다음 친구(왼쪽부터): {seen}")
+    p.wait_for_timeout(2300); k = kbs(p)
+    check(all(v is None for v in k.values()), f"입력을 멈추면 하던 것만 끝내고 더 이어지지 않음 {k}")
+    # 한글 조합: 조합 중 input 은 무시, 조합이 끝날 때 한 번
+    p.wait_for_timeout(200)
+    p.evaluate("""(()=>{const u=document.getElementById('ssU');u.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));
+      for(let i=0;i<5;i++)u.dispatchEvent(new InputEvent('input',{bubbles:true,isComposing:true,data:'ㄱ'}))})()""")
+    frames(p); k = kbs(p); check(all(v is None for v in k.values()), f"한글 조합 중에는 아직 반응 안 함 {k}")
+    p.evaluate("document.getElementById('ssU').dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:'가'}))"); frames(p)
+    k = kbs(p); check(list(k.values()).count("kb_type") == 1, f"조합이 끝나면 한 번 반응 {k}")
+
+def t_keys_password(b, ctx, m):
+    """비밀번호 칸: 첫 프레임에 여섯 모두 감은 눈(타자 도중이어도) → 3초 반복 자세 / 입력 글자 수와 무관 / 마우스 반응·시선 없음 / 나오면 0.65초 뒤 눈 뜸"""
+    p = open_mouse(ctx, m); p.mouse.move(700, 60)
+    check(p.evaluate(FACE) == OPEN, f"기본 얼굴(눈 뜸): {p.evaluate(FACE)}")
+    p.click("#ssU"); p.keyboard.type("ab"); p.wait_for_timeout(400)
+    p.focus("#ssP"); frames(p)
+    k = kbs(p); check(set(k.values()) == {"kb_private_in"}, f"비밀번호 칸: 여섯 모두 '안 볼게' {k}")
+    fc = p.evaluate(FACE); fc["giltong"][2:] = [1, 1]
+    check(fc == CLOSED, f"첫 프레임부터 감은 눈 {p.evaluate(FACE)}")
+    p.wait_for_timeout(900); check(set(kbs(p).values()) == {"kb_private_hold"}, "0.65초 뒤 조용히 기다리기(반복)")
+    check(p.evaluate(FACE) == CLOSED, f"기다리는 동안 감은 눈·길통이 팔은 볼 앞 {p.evaluate(FACE)}")
+    g = p.evaluate(GBOX, "giltong"); p.mouse.move((g[0] + g[2]) / 2 + 10, g[1] + (g[3] - g[1]) * 0.4, steps=3); p.wait_for_timeout(1300)
+    st = ms(p, "giltong"); check(not st.get("act") and abs(st.get("gx", 0)) < 0.01, f"비밀번호 칸에서는 마우스 반응·시선 없음 {st}")
+    check(p.evaluate(FACE) == CLOSED, "커서를 가까이 두어도 눈을 뜨지 않음")
+    pose = "(()=>{const L=__ssIntro.info().last;return JSON.stringify(Object.keys(L).filter(k=>k[0]!=='_').map(k=>Object.values(L[k].fp).map(f=>[f.img,+f.op.toFixed(2)])))})()"
+    p.mouse.move(700, 60); p.wait_for_timeout(300); a = p.evaluate(pose)
+    p.keyboard.type("x"); p.wait_for_timeout(200); b1 = p.evaluate(pose)
+    p.keyboard.type("aB3$ 긴비밀번호입력", delay=20); p.wait_for_timeout(200); b2 = p.evaluate(pose)
+    check(a == b1 == b2 and set(kbs(p).values()) == {"kb_private_hold"}, "비밀번호 입력·글자 수에 따라 그림이 바뀌지 않음")
+    p.click("#ssU"); frames(p); check(set(kbs(p).values()) == {"kb_private_out"}, "다른 칸으로 가면 0.65초 동안 돌아옴")
+    check(p.evaluate(FACE)["charocharo"] == [2, 2], "돌아오는 동안은 아직 감은 눈")
+    p.wait_for_timeout(900); check(all(v is None for v in kbs(p).values()), "돌아오기 끝")
+    check(p.evaluate(FACE) == OPEN, f"끝나면 눈 뜸·볼 앞 팔 숨김 {p.evaluate(FACE)}")
+    p.keyboard.type("z"); frames(p); check(list(kbs(p).values()).count("kb_type") == 1, "돌아온 뒤 아이디 입력에는 다시 반응")
+
+def t_keys_reduced_off(b, ctx, m):
+    """움직임 줄이기: 타자 동작 없음, 비밀번호 때 감은 눈(그림만, 자세는 그대로) / ?keys=off: 키보드 반응 없음(마우스는 그대로)"""
+    rc = b.new_context(reduced_motion="reduce"); p = open_mouse(rc, m)
+    p.click("#ssU"); p.keyboard.type("abc"); frames(p); check(all(v is None for v in kbs(p).values()), "움직임 줄이기: 타자 동작 없음")
+    arm = "__ssIntro.info().last.giltong.fp.armL.rot"; r0 = p.evaluate(arm)
+    p.focus("#ssP"); p.wait_for_timeout(900); fc = p.evaluate(FACE)
+    check(fc["charocharo"] == [2, 2] and fc["giltong"] == [1, 1, 0, 0], f"움직임 줄이기: 감은 눈만(볼 앞 팔 없음) {fc}")
+    check(abs(p.evaluate(arm) - r0) < 3, "움직임 줄이기: 팔 자세는 그대로")
+    rc.close()
+    p = ctx.new_page(); p.set_viewport_size({"width": 1440, "height": 900}); p.route("**/*", T.route); p.route(SBM.SB + "/**", m.handle)
+    p.goto(T.URL + "?keys=off"); p.wait_for_selector("#ssGate", state="attached", timeout=20000)
+    wait_js(p, "!!(window.__ssIntro && __ssIntro.info().state === 'play')"); p.keyboard.press("Escape"); wait_js(p, "__ssIntro.info().state === 'wait'", 4000); p.wait_for_timeout(300)
+    p.click("#ssU"); p.keyboard.type("abc"); p.focus("#ssP"); p.wait_for_timeout(300)
+    check(all(v is None for v in kbs(p).values()) and p.evaluate(FACE)["charocharo"] == [0, 0], "?keys=off 면 키보드 반응 없음")
+    check(p.evaluate("__ssMouse.hover") is True, "?keys=off 여도 마우스 반응은 그대로")
+
+def t_keys_mobile_lock(b, ctx, m):
+    """휴대폰: 입력하는 동안 화면 높이가 바뀌어도(화면 키보드) 친구들 위치·크기를 다시 계산하지 않음, 입력이 끝나면 다시 맞춤 / 터치 기기에서도 키보드 반응"""
+    mc = b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+    p = mc.new_page(); p.on("pageerror", lambda e: errors.append(str(e))); p.route("**/*", T.route); p.route(SBM.SB + "/**", m.handle)
+    p.goto(T.URL); p.wait_for_selector("#ssGate", state="attached", timeout=20000)
+    wait_js(p, "!!(window.__ssIntro && __ssIntro.info().state === 'play')"); p.evaluate("__ssIntro.jump(5.15)"); wait_js(p, "__ssIntro.info().state === 'wait'", 4000); p.wait_for_timeout(1000)
+    lay = "JSON.stringify(window.__ssLayout)"; L0 = p.evaluate(lay)
+    p.tap("#ssU"); p.wait_for_timeout(300); p.keyboard.type("a"); frames(p)
+    check(list(kbs(p).values()).count("kb_type") == 1, "터치 기기에서도 아이디 입력에 반응")
+    p.set_viewport_size({"width": 390, "height": 500}); p.wait_for_timeout(500)
+    check(p.evaluate(lay) == L0, "입력 중 화면 높이가 바뀌어도 배치 그대로")
+    check(p.evaluate("document.getElementById('ssIntro').style.height") == "844px", "입력 중 친구들 무대 높이 고정")
+    p.set_viewport_size({"width": 390, "height": 844}); p.evaluate("document.activeElement.blur()"); p.wait_for_timeout(600)
+    check(p.evaluate("document.getElementById('ssIntro').style.height") == "", "입력이 끝나면 고정 풀림")
+    check(p.evaluate(lay) == L0, "원래 크기로 돌아오면 같은 배치")
+    mc.close()
+
+TESTS = [t_off_switch, t_preview_intro_then_login, t_single_move, t_skip, t_auto_login_no_intro, t_intro_files_missing, t_loader_missing, t_password_no_reaction, t_reduced_motion, t_mouse_giltong, t_mouse_blocked, t_mouse_all, t_keys_type, t_keys_password, t_keys_reduced_off, t_keys_mobile_lock]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()

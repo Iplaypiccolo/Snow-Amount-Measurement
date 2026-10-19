@@ -12,6 +12,16 @@
  * - 막는 때: 인트로 중, 비밀번호 칸에 있을 때(시선도 끔), 아이디를 입력하는 중(1.2초), 로그인 확인 중, 터치 전용 기기.
  *   움직임 줄이기: 반응 동작 없이 작은 시선만.
  * - 키를 듣는 것은 '아이디 칸에서 입력 중인지' 여부뿐이고, 비밀번호 칸의 키·글자 수에는 전혀 반응하지 않습니다.
+ * - 같은 자리에 커서를 계속 두면 반응이 끝나고 repeat 초(기본 gap+6초) 뒤 다시 한 번(2026-10-20, 너무 잦지 않게).
+ *
+ * 키보드 반응(opt.keys 가 false 가 아니면, 터치 기기에서도): 캐릭터 파일의 kb_ 클립 5개를 씀(add_keys.js 가 넣음)
+ *   · 아이디 칸 'input' 신호(한글 조합은 compositionend 에 한 번)만 씀. 무슨 키·글자·길이인지는 읽지 않음.
+ *   · 주연 한 명이 kb_type(2.1초). 신호가 이어지면 2.2초 간격으로 화면 왼쪽부터 차례로 넘기고, 그다음 친구 하나만 kb_echo(0.62초).
+ *     키마다 처음부터 다시 하지 않고, 쌓아 두지도 않음(입력이 멈추면 하던 것만 마무리).
+ *   · 비밀번호 칸에 있는 동안(포커스만 봄): 여섯 모두 kb_private_in(0.65초) → kb_private_hold(3초 반복), 나오면 kb_private_out(0.65초).
+ *     다른 모든 반응보다 우선 — 첫 프레임에 감은 눈, 마우스 반응·시선·깜빡임·타자는 끔. 비밀번호 칸의 input/keydown 은 듣지 않음.
+ *   · 전환은 직전 자세에서 0.16초 동안 이어 붙임(눈·입 그림은 바로 바뀜). 마우스용 얼굴(m_ 파츠)은 키보드 동작 중 숨기고 p.keys.unbase 로 원래 얼굴을 켬.
+ *   · 움직임 줄이기: 타자 동작 없음, 비밀번호 때 감은 눈(그림만)만.
  */
 (function (global) {
   'use strict';
@@ -22,8 +32,10 @@
   function create(opt) {
     var CP = global.CharoPet, doc = global.document, reduce = !!opt.reduce;
     var hover = true; try { hover = global.matchMedia('(hover: hover) and (pointer: fine)').matches; } catch (e) {}
+    if (opt.mouse === false) hover = false;   // 마우스 반응만 끔(키보드 반응은 그대로)
     var ptr = { x: -1e4, y: -1e4, inside: false, t: 0 }, typingAt = -1e9, intro = null, frameAt = -1, frameNow = 0, acting = null, lastNow = 0;
     var st = {};   // 친구별 상태
+    var KEYS = opt.keys !== false, kbOn = false, composing = false, kb = { mode: 'idle', pwAt: -1e9, outAt: -1e9, lastHero: -1e9, lastEcho: -1e9, leader: 0, order: [] };
     function now() { return global.performance.now() / 1000; }
     function onMove(e) { if (e.pointerType && e.pointerType !== 'mouse') return; ptr.x = e.clientX; ptr.y = e.clientY; ptr.inside = true; ptr.t = now(); }
     function onOut(e) { if (!e.relatedTarget) ptr.inside = false; }
@@ -34,10 +46,32 @@
       global.addEventListener('blur', function () { ptr.inside = false; });
       doc.addEventListener('keydown', onKey, true);
     }
+    if (KEYS) {   // 아이디 칸의 '입력 있었음' 신호만. 비밀번호 칸은 포커스(activeElement)만 프레임마다 확인
+      var isUser = function (e) { return e.target && e.target.id === opt.userField; };
+      doc.addEventListener('compositionstart', function (e) { if (isUser(e)) composing = true; }, true);
+      doc.addEventListener('compositionend', function (e) { if (isUser(e)) { composing = false; signal(); } }, true);
+      doc.addEventListener('input', function (e) { if (isUser(e) && !composing && !e.isComposing) signal(); }, true);
+    }
+    function clipOf(c, id) { return c.P && CP.findClip(c.P, id); }
+    function signal() {
+      var t = now(); typingAt = t;
+      if (!kbOn || reduce || kb.mode === 'pw' || t - kb.outAt < 0.65 || (opt.busy && opt.busy())) return;
+      var L = kb.order, n = L.length; if (!n) return;
+      if (t - kb.lastHero >= 2.2) {
+        var h = L[kb.leader % n], sh = S(h), cl = clipOf(h, 'kb_type');
+        if (cl) { sh.kb = { clip: cl, t0: t }; kb.lastHero = t; }
+        kb.leader = (kb.leader + 1) % n;
+      }
+      if (t - kb.lastEcho > 0.7) {
+        var e = L[(kb.leader + 1) % n], se = S(e), ce = clipOf(e, 'kb_echo');
+        if (ce && !(se.kb && t - se.kb.t0 < se.kb.clip.dur)) se.kb = { clip: ce, t0: t };
+        kb.lastEcho = t;
+      }
+    }
     function blocked() {
       var a = doc.activeElement;
       return { gaze: !hover || !ptr.inside || (a && a.id === opt.passField), act: !hover || reduce || !ptr.inside || (a && a.id === opt.passField) ||
-        now() - typingAt < 1.2 || (opt.busy && opt.busy()) };
+        now() - typingAt < 1.2 || kb.mode === 'pw' || now() - kb.outAt < 0.65 || (opt.busy && opt.busy()) };
     }
     function S(c) {
       if (!st[c.id]) st[c.id] = { gx: 0, gy: 0, hr: 0, hy: 0, br: 0, lag: [], blinkAt: 0, dwellAt: 0, dwellX: 0, dwellY: 0, played: false, lastStart: -1e9, act: null, ret: null, dir: 'L', box: null };
@@ -61,6 +95,13 @@
     // 한 프레임에 한 번: 누가 반응할지 정함
     function tick(t, list) {
       var dt = lastNow ? Math.min(0.1, t - lastNow) : 0; lastNow = t;
+      if (KEYS) {   // 비밀번호 칸에 있는지(포커스만), 주연 순서(화면 왼쪽부터)
+        kbOn = true;
+        var ae = doc.activeElement, pw = !!(ae && ae.id === opt.passField);
+        if (pw && kb.mode !== 'pw') { kb.mode = 'pw'; kb.pwAt = t; list.forEach(function (c) { var s0 = S(c); s0.kb = null; if (s0.act) { s0.act = null; s0.ret = null; s0.endAt = t; } }); acting = null; }
+        else if (!pw && kb.mode === 'pw') { kb.mode = 'idle'; kb.outAt = t; }
+        kb.order = list.filter(function (c) { return S(c).box; }).sort(function (a, b) { var A = S(a).box, B2 = S(b).box; return (A.x0 + A.x1) - (B2.x0 + B2.x1); });
+      }
       var B = blocked(), best = null, bestD = 1e9;
       list.forEach(function (c) {
         var s = S(c), b = s.box = boxOf(c); if (!b) return;
@@ -82,25 +123,71 @@
       if (acting) { var sa = S(acting); if (!sa.act && !sa.ret) acting = null; }
       if (!acting && best && !B.act) {
         var s = S(best), M = best.P.mouse;
-        if (!s.played && t - s.dwellAt >= M.dwell && t - s.lastStart >= M.gap) {
+        var again = s.played && s.endAt && t - s.endAt >= (M.repeat || M.gap + 6);   // 같은 자리에 계속 있으면 끝나고 repeat 초 뒤 한 번 더
+        if ((!s.played || again) && t - s.dwellAt >= M.dwell && t - s.lastStart >= M.gap) {
           var b = s.box, cx = (b.x0 + b.x1) / 2, w = (b.x1 - b.x0) * 0.08;
           s.dir = ptr.x < cx - w ? 'L' : ptr.x > cx + w ? 'R' : (s.dir || 'L');
           var cl = clipFor(best, s);
-          if (cl) { s.act = { clip: cl, t0: t, gx: s.dir === 'L' ? -0.8 : 0.8, gy: -0.2 }; s.ret = null; s.played = true; s.lastStart = t; acting = best; }
+          if (cl) { s.act = { clip: cl, t0: t, gx: s.dir === 'L' ? -0.8 : 0.8, gy: -0.2 }; s.ret = null; s.played = true; s.endAt = 0; s.lastStart = t; acting = best; }
         }
       }
-      list.forEach(function (c) { var s = S(c); c.depthBoost = (s.act || s.ret) ? 10 : 0; });
+      list.forEach(function (c) { var s = S(c); c.depthBoost = (s.act || s.ret || (s.kb && s.kb.clip.id === 'kb_type' && t - s.kb.t0 < s.kb.clip.dur)) ? 10 : 0; });
     }
-    function cancel(c, s, t) { if (!s.act) return; s.ret = { t0: t, dur: 0.42, from: s.last }; s.act = null; }
+    function cancel(c, s, t) { if (!s.act) return; s.ret = { t0: t, dur: 0.42, from: s.last }; s.act = null; s.endAt = t; }
+
+    // 키보드 동작: 지금 이 친구가 재생할 kb_ 클립과 그 안의 시각
+    function kbNow(c, s, t) {
+      if (!KEYS) return null;
+      var d;
+      if (kb.mode === 'pw') { d = t - kb.pwAt; return d < 0.65 ? { id: 'kb_private_in', tt: d, key: 'in' } : { id: 'kb_private_hold', tt: (d - 0.65) % 3, key: 'hold' }; }
+      d = t - kb.outAt; if (d < 0.65) return { id: 'kb_private_out', tt: d, key: 'out' };
+      if (s.kb) { d = t - s.kb.t0; if (d < s.kb.clip.dur) return { id: s.kb.clip.id, tt: d, key: s.kb.clip.id + '@' + s.kb.t0 }; s.kb = null; }
+      return null;
+    }
+    function snapAll(off) { var o = {}; for (var id in off) { var a = off[id], b = {}; PROPS.forEach(function (k) { b[k] = a[k]; }); o[id] = b; } return o; }
+    function blendFrom(off, from, u) {   // 이전 자세에서 이어 붙이기(위치·회전·배율만, 투명도·그림은 바로)
+      var e = smooth(u);
+      for (var id in from) { var o = off[id], f = from[id]; if (!o) continue; ['x', 'y', 'rot', 'sx', 'sy'].forEach(function (k) { o[k] = f[k] + (o[k] - f[k]) * e; }); }
+    }
+    function applyKeys(c, s, off, t, K) {
+      var P = c.P, cl = CP.findClip(P, K.id); if (!cl) return false;
+      for (var id in off) if (/^m_/.test(id)) off[id].op = 0;   // 마우스용 얼굴 숨김
+      var ub = (P.keys && P.keys.unbase) || {};
+      for (var u in ub) { var ou = off[u]; if (!ou) continue; if (ub[u].op != null) ou.op = ub[u].op; if (ub[u].img != null) ou.img = { img: ub[u].img, prev: ub[u].img, mix: 1 }; }
+      var pose = CP.clipPose(P, cl, K.tt);
+      for (var pid in pose) {
+        var o = off[pid]; if (!o) continue; var q = pose[pid];
+        if (reduce) { if (q.img) o.img = q.img; continue; }   // 움직임 줄이기: 그림(감은 눈)만
+        for (var j = 0; j < PROPS.length; j++) { var k = PROPS[j]; if (q[k] != null) o[k] = q[k]; }
+        if (q.img) o.img = q.img;
+      }
+      if (reduce) for (var r in off) if (/^k_/.test(r)) off[r].op = 0;
+      if (K.key !== s.kbKey) { s.kbTr = s.kbSnap ? { from: s.kbSnap, t0: t } : null; s.kbKey = K.key; s.kbId = K.id; }
+      if (s.kbTr && !s.kbTr.back && !reduce) { var uu = (t - s.kbTr.t0) / 0.16; if (uu < 1) blendFrom(off, s.kbTr.from, uu); else s.kbTr = null; }
+      else s.kbTr = null;
+      s.kbSnap = snapAll(off);
+      return true;
+    }
 
     function apply(c, off, t) {
       var s = S(c), M = c.P.mouse, P = c.P;
       // 로그인 대기 기본 상태(인트로가 끝난 뒤에만): 마우스용 얼굴 켜기·팻말 숨기기 등 { 파츠: {op, img} }
       if (M.base) for (var bp in M.base) { var ob0 = off[bp], bv = M.base[bp]; if (!ob0) continue; if (bv.op != null) ob0.op = bv.op; if (bv.img != null) ob0.img = { img: bv.img, prev: bv.img, mix: 1 }; }
+      for (var kp in off) if (/^k_/.test(kp)) off[kp].op = 0;   // 키보드용 추가 파츠(길통이 볼 앞 팔)는 키보드 동작 때만
+      // 키보드 반응이 가장 우선: 재생 중이면 마우스 반응·시선·깜빡임 없이 그것만
+      var K = kbNow(c, s, t);
+      if (K && applyKeys(c, s, off, t, K)) {
+        if (s.act) s.endAt = t;
+        s.act = null; s.ret = null; if (acting === c) acting = null;
+        s.gx = s.gy = s.hr = s.hy = s.br = 0; s.lag = [];
+        return off;
+      }
+      if (s.kbKey) { s.kbTr = s.kbSnap && !reduce ? { from: s.kbSnap, t0: t, back: true } : null; s.kbKey = null; s.kbSnap = null; }   // 끝남 → 기본으로 이어 붙이기
+      if (s.kbTr && s.kbTr.back) { var ub2 = (t - s.kbTr.t0) / 0.2; if (ub2 < 1) blendFrom(off, s.kbTr.from, ub2); else s.kbTr = null; }
       // 반응 동작
       if (s.act) {
         var tt = t - s.act.t0, cl = s.act.clip;
-        if (tt >= cl.dur) { s.ret = { t0: t, dur: 0.16, from: s.last }; s.act = null; }
+        if (tt >= cl.dur) { s.ret = { t0: t, dur: 0.16, from: s.last }; s.act = null; s.endAt = t; }
         else {
           var pose = CP.clipPose(P, cl, tt), u = smooth(tt / 0.16);
           for (var pid in pose) {
@@ -151,7 +238,7 @@
         if (T !== frameAt) { frameAt = T; frameNow = now(); tick(frameNow, intro ? intro.cast.filter(function (x) { return x.P && x.P.mouse; }) : []); }   // 한 프레임(같은 T)에 한 번
         return apply(c, off, frameNow);
       },
-      state: function () { var o = {}; for (var k in st) o[k] = { act: !!st[k].act, ret: !!st[k].ret, played: st[k].played, gx: +st[k].gx.toFixed(3), dir: st[k].dir }; o.__acting = acting && acting.id; return o; },
+      state: function () { var o = {}; for (var k in st) o[k] = { act: !!st[k].act, ret: !!st[k].ret, played: st[k].played, gx: +st[k].gx.toFixed(3), dir: st[k].dir, kb: st[k].kbKey ? st[k].kbId : null }; o.__acting = acting && acting.id; o.__keys = { mode: kb.mode, order: kb.order.map(function (c) { return c.id; }) }; return o; },
       hover: hover
     };
     return api;
