@@ -18,7 +18,7 @@
   if (/[?&]intro=off(&|$)/.test(root.location.search)) return;   // 비상용: 주소 끝에 ?intro=off 를 붙이면 예전 로그인 화면(인트로 없음)
   var V = /*@@V@@*/{"charo-pet.js":"3751917b","charo-intro.js":"d8279735","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"2b7e5817","charocharo":"e337eeac","chumdani":"d52185aa","giltong":"7979d37e","tira":"55cd7f39","tarotaro":"089e0a5f","doroduck":"9d1e9be4","fx":"99ec5eb7"};
   var BASE = 'login/intro/', LOAD_LIMIT = 5000;
-  var MOUSE = /[?&]mouse=preview(&|$)/.test(root.location.search);   // 친구들 마우스 반응: 지금은 미리보기 주소에서만(확인 후 기본으로)
+  var MOUSE = !/[?&]mouse=off(&|$)/.test(root.location.search);   // 친구들 마우스 반응: 2026-10-19 기본으로 켬. 비상용 ?mouse=off 면 끔
   var reduce = false; try { reduce = root.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
   var mobile = Math.min(root.innerWidth, (root.screen && root.screen.width) || 9999) < 700;
   html.classList.add('ss-v2');

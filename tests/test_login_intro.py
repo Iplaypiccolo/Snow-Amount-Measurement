@@ -124,7 +124,7 @@ def t_reduced_motion(b, ctx, m):
     check(p.evaluate("__ssIntro.info().reduce") is True, "움직임 줄이기면 간소화한 인트로")
     p.keyboard.press("Escape"); p.wait_for_selector("#ssIntro.rest", state="attached", timeout=2000); rc.close()
 
-MOUSE = T.URL + "?mouse=preview"
+MOUSE = T.URL                       # 2026-10-19부터 마우스 반응 기본
 GBOX = """(id)=>{const CP=CharoPet,I=__ssIntro,c=I.cast.find(x=>x.id===id),L=I.info().last[id],cv=document.querySelector('#ssIntro canvas'),k=cv.width/cv.clientWidth,r=cv.getBoundingClientRect();
   const W=CP.worldMatrices(c.P,L.fp);let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;c.P.parts.forEach(pt=>{const f=L.fp[pt.id];if(!f||f.op<=.01)return;const v=pt.images[f.img]||pt.images[0];if(!v)return;const m=CP.mul(L.view,W[pt.id]);
   [[v.x,v.y],[v.x+v.w,v.y+v.h],[v.x,v.y+v.h],[v.x+v.w,v.y]].forEach(q=>{const a=CP.apply(m,q[0],q[1]);x0=Math.min(x0,a[0]);x1=Math.max(x1,a[0]);y0=Math.min(y0,a[1]);y1=Math.max(y1,a[1])})});return [r.left+x0/k,r.top+y0/k,r.left+x1/k,r.top+y1/k]}"""
@@ -161,15 +161,16 @@ def t_mouse_giltong(b, ctx, m):
     check(hid[0] < 0.01 and hid[1] < 0.01 and hid[2] > 0.99, f"복귀 뒤 추가 그림은 숨고 원래 팔: {hid}")
 
 def t_mouse_blocked(b, ctx, m):
-    """비밀번호 칸에 있으면 시선·반응 없음 / 아이디 입력 중이면 반응 안 함 / ?mouse=preview 없으면 반응 기능 자체가 없음"""
+    """비밀번호 칸에 있으면 시선·반응 없음 / 아이디 입력 중이면 반응 안 함 / ?mouse=off 면 반응 기능 자체가 없음"""
     p = open_mouse(ctx, m); g = p.evaluate(GBOX, "giltong"); cx, cy = (g[0] + g[2]) / 2, g[1] + (g[3] - g[1]) * 0.35
     p.click("#ssP"); p.mouse.move(cx + 20, cy, steps=3); p.wait_for_timeout(1300)
     st = ms(p, "giltong"); check(not st.get("act") and abs(st.get("gx", 0)) < 0.05, f"비밀번호 칸에서는 반응·시선 없음: {st}")
     p.click("#ssU"); p.mouse.move(cx + 22, cy)
     for _ in range(8): p.keyboard.type("a"); p.wait_for_timeout(150)
     check(not ms(p, "giltong").get("act"), "아이디 입력 중에는 반응 안 함")
-    q = open_preview(ctx, m); wait_js(q, "!!(window.__ssIntro && __ssIntro.info().state === 'play')")
-    check(q.evaluate("!window.__ssMouse && !window.CharoLoginMouse"), "?mouse=preview 가 없으면 마우스 반응 파일도 안 받음")
+    q = q2 = ctx.new_page(); q.set_viewport_size({"width": 1400, "height": 900}); q.route("**/*", T.route); q.route(SBM.SB + "/**", m.handle)
+    q.goto(T.URL + "?mouse=off"); q.wait_for_selector("#ssGate", state="attached", timeout=20000); wait_js(q, "!!(window.__ssIntro && __ssIntro.info().state === 'play')")
+    check(q.evaluate("!window.__ssMouse && !window.CharoLoginMouse"), "?mouse=off 면 마우스 반응 파일도 안 받음(인트로는 그대로)")
 
 def t_mouse_all(b, ctx, m):
     """여섯 친구 모두: 그 친구 근처에 머무르면 그 친구가(한 명만) 반응, 커서 방향(왼쪽/오른쪽) 동작, 로그인 대기 얼굴(티라·타로타로 마우스용 눈, 도로덕 팻말 숨김)"""
