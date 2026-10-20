@@ -16,8 +16,8 @@
  *
  * 키보드 반응(opt.keys 가 false 가 아니면, 터치 기기에서도): 캐릭터 파일의 kb_ 클립 5개를 씀(add_keys.js 가 넣음)
  *   · 아이디 칸 'input' 신호(한글 조합은 compositionend 에 한 번)만 씀. 무슨 키·글자·길이인지는 읽지 않음.
- *   · 주연 한 명이 kb_type(2.1초). 신호가 이어지면 2.2초 간격으로 화면 왼쪽부터 차례로 넘기고, 그다음 친구 하나만 kb_echo(0.62초).
- *     키마다 처음부터 다시 하지 않고, 쌓아 두지도 않음(입력이 멈추면 하던 것만 마무리).
+ *   · 신호마다(0.15초에 한 번까지) 쉬고 있는 친구 하나를 무작위로: 대부분 작은 동조 kb_echo(0.62초), 가끔 큰 타자 kb_type(2.1초, 동시 2명까지).
+ *     친구마다 따로 움직여 여러 명이 한꺼번에 들썩임. 키마다 처음부터 다시 하지 않고, 쌓아 두지도 않음(입력이 멈추면 하던 것만 마무리).
  *   · 비밀번호 칸에 있는 동안(포커스만 봄): 여섯 모두 kb_private_in(0.65초) → kb_private_hold(3초 반복), 나오면 kb_private_out(0.65초).
  *     다른 모든 반응보다 우선 — 첫 프레임에 감은 눈, 마우스 반응·시선·깜빡임·타자는 끔. 비밀번호 칸의 input/keydown 은 듣지 않음.
  *   · 전환은 직전 자세에서 0.16초 동안 이어 붙임(눈·입 그림은 바로 바뀜). 마우스용 얼굴(m_ 파츠)은 키보드 동작 중 숨기고 p.keys.unbase 로 원래 얼굴을 켬.
@@ -28,7 +28,7 @@
  *   · 0.08초 넘게 누르고 있으면 작은 준비 자세(mt_press), 0.45초 안에 12px 이하로 움직이고 떼면 큰 동작(mt_tap) 한 번.
  *     12px 넘게 쓸기·오래 누르기·pointercancel·두 번째 손가락·탭 숨김 → 취소(mt_cancel). 시간은 performance.now.
  *   · preventDefault 를 하지 않음(스크롤·확대는 브라우저 그대로). click 은 듣지 않으므로 두 번 재생되지 않음.
- *   · 큰 동작은 한 번에 한 친구만. 재생 중 다시 누르면 작은 원만(다시 시작·예약·높이 누적 없음).
+ *   · 친구마다 따로: 한 친구가 움직이는 중에 다른 친구를 톡 하면 그 친구도 바로 움직임. 같은 친구를 다시 누르면 작은 원만(다시 시작·예약·높이 누적 없음).
  *   · 우선순위: 비밀번호 > 터치 > 아이디 타자 > 마우스·대기. 비밀번호 칸에 있는 동안 터치는 아무것도 하지 않음.
  *   · 첨다니 공중제비(360도)는 끝나고 돌아올 때 각도를 가까운 쪽으로 맞춰 거꾸로 돌지 않음.
  *   · 움직임 줄이기: 움직임을 12%로, 공중제비·불꽃 없음.
@@ -46,7 +46,7 @@
     var ptr = { x: -1e4, y: -1e4, inside: false, t: 0 }, typingAt = -1e9, intro = null, frameAt = -1, frameNow = 0, acting = null, lastNow = 0;
     var st = {};   // 친구별 상태
     var TAP = opt.tap !== false, tap = { ptr: null, busyUntil: -1e9, last: {} }, live = false, masks = {};
-    var KEYS = opt.keys !== false, kbOn = false, composing = false, kb = { mode: 'idle', pwAt: -1e9, outAt: -1e9, lastHero: -1e9, lastEcho: -1e9, leader: 0, order: [] };
+    var KEYS = opt.keys !== false, kbOn = false, composing = false, kb = { mode: 'idle', pwAt: -1e9, outAt: -1e9, lastHero: -1e9, lastSig: -1e9, lastPick: null, order: [] };
     function now() { return global.performance.now() / 1000; }
     function onMove(e) { if (e.pointerType && e.pointerType !== 'mouse') return; ptr.x = e.clientX; ptr.y = e.clientY; ptr.inside = true; ptr.t = now(); }
     function onOut(e) { if (!e.relatedTarget) ptr.inside = false; }
@@ -102,15 +102,16 @@
       el.style.left = x + 'px'; el.style.top = y + 'px'; doc.body.appendChild(el);
       global.setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 500);
     }
-    function tapRunning(t) { return t < tap.busyUntil; }
+    function tapRunning(t) { return t < tap.busyUntil; }   // 누군가 큰 터치 동작 중(마우스 반응을 쉬는 용도)
+    function tapBusy(s, t) { return s.tap && s.tap.clip.id === 'mt_tap' && t - s.tap.t0 < s.tap.clip.dur; }   // 이 친구가 큰 동작 중
     function cancelTap() {
       var p = tap.ptr; if (!p) return; tap.ptr = null;
       var s = S(p.c); if (p.pressed && s.tap && s.tap.hold) { var cl = clipOf(p.c, 'mt_cancel'); s.tap = cl ? { clip: cl, t0: now() } : null; }
     }
     function playTap(c) {
       var t = now(), s = S(c), cl = clipOf(c, 'mt_tap');
-      if (!cl || tapRunning(t) || t - (tap.last[c.id] || -1e9) < 0.25) return false;
-      s.tap = { clip: cl, t0: t }; s.kb = null; tap.last[c.id] = t; tap.busyUntil = t + cl.dur + 0.15; return true;
+      if (!cl || tapBusy(s, t) || t - (tap.last[c.id] || -1e9) < 0.25) return false;   // 친구마다 따로: 다른 친구가 움직이는 중이어도 됨
+      s.tap = { clip: cl, t0: t }; s.kb = null; tap.last[c.id] = t; tap.busyUntil = Math.max(tap.busyUntil, t + cl.dur + 0.15); return true;
     }
     function interactive(el) { return el && el.closest && el.closest('input,button,select,textarea,a,label,[role=button],.ss-card,.ss-skip'); }
     if (TAP) {
@@ -131,20 +132,22 @@
       doc.addEventListener('pointercancel', function (e) { if (tap.ptr && tap.ptr.id === e.pointerId) cancelTap(); }, true);
       doc.addEventListener('visibilitychange', function () { if (doc.hidden) cancelTap(); });
     }
+    // 2026-10-20 사용자 요청: 친구마다 따로. 입력 신호마다(0.15초에 한 번까지) 쉬고 있는 친구 하나를 무작위로 골라
+    // 대부분 작은 동조(kb_echo), 가끔 큰 타자(kb_type: 22%, 잠깐 쉬었다 처음 치면 50%) → 타자할 때 여러 친구가 한꺼번에 들썩임.
+    // 큰 타자는 동시에 2명까지, 시작 간격 1.2초 이상. 방금 고른 친구는 되도록 피함. 키마다 다시 시작·쌓기 없음.
+    var rand = Math.random;
+    function playing(s, t) { return s.kb && t - s.kb.t0 < s.kb.clip.dur; }
     function signal() {
       var t = now(); typingAt = t;
       if (!kbOn || reduce || kb.mode === 'pw' || t - kb.outAt < 0.65 || (opt.busy && opt.busy())) return;
-      var L = kb.order, n = L.length; if (!n) return;
-      if (t - kb.lastHero >= 2.2) {
-        var h = L[kb.leader % n], sh = S(h), cl = clipOf(h, 'kb_type');
-        if (cl && !sh.tap) { sh.kb = { clip: cl, t0: t }; kb.lastHero = t; }
-        kb.leader = (kb.leader + 1) % n;
-      }
-      if (t - kb.lastEcho > 0.7) {
-        var e = L[(kb.leader + 1) % n], se = S(e), ce = clipOf(e, 'kb_echo');
-        if (ce && !se.tap && !(se.kb && t - se.kb.t0 < se.kb.clip.dur)) se.kb = { clip: ce, t0: t };
-        kb.lastEcho = t;
-      }
+      var quiet = t - kb.lastSig > 2; if (t - kb.lastSig < 0.15) return; kb.lastSig = t;
+      var free = kb.order.filter(function (c) { var s0 = S(c); return !s0.tap && !playing(s0, t); }); if (!free.length) return;
+      if (free.length > 1) free = free.filter(function (c) { return c.id !== kb.lastPick; });
+      var c = free[Math.floor(rand() * free.length) % free.length], s = S(c);
+      var bigs = kb.order.filter(function (z) { var sz = S(z); return playing(sz, t) && sz.kb.clip.id === 'kb_type'; }).length;
+      var big = bigs < 2 && t - kb.lastHero >= 1.2 && rand() < (quiet ? 0.5 : 0.22), cl = clipOf(c, big ? 'kb_type' : 'kb_echo');
+      if (!cl) return;
+      s.kb = { clip: cl, t0: t }; kb.lastPick = c.id; if (big) kb.lastHero = t;
     }
     function blocked() {
       var a = doc.activeElement;
@@ -176,7 +179,7 @@
       if (tap.ptr) {   // 누르는 중: 0.08초 뒤 준비 자세, 0.45초 넘으면 오래 누르기라 취소
         var tp = tap.ptr, sp = S(tp.c);
         if (t - tp.w0 > 0.45) cancelTap();
-        else if (!tp.pressed && t - tp.w0 >= 0.08 && !tapRunning(t)) { var pc = clipOf(tp.c, 'mt_press'); if (pc) { sp.tap = { clip: pc, t0: t, hold: true }; sp.kb = null; } tp.pressed = true; }
+        else if (!tp.pressed && t - tp.w0 >= 0.08 && !tapBusy(sp, t)) { var pc = clipOf(tp.c, 'mt_press'); if (pc) { sp.tap = { clip: pc, t0: t, hold: true }; sp.kb = null; } tp.pressed = true; }
       }
       if (KEYS) {   // 비밀번호 칸에 있는지(포커스만), 주연 순서(화면 왼쪽부터)
         kbOn = true;
@@ -336,8 +339,9 @@
         if (T !== frameAt) { frameAt = T; frameNow = now(); tick(frameNow, intro ? intro.cast.filter(function (x) { return x.P && x.P.mouse; }) : []); }   // 한 프레임(같은 T)에 한 번
         return apply(c, off, frameNow);
       },
-      state: function () { var o = {}; for (var k in st) o[k] = { act: !!st[k].act, ret: !!st[k].ret, played: st[k].played, gx: +st[k].gx.toFixed(3), dir: st[k].dir, kb: st[k].kbKey ? st[k].kbId : null, tap: st[k].tap ? st[k].tap.clip.id : null }; o.__acting = acting && acting.id; o.__keys = { mode: kb.mode, order: kb.order.map(function (c) { return c.id; }) }; o.__tap = { tracking: tap.ptr && tap.ptr.c.id, busy: tapRunning(now()) }; return o; },
-      hover: hover
+      state: function () { var o = {}; for (var k in st) o[k] = { act: !!st[k].act, ret: !!st[k].ret, played: st[k].played, gx: +st[k].gx.toFixed(3), dir: st[k].dir, kb: st[k].kbKey ? st[k].kbId : null, tap: st[k].tap ? st[k].tap.clip.id : null, tapT0: st[k].tap ? st[k].tap.t0 : null }; o.__acting = acting && acting.id; o.__keys = { mode: kb.mode, order: kb.order.map(function (c) { return c.id; }) }; o.__tap = { tracking: tap.ptr && tap.ptr.c.id, busy: tapRunning(now()) }; return o; },
+      hover: hover,
+      setRandom: function (f) { rand = f || Math.random; }   // 시험용(무작위 고정)
     };
     return api;
   }

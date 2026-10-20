@@ -3,9 +3,9 @@
 확인하는 것: 정렬 단계에서 크기·위치가 한 번에 바뀜(PC·휴대폰) / ?intro=off 면 예전 화면(인트로 파일도 안 받음) / 기본은 인트로 → 새 로그인 화면(친구들 줄은 왼쪽·상자는 오른쪽, 휴대폰은 상자 아래 줄) / 인트로 중 칸 잠금 /
              건너뛰기(Esc·버튼) / 자동 로그인 사람은 인트로 없음 / 인트로 파일을 못 받으면 바로 로그인 화면 / 비밀번호 입력에 화면이 반응하지 않음 /
              움직임 줄이기 / 새 화면에서도 로그인이 그대로 됨 / 보안 정책(CSP) 아래에서 오류 없음 /
-             친구들 마우스 반응(머무르면 반응·한 명만·방향·계속 머무르면 간격 두고 반복) / 키보드 반응(아이디 입력 = 화면 왼쪽부터 한 명씩 2.2초 간격·한글 조합 묶음,
+             친구들 마우스 반응(머무르면 반응·한 명만·방향·계속 머무르면 간격 두고 반복) / 키보드 반응(아이디 입력 = 친구마다 따로·대부분 작은 동조·가끔 큰 타자·한글 조합 묶음,
              비밀번호 칸 = 여섯 모두 첫 프레임에 감은 눈·마우스 반응 없음·입력 글자 수와 무관, 움직임 줄이기, ?keys=off, 휴대폰 입력 중 배치 고정) /
-             터치 반응(톡 = 그 친구 큰 동작 한 번·한 번에 한 명·연타 무시·쓸기/오래 누르기 취소·입력칸 무시·비밀번호 중 무시·첨다니 역회전 없음·움직임 줄이기·?tap=off)
+             터치 반응(톡 = 그 친구 큰 동작 한 번·친구마다 따로·같은 친구 연타 무시·쓸기/오래 누르기 취소·입력칸 무시·비밀번호 중 무시·첨다니 역회전 없음·움직임 줄이기·?tap=off)
 실행 (저장소 맨 위 폴더에서):  python tests/test_login_intro.py
 """
 import sys
@@ -219,30 +219,32 @@ OPEN = {"giltong": [0, 0, 0, 0], "charocharo": [0, 0], "tira": [0, 1, 1], "chumd
 def frames(p, n=2): p.evaluate("(n)=>new Promise(r=>{let i=0;(function f(){if(++i>n)r();else requestAnimationFrame(f)})()})", n)
 
 def t_keys_type(b, ctx, m):
-    """아이디 입력: 화면 왼쪽부터 한 명씩 타자(2.1초), 2.2초 간격으로 다음 친구, 동시에 큰 동작은 한 명, 작은 동조는 다른 한 명 / 키마다 다시 시작·쌓기 없음 / 멈추면 마무리만 / 한글 조합은 끝날 때 한 번"""
+    """아이디 입력: 친구마다 따로 — 쉬고 있는 친구를 무작위로 골라 대부분 작은 동조, 가끔 큰 타자(동시 2명까지) → 여러 친구가 한꺼번에 움직임 /
+       키마다 다시 시작·쌓기 없음 / 멈추면 마무리만 / 한글 조합은 끝날 때 한 번"""
     p = open_mouse(ctx, m); p.mouse.move(700, 60)
-    check(p.evaluate("__ssMouse.state().__keys.order") == ORDER, f"주연 순서는 화면 왼쪽부터: {p.evaluate('__ssMouse.state().__keys.order')}")
+    check(sorted(p.evaluate("__ssMouse.state().__keys.order")) == sorted(ORDER), "여섯 친구 모두 후보")
     p.click("#ssU"); p.keyboard.type("a"); frames(p)
-    k = kbs(p); check(k["chumdani"] == "kb_type" and list(k.values()).count("kb_type") == 1, f"첫 입력: 맨 왼쪽 첨다니 한 명만 타자 {k}")
-    check(list(k.values()).count("kb_echo") == 1 and k["tarotaro"] == "kb_echo", f"작은 동조는 다른 한 명 {k}")
-    check(p.evaluate("__ssIntro.info().last.__order.slice(-1)[0]") == "chumdani", "타자하는 친구가 맨 앞")
-    seen, maxtype = [], 0
-    for i in range(50):                   # 약 6초 동안 빠르게 입력
+    k = kbs(p); check(sum(1 for v in k.values() if v) == 1, f"첫 입력: 한 친구가 반응 {k}")
+    moved, maxtype, maxall, nt, ne, prev = set(), 0, 0, 0, 0, {}
+    for i in range(55):                   # 약 6초 동안 빠르게 입력
         p.keyboard.type("b"); p.wait_for_timeout(110)
-        k = kbs(p); ty = [c for c, v in k.items() if v == "kb_type"]; maxtype = max(maxtype, len(ty))
-        for c in ty:
-            if not seen or seen[-1] != c: seen.append(c)
-    check(maxtype == 1, f"큰 타자 동작은 언제나 한 명: 최대 {maxtype}")
-    check(seen[:3] == ORDER[:3], f"2.2초마다 다음 친구(왼쪽부터): {seen}")
+        k = kbs(p); act = {c: v for c, v in k.items() if v}
+        maxtype = max(maxtype, sum(1 for v in act.values() if v == "kb_type")); maxall = max(maxall, len(act))
+        for c, v in act.items():
+            moved.add(c)
+            if prev.get(c) != v: nt += v == "kb_type"; ne += v == "kb_echo"
+        prev = k
+    check(maxall >= 3, f"여러 친구가 한꺼번에 움직임(최대 {maxall}명)")
+    check(maxtype <= 2, f"큰 타자는 동시에 2명까지(최대 {maxtype})")
+    check(len(moved) == 6, f"여섯 모두 한 번은 움직임: {sorted(moved)}")
+    check(ne > nt >= 1, f"작은 동조가 큰 타자보다 많음(작은 {ne}, 큰 {nt})")
     p.wait_for_timeout(2300); k = kbs(p)
     check(all(v is None for v in k.values()), f"입력을 멈추면 하던 것만 끝내고 더 이어지지 않음 {k}")
-    # 한글 조합: 조합 중 input 은 무시, 조합이 끝날 때 한 번
-    p.wait_for_timeout(200)
     p.evaluate("""(()=>{const u=document.getElementById('ssU');u.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));
       for(let i=0;i<5;i++)u.dispatchEvent(new InputEvent('input',{bubbles:true,isComposing:true,data:'ㄱ'}))})()""")
     frames(p); k = kbs(p); check(all(v is None for v in k.values()), f"한글 조합 중에는 아직 반응 안 함 {k}")
     p.evaluate("document.getElementById('ssU').dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:'가'}))"); frames(p)
-    k = kbs(p); check(list(k.values()).count("kb_type") == 1, f"조합이 끝나면 한 번 반응 {k}")
+    k = kbs(p); check(sum(1 for v in k.values() if v) == 1, f"조합이 끝나면 한 번 반응 {k}")
 
 def t_keys_password(b, ctx, m):
     """비밀번호 칸: 첫 프레임에 여섯 모두 감은 눈(타자 도중이어도) → 3초 반복 자세 / 입력 글자 수와 무관 / 마우스 반응·시선 없음 / 나오면 0.65초 뒤 눈 뜸"""
@@ -267,7 +269,7 @@ def t_keys_password(b, ctx, m):
     check(p.evaluate(FACE)["charocharo"] == [2, 2], "돌아오는 동안은 아직 감은 눈")
     p.wait_for_timeout(900); check(all(v is None for v in kbs(p).values()), "돌아오기 끝")
     check(p.evaluate(FACE) == OPEN, f"끝나면 눈 뜸·볼 앞 팔 숨김 {p.evaluate(FACE)}")
-    p.keyboard.type("z"); frames(p); check(list(kbs(p).values()).count("kb_type") == 1, "돌아온 뒤 아이디 입력에는 다시 반응")
+    p.keyboard.type("z"); frames(p); check(any(kbs(p).values()), "돌아온 뒤 아이디 입력에는 다시 반응")
 
 def t_keys_reduced_off(b, ctx, m):
     """움직임 줄이기: 타자 동작 없음, 비밀번호 때 감은 눈(그림만, 자세는 그대로) / ?keys=off: 키보드 반응 없음(마우스는 그대로)"""
@@ -293,7 +295,7 @@ def t_keys_mobile_lock(b, ctx, m):
     wait_js(p, "!!(window.__ssIntro && __ssIntro.info().state === 'play')"); p.evaluate("__ssIntro.jump(5.15)"); wait_js(p, "__ssIntro.info().state === 'wait'", 4000); p.wait_for_timeout(1000)
     lay = "JSON.stringify(window.__ssLayout)"; L0 = p.evaluate(lay)
     p.tap("#ssU"); p.wait_for_timeout(300); p.keyboard.type("a"); frames(p)
-    check(list(kbs(p).values()).count("kb_type") == 1, "터치 기기에서도 아이디 입력에 반응")
+    check(any(kbs(p).values()), "터치 기기에서도 아이디 입력에 반응")
     p.set_viewport_size({"width": 390, "height": 500}); p.wait_for_timeout(500)
     check(p.evaluate(lay) == L0, "입력 중 화면 높이가 바뀌어도 배치 그대로")
     check(p.evaluate("document.getElementById('ssIntro').style.height") == "844px", "입력 중 친구들 무대 높이 고정")
@@ -331,14 +333,15 @@ def t_tap_all(b, ctx, m):
     mc.close()
 
 def t_tap_rules(b, ctx, m):
-    """연타는 다시 시작·예약 없음, 큰 동작은 한 명씩 / 12px 넘게 쓸면 취소 / 오래 누르면 취소 / 입력칸 누르기는 무시 / 비밀번호 칸에 있으면 톡 무시 / ?tap=off"""
+    """같은 친구 연타는 다시 시작·예약 없음, 다른 친구는 동시에 / 12px 넘게 쓸면 취소 / 오래 누르면 취소 / 입력칸 누르기는 무시 / 비밀번호 칸에 있으면 톡 무시 / ?tap=off"""
     p = open_mouse(ctx, m); p.mouse.move(700, 60)
     x, y = center(p, "giltong"); x2, y2 = center(p, "doroduck")
     p.mouse.click(x, y); frames(p); check(tsd(p)["giltong"] == "mt_tap", "클릭(톡)으로 큰 동작")
-    t0 = p.evaluate("__ssMouse.state().__tap.busy")
-    p.wait_for_timeout(300); p.mouse.click(x, y); p.mouse.click(x2, y2); frames(p)
-    k = tsd(p); check(k["giltong"] == "mt_tap" and not k["doroduck"], f"재생 중 다시 눌러도 다시 시작·다른 친구 시작 없음 {k}")
-    wait_js(p, "!__ssMouse.state().giltong.tap && !__ssMouse.state().__tap.busy", 4500)
+    t0 = p.evaluate("__ssMouse.state().giltong.tapT0")
+    p.wait_for_timeout(300); p.mouse.click(x, y); p.wait_for_timeout(300); p.mouse.click(x2, y2); frames(p)
+    k = tsd(p); check(k["giltong"] == "mt_tap" and p.evaluate("__ssMouse.state().giltong.tapT0") == t0, f"같은 친구를 다시 눌러도 다시 시작 안 함 {k}")
+    check(k["doroduck"] == "mt_tap", f"다른 친구는 움직이는 중에도 바로 시작(친구마다 따로) {k}")
+    wait_js(p, "!__ssMouse.state().giltong.tap && !__ssMouse.state().doroduck.tap && !__ssMouse.state().__tap.busy", 5000)
     check(all(v is None for v in tsd(p).values()), "끝난 뒤 쌓아 둔 동작 없음")
     p.mouse.move(x, y); p.mouse.down(); p.wait_for_timeout(200)
     check(tsd(p)["giltong"] == "mt_press", "누르고 있으면 준비 자세")
