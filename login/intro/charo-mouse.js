@@ -36,7 +36,8 @@
  * 비밀번호 요원 모드(opt.agent, 2026-10-21 · 지금은 길통이만 요원 그림): 비밀번호 칸에 있는 동안
  *   · 캐릭터 파일에 p.agent({in, hold, out, ready})가 있는 친구는 kb_private_* 대신 요원 동작(ag_in → ag_hold 반복, 나오면 ag_out).
  *     없는 친구(아직 요원 그림이 안 온 다섯)는 지금처럼 눈 감기(kb_private_*).
- *   · 여섯 모두 0.2~0.9초에 사선 대형으로 이동(opt.slots() 가 무대 좌표로 알려 줌, 앞→뒤 도로덕…길통이 순으로 앞에 그림), 나오면 0.42초에 원래 자리.
+ *   · 여섯 모두 0.2~0.9초에 사선 대형으로 이동하며 가까워짐(opt.slots() 가 무대 좌표 이동량·배율을 알려 줌, 앞→뒤 도로덕…길통이 순으로 앞에 그림),
+ *     나오면 0.42초에 원래 자리. 요원 사선 그림인 동안은 p.agent.order 앞뒤 순서로 그림(v2, 2026-10-21).
  *   · 다시 들어오면(나오는 중) 처음부터 다시 하지 않고 경계 자세로 이어 감. 움직임 줄이기: 완성 자세로 바로(이동·바람 없음).
  */
 (function (global) {
@@ -233,7 +234,7 @@
         var SL = form.p > 0.001 && opt.slots ? opt.slots() : null;
         list.forEach(function (c) {
           var q = SL && SL[c.id];
-          c.shift = q ? { x: q.x * form.p, y: q.y * form.p } : null;
+          c.shift = q ? { x: q.x * form.p, y: q.y * form.p, s: 1 + ((q.s || 1) - 1) * form.p } : null;
           if (q) c.depthBoost = 20 + (10 - q.rank);   // 앞 친구(왼쪽 아래)를 앞에
         });
       }
@@ -250,14 +251,14 @@
         s.tap = null;
       }
       if (!KEYS) return null;
-      var A = AGENT && c.P.agent;
+      var A = AGENT && c.P.agent && clipOf(c, c.P.agent.in) ? c.P.agent : null;   // 요원 동작이 없으면 눈 감기로
       if (A && kb.mode === 'pw') {   // 요원 동작
         d = t - kb.pwAt;
-        if (reduce) return { id: A.in, tt: A.ready, key: 'agent', full: true };
+        if (reduce) return { id: A.in, tt: A.ready, key: 'agent', full: true, side: true };
         var ci = clipOf(c, A.in), ch = clipOf(c, A.hold); if (!ci || !ch) return null;
-        return d < ci.dur ? { id: A.in, tt: d, key: 'ag_in' } : { id: A.hold, tt: (d - ci.dur) % ch.dur, key: 'ag_hold' };
+        return d < ci.dur ? { id: A.in, tt: d, key: 'ag_in', side: d >= (A.side || 0.42) } : { id: A.hold, tt: (d - ci.dur) % ch.dur, key: 'ag_hold', side: true };
       }
-      if (A) { var co = clipOf(c, A.out); d = t - kb.outAt; if (co && !reduce && d < co.dur) return { id: A.out, tt: d, key: 'ag_out' }; if (d < 0.65) return null; }
+      if (A) { var co = clipOf(c, A.out); d = t - kb.outAt; if (co && !reduce && d < co.dur) return { id: A.out, tt: d, key: 'ag_out', side: true }; if (d < 0.65) return null; }
       if (kb.mode === 'pw') { d = t - kb.pwAt; return d < 0.65 ? { id: 'kb_private_in', tt: d, key: 'in' } : { id: 'kb_private_hold', tt: (d - 0.65) % 3, key: 'hold' }; }
       d = t - kb.outAt; if (d < 0.65) return { id: 'kb_private_out', tt: d, key: 'out' };
       if (s.kb) { d = t - s.kb.t0; if (d < s.kb.clip.dur) return { id: s.kb.clip.id, tt: d, key: s.kb.clip.id + '@' + s.kb.t0 }; s.kb = null; }
@@ -304,6 +305,7 @@
       for (var kp in off) if (/^k_/.test(kp)) off[kp].op = 0;   // 키보드용 추가 파츠(길통이 볼 앞 팔)는 키보드 동작 때만
       // 키보드 반응이 가장 우선: 재생 중이면 마우스 반응·시선·깜빡임 없이 그것만
       var K = kbNow(c, s, t);
+      c.drawOrder = K && K.side && c.P.agent && c.P.agent.order ? c.P.agent.order : null;   // 요원 사선 그림일 때만 앞뒤 순서(agentDrawOrder)
       if (K && applyKeys(c, s, off, t, K)) {
         if (s.act) s.endAt = t;
         s.act = null; s.ret = null; if (acting === c) acting = null;

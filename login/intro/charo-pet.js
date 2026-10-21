@@ -198,9 +198,18 @@
     ctx.drawImage(im, v.x || 0, v.y || 0, v.w || im.naturalWidth, v.h || im.naturalHeight);
   }
 
-  function render(ctx, p, fp, W, view) {
-    for (var i = 0; i < p.parts.length; i++) {
-      var part = p.parts[i], f = fp[part.id];
+  // order(선택): 파츠 id 목록. 주면 그 순서로 먼저 그리고 나머지는 원래 순서로(로그인 화면 요원 모드처럼 상태별 앞뒤 순서)
+  function drawList(p, order) {
+    if (!order || !order.length) return p.parts;
+    var seen = {}, out = [];
+    order.forEach(function (id) { var pt = findPart(p, id); if (pt && !seen[id]) { seen[id] = 1; out.push(pt); } });
+    p.parts.forEach(function (pt) { if (!seen[pt.id]) out.push(pt); });
+    return out;
+  }
+  function render(ctx, p, fp, W, view, order) {
+    var list = drawList(p, order);
+    for (var i = 0; i < list.length; i++) {
+      var part = list[i], f = fp[part.id];
       if (!f || f.op <= 0.001) continue;
       var m = mul(view, W[part.id]), cl = part.clip;
       if (cl && W[cl.part]) {   // clip: 다른 파츠 좌표의 사각형 안쪽만 그림(예: 길통이 팔의 얼굴 앞 부분만 다시 그리기)

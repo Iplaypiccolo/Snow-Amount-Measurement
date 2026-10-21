@@ -16,7 +16,7 @@
   var doc = root.document, html = doc.documentElement;
   html.classList.add('ss-ready');   // 이 파일이 실행됨 → login-v2.css 의 '잠깐 가리기'를 품(아래 CSS 설명)
   if (/[?&]intro=off(&|$)/.test(root.location.search)) return;   // 비상용: 주소 끝에 ?intro=off 를 붙이면 예전 로그인 화면(인트로 없음)
-  var V = /*@@V@@*/{"charo-pet.js":"1626ec8b","charo-intro.js":"784c9448","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"2abae799","charocharo":"4ef69eb8","chumdani":"3b23e4ee","giltong":"764f33e6","tira":"b1c48866","tarotaro":"3d1e3366","doroduck":"4a5a32e3","fx":"99ec5eb7"};
+  var V = /*@@V@@*/{"charo-pet.js":"c4a84919","charo-intro.js":"cbe717c1","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"04fdadd1","charocharo":"a997d393","chumdani":"3b23e4ee","giltong":"f2526c6e","tira":"b1c48866","tarotaro":"3d1e3366","doroduck":"4a5a32e3","fx":"99ec5eb7"};
   var BASE = 'login/intro/', LOAD_LIMIT = 5000;
   var MOUSE = !/[?&]mouse=off(&|$)/.test(root.location.search);   // 친구들 마우스 반응: 2026-10-19 기본으로 켬. 비상용 ?mouse=off 면 끔
   var KEYS = !/[?&]keys=off(&|$)/.test(root.location.search);     // 친구들 키보드 반응(아이디 입력·비밀번호 칸): 2026-10-20. 비상용 ?keys=off 면 끔
@@ -76,12 +76,28 @@
     // 최종 자리: 인트로 정렬 단계의 도착점(정렬 키)을 화면의 빈 곳으로 바꿔 넣음(크기·위치가 한 번에 바뀌게).
     // ROWB = 원래 도착점에서 친구 6명의 보이는 그림 범위(무대 좌표, 여유 3px). 무대는 화면 가운데(1000×600을 화면에 맞춤).
     var ROWB = [236, 439, 774, 588], lay = null;
-    // 비밀번호 요원 대형: 왼쪽 아래(앞) → 오른쪽 위(뒤) 완만한 사선. 줄 폭의 14%~84%, 한 칸마다 줄 높이의 7%씩 올라감(무대 좌표의 이동량)
-    var SLOT = ['doroduck', 'charocharo', 'tira', 'chumdani', 'tarotaro', 'giltong'];
+    // 비밀번호 요원 대형(v2, 2026-10-21): 영화 포스터처럼 가까이(PC 약 1.35배). 왼쪽 아래(앞) → 오른쪽 위(뒤).
+    // 얼굴 가운데를 친구들 영역의 x=[10,25,41,58,74,89]%, y=[76,67,57,46,35,24]% 에(전체 콘티 시작안). PC 영역 = 로그인 상자 왼쪽, 휴대폰 = 상자 아래(배율 1).
+    // 돌려주는 값: 무대 좌표 이동량(x: 발 기준, y: 발 기준)·배율 s·앞뒤 rank
+    var SLOT = ['doroduck', 'charocharo', 'tira', 'chumdani', 'tarotaro', 'giltong'], FX = [0.10, 0.25, 0.41, 0.58, 0.74, 0.89], FY = [0.76, 0.67, 0.57, 0.46, 0.35, 0.24];
+    var FACE = { doroduck: 0.6, charocharo: 0.55, tira: 0.6, chumdani: 0.55, tarotaro: 0.5, giltong: 0.68 };   // 얼굴 가운데 높이(키에 대한 비율)
     function slots() {
       if (!lay || !C) return null;
-      var w = (ROWB[2] - ROWB[0]) * lay.s, h = (ROWB[3] - ROWB[1]) * lay.s, left = lay.tx - w / 2, o = {};
-      SLOT.forEach(function (id, k) { o[id] = { x: left + w * (0.14 + 0.14 * k) - (lay.tx + (C.lineupX[id] - lay.rx) * lay.s), y: -k * 0.07 * h, rank: k }; });
+      var vw = root.innerWidth, vh = root.innerHeight, sc = Math.min(vw / 1000, vh / 600), ox = (vw - 1000 * sc) / 2, oy = (vh - 600 * sc) / 2;
+      var card = doc.querySelector('#ssGate .ss-card'), R, zoom;
+      if (vw < 761) { var top = card ? card.offsetTop + card.offsetHeight + 16 : vh * 0.5; R = [8, top, vw - 8, vh - 8]; zoom = 1; }
+      else {   // PC: 상자 왼쪽 빈 곳 가운데에, 친구들 줄 크기에 맞춘 영역(너무 넓으면 대형이 듬성듬성해져 포스터 느낌이 사라짐)
+        zoom = 1.35;
+        var left = Math.max(24, vw * 0.04), right = card ? card.offsetLeft - Math.max(32, vw * 0.04) : vw * 0.6, L = root.__ssLayout || { lw: 500, lh: 150 };
+        var W = Math.min(right - left, L.lw * 0.95), H = Math.min(vh * 0.8, L.lh * 1.3), cx = (left + right) / 2, cy = vh * 0.5;
+        R = [cx - W / 2, cy - H / 2, cx + W / 2, cy + H / 2];
+      }
+      var o = {};
+      SLOT.forEach(function (id, k) {
+        var h = C.lineupH[id] * lay.s, x0 = lay.tx + (C.lineupX[id] - lay.rx) * lay.s, y0 = lay.ty + (C.lineupRow - lay.ry) * lay.s;
+        var fx = (R[0] + (R[2] - R[0]) * FX[k] - ox) / sc, fy = (R[1] + (R[3] - R[1]) * FY[k] - oy) / sc;
+        o[id] = { x: fx - x0, y: fy + FACE[id] * h * zoom - y0, s: zoom, rank: k };
+      });
       return o;
     }
     function relayout() {

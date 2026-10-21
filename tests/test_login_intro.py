@@ -369,27 +369,32 @@ def t_tap_reduced(b, ctx, m):
     rc.close()
 
 def t_agent_preview(b, ctx, m):
-    """비밀번호 요원 모드(미리보기 ?agent=preview, 길통이만 요원 그림): 비밀번호 칸 → 어두운 장면·사선 대형(앞→뒤 도로덕…길통이)·
+    """비밀번호 요원 모드(미리보기 ?agent=preview, v2: 길통이·차로차로 45도 요원 그림): 비밀번호 칸 → 어두운 장면·사선 대형(앞→뒤 도로덕…길통이)·
        길통이 눈 감기 → 사선 머리·몸통 → 선글라스, 다른 친구는 눈 감기 / 입력과 무관 / 나오면 0.42초에 원래 자리·얼굴 / 다시 들어오면 이어 감 / 기본 주소는 그대로"""
     p = ctx.new_page(); p.set_viewport_size({"width": 1440, "height": 900}); p.on("pageerror", lambda e: errors.append(str(e)))
     p.route("**/*", T.route); p.route(SBM.SB + "/**", m.handle)
     p.goto(T.URL + "?agent=preview"); p.wait_for_selector("#ssGate", state="attached", timeout=20000)
     wait_js(p, "!!(window.__ssIntro && __ssIntro.info().state === 'play')"); p.keyboard.press("Escape"); wait_js(p, "__ssIntro.info().state === 'wait'", 4000); p.wait_for_timeout(400)
     p.mouse.move(5, 5)
-    G0 = "(()=>{const f=__ssIntro.info().last.giltong.fp;return {head:f.head.img,body:f.body.img,mouth:f.mouth.img,glass:+(f.k_agentGlasses.op>.5),eye:+(f.eyeL.op>.5),eyeImg:f.eyeL.img,arm:Math.round(f.armL.rot)}})()"
+    G0 = "(()=>{const f=__ssIntro.info().last.giltong.fp;return {head:f.head.img,body:f.body.img,mouth:+(f.mouth.op>.5),glass:+(f.k_agentGlasses.op>.5),eye:+(f.eyeL.op>.5),eyeImg:f.eyeL.img,arm:Math.round(f.armL.rot)}})()"
+    C0 = "(()=>{const f=__ssIntro.info().last.charocharo.fp;return {body:f.body.img,glass:+(f.k_agentGlasses.op>.5),eye:+(f.eyeL.op>.5),eyeImg:f.eyeL.img,mouth:+(f.mouth.op>.5)}})()"
     box0 = {c: p.evaluate(GBOX, c) for c in ORDER}
     check(p.evaluate(G0)["glass"] == 0 and not p.evaluate("document.documentElement.classList.contains('ss-agent')"), "평소에는 선글라스·어두운 장면 없음")
     p.focus("#ssP"); frames(p)
     g = p.evaluate(G0); check(g["eyeImg"] == 1 and g["glass"] == 0 and g["head"] == 0, f"첫 프레임: 정면에서 눈 감기 {g}")
     check(p.evaluate("document.documentElement.classList.contains('ss-agent')"), "어두운 장면 켜짐")
-    k = kbs(p); check(k["giltong"] == "ag_in" and all(k[c] == "kb_private_in" for c in ORDER if c != "giltong"), f"길통이는 요원, 나머지는 눈 감기 {k}")
+    k = kbs(p); check(k["giltong"] == "ag_in" and k["charocharo"] == "ag_in" and all(k[c] == "kb_private_in" for c in ORDER if c not in ("giltong", "charocharo")), f"길통이·차로차로는 요원, 나머지는 눈 감기 {k}")
+    cc = p.evaluate(C0); check(cc["eyeImg"] == 2 and cc["body"] == 0 and cc["glass"] == 0, f"차로차로 첫 프레임: 정면에서 눈 감기 {cc}")
     p.wait_for_timeout(1500); g = p.evaluate(G0)
-    check(g["head"] == 1 and g["body"] == 1 and g["glass"] == 1 and g["eye"] == 0 and g["mouth"] == 4, f"사선 머리·몸통·선글라스·다문 입 {g}")
-    check(-52 <= g["arm"] <= -44, f"팔은 원본 대기 각도(-48도) 그대로 {g['arm']}")
+    check(g["head"] == 1 and g["body"] == 1 and g["glass"] == 1 and g["eye"] == 0 and g["mouth"] == 0, f"길통이: 45도 머리(감은 눈·다문 입 포함)·몸통·선글라스, 원래 눈·입은 숨김 {g}")
+    check(-82 <= g["arm"] <= -74, f"길통이 가까운 팔은 사선 자세 값(-78도) {g['arm']}")
+    cc = p.evaluate(C0); check(cc["body"] == 1 and cc["glass"] == 1 and cc["eye"] == 0 and cc["mouth"] == 0, f"차로차로: 45도 몸통·선글라스, 원래 눈·입 숨김 {cc}")
+    check(p.evaluate("__ssIntro.cast.find(c=>c.id==='giltong').drawOrder.join()") == "cape,legR,legL,armR,body,armL,head,k_agentGlasses", "요원 그림일 때 앞뒤 순서(가까운 팔이 몸 앞)")
     check(p.evaluate("__ssMouse.state().__agent.p") == 1, "대형 이동 끝")
     bx = {c: p.evaluate(GBOX, c) for c in ORDER}
-    feet = [bx[c][3] for c in ["doroduck", "charocharo", "tira", "chumdani", "tarotaro", "giltong"]]
-    check(all(feet[i] > feet[i + 1] for i in range(5)), f"왼쪽 아래(앞) → 오른쪽 위(뒤) 사선: 발 높이 {[round(v) for v in feet]}")
+    FF = {"doroduck": 0.6, "charocharo": 0.55, "tira": 0.6, "chumdani": 0.55, "tarotaro": 0.5, "giltong": 0.68}   # v2 는 얼굴 가운데 기준 배치(로더의 FACE 와 같음)
+    faces = [bx[c][3] - FF[c] * (bx[c][3] - bx[c][1]) for c in ["doroduck", "charocharo", "tira", "chumdani", "tarotaro", "giltong"]]
+    check(all(faces[i] > faces[i + 1] for i in range(5)), f"왼쪽 아래(앞) → 오른쪽 위(뒤) 사선: 얼굴 높이 {[round(v) for v in faces]}")
     xs = [ (bx[c][0] + bx[c][2]) / 2 for c in ["doroduck", "charocharo", "tira", "chumdani", "tarotaro", "giltong"]]
     check(all(xs[i] < xs[i + 1] for i in range(5)), "앞에서 뒤로 왼쪽 → 오른쪽")
     order = p.evaluate("__ssIntro.info().last.__order")
@@ -404,7 +409,9 @@ def t_agent_preview(b, ctx, m):
     p.wait_for_timeout(300); p.focus("#ssP"); frames(p)
     check(kbs(p)["giltong"] == "ag_hold", "나오는 중에 다시 들어오면 처음부터가 아니라 경계 자세로 이어 감")
     p.focus("#ssU"); p.wait_for_timeout(1000); g = p.evaluate(G0)
-    check(g["head"] == 0 and g["body"] == 0 and g["glass"] == 0 and g["eye"] == 1 and g["eyeImg"] == 0, f"원래 얼굴·정면 {g}")
+    check(g["head"] == 0 and g["body"] == 0 and g["glass"] == 0 and g["eye"] == 1 and g["eyeImg"] == 0 and g["mouth"] == 1, f"원래 얼굴·정면 {g}")
+    cc = p.evaluate(C0); check(cc["body"] == 0 and cc["eye"] == 1 and cc["eyeImg"] == 0 and cc["glass"] == 0, f"차로차로 원래 얼굴 {cc}")
+    check(p.evaluate("__ssIntro.cast.find(c=>c.id==='giltong').drawOrder") is None, "원래 앞뒤 순서")
     bx = {c: p.evaluate(GBOX, c) for c in ORDER}
     SH = p.evaluate("__ssIntro.cast.map(c=>c.shift)")
     check(all(abs(bx[c][3] - box0[c][3]) < 3 and abs((bx[c][0] + bx[c][2]) - (box0[c][0] + box0[c][2])) / 2 < 12 for c in ORDER), f"원래 자리로 돌아옴 {[(c, [round(v) for v in box0[c]], [round(v) for v in bx[c]]) for c in ORDER]} {SH}")

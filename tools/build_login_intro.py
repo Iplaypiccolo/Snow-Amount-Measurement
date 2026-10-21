@@ -17,11 +17,12 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / 'login' / 'intro'
 SRC = Path(sys.argv[1] if len(sys.argv) > 1 else '../Charocharo').resolve()
-KB = ['kb_type', 'kb_echo', 'kb_private_in', 'kb_private_hold', 'kb_private_out', 'mt_press', 'mt_tap', 'mt_cancel']   # 키보드·터치 반응(차로차로 저장소 intro/tools/add_keys.js)
+KB = ['kb_type', 'kb_echo', 'kb_private_in', 'kb_private_hold', 'kb_private_out', 'mt_press', 'mt_tap', 'mt_cancel']
+AG = ['ag_in', 'ag_hold', 'ag_out']   # 비밀번호 요원(차로차로 저장소 intro/tools/add_agent.js) — 있는 캐릭터만 남김   # 키보드·터치 반응(차로차로 저장소 intro/tools/add_keys.js)
 CHARS = {   # 인트로 배치표의 id: (차로차로 저장소 안 파일, 남길 동작)
     'charocharo': ('charo-pet.json', ['c_breath', 'i_charo', 'i_charo_r', 'm_mouse_L', 'm_mouse_R'] + KB),
     'chumdani': ('chumdani/chumdani.json', ['c_idle', 'c_run_i', 'c_jump_i', 'c_welcome', 'c_flip', 'm_mouse_L', 'm_mouse_R'] + KB),
-    'giltong': ('giltong/giltong.json', ['g_idle', 'g_run_i', 'g_welcome', 'g_finish', 'm_mouse'] + KB + ['ag_in', 'ag_hold', 'ag_out']),   # ag_ = 비밀번호 요원(intro/tools/add_agent.js)
+    'giltong': ('giltong/giltong.json', ['g_idle', 'g_run_i', 'g_welcome', 'g_finish', 'm_mouse'] + KB),
     'tira': ('tira_v3/tira_v3.json', ['t_idle', 't_intro', 't_intro_r', 'm_mouse_L', 'm_mouse_R'] + KB),
     'tarotaro': ('tarotaro/tarotaro.json', ['tt_idle', 'tt_intro', 'tt_intro_r', 'm_mouse_L', 'm_mouse_R'] + KB),
     'doroduck': ('doroduck/doroduck.json', ['d_idle', 'd_run_i', 'd_welcome', 'd_finish_i', 'm_mouse_L', 'm_mouse_R'] + KB),
@@ -50,6 +51,7 @@ def main():
         shutil.copy(SRC / src, OUT / dst); V[dst] = h8(OUT / dst)
     for cid, (f, keep) in CHARS.items():
         p = json.loads((SRC / f).read_text(encoding='utf-8'))
+        keep = keep + [k for k in AG if any(c['id'] == k for c in p['clips'])]
         missing = [k for k in keep if not any(c['id'] == k for c in p['clips'])]
         if missing: raise SystemExit(f'{cid}: 동작 없음 {missing}')
         p['clips'] = [c for c in p['clips'] if c['id'] in keep]
@@ -57,7 +59,7 @@ def main():
         drawn = {}
         for pt in p['parts']:
             for v in pt['images']: drawn[v['asset']] = max(drawn.get(v['asset'], 0), v['w'])
-        p['assets'] = {k: webp(v, drawn.get(k) if k.startswith('g_agent_') else None) if v.startswith('data:image/png') else v for k, v in p['assets'].items()}
+        p['assets'] = {k: webp(v, drawn.get(k) if '_agent_' in k else None) if v.startswith('data:image/png') else v for k, v in p['assets'].items()}
         out = OUT / 'chars' / (cid + '.json')
         out.write_text(json.dumps(p, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
         V[cid] = h8(out); total += out.stat().st_size
