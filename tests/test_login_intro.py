@@ -386,11 +386,12 @@ def t_agent_preview(b, ctx, m):
     k = kbs(p); check(all(k[c] == "ag_in" for c in ORDER), f"여섯 모두 요원 동작 {k}")
     D0 = "(()=>{const f=__ssIntro.info().last.doroduck.fp;return [f.body.img,+(f.k_agentGlasses.op>.5),+(f.eyeL.op>.5),+(f.beak.op>.5),+(f.sign.op>.5),+(f.wingRf.op>.5)]})()"
     V0 = """(()=>{const L=__ssIntro.info().last,c=L.chumdani.fp,t=L.tarotaro.fp;return {ch:[c.body.img,+(c.k_agentGlasses.op>.5),+(c.eyeL.op>.5),+(c.wifi0.op>.5),+(c.m_sparkle.op>.5)],tt:[t.bodyImg.img,+(t.k_agentGlasses.op>.5),+(t.eyes.op>.5),+(t.m_eyeL.op>.5),+(t.excl.op>.5)]}})()"""
-    T0 = "(()=>{const f=__ssIntro.info().last.tira.fp;return {head:+(f.headImg.op>.5),headImg:f.headImg.img,body:+(f.k_agentBody.op>.5),buried:+(f.k_agentBuried.op>.5),snow:+(f.k_agentSnow.op>.5),glass:+(f.k_agentGlasses.op>.5),face:+(f.m_face.op>.5),orig:+(f.body.op>.5)}})()"
+    T0 = "(()=>{const f=__ssIntro.info().last.tira.fp;return {head:+(f.headImg.op>.5),headImg:f.headImg.img,body:+(f.k_agentBody.op>.5),buried:+!!f.k_agentBuried,snow:+!!f.k_agentSnow,glass:+(f.k_agentGlasses.op>.5),face:+(f.m_face.op>.5),orig:+(f.body.op>.5)}})()"
+    check(p.evaluate("(()=>{const a=__ssIntro.cast.find(c=>c.id==='tira').P.agent;return !a.bury&&!a.puffs&&a.version===3})()"), "티라 v3: 머리 박기·눈가루 설정 없음")
     tt = p.evaluate(T0); check(tt["headImg"] == 1 and tt["face"] == 0 and tt["body"] == 0, f"티라 첫 프레임: 원래 정면 감은 눈(마우스 얼굴 끔) {tt}")
     cc = p.evaluate(C0); check(cc["eyeImg"] == 2 and cc["body"] == 0 and cc["glass"] == 0, f"차로차로 첫 프레임: 정면에서 눈 감기 {cc}")
     p.wait_for_timeout(1000); tt = p.evaluate(T0)
-    check(tt["buried"] == 1 and tt["snow"] == 1 and tt["body"] == 0 and tt["glass"] == 0 and tt["orig"] == 0, f"티라: 눈더미에 머리 박음(얼굴·안경 안 보임) {tt}")
+    check(tt["buried"] == 0 and tt["snow"] == 0 and tt["body"] == 1 and tt["glass"] == 1 and tt["orig"] == 0, f"티라 v3: 머리 박기 없이 선 채로 사선 몸체·선글라스 {tt}")
     p.wait_for_timeout(500); g = p.evaluate(G0)
     check(g["head"] == 1 and g["body"] == 1 and g["glass"] == 1 and g["eye"] == 0 and g["mouth"] == 0, f"길통이: 45도 머리(감은 눈·다문 입 포함)·몸통·선글라스, 원래 눈·입은 숨김 {g}")
     check(-82 <= g["arm"] <= -74, f"길통이 가까운 팔은 사선 자세 값(-78도) {g['arm']}")
@@ -398,7 +399,7 @@ def t_agent_preview(b, ctx, m):
     d = p.evaluate(D0); check(d == [1, 1, 0, 1, 0, 0], f"도로덕: 사선 몸통·선글라스·원본 부리, 원래 눈·팻말·앞 가림 날개 숨김 {d}")
     v = p.evaluate(V0); check(v["ch"] == [1, 1, 0, 1, 0] and v["tt"] == [2, 1, 0, 0, 0], f"첨다니(사선 트럭·선글라스·약한 신호)·타로타로(사선 차체·선글라스), 원래 눈 숨김 {v}")
     p.wait_for_timeout(700); tt = p.evaluate(T0)
-    check(tt["body"] == 1 and tt["glass"] == 1 and tt["snow"] == 0 and tt["buried"] == 0 and tt["head"] == 0 and tt["orig"] == 0, f"티라: 머리를 뽑고 사선 몸체·선글라스, 눈더미 사라짐 {tt}")
+    check(tt["body"] == 1 and tt["glass"] == 1 and tt["snow"] == 0 and tt["buried"] == 0 and tt["head"] == 0 and tt["orig"] == 0, f"티라: 사선 몸체·선글라스 유지 {tt}")
     check(p.evaluate("__ssIntro.cast.find(c=>c.id==='giltong').drawOrder.join()") == "cape,legR,legL,armR,body,armL,head,k_agentGlasses", "요원 그림일 때 앞뒤 순서(가까운 팔이 몸 앞)")
     check(p.evaluate("__ssMouse.state().__agent.p") == 1, "대형 이동 끝")
     bx = {c: p.evaluate(GBOX, c) for c in ORDER}

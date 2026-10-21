@@ -16,7 +16,7 @@
   var doc = root.document, html = doc.documentElement;
   html.classList.add('ss-ready');   // 이 파일이 실행됨 → login-v2.css 의 '잠깐 가리기'를 품(아래 CSS 설명)
   if (/[?&]intro=off(&|$)/.test(root.location.search)) return;   // 비상용: 주소 끝에 ?intro=off 를 붙이면 예전 로그인 화면(인트로 없음)
-  var V = /*@@V@@*/{"charo-pet.js":"c4a84919","charo-intro.js":"cbe717c1","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"8147e7c6","charocharo":"a997d393","chumdani":"1ab99e1f","giltong":"f2526c6e","tira":"93d8bbf5","tarotaro":"598a985d","doroduck":"b0640986","fx":"99ec5eb7"};
+  var V = /*@@V@@*/{"charo-pet.js":"c4a84919","charo-intro.js":"cbe717c1","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"8147e7c6","charocharo":"a997d393","chumdani":"1ab99e1f","giltong":"f2526c6e","tira":"3f992a31","tarotaro":"598a985d","doroduck":"b0640986","fx":"99ec5eb7"};
   var BASE = 'login/intro/', LOAD_LIMIT = 5000;
   var MOUSE = !/[?&]mouse=off(&|$)/.test(root.location.search);   // 친구들 마우스 반응: 2026-10-19 기본으로 켬. 비상용 ?mouse=off 면 끔
   var KEYS = !/[?&]keys=off(&|$)/.test(root.location.search);     // 친구들 키보드 반응(아이디 입력·비밀번호 칸): 2026-10-20. 비상용 ?keys=off 면 끔
@@ -96,7 +96,7 @@
       SLOT.forEach(function (id, k) {
         var h = C.lineupH[id] * lay.s, x0 = lay.tx + (C.lineupX[id] - lay.rx) * lay.s, y0 = lay.ty + (C.lineupRow - lay.ry) * lay.s;
         var fx = (R[0] + (R[2] - R[0]) * FX[k] - ox) / sc, fy = (R[1] + (R[3] - R[1]) * FY[k] - oy) / sc;
-        o[id] = { x: fx - x0, y: fy + FACE[id] * h * zoom - y0, s: zoom, rank: k, dur: id === 'tira' ? 0.45 : 0.7 };   // 티라는 먼저 도착(0.65초)한 뒤 머리를 박음
+        o[id] = { x: fx - x0, y: fy + FACE[id] * h * zoom - y0, s: zoom, rank: k, dur: 0.7 };   // 모두 같이 0.2~0.9초(친구마다 다르게 할 수 있음: dur). 티라 v3 은 머리 박기가 없어 먼저 도착할 필요 없음
       });
       return o;
     }
