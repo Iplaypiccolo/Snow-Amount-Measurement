@@ -45,12 +45,12 @@
     if (cur < 0) {
       if (!loop) return null;
       var lv = keys[keys.length - 1].v;
-      return { img: lv, prev: lv, mix: 1 };
+      return { img: lv, prev: lv, mix: 1, over: 0 };
     }
     var k = keys[cur];
     var prev = cur > 0 ? keys[cur - 1].v : (loop ? keys[keys.length - 1].v : restImg);
     var mix = k.f > 0 ? Math.min(1, (t - k.t) / k.f) : 1;
-    return { img: k.v, prev: prev, mix: mix };
+    return { img: k.v, prev: prev, mix: mix, over: k.o ? 1 : 0 };   // o:1 이면 '덮어 그리기'(이전 그림은 그대로 두고 새 그림이 위로 서서히 — 몸통이 반투명해지지 않음, 요원 모드 구도 전환용)
   }
 
   function findClip(p, id) {
@@ -113,6 +113,7 @@
       f.img = im ? im.img : (r.img || 0);
       f.prev = im ? im.prev : f.img;
       f.mix = im ? im.mix : 1;
+      f.over = im ? im.over : 0;
       if (follow && part.follow && part.follow.on) {
         f.x += follow.x * (part.follow.max || 0);
         f.y += follow.y * (part.follow.max || 0);
@@ -219,7 +220,7 @@
       }
       ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
       if (f.prev !== f.img && f.mix < 1) {
-        drawVariant(ctx, p, part, f.prev, f.op * (1 - f.mix));
+        drawVariant(ctx, p, part, f.prev, f.over ? f.op : f.op * (1 - f.mix));
         drawVariant(ctx, p, part, f.img, f.op * f.mix);
       } else {
         drawVariant(ctx, p, part, f.img, f.op);

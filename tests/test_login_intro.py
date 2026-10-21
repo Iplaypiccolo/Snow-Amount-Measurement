@@ -381,15 +381,15 @@ def t_agent_preview(b, ctx, m):
     box0 = {c: p.evaluate(GBOX, c) for c in ORDER}
     check(p.evaluate(G0)["glass"] == 0 and not p.evaluate("document.documentElement.classList.contains('ss-agent')"), "평소에는 선글라스·어두운 장면 없음")
     p.focus("#ssP"); frames(p)
-    g = p.evaluate(G0); check(g["eyeImg"] == 1 and g["glass"] == 0 and g["head"] == 0, f"첫 프레임: 정면에서 눈 감기 {g}")
+    g = p.evaluate(G0); check(g["eyeImg"] == 0 and g["eye"] == 1 and g["mouth"] == 1 and g["glass"] == 0 and g["head"] == 0, f"첫 프레임: 눈 감기 없이 평소 얼굴 그대로(v5) {g}")
     check(p.evaluate("document.documentElement.classList.contains('ss-agent')"), "어두운 장면 켜짐")
     k = kbs(p); check(all(k[c] == "ag_in" for c in ORDER), f"여섯 모두 요원 동작 {k}")
     D0 = "(()=>{const f=__ssIntro.info().last.doroduck.fp;return [f.body.img,+(f.k_agentGlasses.op>.5),+(f.eyeL.op>.5),+(f.beak.op>.5),+(f.sign.op>.5),+(f.wingRf.op>.5)]})()"
     V0 = """(()=>{const L=__ssIntro.info().last,c=L.chumdani.fp,t=L.tarotaro.fp;return {ch:[c.body.img,+(c.k_agentGlasses.op>.5),+(c.eyeL.op>.5),+(c.wifi0.op>.5),+(c.m_sparkle.op>.5)],tt:[t.bodyImg.img,+(t.k_agentGlasses.op>.5),+(t.eyes.op>.5),+(t.m_eyeL.op>.5),+(t.excl.op>.5)]}})()"""
     T0 = "(()=>{const f=__ssIntro.info().last.tira.fp;return {head:+(f.headImg.op>.5),headImg:f.headImg.img,body:+(f.k_agentBody.op>.5),buried:+!!f.k_agentBuried,snow:+!!f.k_agentSnow,glass:+(f.k_agentGlasses.op>.5),face:+(f.m_face.op>.5),orig:+(f.body.op>.5)}})()"
     check(p.evaluate("(()=>{const a=__ssIntro.cast.find(c=>c.id==='tira').P.agent;return !a.bury&&!a.puffs&&a.version===4})()"), "티라: 머리 박기·눈가루 설정 없음(v4)")
-    tt = p.evaluate(T0); check(tt["headImg"] == 1 and tt["face"] == 0 and tt["body"] == 0, f"티라 첫 프레임: 원래 정면 감은 눈(마우스 얼굴 끔) {tt}")
-    cc = p.evaluate(C0); check(cc["eyeImg"] == 2 and cc["body"] == 0 and cc["glass"] == 0, f"차로차로 첫 프레임: 정면에서 눈 감기 {cc}")
+    tt = p.evaluate(T0); check(tt["headImg"] == 0 and tt["face"] == 1 and tt["body"] == 0, f"티라 첫 프레임: 평소 얼굴(마우스 얼굴) 그대로, 감은 눈 아님 {tt}")
+    cc = p.evaluate(C0); check(cc["eyeImg"] == 0 and cc["eye"] == 1 and cc["body"] == 0 and cc["glass"] == 0, f"차로차로 첫 프레임: 평소 눈 그대로(눈 감기 없음) {cc}")
     p.wait_for_timeout(1000); tt = p.evaluate(T0)
     check(tt["buried"] == 0 and tt["snow"] == 0 and tt["body"] == 1 and tt["glass"] == 1 and tt["orig"] == 0, f"티라 v3: 머리 박기 없이 선 채로 사선 몸체·선글라스 {tt}")
     p.wait_for_timeout(500); g = p.evaluate(G0)
