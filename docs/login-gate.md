@@ -132,8 +132,9 @@
 - **첨다니**(수소트럭 수정본): 사선 트럭 운전석 차체(감은 눈 포함, 원래 눈·눈썹·반짝 숨김)·선글라스(body 에 붙음)·원본 귀·안테나·바퀴·와이파이. 1.2~1.8초 와이파이 점→안쪽→바깥 한 번 켰다 끔(약한 테두리는 계속, 실제 통신과 무관) → 2.48초 바람(몸 1.3도, 안테나 0.14초·귀 0.18초 늦게). 반짝·공중제비 없음.
 - **타로타로**: 사선 차체(bodyImg 에 덧붙임, 감은 눈·엣헴 입 포함, 원래 눈·점눈·입·느낌표 숨김)·선글라스(bodyImg 에 붙음)·원본 귀·번개 안테나·바퀴. 2.6초 바람(몸 그룹 1.5도, 안테나·귀 늦게) → 3.55~3.95초 작은 엣헴 반동. 반짝·스파크 없음.
 - 바퀴 친구들은 프레임마다 바퀴 윤곽(wheelHulls)으로 바닥 높이를 맞춤.
-- 나머지 하나(도로덕): 요원 그림이 오기 전까지는 눈 감기(kb_private_*)로 대형에 섬.
+- **도로덕**(마지막): 사선 몸통(감은 눈·두 가닥 머리깃 포함)·선글라스(body 에 붙음)·원본 부리(붉은 타원 그대로 옮겨 씀)·날개·발(가까운 발은 좌우 반전). 팻말·팻말 글자·앞 가림 날개는 숨김. 2.25초 바람(몸 2도, 날개 0.18초 늦게) → 3.12~3.5초 먼 발 한 번 고쳐 딛기 → 작은 반대 반동으로 정돈. 반짝 없음. 발 윤곽으로 접지.
+- **여섯 친구 모두 요원 그림 완료(2026-10-21).** 기본 화면에 켤지는 사용자가 미리보기를 보고 결정.
 - 나오면 0.42초 동안 선글라스를 거두고 원래 자리·정면·밝은 배경으로, 끝에 원래 얼굴·순서. 나오는 중에 다시 들어오면 경계 자세로 이어 감. 움직임 줄이기: 완성 자세로 바로, 숫자는 멈춤. 연출 중에도 입력·로그인 버튼은 그대로 됨.
 - 로그인 화면용 빌드는 요원 그림(이름에 `_agent_`)을 그림 좌표 크기로 같은 비율로만 줄여 넣음.
-- 파일: 차로차로 저장소 `intro/tools/add_agent_vehicle.js`(첨다니·타로타로 자료, 폴더 하나씩), `intro/tools/add_agent_tira.js`(티라 자료), `intro/tools/add_agent.js`(v2 자료 폴더를 받음; 동작 ag_in·ag_hold·ag_out, 파츠 k_agentGlasses, p.agent), 재생기 `charo-pet.js` 의 그리는 순서(order)·`charo-intro.js` 의 c.drawOrder·c.shift.s, 반응 코드 `charo-mouse.js` 의 opt.agent, 대형 `login/intro-loader.js` 의 slots(), 배경 agentScene().
+- 파일: 차로차로 저장소 `intro/tools/add_agent_vehicle.js`(첨다니·타로타로·도로덕 자료, 폴더 하나씩), `intro/tools/add_agent_tira.js`(티라 자료), `intro/tools/add_agent.js`(v2 자료 폴더를 받음; 동작 ag_in·ag_hold·ag_out, 파츠 k_agentGlasses, p.agent), 재생기 `charo-pet.js` 의 그리는 순서(order)·`charo-intro.js` 의 c.drawOrder·c.shift.s, 반응 코드 `charo-mouse.js` 의 opt.agent, 대형 `login/intro-loader.js` 의 slots(), 배경 agentScene().
 - 시험: `t_agent_preview`·`t_agent_reduced`. **여섯 친구 요원 그림이 다 오면 전체 가림·배치를 다시 보고 기본으로 켤지 결정.** 모션 에디터는 요원 동작의 앞뒤 순서를 반영하지 않음(가까운 팔이 몸 뒤로 보일 수 있음, 로그인 화면은 정상).
