@@ -16,7 +16,7 @@
   var doc = root.document, html = doc.documentElement;
   html.classList.add('ss-ready');   // 이 파일이 실행됨 → login-v2.css 의 '잠깐 가리기'를 품(아래 CSS 설명)
   if (/[?&]intro=off(&|$)/.test(root.location.search)) return;   // 비상용: 주소 끝에 ?intro=off 를 붙이면 예전 로그인 화면(인트로 없음)
-  var V = /*@@V@@*/{"charo-pet.js":"c4a84919","charo-intro.js":"cbe717c1","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"04fdadd1","charocharo":"a997d393","chumdani":"3b23e4ee","giltong":"f2526c6e","tira":"b1c48866","tarotaro":"3d1e3366","doroduck":"4a5a32e3","fx":"99ec5eb7"};
+  var V = /*@@V@@*/{"charo-pet.js":"c4a84919","charo-intro.js":"cbe717c1","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"8147e7c6","charocharo":"a997d393","chumdani":"3b23e4ee","giltong":"f2526c6e","tira":"93d8bbf5","tarotaro":"3d1e3366","doroduck":"4a5a32e3","fx":"99ec5eb7"};
   var BASE = 'login/intro/', LOAD_LIMIT = 5000;
   var MOUSE = !/[?&]mouse=off(&|$)/.test(root.location.search);   // 친구들 마우스 반응: 2026-10-19 기본으로 켬. 비상용 ?mouse=off 면 끔
   var KEYS = !/[?&]keys=off(&|$)/.test(root.location.search);     // 친구들 키보드 반응(아이디 입력·비밀번호 칸): 2026-10-20. 비상용 ?keys=off 면 끔
@@ -96,7 +96,7 @@
       SLOT.forEach(function (id, k) {
         var h = C.lineupH[id] * lay.s, x0 = lay.tx + (C.lineupX[id] - lay.rx) * lay.s, y0 = lay.ty + (C.lineupRow - lay.ry) * lay.s;
         var fx = (R[0] + (R[2] - R[0]) * FX[k] - ox) / sc, fy = (R[1] + (R[3] - R[1]) * FY[k] - oy) / sc;
-        o[id] = { x: fx - x0, y: fy + FACE[id] * h * zoom - y0, s: zoom, rank: k };
+        o[id] = { x: fx - x0, y: fy + FACE[id] * h * zoom - y0, s: zoom, rank: k, dur: id === 'tira' ? 0.45 : 0.7 };   // 티라는 먼저 도착(0.65초)한 뒤 머리를 박음
       });
       return o;
     }
@@ -155,7 +155,7 @@
         busy: function () { var b = doc.getElementById('ssGo'); return !!(b && b.disabled); } }) : null;   // 로그인 확인 중이면 반응 안 함
       intro = root.CharoIntro.create({
         canvas: ov.querySelector('canvas'), center: true, duration: C.duration, cast: C.cast, phases: C.phases, reduce: reduce, fx: fx,
-        afterPose: mouse ? mouse.afterPose : null,
+        afterPose: mouse ? mouse.afterPose : null, drawFront: mouse && AGENT ? mouse.drawFront : null,   // 요원 모드 효과(티라 반짝·눈가루)
         onWelcome: function () { ov.querySelector('.ss-sr').textContent = '환영합니다!'; },
         onError: function () { showLogin(); drop(); }
       });

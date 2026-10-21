@@ -227,16 +227,19 @@
       }
       list.forEach(function (c) { var s = S(c); c.depthBoost = (s.act || s.ret || s.tap || (s.kb && s.kb.clip.id === 'kb_type' && t - s.kb.t0 < s.kb.clip.dur)) ? 10 : 0; });
       if (AGENT) {   // 요원 대형: 0.2초 뒤 0.7초 동안 사선 자리로, 나오면 0.42초에 원래 자리
-        var to = kb.mode === 'pw' ? 1 : 0;
-        if (to !== form.to) { form.from = form.p; form.to = to; form.t0 = t; }
-        var uf = to ? (t - form.t0 - 0.2) / 0.7 : (t - form.t0) / 0.42;
-        form.p = reduce ? to : form.from + (to - form.from) * smooth(uf);
-        var SL = form.p > 0.001 && opt.slots ? opt.slots() : null;
-        list.forEach(function (c) {
-          var q = SL && SL[c.id];
-          c.shift = q ? { x: q.x * form.p, y: q.y * form.p, s: 1 + ((q.s || 1) - 1) * form.p } : null;
-          if (q) c.depthBoost = 20 + (10 - q.rank);   // 앞 친구(왼쪽 아래)를 앞에
+        var to = kb.mode === 'pw' ? 1 : 0, changed = to !== form.to;
+        if (changed) { form.to = to; form.t0 = t; }
+        var SL = opt.slots ? opt.slots() : null, pmax = 0;
+        list.forEach(function (c) {   // 친구마다 도착 시간이 다를 수 있음(티라는 먼저 도착해야 머리를 박음: q.dur)
+          var sc = S(c), q = SL && SL[c.id]; if (sc.fp == null) { sc.fp = 0; sc.fpFrom = 0; }
+          if (changed) sc.fpFrom = sc.fp;
+          var uf = to ? (t - form.t0 - 0.2) / ((q && q.dur) || 0.7) : (t - form.t0) / 0.42;
+          sc.fp = reduce ? to : sc.fpFrom + (to - sc.fpFrom) * smooth(uf); pmax = Math.max(pmax, sc.fp);
+          var pp = sc.fp;
+          c.shift = q && pp > 0.001 ? { x: q.x * pp, y: q.y * pp, s: 1 + ((q.s || 1) - 1) * pp } : null;
+          if (q && pp > 0.001) c.depthBoost = 20 + (10 - q.rank);   // 앞 친구(왼쪽 아래)를 앞에
         });
+        form.p = pmax;
       }
     }
     function cancel(c, s, t) { if (!s.act) return; s.ret = { t0: t, dur: 0.42, from: s.last }; s.act = null; s.endAt = t; }
@@ -306,6 +309,10 @@
       // 키보드 반응이 가장 우선: 재생 중이면 마우스 반응·시선·깜빡임 없이 그것만
       var K = kbNow(c, s, t);
       c.drawOrder = K && K.side && c.P.agent && c.P.agent.order ? c.P.agent.order : null;   // 요원 사선 그림일 때만 앞뒤 순서(agentDrawOrder)
+      if (K && c.P.agent && /^ag_/.test(K.id)) {   // 반짝·눈가루용 기록. 머리를 박고 있던 중에 나가면 나올 때 눈가루로 가림
+        if (K.id === c.P.agent.out && s.agK && s.agK.id === c.P.agent.in && c.P.agent.bury && s.agK.tt > c.P.agent.bury[0] && s.agK.tt < c.P.agent.bury[1]) s.agPuffOut = t;
+        s.agK = { id: K.id, tt: K.tt, full: !!K.full };
+      } else s.agK = null;
       if (K && applyKeys(c, s, off, t, K)) {
         if (s.act) s.endAt = t;
         s.act = null; s.ret = null; if (acting === c) acting = null;
@@ -370,6 +377,31 @@
       },
       state: function () { var o = {}; for (var k in st) o[k] = { act: !!st[k].act, ret: !!st[k].ret, played: st[k].played, gx: +st[k].gx.toFixed(3), dir: st[k].dir, kb: st[k].kbKey ? st[k].kbId : null, tap: st[k].tap ? st[k].tap.clip.id : null, tapT0: st[k].tap ? st[k].tap.t0 : null }; o.__acting = acting && acting.id; o.__keys = { mode: kb.mode, order: kb.order.map(function (c) { return c.id; }) }; o.__tap = { tracking: tap.ptr && tap.ptr.c.id, busy: tapRunning(now()) }; o.__agent = { on: AGENT, p: +form.p.toFixed(3) }; return o; },
       hover: hover,
+      drawFront: function (ctx) {   // 요원 모드 효과(코드로 그림): 티라 안경 반짝 한 번(진입 때만), 눈가루. 움직임 줄이기면 없음
+        if (!AGENT || reduce || !intro) return;
+        var info = intro.info();
+        intro.cast.forEach(function (c) {
+          var s = st[c.id], A = c.P && c.P.agent, L = info.last[c.id]; if (!s || !s.agK || !A || !L) return;
+          var K = s.agK, W = null;
+          function at(pid) { if (!W) W = CP.worldMatrices(c.P, L.fp); var m = CP.mul(L.view, W[pid]); ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]); }
+          if (A.glint && K.id === A.in && K.tt >= A.glint.t[0] && K.tt <= A.glint.t[1]) {
+            var u = (K.tt - A.glint.t[0]) / (A.glint.t[1] - A.glint.t[0]), a = Math.sin(Math.PI * u), r = A.glint.r * a, x = A.glint.at[0], y = A.glint.at[1];
+            at(A.glint.part); ctx.globalAlpha = a; ctx.fillStyle = '#fff'; ctx.beginPath();
+            ctx.moveTo(x, y - r); ctx.lineTo(x + r * .2, y - r * .2); ctx.lineTo(x + r, y); ctx.lineTo(x + r * .2, y + r * .2); ctx.lineTo(x, y + r); ctx.lineTo(x - r * .2, y + r * .2); ctx.lineTo(x - r, y); ctx.lineTo(x - r * .2, y - r * .2);
+            ctx.closePath(); ctx.fill();
+          }
+          var puffs = (A.puffs || []).filter(function (q) { return K.id === A.in && K.tt >= q.t[0] && K.tt <= q.t[1]; }).map(function (q) { return [q, (K.tt - q.t[0]) / (q.t[1] - q.t[0])]; });
+          if (s.agPuffOut && A.puffs && A.puffs[0] && frameNow - s.agPuffOut < 0.22) puffs.push([A.puffs[0], (frameNow - s.agPuffOut) / 0.22]);
+          puffs.forEach(function (pq) {
+            var q = pq[0], u = pq[1]; at(q.part); ctx.globalAlpha = 1 - u;
+            [[-70, -30, 34], [10, -70, 42], [80, -20, 30]].forEach(function (d) {
+              ctx.beginPath(); ctx.arc(q.at[0] + d[0] * (0.6 + u), q.at[1] + d[1] * (0.6 + u) - 40 * u, d[2] * (0.7 + 0.5 * u), 0, Math.PI * 2);
+              ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(140,170,195,.8)'; ctx.stroke();
+            });
+          });
+        });
+        ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+      },
       setRandom: function (f) { rand = f || Math.random; }   // 시험용(무작위 고정)
     };
     return api;
