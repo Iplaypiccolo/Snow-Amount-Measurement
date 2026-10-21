@@ -383,8 +383,9 @@ def t_agent_preview(b, ctx, m):
     p.focus("#ssP"); frames(p)
     g = p.evaluate(G0); check(g["eyeImg"] == 1 and g["glass"] == 0 and g["head"] == 0, f"첫 프레임: 정면에서 눈 감기 {g}")
     check(p.evaluate("document.documentElement.classList.contains('ss-agent')"), "어두운 장면 켜짐")
-    AGS = ("giltong", "charocharo", "tira")
-    k = kbs(p); check(all(k[c] == "ag_in" for c in AGS) and all(k[c] == "kb_private_in" for c in ORDER if c not in AGS), f"길통이·차로차로·티라는 요원, 나머지는 눈 감기 {k}")
+    AGS = ("giltong", "charocharo", "tira", "chumdani", "tarotaro")
+    k = kbs(p); check(all(k[c] == "ag_in" for c in AGS) and all(k[c] == "kb_private_in" for c in ORDER if c not in AGS), f"도로덕 빼고 다섯은 요원, 도로덕은 눈 감기 {k}")
+    V0 = """(()=>{const L=__ssIntro.info().last,c=L.chumdani.fp,t=L.tarotaro.fp;return {ch:[c.body.img,+(c.k_agentGlasses.op>.5),+(c.eyeL.op>.5),+(c.wifi0.op>.5),+(c.m_sparkle.op>.5)],tt:[t.bodyImg.img,+(t.k_agentGlasses.op>.5),+(t.eyes.op>.5),+(t.m_eyeL.op>.5),+(t.excl.op>.5)]}})()"""
     T0 = "(()=>{const f=__ssIntro.info().last.tira.fp;return {head:+(f.headImg.op>.5),headImg:f.headImg.img,body:+(f.k_agentBody.op>.5),buried:+(f.k_agentBuried.op>.5),snow:+(f.k_agentSnow.op>.5),glass:+(f.k_agentGlasses.op>.5),face:+(f.m_face.op>.5),orig:+(f.body.op>.5)}})()"
     tt = p.evaluate(T0); check(tt["headImg"] == 1 and tt["face"] == 0 and tt["body"] == 0, f"티라 첫 프레임: 원래 정면 감은 눈(마우스 얼굴 끔) {tt}")
     cc = p.evaluate(C0); check(cc["eyeImg"] == 2 and cc["body"] == 0 and cc["glass"] == 0, f"차로차로 첫 프레임: 정면에서 눈 감기 {cc}")
@@ -394,6 +395,7 @@ def t_agent_preview(b, ctx, m):
     check(g["head"] == 1 and g["body"] == 1 and g["glass"] == 1 and g["eye"] == 0 and g["mouth"] == 0, f"길통이: 45도 머리(감은 눈·다문 입 포함)·몸통·선글라스, 원래 눈·입은 숨김 {g}")
     check(-82 <= g["arm"] <= -74, f"길통이 가까운 팔은 사선 자세 값(-78도) {g['arm']}")
     cc = p.evaluate(C0); check(cc["body"] == 1 and cc["glass"] == 1 and cc["eye"] == 0 and cc["mouth"] == 0, f"차로차로: 45도 몸통·선글라스, 원래 눈·입 숨김 {cc}")
+    v = p.evaluate(V0); check(v["ch"] == [1, 1, 0, 1, 0] and v["tt"] == [2, 1, 0, 0, 0], f"첨다니(사선 트럭·선글라스·약한 신호)·타로타로(사선 차체·선글라스), 원래 눈 숨김 {v}")
     p.wait_for_timeout(700); tt = p.evaluate(T0)
     check(tt["body"] == 1 and tt["glass"] == 1 and tt["snow"] == 0 and tt["buried"] == 0 and tt["head"] == 0 and tt["orig"] == 0, f"티라: 머리를 뽑고 사선 몸체·선글라스, 눈더미 사라짐 {tt}")
     check(p.evaluate("__ssIntro.cast.find(c=>c.id==='giltong').drawOrder.join()") == "cape,legR,legL,armR,body,armL,head,k_agentGlasses", "요원 그림일 때 앞뒤 순서(가까운 팔이 몸 앞)")
@@ -419,6 +421,7 @@ def t_agent_preview(b, ctx, m):
     check(g["head"] == 0 and g["body"] == 0 and g["glass"] == 0 and g["eye"] == 1 and g["eyeImg"] == 0 and g["mouth"] == 1, f"원래 얼굴·정면 {g}")
     cc = p.evaluate(C0); check(cc["body"] == 0 and cc["eye"] == 1 and cc["eyeImg"] == 0 and cc["glass"] == 0, f"차로차로 원래 얼굴 {cc}")
     check(p.evaluate("__ssIntro.cast.find(c=>c.id==='giltong').drawOrder") is None, "원래 앞뒤 순서")
+    v = p.evaluate(V0); check(v["ch"][0] == 0 and v["ch"][1] == 0 and v["ch"][2] == 1 and v["tt"][0] == 0 and v["tt"][1] == 0 and v["tt"][3] == 1, f"첨다니·타로타로 원래 모습(타로타로 마우스용 점눈 포함) {v}")
     tt = p.evaluate(T0); check(tt["head"] == 1 and tt["headImg"] == 0 and tt["body"] == 0 and tt["orig"] == 1 and tt["face"] == 1, f"티라 원래 얼굴(마우스용 얼굴 포함) {tt}")
     bx = {c: p.evaluate(GBOX, c) for c in ORDER}
     SH = p.evaluate("__ssIntro.cast.map(c=>c.shift)")
