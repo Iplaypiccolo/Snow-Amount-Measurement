@@ -21,7 +21,7 @@ KB = ['kb_type', 'kb_echo', 'kb_private_in', 'kb_private_hold', 'kb_private_out'
 CHARS = {   # 인트로 배치표의 id: (차로차로 저장소 안 파일, 남길 동작)
     'charocharo': ('charo-pet.json', ['c_breath', 'i_charo', 'i_charo_r', 'm_mouse_L', 'm_mouse_R'] + KB),
     'chumdani': ('chumdani/chumdani.json', ['c_idle', 'c_run_i', 'c_jump_i', 'c_welcome', 'c_flip', 'm_mouse_L', 'm_mouse_R'] + KB),
-    'giltong': ('giltong/giltong.json', ['g_idle', 'g_run_i', 'g_welcome', 'g_finish', 'm_mouse'] + KB),
+    'giltong': ('giltong/giltong.json', ['g_idle', 'g_run_i', 'g_welcome', 'g_finish', 'm_mouse'] + KB + ['ag_in', 'ag_hold', 'ag_out']),   # ag_ = 비밀번호 요원(intro/tools/add_agent.js)
     'tira': ('tira_v3/tira_v3.json', ['t_idle', 't_intro', 't_intro_r', 'm_mouse_L', 'm_mouse_R'] + KB),
     'tarotaro': ('tarotaro/tarotaro.json', ['tt_idle', 'tt_intro', 'tt_intro_r', 'm_mouse_L', 'm_mouse_R'] + KB),
     'doroduck': ('doroduck/doroduck.json', ['d_idle', 'd_run_i', 'd_welcome', 'd_finish_i', 'm_mouse_L', 'm_mouse_R'] + KB),
@@ -29,9 +29,11 @@ CHARS = {   # 인트로 배치표의 id: (차로차로 저장소 안 파일, 남
 JS = {'charo-pet.js': 'charo-pet.js', 'charo-intro.js': 'intro/charo-intro.js', 'welcome-fx.js': 'intro/welcome-fx.js', 'intro-cast.js': 'intro/intro-cast.js', 'charo-mouse.js': 'intro/charo-mouse.js'}
 
 
-def webp(uri):
+def webp(uri, fit=None):
     head, b64 = uri.split(',', 1)
     im = Image.open(io.BytesIO(base64.b64decode(b64))); im.load()
+    if fit and im.width > fit * 1.05:   # 요원 그림(생성 원본이 커서): 그림 좌표 크기(원본 파츠와 같은 밀도)로 가로세로 같은 비율로만 줄임
+        im = im.convert('RGBA').resize((round(fit), round(im.height * fit / im.width)), Image.LANCZOS)
     b = io.BytesIO(); im.convert('RGBA').save(b, 'WEBP', quality=92, method=6)
     new = 'data:image/webp;base64,' + base64.b64encode(b.getvalue()).decode()
     return new if len(new) < len(uri) else uri
@@ -52,7 +54,10 @@ def main():
         if missing: raise SystemExit(f'{cid}: 동작 없음 {missing}')
         p['clips'] = [c for c in p['clips'] if c['id'] in keep]
         p['rules'] = []; p.pop('preview', None)   # p['mouse'](마우스 반응 설정)는 그대로 둠
-        p['assets'] = {k: webp(v) if v.startswith('data:image/png') else v for k, v in p['assets'].items()}
+        drawn = {}
+        for pt in p['parts']:
+            for v in pt['images']: drawn[v['asset']] = max(drawn.get(v['asset'], 0), v['w'])
+        p['assets'] = {k: webp(v, drawn.get(k) if k.startswith('g_agent_') else None) if v.startswith('data:image/png') else v for k, v in p['assets'].items()}
         out = OUT / 'chars' / (cid + '.json')
         out.write_text(json.dumps(p, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
         V[cid] = h8(out); total += out.stat().st_size

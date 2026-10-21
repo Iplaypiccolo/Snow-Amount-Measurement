@@ -99,6 +99,7 @@
 
     function viewOf(c, T) {
       var pl = samplePlace(placeOf(c), Math.min(T, DUR)), s = pl[3] / c.stageH * scale;
+      if (c.shift) pl = [pl[0], pl[1] + (c.shift.x || 0), pl[2] + (c.shift.y || 0), pl[3]];   // 바깥에서 잠깐 자리 옮기기(무대 좌표, 로그인 화면 비밀번호 요원 대형 등)
       return [s, 0, 0, s, (pl[1] - c.anchor[0] * pl[3] / c.stageH) * scale + ox, (pl[2] - c.anchor[1] * pl[3] / c.stageH) * scale + oy];
     }
 

@@ -16,10 +16,11 @@
   var doc = root.document, html = doc.documentElement;
   html.classList.add('ss-ready');   // 이 파일이 실행됨 → login-v2.css 의 '잠깐 가리기'를 품(아래 CSS 설명)
   if (/[?&]intro=off(&|$)/.test(root.location.search)) return;   // 비상용: 주소 끝에 ?intro=off 를 붙이면 예전 로그인 화면(인트로 없음)
-  var V = /*@@V@@*/{"charo-pet.js":"1626ec8b","charo-intro.js":"d8279735","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"0483693b","charocharo":"4ef69eb8","chumdani":"3b23e4ee","giltong":"d07bfe3a","tira":"b1c48866","tarotaro":"3d1e3366","doroduck":"4a5a32e3","fx":"99ec5eb7"};
+  var V = /*@@V@@*/{"charo-pet.js":"1626ec8b","charo-intro.js":"784c9448","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"2abae799","charocharo":"4ef69eb8","chumdani":"3b23e4ee","giltong":"764f33e6","tira":"b1c48866","tarotaro":"3d1e3366","doroduck":"4a5a32e3","fx":"99ec5eb7"};
   var BASE = 'login/intro/', LOAD_LIMIT = 5000;
   var MOUSE = !/[?&]mouse=off(&|$)/.test(root.location.search);   // 친구들 마우스 반응: 2026-10-19 기본으로 켬. 비상용 ?mouse=off 면 끔
   var KEYS = !/[?&]keys=off(&|$)/.test(root.location.search);     // 친구들 키보드 반응(아이디 입력·비밀번호 칸): 2026-10-20. 비상용 ?keys=off 면 끔
+  var AGENT = /[?&]agent=preview(&|$)/.test(root.location.search); // 비밀번호 요원 모드(2026-10-21, 길통이만 요원 그림): 미리보기 주소에서만
   var TAP = !/[?&]tap=off(&|$)/.test(root.location.search);       // 친구 터치·클릭 반응(톡 하면 큰 동작): 2026-10-20. 비상용 ?tap=off 면 끔
   var reduce = false; try { reduce = root.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
   var mobile = Math.min(root.innerWidth, (root.screen && root.screen.width) || 9999) < 700;
@@ -74,7 +75,15 @@
     }
     // 최종 자리: 인트로 정렬 단계의 도착점(정렬 키)을 화면의 빈 곳으로 바꿔 넣음(크기·위치가 한 번에 바뀌게).
     // ROWB = 원래 도착점에서 친구 6명의 보이는 그림 범위(무대 좌표, 여유 3px). 무대는 화면 가운데(1000×600을 화면에 맞춤).
-    var ROWB = [236, 439, 774, 588];
+    var ROWB = [236, 439, 774, 588], lay = null;
+    // 비밀번호 요원 대형: 왼쪽 아래(앞) → 오른쪽 위(뒤) 완만한 사선. 줄 폭의 14%~84%, 한 칸마다 줄 높이의 7%씩 올라감(무대 좌표의 이동량)
+    var SLOT = ['doroduck', 'charocharo', 'tira', 'chumdani', 'tarotaro', 'giltong'];
+    function slots() {
+      if (!lay || !C) return null;
+      var w = (ROWB[2] - ROWB[0]) * lay.s, h = (ROWB[3] - ROWB[1]) * lay.s, left = lay.tx - w / 2, o = {};
+      SLOT.forEach(function (id, k) { o[id] = { x: left + w * (0.14 + 0.14 * k) - (lay.tx + (C.lineupX[id] - lay.rx) * lay.s), y: -k * 0.07 * h, rank: k }; });
+      return o;
+    }
     function relayout() {
       if (!C) return;
       var vw = root.innerWidth, vh = root.innerHeight, sc = Math.min(vw / 1000, vh / 600), ox = (vw - 1000 * sc) / 2, oy = (vh - 600 * sc) / 2;
@@ -94,6 +103,7 @@
         [c.place, c.reducedPlace].forEach(function (keys) { (keys || []).forEach(function (k) { if (k[0] >= L1 - 1e-6) { k[1] = x; k[2] = y; k[3] = h; } }); });
       });
       root.__ssLayout = { s: s, cx: cx, cy: cy, lw: lw * s, lh: lh * s };   // 시험용
+      lay = { tx: tx, ty: ty, s: s, rx: rx, ry: ry };
     }
     // 휴대폰에서 입력하는 동안(화면 키보드가 올라와 있음)은 친구들 무대 크기를 고정하고 다시 배치하지 않음 → 줄이 갑자기 움직이지 않음.
     // 키보드에 가려지면 가려진 대로 둠(입력칸·버튼은 친구들보다 앞이라 가려지지 않음). 입력이 끝나면 다시 맞춤.
@@ -111,6 +121,7 @@
       }, 250);
     });
     root.addEventListener('resize', function () { if (!locked) root.requestAnimationFrame(relayout); });
+    if (AGENT && KEYS) agentScene(ov);
     function drop() { root.clearTimeout(timer); if (intro) intro.destroy(); if (ov.parentNode) ov.parentNode.removeChild(ov); }
     // 로그인하면 친구들도 정리(그리기를 멈춤)
     new root.MutationObserver(function (l, ob) { if (doc.body.classList.contains('authed')) { ob.disconnect(); drop(); } }).observe(doc.body, { attributes: true, attributeFilter: ['class'] });
@@ -124,7 +135,7 @@
       C.cast.forEach(function (c) { c.file = BASE + 'chars/' + c.id + '.json?v=' + (V[c.id] || ''); });
       Object.keys(meta).forEach(function (k) { if (meta[k] && meta[k].file) meta[k].file += '?v=' + (V.fx || ''); });
       var fx = root.CharoWelcomeFX.create({ meta: meta, base: BASE, slow: C.slow, reduce: reduce, mobile: mobile });
-      var mouse = (MOUSE || KEYS || TAP) && root.CharoLoginMouse ? root.CharoLoginMouse.create({ canvas: ov.querySelector('canvas'), reduce: reduce, userField: 'ssU', passField: 'ssP', mouse: MOUSE, keys: KEYS, tap: TAP, dotClass: 'ss-tap-dot',
+      var mouse = (MOUSE || KEYS || TAP) && root.CharoLoginMouse ? root.CharoLoginMouse.create({ canvas: ov.querySelector('canvas'), reduce: reduce, userField: 'ssU', passField: 'ssP', mouse: MOUSE, keys: KEYS, tap: TAP, dotClass: 'ss-tap-dot', agent: AGENT && KEYS, slots: slots,
         busy: function () { var b = doc.getElementById('ssGo'); return !!(b && b.disabled); } }) : null;   // 로그인 확인 중이면 반응 안 함
       intro = root.CharoIntro.create({
         canvas: ov.querySelector('canvas'), center: true, duration: C.duration, cast: C.cast, phases: C.phases, reduce: reduce, fx: fx,
@@ -139,6 +150,41 @@
         return intro.start().then(function () { if (done) intro.skip(); else watch(); });   // 이미 로그인 화면이면(늦게 불러옴) 친구들은 바로 최종 자리
       });
     }).catch(function () { showLogin(); drop(); });
+  }
+
+  // ── 비밀번호 요원 장면: 비밀번호 칸에 있는 동안(인트로가 끝난 뒤) 배경이 어두워지고 장식용 초록 숫자가 아래에서 위로 흐름 ──
+  // 숫자는 고정 시드의 장식일 뿐 비밀번호의 값·키·길이와 무관(칸에 있는지만 봄). 클릭을 막지 않음. 움직임 줄이기면 멈춘 숫자.
+  function agentScene(ov) {
+    var bg = doc.createElement('div'); bg.className = 'ss-agent-bg'; bg.innerHTML = '<canvas></canvas>';
+    scene.appendChild(bg);
+    var cv = bg.querySelector('canvas'), ctx = cv.getContext('2d'), raf = 0, on = false, offAt = 0, cols = [], w = 0, h = 0, dpr = 1, t0 = 0, seed = 11;
+    function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+    function fit() {
+      dpr = Math.min(2, root.devicePixelRatio || 1); w = cv.clientWidth; h = cv.clientHeight; cv.width = w * dpr; cv.height = h * dpr; cols = []; seed = 11;
+      for (var x = 8; x < w; x += 22) cols.push({ x: x, y: rnd() * h, v: 26 + rnd() * 46, n: 6 + Math.floor(rnd() * 12), d: [] });
+      cols.forEach(function (c) { for (var i = 0; i < 24; i++) c.d.push(Math.floor(rnd() * 10)); });
+    }
+    function draw(dt) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h); ctx.font = '600 14px ui-monospace,Consolas,monospace'; ctx.textAlign = 'center';
+      cols.forEach(function (c) {
+        c.y -= c.v * dt; if (c.y < -c.n * 18) c.y = h + 20;
+        for (var i = 0; i < c.n; i++) { var a = i === 0 ? 0.85 : 0.55 * (1 - i / c.n); ctx.fillStyle = 'rgba(' + (i ? '64,200,120,' : '170,255,200,') + a.toFixed(3) + ')'; ctx.fillText(c.d[((i + Math.floor(c.y / 18)) % 24 + 24) % 24], c.x, c.y + i * 18); }
+      });
+    }
+    function frame(now) {
+      var dt = t0 ? Math.min(0.05, (now - t0) / 1000) : 0; t0 = now;
+      if (!on && now - offAt > 600) { raf = 0; t0 = 0; return; }
+      if (!doc.hidden) draw(dt);
+      raf = root.requestAnimationFrame(frame);
+    }
+    function set(v) {
+      if (v === on) return; on = v;
+      html.classList.toggle('ss-agent', v);
+      if (v) { if (!w) fit(); if (reduce) draw(0); else if (!raf) raf = root.requestAnimationFrame(frame); } else offAt = root.performance.now();
+    }
+    function check() { var a = doc.activeElement; set(!!(a && a.id === 'ssP') && ov.classList.contains('rest') && !doc.body.classList.contains('authed')); }
+    doc.addEventListener('focusin', check); doc.addEventListener('focusout', function () { root.setTimeout(check, 0); });
+    root.addEventListener('resize', function () { if (w) { fit(); if (reduce && on) draw(0); } });
   }
 
   function load(files) {

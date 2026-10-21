@@ -32,6 +32,12 @@
  *   · 우선순위: 비밀번호 > 터치 > 아이디 타자 > 마우스·대기. 비밀번호 칸에 있는 동안 터치는 아무것도 하지 않음.
  *   · 첨다니 공중제비(360도)는 끝나고 돌아올 때 각도를 가까운 쪽으로 맞춰 거꾸로 돌지 않음.
  *   · 움직임 줄이기: 움직임을 12%로, 공중제비·불꽃 없음.
+ *
+ * 비밀번호 요원 모드(opt.agent, 2026-10-21 · 지금은 길통이만 요원 그림): 비밀번호 칸에 있는 동안
+ *   · 캐릭터 파일에 p.agent({in, hold, out, ready})가 있는 친구는 kb_private_* 대신 요원 동작(ag_in → ag_hold 반복, 나오면 ag_out).
+ *     없는 친구(아직 요원 그림이 안 온 다섯)는 지금처럼 눈 감기(kb_private_*).
+ *   · 여섯 모두 0.2~0.9초에 사선 대형으로 이동(opt.slots() 가 무대 좌표로 알려 줌, 앞→뒤 도로덕…길통이 순으로 앞에 그림), 나오면 0.42초에 원래 자리.
+ *   · 다시 들어오면(나오는 중) 처음부터 다시 하지 않고 경계 자세로 이어 감. 움직임 줄이기: 완성 자세로 바로(이동·바람 없음).
  */
 (function (global) {
   'use strict';
@@ -45,6 +51,7 @@
     if (opt.mouse === false) hover = false;   // 마우스 반응만 끔(키보드 반응은 그대로)
     var ptr = { x: -1e4, y: -1e4, inside: false, t: 0 }, typingAt = -1e9, intro = null, frameAt = -1, frameNow = 0, acting = null, lastNow = 0;
     var st = {};   // 친구별 상태
+    var AGENT = !!opt.agent, form = { p: 0, from: 0, to: 0, t0: -1e9 };
     var TAP = opt.tap !== false, tap = { ptr: null, busyUntil: -1e9, last: {} }, live = false, masks = {};
     var KEYS = opt.keys !== false, kbOn = false, composing = false, kb = { mode: 'idle', pwAt: -1e9, outAt: -1e9, lastHero: -1e9, lastSig: -1e9, lastPick: null, order: [] };
     function now() { return global.performance.now() / 1000; }
@@ -184,7 +191,7 @@
       if (KEYS) {   // 비밀번호 칸에 있는지(포커스만), 주연 순서(화면 왼쪽부터)
         kbOn = true;
         var ae = doc.activeElement, pw = !!(ae && ae.id === opt.passField);
-        if (pw && kb.mode !== 'pw') { kb.mode = 'pw'; kb.pwAt = t; tap.ptr = null; tap.busyUntil = -1e9; list.forEach(function (c) { var s0 = S(c); s0.kb = null; s0.tap = null; if (s0.act) { s0.act = null; s0.ret = null; s0.endAt = t; } }); acting = null; }
+        if (pw && kb.mode !== 'pw') { kb.mode = 'pw'; kb.pwAt = AGENT && t - kb.outAt < 0.65 ? t - 3.65 : t; /* 요원: 나오는 중에 다시 오면 경계 자세로 이어 감 */ tap.ptr = null; tap.busyUntil = -1e9; list.forEach(function (c) { var s0 = S(c); s0.kb = null; s0.tap = null; if (s0.act) { s0.act = null; s0.ret = null; s0.endAt = t; } }); acting = null; }
         else if (!pw && kb.mode === 'pw') { kb.mode = 'idle'; kb.outAt = t; }
         kb.order = list.filter(function (c) { return S(c).box; }).sort(function (a, b) { var A = S(a).box, B2 = S(b).box; return (A.x0 + A.x1) - (B2.x0 + B2.x1); });
       }
@@ -218,6 +225,18 @@
         }
       }
       list.forEach(function (c) { var s = S(c); c.depthBoost = (s.act || s.ret || s.tap || (s.kb && s.kb.clip.id === 'kb_type' && t - s.kb.t0 < s.kb.clip.dur)) ? 10 : 0; });
+      if (AGENT) {   // 요원 대형: 0.2초 뒤 0.7초 동안 사선 자리로, 나오면 0.42초에 원래 자리
+        var to = kb.mode === 'pw' ? 1 : 0;
+        if (to !== form.to) { form.from = form.p; form.to = to; form.t0 = t; }
+        var uf = to ? (t - form.t0 - 0.2) / 0.7 : (t - form.t0) / 0.42;
+        form.p = reduce ? to : form.from + (to - form.from) * smooth(uf);
+        var SL = form.p > 0.001 && opt.slots ? opt.slots() : null;
+        list.forEach(function (c) {
+          var q = SL && SL[c.id];
+          c.shift = q ? { x: q.x * form.p, y: q.y * form.p } : null;
+          if (q) c.depthBoost = 20 + (10 - q.rank);   // 앞 친구(왼쪽 아래)를 앞에
+        });
+      }
     }
     function cancel(c, s, t) { if (!s.act) return; s.ret = { t0: t, dur: 0.42, from: s.last }; s.act = null; s.endAt = t; }
 
@@ -231,6 +250,14 @@
         s.tap = null;
       }
       if (!KEYS) return null;
+      var A = AGENT && c.P.agent;
+      if (A && kb.mode === 'pw') {   // 요원 동작
+        d = t - kb.pwAt;
+        if (reduce) return { id: A.in, tt: A.ready, key: 'agent', full: true };
+        var ci = clipOf(c, A.in), ch = clipOf(c, A.hold); if (!ci || !ch) return null;
+        return d < ci.dur ? { id: A.in, tt: d, key: 'ag_in' } : { id: A.hold, tt: (d - ci.dur) % ch.dur, key: 'ag_hold' };
+      }
+      if (A) { var co = clipOf(c, A.out); d = t - kb.outAt; if (co && !reduce && d < co.dur) return { id: A.out, tt: d, key: 'ag_out' }; if (d < 0.65) return null; }
       if (kb.mode === 'pw') { d = t - kb.pwAt; return d < 0.65 ? { id: 'kb_private_in', tt: d, key: 'in' } : { id: 'kb_private_hold', tt: (d - 0.65) % 3, key: 'hold' }; }
       d = t - kb.outAt; if (d < 0.65) return { id: 'kb_private_out', tt: d, key: 'out' };
       if (s.kb) { d = t - s.kb.t0; if (d < s.kb.clip.dur) return { id: s.kb.clip.id, tt: d, key: s.kb.clip.id + '@' + s.kb.t0 }; s.kb = null; }
@@ -258,11 +285,11 @@
           ['x', 'y', 'rot'].forEach(function (k) { if (q[k] != null && !(pid === 'flip' && k === 'rot')) o[k] += (q[k] - o[k]) * 0.12; });
           if (q.op != null && q.op < o.op) o.op = q.op; if (q.img) o.img = q.img; continue;
         }
-        if (reduce) { if (q.img) o.img = q.img; continue; }   // 움직임 줄이기: 그림(감은 눈)만
+        if (reduce && !K.full) { if (q.img) o.img = q.img; continue; }   // 움직임 줄이기: 그림(감은 눈)만(요원은 완성 자세 그대로)
         for (var j = 0; j < PROPS.length; j++) { var k = PROPS[j]; if (q[k] != null) o[k] = q[k]; }
         if (q.img) o.img = q.img;
       }
-      if (reduce) for (var r in off) if (/^k_/.test(r)) off[r].op = 0;
+      if (reduce && !K.full) for (var r in off) if (/^k_/.test(r)) off[r].op = 0;
       if (K.key !== s.kbKey) { s.kbTr = s.kbSnap ? { from: s.kbSnap, t0: t } : null; s.kbKey = K.key; s.kbId = K.id; }
       if (s.kbTr && !s.kbTr.back && (!reduce || K.tap)) { var uu = (t - s.kbTr.t0) / 0.16; if (uu < 1) blendFrom(off, s.kbTr.from, uu); else s.kbTr = null; }
       else s.kbTr = null;
@@ -339,7 +366,7 @@
         if (T !== frameAt) { frameAt = T; frameNow = now(); tick(frameNow, intro ? intro.cast.filter(function (x) { return x.P && x.P.mouse; }) : []); }   // 한 프레임(같은 T)에 한 번
         return apply(c, off, frameNow);
       },
-      state: function () { var o = {}; for (var k in st) o[k] = { act: !!st[k].act, ret: !!st[k].ret, played: st[k].played, gx: +st[k].gx.toFixed(3), dir: st[k].dir, kb: st[k].kbKey ? st[k].kbId : null, tap: st[k].tap ? st[k].tap.clip.id : null, tapT0: st[k].tap ? st[k].tap.t0 : null }; o.__acting = acting && acting.id; o.__keys = { mode: kb.mode, order: kb.order.map(function (c) { return c.id; }) }; o.__tap = { tracking: tap.ptr && tap.ptr.c.id, busy: tapRunning(now()) }; return o; },
+      state: function () { var o = {}; for (var k in st) o[k] = { act: !!st[k].act, ret: !!st[k].ret, played: st[k].played, gx: +st[k].gx.toFixed(3), dir: st[k].dir, kb: st[k].kbKey ? st[k].kbId : null, tap: st[k].tap ? st[k].tap.clip.id : null, tapT0: st[k].tap ? st[k].tap.t0 : null }; o.__acting = acting && acting.id; o.__keys = { mode: kb.mode, order: kb.order.map(function (c) { return c.id; }) }; o.__tap = { tracking: tap.ptr && tap.ptr.c.id, busy: tapRunning(now()) }; o.__agent = { on: AGENT, p: +form.p.toFixed(3) }; return o; },
       hover: hover,
       setRandom: function (f) { rand = f || Math.random; }   // 시험용(무작위 고정)
     };

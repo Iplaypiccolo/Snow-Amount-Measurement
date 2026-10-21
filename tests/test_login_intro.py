@@ -368,7 +368,65 @@ def t_tap_reduced(b, ctx, m):
     check(max(rots) < 1, f"움직임 줄이기: 공중제비 없음(최대 {max(rots):.1f}도)")
     rc.close()
 
-TESTS = [t_off_switch, t_preview_intro_then_login, t_single_move, t_skip, t_auto_login_no_intro, t_intro_files_missing, t_loader_missing, t_password_no_reaction, t_reduced_motion, t_mouse_giltong, t_mouse_blocked, t_mouse_all, t_keys_type, t_keys_password, t_keys_reduced_off, t_keys_mobile_lock, t_tap_all, t_tap_rules, t_tap_reduced]
+def t_agent_preview(b, ctx, m):
+    """비밀번호 요원 모드(미리보기 ?agent=preview, 길통이만 요원 그림): 비밀번호 칸 → 어두운 장면·사선 대형(앞→뒤 도로덕…길통이)·
+       길통이 눈 감기 → 사선 머리·몸통 → 선글라스, 다른 친구는 눈 감기 / 입력과 무관 / 나오면 0.42초에 원래 자리·얼굴 / 다시 들어오면 이어 감 / 기본 주소는 그대로"""
+    p = ctx.new_page(); p.set_viewport_size({"width": 1440, "height": 900}); p.on("pageerror", lambda e: errors.append(str(e)))
+    p.route("**/*", T.route); p.route(SBM.SB + "/**", m.handle)
+    p.goto(T.URL + "?agent=preview"); p.wait_for_selector("#ssGate", state="attached", timeout=20000)
+    wait_js(p, "!!(window.__ssIntro && __ssIntro.info().state === 'play')"); p.keyboard.press("Escape"); wait_js(p, "__ssIntro.info().state === 'wait'", 4000); p.wait_for_timeout(400)
+    p.mouse.move(5, 5)
+    G0 = "(()=>{const f=__ssIntro.info().last.giltong.fp;return {head:f.head.img,body:f.body.img,mouth:f.mouth.img,glass:+(f.k_agentGlasses.op>.5),eye:+(f.eyeL.op>.5),eyeImg:f.eyeL.img,arm:Math.round(f.armL.rot)}})()"
+    box0 = {c: p.evaluate(GBOX, c) for c in ORDER}
+    check(p.evaluate(G0)["glass"] == 0 and not p.evaluate("document.documentElement.classList.contains('ss-agent')"), "평소에는 선글라스·어두운 장면 없음")
+    p.focus("#ssP"); frames(p)
+    g = p.evaluate(G0); check(g["eyeImg"] == 1 and g["glass"] == 0 and g["head"] == 0, f"첫 프레임: 정면에서 눈 감기 {g}")
+    check(p.evaluate("document.documentElement.classList.contains('ss-agent')"), "어두운 장면 켜짐")
+    k = kbs(p); check(k["giltong"] == "ag_in" and all(k[c] == "kb_private_in" for c in ORDER if c != "giltong"), f"길통이는 요원, 나머지는 눈 감기 {k}")
+    p.wait_for_timeout(1500); g = p.evaluate(G0)
+    check(g["head"] == 1 and g["body"] == 1 and g["glass"] == 1 and g["eye"] == 0 and g["mouth"] == 4, f"사선 머리·몸통·선글라스·다문 입 {g}")
+    check(-52 <= g["arm"] <= -44, f"팔은 원본 대기 각도(-48도) 그대로 {g['arm']}")
+    check(p.evaluate("__ssMouse.state().__agent.p") == 1, "대형 이동 끝")
+    bx = {c: p.evaluate(GBOX, c) for c in ORDER}
+    feet = [bx[c][3] for c in ["doroduck", "charocharo", "tira", "chumdani", "tarotaro", "giltong"]]
+    check(all(feet[i] > feet[i + 1] for i in range(5)), f"왼쪽 아래(앞) → 오른쪽 위(뒤) 사선: 발 높이 {[round(v) for v in feet]}")
+    xs = [ (bx[c][0] + bx[c][2]) / 2 for c in ["doroduck", "charocharo", "tira", "chumdani", "tarotaro", "giltong"]]
+    check(all(xs[i] < xs[i + 1] for i in range(5)), "앞에서 뒤로 왼쪽 → 오른쪽")
+    order = p.evaluate("__ssIntro.info().last.__order")
+    check(order.index("doroduck") > order.index("giltong"), "앞 친구(도로덕)가 뒤 친구(길통이)보다 앞에 그려짐")
+    card = p.evaluate("(()=>{const r=document.querySelector('.ss-card').getBoundingClientRect();return [r.left,r.top,r.right,r.bottom]})()")
+    check(all(bx[c][2] <= card[0] for c in ORDER), "대형이 로그인 상자를 침범하지 않음(PC)")
+    pose = "JSON.stringify(Object.values(__ssIntro.info().last.giltong.fp).map(f=>[f.img,+f.op.toFixed(2)]))"
+    a = p.evaluate(pose); p.keyboard.type("aB3$ 긴비밀번호", delay=20); p.wait_for_timeout(100); b2 = p.evaluate(pose)
+    check(a == b2, "비밀번호 입력에 따라 그림이 바뀌지 않음")
+    check(p.input_value("#ssP") == "aB3$ 긴비밀번호", "연출 중에도 비밀번호 입력이 됨")
+    p.focus("#ssU"); frames(p); check(kbs(p)["giltong"] == "ag_out", "나오면 선글라스 거두기")
+    p.wait_for_timeout(300); p.focus("#ssP"); frames(p)
+    check(kbs(p)["giltong"] == "ag_hold", "나오는 중에 다시 들어오면 처음부터가 아니라 경계 자세로 이어 감")
+    p.focus("#ssU"); p.wait_for_timeout(1000); g = p.evaluate(G0)
+    check(g["head"] == 0 and g["body"] == 0 and g["glass"] == 0 and g["eye"] == 1 and g["eyeImg"] == 0, f"원래 얼굴·정면 {g}")
+    bx = {c: p.evaluate(GBOX, c) for c in ORDER}
+    SH = p.evaluate("__ssIntro.cast.map(c=>c.shift)")
+    check(all(abs(bx[c][3] - box0[c][3]) < 3 and abs((bx[c][0] + bx[c][2]) - (box0[c][0] + box0[c][2])) / 2 < 12 for c in ORDER), f"원래 자리로 돌아옴 {[(c, [round(v) for v in box0[c]], [round(v) for v in bx[c]]) for c in ORDER]} {SH}")
+    p.wait_for_timeout(700)
+    check(not p.evaluate("document.documentElement.classList.contains('ss-agent')"), "어두운 장면 꺼짐")
+    G.typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".topnav", state="visible")
+    # 기본 주소에서는 요원 모드 없음
+    q = open_mouse(ctx, m); q.focus("#ssP"); q.wait_for_timeout(1500)
+    check(kbs(q)["giltong"] == "kb_private_hold" and not q.evaluate("document.documentElement.classList.contains('ss-agent')"), "기본 주소는 지금처럼(요원 모드 없음)")
+
+def t_agent_reduced(b, ctx, m):
+    """요원 모드 + 움직임 줄이기: 비밀번호 칸에 들어가면 완성 자세(선글라스·사선 대형)로 바로, 숫자는 멈춤"""
+    rc = b.new_context(reduced_motion="reduce"); p = rc.new_page(); p.set_viewport_size({"width": 1440, "height": 900}); p.on("pageerror", lambda e: errors.append(str(e)))
+    p.route("**/*", T.route); p.route(SBM.SB + "/**", m.handle)
+    p.goto(T.URL + "?agent=preview"); p.wait_for_selector("#ssGate", state="attached", timeout=20000)
+    wait_js(p, "!!(window.__ssIntro && __ssIntro.info().state === 'play')"); p.keyboard.press("Escape"); wait_js(p, "__ssIntro.info().state === 'wait'", 4000); p.wait_for_timeout(400)
+    p.focus("#ssP"); frames(p, 3)
+    f = p.evaluate("(()=>{const f=__ssIntro.info().last.giltong.fp;return [f.head.img,+(f.k_agentGlasses.op>.5),__ssMouse.state().__agent.p]})()")
+    check(f == [1, 1, 1], f"움직임 줄이기: 바로 완성 자세 {f}")
+    rc.close()
+
+TESTS = [t_off_switch, t_preview_intro_then_login, t_single_move, t_skip, t_auto_login_no_intro, t_intro_files_missing, t_loader_missing, t_password_no_reaction, t_reduced_motion, t_mouse_giltong, t_mouse_blocked, t_mouse_all, t_keys_type, t_keys_password, t_keys_reduced_off, t_keys_mobile_lock, t_tap_all, t_tap_rules, t_tap_reduced, t_agent_preview, t_agent_reduced]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()
