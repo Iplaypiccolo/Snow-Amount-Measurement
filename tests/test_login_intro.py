@@ -403,9 +403,11 @@ def t_agent_preview(b, ctx, m):
     check(p.evaluate("__ssIntro.cast.find(c=>c.id==='giltong').drawOrder.join()") == "cape,legR,legL,armR,body,armL,head,k_agentGlasses", "요원 그림일 때 앞뒤 순서(가까운 팔이 몸 앞)")
     check(p.evaluate("__ssMouse.state().__agent.p") == 1, "대형 이동 끝")
     bx = {c: p.evaluate(GBOX, c) for c in ORDER}
-    FF = {"doroduck": 0.6, "charocharo": 0.55, "tira": 0.6, "chumdani": 0.55, "tarotaro": 0.5, "giltong": 0.68}   # v2 는 얼굴 가운데 기준 배치(로더의 FACE 와 같음)
-    faces = [bx[c][3] - FF[c] * (bx[c][3] - bx[c][1]) for c in ["doroduck", "charocharo", "tira", "chumdani", "tarotaro", "giltong"]]
-    check(all(faces[i] > faces[i + 1] for i in range(5)), f"왼쪽 아래(앞) → 오른쪽 위(뒤) 사선: 얼굴 높이 {[round(v) for v in faces]}")
+    feet = [bx[c][3] for c in ["doroduck", "charocharo", "tira", "chumdani", "tarotaro", "giltong"]]   # v3: 모두 같은 지면(발이 한 직선 위), 그 직선이 오른쪽 위로 멀어짐
+    check(all(feet[i] > feet[i + 1] for i in range(5)), f"같은 지면을 약간 사선에서 본 줄: 발 높이가 앞→뒤로 조금씩 올라감 {[round(v) for v in feet]}")
+    xs0 = [bx[c][0] for c in ["doroduck", "charocharo", "tira", "chumdani", "tarotaro", "giltong"]]
+    gaps = [feet[i] - feet[i + 1] for i in range(5)]
+    check(max(gaps) < 60, f"발이 한 직선 근처(급하게 올라가지 않음) {[round(v) for v in gaps]}")
     xs = [ (bx[c][0] + bx[c][2]) / 2 for c in ["doroduck", "charocharo", "tira", "chumdani", "tarotaro", "giltong"]]
     check(all(xs[i] < xs[i + 1] for i in range(5)), "앞에서 뒤로 왼쪽 → 오른쪽")
     order = p.evaluate("__ssIntro.info().last.__order")

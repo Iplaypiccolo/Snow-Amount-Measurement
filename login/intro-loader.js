@@ -76,27 +76,36 @@
     // 최종 자리: 인트로 정렬 단계의 도착점(정렬 키)을 화면의 빈 곳으로 바꿔 넣음(크기·위치가 한 번에 바뀌게).
     // ROWB = 원래 도착점에서 친구 6명의 보이는 그림 범위(무대 좌표, 여유 3px). 무대는 화면 가운데(1000×600을 화면에 맞춤).
     var ROWB = [236, 439, 774, 588], lay = null;
-    // 비밀번호 요원 대형(v2, 2026-10-21): 영화 포스터처럼 가까이(PC 약 1.35배). 왼쪽 아래(앞) → 오른쪽 위(뒤).
-    // 얼굴 가운데를 친구들 영역의 x=[10,25,41,58,74,89]%, y=[76,67,57,46,35,24]% 에(전체 콘티 시작안). PC 영역 = 로그인 상자 왼쪽, 휴대폰 = 상자 아래(배율 1).
-    // 돌려주는 값: 무대 좌표 이동량(x: 발 기준, y: 발 기준)·배율 s·앞뒤 rank
-    var SLOT = ['doroduck', 'charocharo', 'tira', 'chumdani', 'tarotaro', 'giltong'], FX = [0.10, 0.25, 0.41, 0.58, 0.74, 0.89], FY = [0.76, 0.67, 0.57, 0.46, 0.35, 0.24];
-    var FACE = { doroduck: 0.6, charocharo: 0.55, tira: 0.6, chumdani: 0.55, tarotaro: 0.5, giltong: 0.68 };   // 얼굴 가운데 높이(키에 대한 비율)
+    // 비밀번호 요원 대형(v3, 2026-10-21 사용자 요청): 영화처럼 '일렬로 선 친구들을 약간 사선에서 본' 구도.
+    // 모두 같은 지면(발이 한 직선 위) — 그 직선이 화면 왼쪽 아래(앞, 도로덕) → 오른쪽 위(뒤, 길통이)로 완만하게(약 11도) 멀어짐.
+    // 원근: 앞 친구는 조금 크게, 뒤로 갈수록 조금 작게(1.12 → 0.88). 몸통은 옆 친구와 30% 정도 겹치고, 뒤 친구가 위에 있어 얼굴은 보임.
+    // 전체를 영역(PC: 로그인 상자 왼쪽 빈 곳, 휴대폰: 상자 아래)에 맞게 줄여 가운데에. 돌려주는 값: 무대 좌표 이동량(발 기준)·배율 s·앞뒤 rank
+    var SLOT = ['doroduck', 'charocharo', 'tira', 'chumdani', 'tarotaro', 'giltong'];
+    var AR = { doroduck: 1.0, charocharo: 1.0, tira: 1.0, chumdani: 1.07, tarotaro: 0.9, giltong: 0.73 };   // 요원 자세의 가로/세로(측정값)
+    var LINE = { slope: Math.tan(11 * Math.PI / 180), near: 1.12, far: 0.88, overlap: 0.3 };
+    var FACE = { doroduck: 0.6, charocharo: 0.55, tira: 0.6, chumdani: 0.55, tarotaro: 0.5, giltong: 0.68 };   // 얼굴 가운데 높이(키에 대한 비율, 시험용)
     function slots() {
       if (!lay || !C) return null;
       var vw = root.innerWidth, vh = root.innerHeight, sc = Math.min(vw / 1000, vh / 600), ox = (vw - 1000 * sc) / 2, oy = (vh - 600 * sc) / 2;
       var card = doc.querySelector('#ssGate .ss-card'), R, zoom;
-      if (vw < 761) { var top = card ? card.offsetTop + card.offsetHeight + 16 : vh * 0.5; R = [8, top, vw - 8, vh - 8]; zoom = 1; }
-      else {   // PC: 상자 왼쪽 빈 곳 가운데에, 친구들 줄 크기에 맞춘 영역(너무 넓으면 대형이 듬성듬성해져 포스터 느낌이 사라짐)
-        zoom = 1.35;
-        var left = Math.max(24, vw * 0.04), right = card ? card.offsetLeft - Math.max(32, vw * 0.04) : vw * 0.6, L = root.__ssLayout || { lw: 500, lh: 150 };
-        var W = Math.min(right - left, L.lw * 0.95), H = Math.min(vh * 0.8, L.lh * 1.3), cx = (left + right) / 2, cy = vh * 0.5;
-        R = [cx - W / 2, cy - H / 2, cx + W / 2, cy + H / 2];
-      }
-      var o = {};
+      if (vw < 761) { var top = card ? card.offsetTop + card.offsetHeight + 16 : vh * 0.5; R = [10, top, vw - 10, vh - 10]; zoom = 1.6; }   // 휴대폰: 가능한 크게(영역에 맞춰 아래 fit 이 줄임)
+      else { var right = card ? card.offsetLeft - Math.max(32, vw * 0.04) : vw * 0.6; R = [Math.max(24, vw * 0.04), vh * 0.14, right, vh * 0.9]; zoom = 1.35; }
+      var Rs = [(R[0] - ox) / sc, (R[1] - oy) / sc, (R[2] - ox) / sc, (R[3] - oy) / sc];   // 무대 좌표
+      // 발 위치(앞 친구 발 = 0,0 기준)
+      var P = [], x = 0;
       SLOT.forEach(function (id, k) {
-        var h = C.lineupH[id] * lay.s, x0 = lay.tx + (C.lineupX[id] - lay.rx) * lay.s, y0 = lay.ty + (C.lineupRow - lay.ry) * lay.s;
-        var fx = (R[0] + (R[2] - R[0]) * FX[k] - ox) / sc, fy = (R[1] + (R[3] - R[1]) * FY[k] - oy) / sc;
-        o[id] = { x: fx - x0, y: fy + FACE[id] * h * zoom - y0, s: zoom, rank: k, dur: 0.7 };   // 모두 같이 0.2~0.9초(친구마다 다르게 할 수 있음: dur). 티라 v3 은 머리 박기가 없어 먼저 도착할 필요 없음
+        var sk = zoom * (LINE.near + (LINE.far - LINE.near) * k / (SLOT.length - 1)), h = C.lineupH[id] * lay.s * sk, w = AR[id] * h;
+        if (k) x += (1 - (vw < 761 ? LINE.overlap + 0.12 : LINE.overlap)) * (P[k - 1].w + w) / 2;   // 휴대폰은 폭이 좁아 조금 더 겹쳐 크게
+        P.push({ id: id, x: x, y: -x * LINE.slope, s: sk, h: h, w: w });
+      });
+      var bx0 = 1e9, bx1 = -1e9, by0 = 1e9, by1 = -1e9;
+      P.forEach(function (q) { bx0 = Math.min(bx0, q.x - q.w / 2); bx1 = Math.max(bx1, q.x + q.w / 2); by0 = Math.min(by0, q.y - q.h); by1 = Math.max(by1, q.y); });
+      var fit = Math.min(1, (Rs[2] - Rs[0]) / (bx1 - bx0), (Rs[3] - Rs[1]) / (by1 - by0));
+      var cx = (Rs[0] + Rs[2]) / 2 - (bx0 + bx1) / 2 * fit, cy = (Rs[1] + Rs[3]) / 2 - (by0 + by1) / 2 * fit;
+      var o = {};
+      P.forEach(function (q, k) {
+        var x0 = lay.tx + (C.lineupX[q.id] - lay.rx) * lay.s, y0 = lay.ty + (C.lineupRow - lay.ry) * lay.s;
+        o[q.id] = { x: cx + q.x * fit - x0, y: cy + q.y * fit - y0, s: q.s * fit, rank: k, dur: 0.7 };
       });
       return o;
     }
