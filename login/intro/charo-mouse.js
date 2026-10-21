@@ -377,6 +377,49 @@
       },
       state: function () { var o = {}; for (var k in st) o[k] = { act: !!st[k].act, ret: !!st[k].ret, played: st[k].played, gx: +st[k].gx.toFixed(3), dir: st[k].dir, kb: st[k].kbKey ? st[k].kbId : null, tap: st[k].tap ? st[k].tap.clip.id : null, tapT0: st[k].tap ? st[k].tap.t0 : null }; o.__acting = acting && acting.id; o.__keys = { mode: kb.mode, order: kb.order.map(function (c) { return c.id; }) }; o.__tap = { tracking: tap.ptr && tap.ptr.c.id, busy: tapRunning(now()) }; o.__agent = { on: AGENT, p: +form.p.toFixed(3) }; return o; },
       hover: hover,
+      // 요원 대기 자세(ag_hold 처음)의 실제 불투명 범위(키 단위: 무대 높이 stageH 로 나눔, anchor 기준) — 로그인 화면이 수평 바닥·간격을 맞출 때 씀
+      extents: function () {
+        if (!intro) return null;
+        var out = {};
+        intro.cast.forEach(function (c) {
+          var P = c.P, A = P && P.agent, cl = A && CP.findClip(P, A.hold); if (!cl) return;
+          if (c._agExt) { out[c.id] = c._agExt; return; }
+          function measure(withClip) {
+          var off = CP.offsetsFrom(P, CP.clipPose(P, CP.findClip(P, P.baseClip), 0)), pose = withClip ? CP.clipPose(P, cl, 0) : {};
+          for (var id in off) if (/^(m_|k_)/.test(id)) off[id].op = 0;
+          if (!withClip && P.mouse && P.mouse.base) for (var bp in P.mouse.base) if (off[bp] && P.mouse.base[bp].op != null && !/^m_/.test(bp)) off[bp].op = P.mouse.base[bp].op;   // 로그인 대기 모습(팻말 숨김 등)
+          for (var pid in pose) { var o = off[pid], q = pose[pid]; if (!o) continue; for (var j = 0; j < PROPS.length; j++) if (q[PROPS[j]] != null) o[PROPS[j]] = q[PROPS[j]]; if (q.img) o.img = q.img; }
+          var fp = CP.finalPose(P, off, null), W = CP.worldMatrices(P, fp), x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, ok = true;
+          P.parts.forEach(function (pt) {
+            var f = fp[pt.id]; if (!f || f.op <= 0.05) return; var v = pt.images[f.img] || pt.images[0]; if (!v) return;
+            var m = maskOf(P, v.asset); if (!m) { ok = false; return; }
+            if (!m.bb) { var bx0 = m.w, bx1 = -1, by0 = m.h, by1 = -1; for (var yy = 0; yy < m.h; yy++) for (var xx = 0; xx < m.w; xx++) if (m.a[yy * m.w + xx] > 40) { if (xx < bx0) bx0 = xx; if (xx > bx1) bx1 = xx; if (yy < by0) by0 = yy; if (yy > by1) by1 = yy; } m.bb = bx1 < 0 ? null : [bx0, by0, bx1 + 1, by1 + 1]; }
+            if (!m.bb) return;
+            var bb = m.bb, X0 = v.x + bb[0] / m.w * v.w, X1 = v.x + bb[2] / m.w * v.w, Y0 = v.y + bb[1] / m.h * v.h, Y1 = v.y + bb[3] / m.h * v.h, ins = (X1 - X0) * 0.15;
+            [[X0, Y0], [X1, Y0], [X0, Y1], [X1, Y1]].forEach(function (q) { var a = CP.apply(W[pt.id], q[0], q[1]); x0 = Math.min(x0, a[0]); x1 = Math.max(x1, a[0]); y0 = Math.min(y0, a[1]); });
+            [[X0 + ins, Y1], [X1 - ins, Y1]].forEach(function (q) { y1 = Math.max(y1, CP.apply(W[pt.id], q[0], q[1])[1]); });   // 바닥: 아랫부분 양 끝(15% 들임)
+          });
+          return ok && x0 <= x1 ? [x0, y0, x1, y1] : null;
+          }
+          var ag = measure(true), bs = measure(false); if (!ag || !bs) return;
+          var H = c.stageH, ax = c.anchor[0], ay = c.anchor[1];
+          // k: 요원 모습의 보이는 키를 평소(로그인 대기) 키와 같게 맞추는 배율 — 새 그림마다 그림 크기가 달라 0.42초 교체 때 갑자기 작아지거나 커지지 않게
+          out[c.id] = c._agExt = { left: (ag[0] - ax) / H, right: (ag[2] - ax) / H, top: (ag[1] - ay) / H, floor: (ag[3] - ay) / H, k: (bs[3] - bs[1]) / (ag[3] - ag[1]) };
+        });
+        return out;
+      },
+      // 시험용: 지금 그려진 자세의 불투명 바닥(화면 CSS px, 아랫부분 양 끝 15% 들임)
+      floorNow: function (id) {
+        var c = intro && intro.cast.filter(function (z) { return z.id === id; })[0], L = c && intro.info().last[id]; if (!L) return null;
+        var P = c.P, W = CP.worldMatrices(P, L.fp), cv = opt.canvas, r = cv.getBoundingClientRect(), k = cv.clientWidth ? cv.width / cv.clientWidth : 1, y1 = -1e9;
+        P.parts.forEach(function (pt) {
+          var f = L.fp[pt.id]; if (!f || f.op <= 0.05) return; var v = pt.images[f.img] || pt.images[0]; if (!v) return; var m = maskOf(P, v.asset); if (!m) return;
+          if (!m.bb) { var bx0 = m.w, bx1 = -1, by0 = m.h, by1 = -1; for (var yy = 0; yy < m.h; yy++) for (var xx = 0; xx < m.w; xx++) if (m.a[yy * m.w + xx] > 40) { if (xx < bx0) bx0 = xx; if (xx > bx1) bx1 = xx; if (yy < by0) by0 = yy; if (yy > by1) by1 = yy; } m.bb = bx1 < 0 ? null : [bx0, by0, bx1 + 1, by1 + 1]; }
+          if (!m.bb) return; var bb = m.bb, X0 = v.x + bb[0] / m.w * v.w, X1 = v.x + bb[2] / m.w * v.w, Y1 = v.y + bb[3] / m.h * v.h, ins = (X1 - X0) * 0.15, M = CP.mul(L.view, W[pt.id]);
+          [[X0 + ins, Y1], [X1 - ins, Y1]].forEach(function (q) { y1 = Math.max(y1, CP.apply(M, q[0], q[1])[1]); });
+        });
+        return r.top + y1 / k;
+      },
       drawFront: function (ctx) {   // 요원 모드 효과(코드로 그림): 티라 안경 반짝 한 번(진입 때만), 눈가루. 움직임 줄이기면 없음
         if (!AGENT || reduce || !intro) return;
         var info = intro.info();

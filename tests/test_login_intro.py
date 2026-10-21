@@ -387,27 +387,26 @@ def t_agent_preview(b, ctx, m):
     D0 = "(()=>{const f=__ssIntro.info().last.doroduck.fp;return [f.body.img,+(f.k_agentGlasses.op>.5),+(f.eyeL.op>.5),+(f.beak.op>.5),+(f.sign.op>.5),+(f.wingRf.op>.5)]})()"
     V0 = """(()=>{const L=__ssIntro.info().last,c=L.chumdani.fp,t=L.tarotaro.fp;return {ch:[c.body.img,+(c.k_agentGlasses.op>.5),+(c.eyeL.op>.5),+(c.wifi0.op>.5),+(c.m_sparkle.op>.5)],tt:[t.bodyImg.img,+(t.k_agentGlasses.op>.5),+(t.eyes.op>.5),+(t.m_eyeL.op>.5),+(t.excl.op>.5)]}})()"""
     T0 = "(()=>{const f=__ssIntro.info().last.tira.fp;return {head:+(f.headImg.op>.5),headImg:f.headImg.img,body:+(f.k_agentBody.op>.5),buried:+!!f.k_agentBuried,snow:+!!f.k_agentSnow,glass:+(f.k_agentGlasses.op>.5),face:+(f.m_face.op>.5),orig:+(f.body.op>.5)}})()"
-    check(p.evaluate("(()=>{const a=__ssIntro.cast.find(c=>c.id==='tira').P.agent;return !a.bury&&!a.puffs&&a.version===3})()"), "티라 v3: 머리 박기·눈가루 설정 없음")
+    check(p.evaluate("(()=>{const a=__ssIntro.cast.find(c=>c.id==='tira').P.agent;return !a.bury&&!a.puffs&&a.version===4})()"), "티라: 머리 박기·눈가루 설정 없음(v4)")
     tt = p.evaluate(T0); check(tt["headImg"] == 1 and tt["face"] == 0 and tt["body"] == 0, f"티라 첫 프레임: 원래 정면 감은 눈(마우스 얼굴 끔) {tt}")
     cc = p.evaluate(C0); check(cc["eyeImg"] == 2 and cc["body"] == 0 and cc["glass"] == 0, f"차로차로 첫 프레임: 정면에서 눈 감기 {cc}")
     p.wait_for_timeout(1000); tt = p.evaluate(T0)
     check(tt["buried"] == 0 and tt["snow"] == 0 and tt["body"] == 1 and tt["glass"] == 1 and tt["orig"] == 0, f"티라 v3: 머리 박기 없이 선 채로 사선 몸체·선글라스 {tt}")
     p.wait_for_timeout(500); g = p.evaluate(G0)
-    check(g["head"] == 1 and g["body"] == 1 and g["glass"] == 1 and g["eye"] == 0 and g["mouth"] == 0, f"길통이: 45도 머리(감은 눈·다문 입 포함)·몸통·선글라스, 원래 눈·입은 숨김 {g}")
-    check(-82 <= g["arm"] <= -74, f"길통이 가까운 팔은 사선 자세 값(-78도) {g['arm']}")
-    cc = p.evaluate(C0); check(cc["body"] == 1 and cc["glass"] == 1 and cc["eye"] == 0 and cc["mouth"] == 0, f"차로차로: 45도 몸통·선글라스, 원래 눈·입 숨김 {cc}")
-    d = p.evaluate(D0); check(d == [1, 1, 0, 1, 0, 0], f"도로덕: 사선 몸통·선글라스·원본 부리, 원래 눈·팻말·앞 가림 날개 숨김 {d}")
-    v = p.evaluate(V0); check(v["ch"] == [1, 1, 0, 1, 0] and v["tt"] == [2, 1, 0, 0, 0], f"첨다니(사선 트럭·선글라스·약한 신호)·타로타로(사선 차체·선글라스), 원래 눈 숨김 {v}")
+    check(g["head"] == 2 and g["body"] == 2 and g["glass"] == 1 and g["eye"] == 0 and g["mouth"] == 0, f"길통이: 45도 머리(감은 눈·다문 입 포함)·몸통·선글라스, 원래 눈·입은 숨김 {g}")
+    check(-94 <= g["arm"] <= -86, f"길통이 가까운 팔은 35도 자세 값(-90도, 원본 원통팔 그림) {g['arm']}")
+    W0 = "(()=>{const f=__ssIntro.info().last.charocharo.fp;return [+(f.k_cameraWheelL.op>.5),+(f.k_cameraWheelR.op>.5),f.wingL.img,f.k_agentGlasses.img]})()"
+    check(p.evaluate(W0) == [1, 1, 1, 1], f"차로차로 요원 바퀴·35도 날개·새 선글라스 {p.evaluate(W0)}")
+    cc = p.evaluate(C0); check(cc["body"] == 2 and cc["glass"] == 1 and cc["eye"] == 0 and cc["mouth"] == 0, f"차로차로: 45도 몸통·선글라스, 원래 눈·입 숨김 {cc}")
+    d = p.evaluate(D0); check(d == [2, 1, 0, 1, 0, 0], f"도로덕: 사선 몸통·선글라스·원본 부리, 원래 눈·팻말·앞 가림 날개 숨김 {d}")
+    v = p.evaluate(V0); check(v["ch"] == [2, 1, 0, 1, 0] and v["tt"] == [3, 1, 0, 0, 0], f"첨다니(사선 트럭·선글라스·약한 신호)·타로타로(사선 차체·선글라스), 원래 눈 숨김 {v}")
     p.wait_for_timeout(700); tt = p.evaluate(T0)
     check(tt["body"] == 1 and tt["glass"] == 1 and tt["snow"] == 0 and tt["buried"] == 0 and tt["head"] == 0 and tt["orig"] == 0, f"티라: 사선 몸체·선글라스 유지 {tt}")
     check(p.evaluate("__ssIntro.cast.find(c=>c.id==='giltong').drawOrder.join()") == "cape,legR,legL,armR,body,armL,head,k_agentGlasses", "요원 그림일 때 앞뒤 순서(가까운 팔이 몸 앞)")
     check(p.evaluate("__ssMouse.state().__agent.p") == 1, "대형 이동 끝")
     bx = {c: p.evaluate(GBOX, c) for c in ORDER}
-    feet = [bx[c][3] for c in ["doroduck", "charocharo", "tira", "chumdani", "tarotaro", "giltong"]]   # v3: 모두 같은 지면(발이 한 직선 위), 그 직선이 오른쪽 위로 멀어짐
-    check(all(feet[i] > feet[i + 1] for i in range(5)), f"같은 지면을 약간 사선에서 본 줄: 발 높이가 앞→뒤로 조금씩 올라감 {[round(v) for v in feet]}")
-    xs0 = [bx[c][0] for c in ["doroduck", "charocharo", "tira", "chumdani", "tarotaro", "giltong"]]
-    gaps = [feet[i] - feet[i + 1] for i in range(5)]
-    check(max(gaps) < 60, f"발이 한 직선 근처(급하게 올라가지 않음) {[round(v) for v in gaps]}")
+    fl = p.evaluate("['doroduck','charocharo','tira','chumdani','tarotaro','giltong'].map(k=>__ssMouse.floorNow(k))")   # v4: 수평 바닥(불투명 발·바퀴 아랫점)
+    check(max(fl) - min(fl) < 3, f"여섯 모두 같은 수평 바닥 위 {[round(v) for v in fl]}")
     xs = [ (bx[c][0] + bx[c][2]) / 2 for c in ["doroduck", "charocharo", "tira", "chumdani", "tarotaro", "giltong"]]
     check(all(xs[i] < xs[i + 1] for i in range(5)), "앞에서 뒤로 왼쪽 → 오른쪽")
     order = p.evaluate("__ssIntro.info().last.__order")
@@ -424,6 +423,7 @@ def t_agent_preview(b, ctx, m):
     p.focus("#ssU"); p.wait_for_timeout(1000); g = p.evaluate(G0)
     check(g["head"] == 0 and g["body"] == 0 and g["glass"] == 0 and g["eye"] == 1 and g["eyeImg"] == 0 and g["mouth"] == 1, f"원래 얼굴·정면 {g}")
     cc = p.evaluate(C0); check(cc["body"] == 0 and cc["eye"] == 1 and cc["eyeImg"] == 0 and cc["glass"] == 0, f"차로차로 원래 얼굴 {cc}")
+    w = p.evaluate(W0); check(w[0] == 0 and w[1] == 0 and w[2] == 0, f"차로차로: 요원 바퀴 숨김·원래 날개 {w}")
     check(p.evaluate("__ssIntro.cast.find(c=>c.id==='giltong').drawOrder") is None, "원래 앞뒤 순서")
     d = p.evaluate(D0); check(d[0] == 0 and d[1] == 0 and d[2] == 1 and d[3] == 1 and d[4] == 0, f"도로덕 원래 모습(팻말은 로그인 대기 때처럼 숨김) {d}")
     v = p.evaluate(V0); check(v["ch"][0] == 0 and v["ch"][1] == 0 and v["ch"][2] == 1 and v["tt"][0] == 0 and v["tt"][1] == 0 and v["tt"][3] == 1, f"첨다니·타로타로 원래 모습(타로타로 마우스용 점눈 포함) {v}")
@@ -446,7 +446,7 @@ def t_agent_reduced(b, ctx, m):
     wait_js(p, "!!(window.__ssIntro && __ssIntro.info().state === 'play')"); p.keyboard.press("Escape"); wait_js(p, "__ssIntro.info().state === 'wait'", 4000); p.wait_for_timeout(400)
     p.focus("#ssP"); frames(p, 3)
     f = p.evaluate("(()=>{const f=__ssIntro.info().last.giltong.fp;return [f.head.img,+(f.k_agentGlasses.op>.5),__ssMouse.state().__agent.p]})()")
-    check(f == [1, 1, 1], f"움직임 줄이기: 바로 완성 자세 {f}")
+    check(f == [2, 1, 1], f"움직임 줄이기: 바로 완성 자세(35도 머리 2번·선글라스·대형) {f}")
     rc.close()
 
 TESTS = [t_off_switch, t_preview_intro_then_login, t_single_move, t_skip, t_auto_login_no_intro, t_intro_files_missing, t_loader_missing, t_password_no_reaction, t_reduced_motion, t_mouse_giltong, t_mouse_blocked, t_mouse_all, t_keys_type, t_keys_password, t_keys_reduced_off, t_keys_mobile_lock, t_tap_all, t_tap_rules, t_tap_reduced, t_agent_preview, t_agent_reduced]

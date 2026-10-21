@@ -33,7 +33,7 @@ JS = {'charo-pet.js': 'charo-pet.js', 'charo-intro.js': 'intro/charo-intro.js', 
 def webp(uri, fit=None):
     head, b64 = uri.split(',', 1)
     im = Image.open(io.BytesIO(base64.b64decode(b64))); im.load()
-    if fit and im.width > fit * 1.05:   # 요원 그림(생성 원본이 커서): 그림 좌표 크기(원본 파츠와 같은 밀도)로 가로세로 같은 비율로만 줄임
+    if fit and im.width > 1 and im.width > fit * 1.05:   # 요원 그림(생성 원본이 커서): 그림 좌표 크기(원본 파츠와 같은 밀도)로 가로세로 같은 비율로만 줄임
         im = im.convert('RGBA').resize((round(fit), round(im.height * fit / im.width)), Image.LANCZOS)
     b = io.BytesIO(); im.convert('RGBA').save(b, 'WEBP', quality=92, method=6)
     new = 'data:image/webp;base64,' + base64.b64encode(b.getvalue()).decode()
@@ -56,10 +56,24 @@ def main():
         if missing: raise SystemExit(f'{cid}: 동작 없음 {missing}')
         p['clips'] = [c for c in p['clips'] if c['id'] in keep]
         p['rules'] = []; p.pop('preview', None)   # p['mouse'](마우스 반응 설정)는 그대로 둠
+        # 남긴 동작이 실제로 쓰는 그림만 남김(예전 요원 그림 v1~v3 처럼 더는 안 쓰는 변형은 빼서 가볍게; 그림 목록 자리는 그대로라 번호는 안 바뀜)
+        used = set()
+        for pt in p['parts']:
+            ims = pt['images']
+            idx = {pt['rest'].get('img', 0) or 0, 0}
+            for c in p['clips']:
+                for k in (c['tracks'].get(pt['id'], {}).get('img') or []): idx.add(k['v'])
+            for i in idx:
+                if 0 <= i < len(ims): used.add(ims[i]['asset'])
+        BLANK = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='   # 1×1 투명(재생기가 모든 그림이 열렸는지 확인하므로 자리만 채움)
+        p['assets'] = {k: (v if k in used else BLANK) for k, v in p['assets'].items()}
         drawn = {}
         for pt in p['parts']:
             for v in pt['images']: drawn[v['asset']] = max(drawn.get(v['asset'], 0), v['w'])
-        p['assets'] = {k: webp(v, drawn.get(k) if '_agent_' in k else None) if v.startswith('data:image/png') else v for k, v in p['assets'].items()}
+        def fit(k):   # 요원 그림: 그림 좌표 크기(원본 파츠와 같은 밀도), 35도 새 그림(cam4_)은 긴 변 700px 까지(로그인 화면에서 친구 키 최대 수백 px)
+            if k.startswith('cam4_'): return 700 if drawn.get(k, 0) else None
+            return drawn.get(k) if '_agent_' in k else None
+        p['assets'] = {k: webp(v, fit(k)) if v.startswith('data:image/png') else v for k, v in p['assets'].items()}
         out = OUT / 'chars' / (cid + '.json')
         out.write_text(json.dumps(p, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
         V[cid] = h8(out); total += out.stat().st_size

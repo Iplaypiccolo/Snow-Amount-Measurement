@@ -16,7 +16,7 @@
   var doc = root.document, html = doc.documentElement;
   html.classList.add('ss-ready');   // 이 파일이 실행됨 → login-v2.css 의 '잠깐 가리기'를 품(아래 CSS 설명)
   if (/[?&]intro=off(&|$)/.test(root.location.search)) return;   // 비상용: 주소 끝에 ?intro=off 를 붙이면 예전 로그인 화면(인트로 없음)
-  var V = /*@@V@@*/{"charo-pet.js":"c4a84919","charo-intro.js":"cbe717c1","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"8147e7c6","charocharo":"a997d393","chumdani":"1ab99e1f","giltong":"f2526c6e","tira":"3f992a31","tarotaro":"598a985d","doroduck":"b0640986","fx":"99ec5eb7"};
+  var V = /*@@V@@*/{"charo-pet.js":"c4a84919","charo-intro.js":"f1d248ad","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"fc237648","charocharo":"601c5e9b","chumdani":"46c3153c","giltong":"69551417","tira":"13ec674d","tarotaro":"df94706a","doroduck":"199e41b7","fx":"99ec5eb7"};
   var BASE = 'login/intro/', LOAD_LIMIT = 5000;
   var MOUSE = !/[?&]mouse=off(&|$)/.test(root.location.search);   // 친구들 마우스 반응: 2026-10-19 기본으로 켬. 비상용 ?mouse=off 면 끔
   var KEYS = !/[?&]keys=off(&|$)/.test(root.location.search);     // 친구들 키보드 반응(아이디 입력·비밀번호 칸): 2026-10-20. 비상용 ?keys=off 면 끔
@@ -76,13 +76,13 @@
     // 최종 자리: 인트로 정렬 단계의 도착점(정렬 키)을 화면의 빈 곳으로 바꿔 넣음(크기·위치가 한 번에 바뀌게).
     // ROWB = 원래 도착점에서 친구 6명의 보이는 그림 범위(무대 좌표, 여유 3px). 무대는 화면 가운데(1000×600을 화면에 맞춤).
     var ROWB = [236, 439, 774, 588], lay = null;
-    // 비밀번호 요원 대형(v3, 2026-10-21 사용자 요청): 영화처럼 '일렬로 선 친구들을 약간 사선에서 본' 구도.
-    // 모두 같은 지면(발이 한 직선 위) — 그 직선이 화면 왼쪽 아래(앞, 도로덕) → 오른쪽 위(뒤, 길통이)로 완만하게(약 11도) 멀어짐.
-    // 원근: 앞 친구는 조금 크게, 뒤로 갈수록 조금 작게(1.12 → 0.88). 몸통은 옆 친구와 30% 정도 겹치고, 뒤 친구가 위에 있어 얼굴은 보임.
+    // 비밀번호 요원 대형(v4, 2026-10-21 사용자 요청): 여섯 친구가 같은 35도 카메라 그림으로 바뀐 뒤 '수평 바닥'에 한 줄.
+    // 발(가장 가까운 지지점)이 모두 같은 수평선 위, 원래 키 차이 그대로, 몸통은 옆 친구와 조금 겹치고(왼쪽 친구를 앞에) 얼굴은 보임.
+    // (LINE.slope·near·far 로 예전 v3 처럼 비스듬한 줄·원근도 만들 수 있음)
     // 전체를 영역(PC: 로그인 상자 왼쪽 빈 곳, 휴대폰: 상자 아래)에 맞게 줄여 가운데에. 돌려주는 값: 무대 좌표 이동량(발 기준)·배율 s·앞뒤 rank
     var SLOT = ['doroduck', 'charocharo', 'tira', 'chumdani', 'tarotaro', 'giltong'];
     var AR = { doroduck: 1.0, charocharo: 1.0, tira: 1.0, chumdani: 1.07, tarotaro: 0.9, giltong: 0.73 };   // 요원 자세의 가로/세로(측정값)
-    var LINE = { slope: Math.tan(11 * Math.PI / 180), near: 1.12, far: 0.88, overlap: 0.3 };
+    var LINE = { slope: 0, near: 1, far: 1, overlap: 0.22 };     // 2026-10-21 v4 사용자 요청: 수평 바닥, 원래 키 차이 그대로(새 35도 그림에 원근이 이미 들어 있음)
     var FACE = { doroduck: 0.6, charocharo: 0.55, tira: 0.6, chumdani: 0.55, tarotaro: 0.5, giltong: 0.68 };   // 얼굴 가운데 높이(키에 대한 비율, 시험용)
     function slots() {
       if (!lay || !C) return null;
@@ -91,15 +91,19 @@
       if (vw < 761) { var top = card ? card.offsetTop + card.offsetHeight + 16 : vh * 0.5; R = [10, top, vw - 10, vh - 10]; zoom = 1.6; }   // 휴대폰: 가능한 크게(영역에 맞춰 아래 fit 이 줄임)
       else { var right = card ? card.offsetLeft - Math.max(32, vw * 0.04) : vw * 0.6; R = [Math.max(24, vw * 0.04), vh * 0.14, right, vh * 0.9]; zoom = 1.35; }
       var Rs = [(R[0] - ox) / sc, (R[1] - oy) / sc, (R[2] - ox) / sc, (R[3] - oy) / sc];   // 무대 좌표
-      // 발 위치(앞 친구 발 = 0,0 기준)
+      // 실제 불투명 범위(요원 대기 자세, 키 단위)가 있으면 그것으로 — 발 바닥을 정확히 한 수평선에, 옆 친구와 겹침을 정확히
+      var E = (root.__ssMouse && root.__ssMouse.extents && root.__ssMouse.extents()) || {};
       var P = [], x = 0;
       SLOT.forEach(function (id, k) {
-        var sk = zoom * (LINE.near + (LINE.far - LINE.near) * k / (SLOT.length - 1)), h = C.lineupH[id] * lay.s * sk, w = AR[id] * h;
-        if (k) x += (1 - (vw < 761 ? LINE.overlap + 0.12 : LINE.overlap)) * (P[k - 1].w + w) / 2;   // 휴대폰은 폭이 좁아 조금 더 겹쳐 크게
-        P.push({ id: id, x: x, y: -x * LINE.slope, s: sk, h: h, w: w });
+        var e = E[id] || { left: -AR[id] / 2, right: AR[id] / 2, top: -1, floor: 0, k: 1 };
+        var sk = zoom * (LINE.near + (LINE.far - LINE.near) * k / (SLOT.length - 1)) * Math.max(0.7, Math.min(1.4, e.k || 1)), h = C.lineupH[id] * lay.s * sk;   // e.k: 요원 모습 키 = 평소 키
+        var q = { id: id, s: sk, h: h, l: e.left * h, r: e.right * h, t: e.top * h, f: e.floor * h };
+        if (k) { var pv = P[k - 1], ov = (vw < 761 ? LINE.overlap + 0.12 : LINE.overlap) * Math.min(pv.r - pv.l, q.r - q.l); x = pv.x + pv.r - q.l - ov; }
+        q.x = x; q.y = -x * LINE.slope - q.f;   // q.y = 기준점(anchor) 높이: 발 바닥(f)이 바닥선에 오도록
+        P.push(q);
       });
       var bx0 = 1e9, bx1 = -1e9, by0 = 1e9, by1 = -1e9;
-      P.forEach(function (q) { bx0 = Math.min(bx0, q.x - q.w / 2); bx1 = Math.max(bx1, q.x + q.w / 2); by0 = Math.min(by0, q.y - q.h); by1 = Math.max(by1, q.y); });
+      P.forEach(function (q) { bx0 = Math.min(bx0, q.x + q.l); bx1 = Math.max(bx1, q.x + q.r); by0 = Math.min(by0, q.y + q.t); by1 = Math.max(by1, q.y + q.f); });
       var fit = Math.min(1, (Rs[2] - Rs[0]) / (bx1 - bx0), (Rs[3] - Rs[1]) / (by1 - by0));
       var cx = (Rs[0] + Rs[2]) / 2 - (bx0 + bx1) / 2 * fit, cy = (Rs[1] + Rs[3]) / 2 - (by0 + by1) / 2 * fit;
       var o = {};
