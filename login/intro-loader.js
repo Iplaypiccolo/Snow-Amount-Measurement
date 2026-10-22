@@ -16,7 +16,7 @@
   var doc = root.document, html = doc.documentElement;
   html.classList.add('ss-ready');   // 이 파일이 실행됨 → login-v2.css 의 '잠깐 가리기'를 품(아래 CSS 설명)
   if (/[?&]intro=off(&|$)/.test(root.location.search)) return;   // 비상용: 주소 끝에 ?intro=off 를 붙이면 예전 로그인 화면(인트로 없음)
-  var V = /*@@V@@*/{"charo-pet.js":"86bb02ed","charo-intro.js":"b71be76b","welcome-fx.js":"baac8287","intro-cast.js":"624aedd3","charo-mouse.js":"0906d53e","charocharo":"718827a4","chumdani":"22fbc250","giltong":"c239514b","tira":"f36478a1","tarotaro":"e19cac7e","doroduck":"6c95ed33","fx":"da011085"};
+  var V = /*@@V@@*/{"charo-pet.js":"0f53decd","charo-intro.js":"f1d248ad","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"da96174b","charocharo":"718827a4","chumdani":"22fbc250","giltong":"9d4cef84","tira":"f36478a1","tarotaro":"e19cac7e","doroduck":"6c95ed33","fx":"99ec5eb7"};
   var BASE = 'login/intro/', LOAD_LIMIT = 5000;
   var MOUSE = !/[?&]mouse=off(&|$)/.test(root.location.search);   // 친구들 마우스 반응: 2026-10-19 기본으로 켬. 비상용 ?mouse=off 면 끔
   var KEYS = !/[?&]keys=off(&|$)/.test(root.location.search);     // 친구들 키보드 반응(아이디 입력·비밀번호 칸): 2026-10-20. 비상용 ?keys=off 면 끔

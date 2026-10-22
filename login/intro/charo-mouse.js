@@ -192,8 +192,13 @@
       if (KEYS) {   // 비밀번호 칸에 있는지(포커스만), 주연 순서(화면 왼쪽부터)
         kbOn = true;
         var ae = doc.activeElement, pw = !!(ae && ae.id === opt.passField);
-        if (pw && kb.mode !== 'pw') { kb.mode = 'pw'; kb.pwAt = AGENT && t - kb.outAt < 0.65 ? t - 3.65 : t; /* 요원: 나오는 중에 다시 오면 경계 자세로 이어 감 */ tap.ptr = null; tap.busyUntil = -1e9; list.forEach(function (c) { var s0 = S(c); s0.kb = null; s0.tap = null; if (s0.act) { s0.act = null; s0.ret = null; s0.endAt = t; } }); acting = null; }
-        else if (!pw && kb.mode === 'pw') { kb.mode = 'idle'; kb.outAt = t; }
+        if (pw && kb.mode !== 'pw') {
+          // 요원: 나오는 중에 다시 오면 이어 감. 검수 확정 리그(P.agent.rig)는 '지금 각도'에서(rig.resume), 예전 친구는 경계 자세(3.65초)로
+          var back0 = AGENT && t - kb.outAt < 0.65;
+          list.forEach(function (c) { var s0 = S(c), A0 = c.P.agent; s0.agOff = 0; if (!AGENT || !A0) return;
+            if (A0.rig) { var st0 = s0.agK ? agState(A0, s0.agK) : '0'; s0.agOff = A0.rig.resume[st0] || 0; } else if (back0) s0.agOff = 3.65; });
+          kb.mode = 'pw'; kb.pwAt = t; tap.ptr = null; tap.busyUntil = -1e9; list.forEach(function (c) { var s0 = S(c); s0.kb = null; s0.tap = null; if (s0.act) { s0.act = null; s0.ret = null; s0.endAt = t; } }); acting = null; }
+        else if (!pw && kb.mode === 'pw') { list.forEach(function (c) { var s0 = S(c), A0 = c.P.agent; if (A0 && A0.rig) s0.agExit = s0.agK ? agState(A0, s0.agK) : '0'; }); kb.mode = 'idle'; kb.outAt = t; }   // 나가는 순간 각도·선글라스 기록 → 그 각도의 복귀 동작
         kb.order = list.filter(function (c) { return S(c).box; }).sort(function (a, b) { var A = S(a).box, B2 = S(b).box; return (A.x0 + A.x1) - (B2.x0 + B2.x1); });
       }
       var B = blocked(), best = null, bestD = 1e9;
@@ -256,16 +261,24 @@
       if (!KEYS) return null;
       var A = AGENT && c.P.agent && clipOf(c, c.P.agent.in) ? c.P.agent : null;   // 요원 동작이 없으면 눈 감기로
       if (A && kb.mode === 'pw') {   // 요원 동작
-        d = t - kb.pwAt;
+        d = t - kb.pwAt + (s.agOff || 0);
         if (reduce) return { id: A.in, tt: A.ready, key: 'agent', full: true, side: true };
         var ci = clipOf(c, A.in), ch = clipOf(c, A.hold); if (!ci || !ch) return null;
         return d < ci.dur ? { id: A.in, tt: d, key: 'ag_in', side: d >= (A.side || 0.42) } : { id: A.hold, tt: (d - ci.dur) % ch.dur, key: 'ag_hold', side: true };
       }
-      if (A) { var co = clipOf(c, A.out); d = t - kb.outAt; if (co && !reduce && d < co.dur) return { id: A.out, tt: d, key: 'ag_out', side: true }; if (d < 0.65) return null; }
+      if (A) { var oid = A.rig ? (A.rig.outs[s.agExit] || {}).clip : A.out, co = oid && clipOf(c, oid); d = t - kb.outAt; if (co && !reduce && d < co.dur) return { id: oid, tt: d, key: 'ag_out', side: true }; if (d < 0.65) return null; }
       if (kb.mode === 'pw') { d = t - kb.pwAt; return d < 0.65 ? { id: 'kb_private_in', tt: d, key: 'in' } : { id: 'kb_private_hold', tt: (d - 0.65) % 3, key: 'hold' }; }
       d = t - kb.outAt; if (d < 0.65) return { id: 'kb_private_out', tt: d, key: 'out' };
       if (s.kb) { d = t - s.kb.t0; if (d < s.kb.clip.dur) return { id: s.kb.clip.id, tt: d, key: s.kb.clip.id + '@' + s.kb.t0 }; s.kb = null; }
       return null;
+    }
+    // 검수 확정 리그: 재생 중인 요원 동작(K)이 지금 몇 도인지 + 선글라스를 썼는지 → '0'·'12'·'24'·'35'(안경 전)·'35g'(안경 후). 각도 단계는 P.agent.rig 의 표
+    function agState(A, K) {
+      var R = A.rig, at = function (st, tt) { var a = st[0][1]; st.forEach(function (q) { if (tt >= q[0] - 1e-9) a = q[1]; }); return a; }, a, k;
+      if (K.id === A.in) { a = at(R.steps, K.tt); return a === 35 ? (K.tt >= R.glassesAt ? '35g' : '35') : String(a); }
+      if (K.id === A.hold) return '35g';
+      for (k in R.outs) if (R.outs[k].clip === K.id) { a = at(R.outs[k].steps, K.tt); return a === 35 ? k : String(a); }
+      return '0';
     }
     function snapAll(off) { var o = {}; for (var id in off) { var a = off[id], b = {}; PROPS.forEach(function (k) { b[k] = a[k]; }); o[id] = b; } return o; }
     function blendFrom(off, from, u) {   // 이전 자세에서 이어 붙이기(위치·회전·배율만, 투명도·그림은 바로)
@@ -295,7 +308,7 @@
       }
       if (reduce && !K.full) for (var r in off) if (/^k_/.test(r)) off[r].op = 0;
       if (K.key !== s.kbKey) { s.kbTr = s.kbSnap ? { from: s.kbSnap, t0: t } : null; s.kbKey = K.key; s.kbId = K.id; }
-      if (s.kbTr && !s.kbTr.back && (!reduce || K.tap)) { var uu = (t - s.kbTr.t0) / 0.16; if (uu < 1) blendFrom(off, s.kbTr.from, uu); else s.kbTr = null; }
+      if (s.kbTr && !s.kbTr.back && (!reduce || K.tap)) { var uu = (t - s.kbTr.t0) / (P.agent && P.agent.rig && /^ag_/.test(K.id) ? 0.12 : 0.16); /* 검수 확정 리그: 0.12초(복귀 첫 각도 교체 0.14초 전에 팔·몸을 다 내림) */ if (uu < 1) { blendFrom(off, s.kbTr.from, uu); if (K.key === 'ag_out' && P.agent && P.agent.rig) P.agent.rig.parts.forEach(function (id) { var f0 = s.kbTr.from[id]; if (f0 && off[id] && off[id].op > f0.op) off[id].op = f0.op; }); /* 검수 확정 리그 복귀: 나가던 순간보다 진하게 나타나지 않게(선글라스가 반쯤 보일 때 나가도 툭 진해지지 않음) */ } else s.kbTr = null; }
       else s.kbTr = null;
       s.kbSnap = snapAll(off);
       return true;
@@ -419,6 +432,18 @@
           [[X0 + ins, Y1], [X1 - ins, Y1]].forEach(function (q) { y1 = Math.max(y1, CP.apply(M, q[0], q[1])[1]); });
         });
         return r.top + y1 / k;
+      },
+      // 시험용: 지금 그려진 자세의 불투명 범위 [왼, 위, 오른, 아래](화면 CSS px). 전체 캔버스 그림(검수 확정 리그 1254×1254)의 투명 여백은 빼고 잼
+      boxNow: function (id) {
+        var c = intro && intro.cast.filter(function (z) { return z.id === id; })[0], L = c && intro.info().last[id]; if (!L) return null;
+        var P = c.P, W = CP.worldMatrices(P, L.fp), cv = opt.canvas, r = cv.getBoundingClientRect(), k = cv.clientWidth ? cv.width / cv.clientWidth : 1, x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+        P.parts.forEach(function (pt) {
+          var f = L.fp[pt.id]; if (!f || f.op <= 0.05) return; var v = pt.images[f.img] || pt.images[0]; if (!v) return; var m = maskOf(P, v.asset); if (!m) return;
+          if (!m.bb) { var bx0 = m.w, bx1 = -1, by0 = m.h, by1 = -1; for (var yy = 0; yy < m.h; yy++) for (var xx = 0; xx < m.w; xx++) if (m.a[yy * m.w + xx] > 40) { if (xx < bx0) bx0 = xx; if (xx > bx1) bx1 = xx; if (yy < by0) by0 = yy; if (yy > by1) by1 = yy; } m.bb = bx1 < 0 ? null : [bx0, by0, bx1 + 1, by1 + 1]; }
+          if (!m.bb) return; var bb = m.bb, M = CP.mul(L.view, W[pt.id]);
+          [[v.x + bb[0] / m.w * v.w, v.y + bb[1] / m.h * v.h], [v.x + bb[2] / m.w * v.w, v.y + bb[1] / m.h * v.h], [v.x + bb[0] / m.w * v.w, v.y + bb[3] / m.h * v.h], [v.x + bb[2] / m.w * v.w, v.y + bb[3] / m.h * v.h]].forEach(function (q) { var a = CP.apply(M, q[0], q[1]); x0 = Math.min(x0, a[0]); x1 = Math.max(x1, a[0]); y0 = Math.min(y0, a[1]); y1 = Math.max(y1, a[1]); });
+        });
+        return x0 <= x1 ? [r.left + x0 / k, r.top + y0 / k, r.left + x1 / k, r.top + y1 / k] : null;
       },
       drawFront: function (ctx) {   // 요원 모드 효과(코드로 그림): 티라 안경 반짝 한 번(진입 때만), 눈가루. 움직임 줄이기면 없음
         if (!AGENT || reduce || !intro) return;

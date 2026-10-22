@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / 'login' / 'intro'
 SRC = Path(sys.argv[1] if len(sys.argv) > 1 else '../Charocharo').resolve()
 KB = ['kb_type', 'kb_echo', 'kb_private_in', 'kb_private_hold', 'kb_private_out', 'mt_press', 'mt_tap', 'mt_cancel']
-AG = ['ag_in', 'ag_hold', 'ag_out']   # 비밀번호 요원(차로차로 저장소 intro/tools/add_agent.js) — 있는 캐릭터만 남김   # 키보드·터치 반응(차로차로 저장소 intro/tools/add_keys.js)
+AG = ['ag_in', 'ag_hold', 'ag_out', 'ag_out35', 'ag_out24', 'ag_out12']   # ag_out35·24·12: 검수 확정 리그(add_agent_rig.js)의 각도별 복귀   # 비밀번호 요원(차로차로 저장소 intro/tools/add_agent.js) — 있는 캐릭터만 남김   # 키보드·터치 반응(차로차로 저장소 intro/tools/add_keys.js)
 CHARS = {   # 인트로 배치표의 id: (차로차로 저장소 안 파일, 남길 동작)
     'charocharo': ('charo-pet.json', ['c_breath', 'i_charo', 'i_charo_r', 'm_mouse_L', 'm_mouse_R'] + KB),
     'chumdani': ('chumdani/chumdani.json', ['c_idle', 'c_run_i', 'c_jump_i', 'c_welcome', 'c_flip', 'm_mouse_L', 'm_mouse_R'] + KB),
@@ -70,7 +70,11 @@ def main():
         drawn = {}
         for pt in p['parts']:
             for v in pt['images']: drawn[v['asset']] = max(drawn.get(v['asset'], 0), v['w'])
+        rig = set()   # 검수 확정 리그(1254×1254 전체 캔버스 그림): 긴 변 900px 로 줄임(캔버스 통째로 줄여 좌표는 그대로, 여백 자르지 않음)
+        for pt in p['parts']:
+            if pt['id'] in ((p.get('agent') or {}).get('rig') or {}).get('parts', []): rig.update(v['asset'] for v in pt['images'])
         def fit(k):   # 요원 그림: 그림 좌표 크기(원본 파츠와 같은 밀도), 35도 새 그림(cam4_)은 긴 변 700px 까지(로그인 화면에서 친구 키 최대 수백 px)
+            if k in rig: return 900 if drawn.get(k, 0) else None   # 검수 확정 리그: 900px(PC 화면에서 캔버스가 약 440 CSS px → 고해상도 화면 약 880px)
             if k.startswith('cam4_'): return 700 if drawn.get(k, 0) else None
             return drawn.get(k) if '_agent_' in k else None
         p['assets'] = {k: webp(v, fit(k)) if v.startswith('data:image/png') else v for k, v in p['assets'].items()}
