@@ -198,7 +198,7 @@
           list.forEach(function (c) { var s0 = S(c), A0 = c.P.agent; s0.agOff = 0; if (!AGENT || !A0) return;
             if (A0.rig) { var st0 = s0.agK ? agState(A0, s0.agK) : '0'; s0.agOff = A0.rig.resume[st0] || 0; } else if (back0) s0.agOff = 3.65; });
           kb.mode = 'pw'; kb.pwAt = t; tap.ptr = null; tap.busyUntil = -1e9; list.forEach(function (c) { var s0 = S(c); s0.kb = null; s0.tap = null; if (s0.act) { s0.act = null; s0.ret = null; s0.endAt = t; } }); acting = null; }
-        else if (!pw && kb.mode === 'pw') { list.forEach(function (c) { var s0 = S(c), A0 = c.P.agent; if (A0 && A0.rig) s0.agExit = s0.agK ? agState(A0, s0.agK) : '0'; }); kb.mode = 'idle'; kb.outAt = t; }   // 나가는 순간 각도·선글라스 기록 → 그 각도의 복귀 동작
+        else if (!pw && kb.mode === 'pw') { list.forEach(function (c) { var s0 = S(c), A0 = c.P.agent; if (A0 && A0.rig) { s0.agExit = s0.agK ? agState(A0, s0.agK) : '0'; s0.agKeep = null; if (A0.rig.keep && s0.kbSnap) { s0.agKeep = {}; A0.rig.keep.forEach(function (id) { s0.agKeep[id] = s0.kbSnap[id] ? s0.kbSnap[id].op : 1; }); } } }); kb.mode = 'idle'; kb.outAt = t; }   // 나가는 순간 각도·선글라스 기록 → 그 각도의 복귀 동작
         kb.order = list.filter(function (c) { return S(c).box; }).sort(function (a, b) { var A = S(a).box, B2 = S(b).box; return (A.x0 + A.x1) - (B2.x0 + B2.x1); });
       }
       var B = blocked(), best = null, bestD = 1e9;
@@ -310,6 +310,7 @@
       if (K.key !== s.kbKey) { s.kbTr = s.kbSnap ? { from: s.kbSnap, t0: t } : null; s.kbKey = K.key; s.kbId = K.id; }
       if (s.kbTr && !s.kbTr.back && (!reduce || K.tap)) { var uu = (t - s.kbTr.t0) / (P.agent && P.agent.rig && /^ag_/.test(K.id) ? 0.12 : 0.16); /* 검수 확정 리그: 0.12초(복귀 첫 각도 교체 0.14초 전에 팔·몸을 다 내림) */ if (uu < 1) { blendFrom(off, s.kbTr.from, uu); if (K.key === 'ag_out' && P.agent && P.agent.rig) P.agent.rig.parts.forEach(function (id) { var f0 = s.kbTr.from[id]; if (f0 && off[id] && off[id].op > f0.op) off[id].op = f0.op; }); /* 검수 확정 리그 복귀: 나가던 순간보다 진하게 나타나지 않게(선글라스가 반쯤 보일 때 나가도 툭 진해지지 않음) */ } else s.kbTr = null; }
       else s.kbTr = null;
+      if (K.key === 'ag_out' && s.agKeep && P.agent && P.agent.rig && P.agent.rig.keep) { var vis = off[P.agent.rig.vis] && off[P.agent.rig.vis].op > 0.5; P.agent.rig.keep.forEach(function (id) { if (off[id]) off[id].op = vis ? s.agKeep[id] : 0; }); }   // 첨다니 와이파이: 복귀 동안 나가던 순간 값 그대로
       s.kbSnap = snapAll(off);
       return true;
     }

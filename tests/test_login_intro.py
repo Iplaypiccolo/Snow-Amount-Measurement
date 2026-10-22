@@ -381,14 +381,15 @@ RIGS = {"giltong": {"pfx": "gt_verified_", "img": ["cape", "arm_far", "torso_leg
         "charocharo": {"pfx": "charo_verified_", "img": ["wing_far", "wing_near", "wheel_far", "wheel_near", "body", "glasses"], "main": "body", "move": ["wing_near", "wing_far", "hull"]},
         "doroduck": {"pfx": "doro_verified_", "img": ["wing_far", "foot_far", "foot_near", "body", "wing_near", "glasses"], "main": "body", "move": ["wing_near", "wing_far", "hull"]},
         "tira": {"pfx": "tira_verified_", "img": ["tail", "spines", "foot_far", "foot_near", "body", "glasses"], "main": "body", "move": ["hull", "tail"]},
-        "tarotaro": {"pfx": "tarotaro_verified_", "img": ["wheel_far", "wheel_near", "body", "ear_far", "ear_near", "antenna", "eyes", "mouth", "glasses"], "main": "body", "move": ["pose"]}}
+        "tarotaro": {"pfx": "tarotaro_verified_", "img": ["wheel_far", "wheel_near", "body", "ear_far", "ear_near", "antenna", "eyes", "mouth", "glasses"], "main": "body", "move": ["pose"]},
+        "chumdani": {"pfx": "chumdani_verified_", "img": ["wheel_rear", "wheel_far", "wheel_near", "body", "ear_far", "ear_near", "antenna", "face", "wifi_weak", "wifi_dot", "wifi_inner", "wifi_outer", "glasses"], "main": "body", "move": ["pose"]}}
 RIG0 = """([cid, R]) => {const f=__ssIntro.info().last[cid].fp,I=R.img.map(k=>R.pfx+k),on=f[R.pfx+R.main].op>.5;
   return {rig:+on,ang:[...new Set(I.map(i=>f[i].img))],glass:+(f[R.pfx+'glasses'].op>.5),eye:+((f.eyeL||f.m_eyeL||{op:0}).op>.5),eyeImg:(f.eyeL||{img:0}).img,mouth:f.mouth?+(f.mouth.op>.5):0,
   old:Object.keys(f).filter(k=>!k.startsWith(R.pfx)&&f[k].op>.05).length}}"""
 # 친구 하나의 각도 장면을 프레임마다 기록하며, 정해 둔 각도가 '보이는 바로 그 프레임'에 비밀번호 칸을 떠나고(exitA) 복귀 중 정해 둔 각도에서 다시 들어옴(reA). 시간 운에 기대지 않음
 RIG_SCEN = """async ([cid, R, exitA, exitGlass, reA]) => {
   const I=R.img.map(k=>R.pfx+k), M=R.move.map(k=>R.pfx+k), G=R.pfx+'glasses', P=document.getElementById('ssP'), U=document.getElementById('ssU');
-  const st=()=>{const f=__ssIntro.info().last[cid].fp,on=f[R.pfx+R.main].op>.5,im=I.map(i=>f[i].img),op=I.filter(i=>i!==G).map(i=>+f[i].op.toFixed(3));
+  const st=()=>{const f=__ssIntro.info().last[cid].fp,on=f[R.pfx+R.main].op>.5,im=I.map(i=>f[i].img),op=I.filter(i=>i!==G&&!/wifi_/.test(i)).map(i=>+f[i].op.toFixed(3));
     return {a:on?[12,24,35][f[R.pfx+R.main].img]:0,same:new Set(im).size===1&&new Set(op).size===1,old:on?Object.keys(f).filter(k=>!k.startsWith(R.pfx)&&f[k].op>.05).length:0,g:+f[G].op.toFixed(3),arm:Math.max(...M.map(i=>Math.abs(f[i].rot)))}};
   const frame=()=>new Promise(r=>requestAnimationFrame(r)), rec=[]; let ph='in';
   U.focus(); await new Promise(r=>setTimeout(r,900)); P.focus();
@@ -415,10 +416,10 @@ def t_agent_rig_turn(b, ctx, m):
       for exitA, glass, reA, nm in ((12, False, None, "12도"), (24, False, None, "24도"), (12, False, 12, "12도→12도 재진입"), (24, False, 12, "24도→12도 재진입"),
                                     (35, False, 24, "35도(안경 전)→24도 재진입"), (35, True, None, "안경 나타나는 중")):
         name = f"{cid} {nm}"
-        for _try in range(3):   # 느린 컴퓨터에서 0.14~0.15초짜리 단계 프레임이 건너뛰어지면 그 장면만 다시
+        for _try in range(6):   # 느린 컴퓨터에서 0.14~0.15초짜리 단계 프레임이 건너뛰어지면 그 장면만 다시(병렬 전체 시험 때 초당 7장 아래로 떨어지기도 함)
             got = p.evaluate(RIG_SCEN, [cid, R, exitA, glass, reA])
             if not got["missed"]: break
-        rec = got["rec"]; check(not got["missed"], f"{name}: 다시 들어올 각도({reA}°) 프레임을 세 번 다 놓침(컴퓨터가 너무 느림)")
+        rec = got["rec"]; check(not got["missed"], f"{name}: 다시 들어올 각도({reA}°) 프레임을 여섯 번 다 놓침(컴퓨터가 너무 느림)")
         ph = lambda k: [r["a"] for r in rec if r["ph"] == k]
         check(rec[-1]["a"] == 0 and len(rec) < 900, f"{name}: 장면 끝까지 진행 {[(r['ph'], r['a']) for r in rec[-5:]]}")
         check(all(r["same"] and r["old"] == 0 for r in rec if r["a"]), f"{name}: 새 파츠 여섯 동시 교체·원래 파츠와 겹침 없음")
@@ -434,6 +435,31 @@ def t_agent_rig_turn(b, ctx, m):
         if glass:
             gmax = max(r["g"] for r in rec if r["ph"] == "out"); gex = [r["g"] for r in rec if r["ph"] == "in"][-1]
             check(gmax <= gex + 0.02, f"{name}: 안경이 반쯤일 때 떠나도 더 진해지지 않음(떠날 때 {gex}, 복귀 중 최대 {gmax})")
+
+def t_agent_wifi(b, ctx, m):
+    """첨다니 와이파이: 회전 중 강함 → 35도 정지 때 약한 윤곽 → 점 → 안쪽 곡선 → 강함 순서(같은 자리 네 겹, 한 번만) / 대기 중 강함 유지 /
+       점등 중간(점만 켜진 때)에 칸을 떠나면 복귀 내내 그 상태 그대로(강함으로 튀지 않음)"""
+    p = ctx.new_page(); p.set_viewport_size({"width": 1440, "height": 900}); p.on("pageerror", lambda e: errors.append(str(e)))
+    p.route("**/*", T.route); p.route(SBM.SB + "/**", m.handle)
+    p.goto(T.URL + "?agent=preview"); p.wait_for_selector("#ssGate", state="attached", timeout=20000)
+    wait_js(p, "!!(window.__ssIntro && __ssIntro.info().state === 'play')"); p.keyboard.press("Escape"); wait_js(p, "__ssIntro.info().state === 'wait'", 4000); p.wait_for_timeout(400)
+    p.mouse.move(5, 5)
+    SC = """async (leaveAt)=>{const P=document.getElementById('ssP'),U=document.getElementById('ssU'),fr=()=>new Promise(r=>requestAnimationFrame(r)),X='chumdani_verified_',rec=[];
+      U.focus(); await new Promise(r=>setTimeout(r,900)); P.focus(); let out=false;
+      for(let i=0;i<700;i++){await fr();const f=__ssIntro.info().last.chumdani.fp,a=f[X+'body'].op>.5?[12,24,35][f[X+'body'].img]:0,w=['weak','dot','inner','outer'].map(k=>+(f[X+'wifi_'+k].op>.5)).join(''),kb=__ssMouse.state().chumdani.kb;
+        rec.push([out?'out':'in',a,w,kb]); if(!out&&leaveAt&&w===leaveAt){U.focus();out=true;} if(!leaveAt&&kb==='ag_hold'&&rec.filter(r=>r[3]==='ag_hold').length>20)break; if(out&&a===0)break;}
+      return rec;}"""
+    rec = p.evaluate(SC, None)
+    seq = []
+    for ph, a, w, kb in rec:
+        if a == 35 and (not seq or seq[-1] != w): seq.append(w)
+    check(all(w == "0111" for ph, a, w, kb in rec if a in (12, 24)), "회전 중(12·24도) 와이파이 강함")
+    check(seq[:4] == ["1000", "1100", "1110", "0111"], f"35도: 약한 윤곽 → 점 → 안쪽 → 강함(한 번씩) {seq}")
+    check(len(seq) == 4 and all(w == "0111" for ph, a, w, kb in rec if kb == "ag_hold"), f"대기 중 강함 유지(반복 깜빡임 없음) {seq}")
+    rec = p.evaluate(SC, "1100")   # 점만 켜진 순간에 떠남
+    outs = [w for ph, a, w, kb in rec if ph == "out" and a]
+    check(outs and all(w == "1100" for w in outs), f"점등 중간에 떠나면 복귀 내내 그 상태(강함으로 튀지 않음) {sorted(set(outs))}")
+    check([a for ph, a, w, kb in rec if ph == "out"][-1] == 0, "정면까지 복귀")
 
 def t_agent_preview(b, ctx, m):
     """비밀번호 요원 모드(미리보기 ?agent=preview, 여섯 친구 모두 45도 요원 그림): 비밀번호 칸 → 어두운 장면·사선 대형(앞→뒤 도로덕…길통이)·
@@ -455,7 +481,7 @@ def t_agent_preview(b, ctx, m):
     check(p.evaluate("document.documentElement.classList.contains('ss-agent')"), "어두운 장면 켜짐")
     k = kbs(p); check(all(k[c] == "ag_in" for c in ORDER), f"여섯 모두 요원 동작 {k}")
     D0 = ("""(()=>(""" + RIG0 + """)(['doroduck',""" + json.dumps(RIGS["doroduck"]) + """]))()""")   # 도로덕도 검수 확정 리그
-    V0 = """(()=>{const L=__ssIntro.info().last,c=L.chumdani.fp,t=L.tarotaro.fp;return {ch:[c.body.img,+(c.k_agentGlasses.op>.5),+(c.eyeL.op>.5),+(c.wifi0.op>.5),+(c.m_sparkle.op>.5)],tt:[t.bodyImg.img,+(t.k_agentGlasses.op>.5),+(t.eyes.op>.5),+(t.m_eyeL.op>.5),+(t.excl.op>.5)]}})()"""
+    CH0 = ("""(()=>{const r=(""" + RIG0 + """)(['chumdani',""" + json.dumps(RIGS["chumdani"]) + """]),f=__ssIntro.info().last.chumdani.fp,P='chumdani_verified_wifi_';r.wifi=['weak','dot','inner','outer'].map(k=>+(f[P+k].op>.5));r.body=+(f.body.op>.5);r.oldWifi=+(f.wifi0.op>.5);return r})()""")   # 첨다니도 검수 확정 리그(와이파이 네 겹)
     check(p.evaluate("(()=>{const a=__ssIntro.cast.find(c=>c.id==='tira').P.agent;return !a.bury&&!a.puffs&&!!a.rig&&a.glint.style==='cross'&&a.glint.part==='tira_verified_glasses'&&a.ready===1.9})()"), "티라: 검수 확정 리그·새 안경 위 반짝(십자)·완성 자세 1.9초, 머리 박기·눈가루 없음")
     tt = F["t"]; check(tt["headImg"] == 0 and tt["face"] == 1 and tt["rig"] == 0, f"티라 첫 프레임: 정면 평소 얼굴(마우스 얼굴) 그대로(새 리그 숨김) {tt}")
     cc = F["c"]; check(cc["eyeImg"] == 0 and cc["eye"] == 1 and cc["rig"] == 0 and cc["glass"] == 0, f"차로차로 첫 프레임: 정면 평소 얼굴 그대로(새 리그 숨김) {cc}")
@@ -465,7 +491,7 @@ def t_agent_preview(b, ctx, m):
     check(g["rig"] == 1 and g["ang"] == [2] and g["glass"] == 1 and g["eye"] == 0 and g["mouth"] == 0 and g["old"] == 0, f"길통이: 새 리그 35도(여섯 파츠 같은 그림 번호)·선글라스, 원래 파츠 모두 숨김 {g}")
     cc = p.evaluate(C0); check(cc["rig"] == 1 and cc["ang"] == [2] and cc["glass"] == 1 and cc["eye"] == 0 and cc["mouth"] == 0 and cc["old"] == 0, f"차로차로: 새 리그 35도(여섯 파츠 같은 그림 번호)·선글라스, 원래 파츠(옛 요원 바퀴·안경 포함) 모두 숨김 {cc}")
     d = p.evaluate(D0); check(d["rig"] == 1 and d["ang"] == [2] and d["glass"] == 1 and d["eye"] == 0 and d["old"] == 0, f"도로덕: 새 리그 35도(여섯 파츠 같은 그림 번호)·선글라스, 원래 파츠(팻말·옛 날개·옛 안경 포함) 모두 숨김 {d}")
-    v = p.evaluate(V0); check(v["ch"] == [2, 1, 0, 1, 0], f"첨다니(사선 트럭·선글라스·약한 신호), 원래 눈 숨김 {v['ch']}")
+    v = p.evaluate(CH0); check(v["rig"] == 1 and v["ang"] == [2] and v["glass"] == 1 and v["old"] == 0, f"첨다니: 새 리그 35도(그림 파츠 같은 번호)·선글라스, 원래 파츠(옛 와이파이·옛 안경 포함) 모두 숨김 {v}")
     tq = p.evaluate(TT0); check(tq["rig"] == 1 and tq["ang"] == [2] and tq["glass"] == 1 and tq["old"] == 0, f"타로타로: 새 리그 35도(아홉 파츠 같은 그림 번호)·선글라스, 원래 파츠(마우스 눈·느낌표·옛 안경 포함) 모두 숨김 {tq}")
     p.wait_for_timeout(700); tt = p.evaluate(T0)
     check(tt["rig"] == 1 and tt["ang"] == [2] and tt["glass"] == 1 and tt["old"] == 0, f"티라: 35도·선글라스 유지 {tt}")
@@ -487,12 +513,14 @@ def t_agent_preview(b, ctx, m):
     check(p.input_value("#ssP") == "aB3$ 긴비밀번호", "연출 중에도 비밀번호 입력이 됨")
     p.focus("#ssU"); frames(p); check(kbs(p)["giltong"] == "ag_out", "나오면 선글라스 거두기")
     # 복귀 중 길통이가 24° 이하(정면 전)로 내려온 바로 그 프레임에 다시 들어옴(페이지 안에서 — 시험 컴퓨터가 느려도 '빠른 재진입'이 유지됨)
-    p.evaluate("""async()=>{const P=document.getElementById('ssP'),fr=()=>new Promise(r=>requestAnimationFrame(r));
-      for(let i=0;i<300;i++){await fr();const f=__ssIntro.info().last.giltong.fp,a=f.gt_verified_torso_legs.op>.5?[12,24,35][f.gt_verified_torso_legs.img]:0;if(a&&a<=24)break;}
-      P.focus();await fr();await fr();}""")
+    REENTER = """async()=>{const P=document.getElementById('ssP'),fr=()=>new Promise(r=>requestAnimationFrame(r));let hit=false;
+      for(let i=0;i<300;i++){await fr();const f=__ssIntro.info().last.giltong.fp,a=f.gt_verified_torso_legs.op>.5?[12,24,35][f.gt_verified_torso_legs.img]:0;if(a&&a<=24){hit=true;break;}if(!a&&i>3)break;}
+      P.focus();await fr();await fr();return hit;}"""
+    for _try in range(3):   # 바쁜 시험 컴퓨터가 0.14초짜리 복귀 단계를 건너뛰어 '빠른 재진입' 순간을 놓치면, 다시 대기 자세가 된 뒤 한 번 더
+        if p.evaluate(REENTER): break
+        p.wait_for_timeout(2600); p.focus("#ssU"); frames(p)
     k = kbs(p); g = p.evaluate(G0)
-    cg = p.evaluate("(()=>{const f=__ssIntro.info().last.chumdani.fp;return +(f.k_agentGlasses.op>.5)})()")
-    check(k["chumdani"] in ("ag_in", "ag_hold") and cg == 1, f"(예전 친구 첨다니) 나오는 중에 다시 들어오면 처음부터가 아니라 경계 자세(선글라스 쓴 채)로 이어 감 {k['chumdani']} {cg}")
+    c3 = p.evaluate(CH0); check(k["chumdani"] == "ag_in" and c3["rig"] == 1 and c3["glass"] == 0, f"첨다니: 나오는 중에 다시 들어오면 돌던 중간에서 이어 감 {k['chumdani']} {c3}")
     t2 = p.evaluate(T0); check(k["tira"] == "ag_in" and t2["rig"] == 1 and t2["glass"] == 0, f"티라: 나오는 중에 다시 들어오면 돌던 중간에서 이어 감 {k['tira']} {t2}")
     t3 = p.evaluate(TT0); check(k["tarotaro"] == "ag_in" and t3["rig"] == 1 and t3["glass"] == 0, f"타로타로: 나오는 중에 다시 들어오면 돌던 중간에서 이어 감 {k['tarotaro']} {t3}")
     d2 = p.evaluate(D0); check(k["doroduck"] == "ag_in" and d2["rig"] == 1 and d2["glass"] == 0, f"도로덕: 나오는 중에 다시 들어오면 돌던 중간에서 이어 감 {k['doroduck']} {d2}")
@@ -505,7 +533,7 @@ def t_agent_preview(b, ctx, m):
     d = p.evaluate(D0); dd = p.evaluate("(()=>{const f=__ssIntro.info().last.doroduck.fp;return [+(f.beak.op>.5),+(f.sign.op>.5)]})()")
     check(d["rig"] == 0 and d["eye"] == 1 and dd == [1, 0], f"도로덕 원래 모습(새 리그 숨김, 팻말은 로그인 대기 때처럼 숨김) {d} {dd}")
     tq = p.evaluate(TT0); check(tq["rig"] == 0 and tq["me"] == 1 and tq["body"] == 1, f"타로타로 원래 모습(새 리그 숨김, 마우스용 점눈 포함) {tq}")
-    v = p.evaluate(V0); check(v["ch"][0] == 0 and v["ch"][1] == 0 and v["ch"][2] == 1, f"첨다니 원래 모습 {v}")
+    v = p.evaluate(CH0); check(v["rig"] == 0 and v["body"] == 1 and v["eye"] == 1 and v["oldWifi"] == 1, f"첨다니 원래 모습(새 리그 숨김, 원래 눈·와이파이) {v}")
     tt = p.evaluate(T0); check(tt["rig"] == 0 and tt["head"] == 1 and tt["headImg"] == 0 and tt["orig"] == 1 and tt["face"] == 1, f"티라 원래 모습(새 리그 숨김, 마우스용 얼굴 포함) {tt}")
     bx = {c: p.evaluate(GBOX, c) for c in ORDER}
     SH = p.evaluate("__ssIntro.cast.map(c=>c.shift)")
@@ -534,9 +562,11 @@ def t_agent_reduced(b, ctx, m):
     check(t == [2, 1, 0, 0], f"움직임 줄이기: 티라도 35도·선글라스·몸·꼬리 기울기 0 {t}")
     q = p.evaluate("(()=>{const f=__ssIntro.info().last.tarotaro.fp;return [f.tarotaro_verified_body.img,+(f.tarotaro_verified_glasses.op>.5),+(f.tarotaro_verified_pose.rot).toFixed(2)]})()")
     check(q == [2, 1, 0], f"움직임 줄이기: 타로타로도 35도·선글라스·몸 기울기 0 {q}")
+    c = p.evaluate("(()=>{const f=__ssIntro.info().last.chumdani.fp,P='chumdani_verified_';return [f[P+'body'].img,+(f[P+'glasses'].op>.5),+(f[P+'pose'].rot).toFixed(2),['weak','dot','inner','outer'].map(k=>+(f[P+'wifi_'+k].op>.5)).join('')]})()")
+    check(c == [2, 1, 0, "0111"], f"움직임 줄이기: 첨다니도 35도·선글라스·기울기 0·와이파이 강함 {c}")
     rc.close()
 
-TESTS = [t_off_switch, t_preview_intro_then_login, t_single_move, t_skip, t_auto_login_no_intro, t_intro_files_missing, t_loader_missing, t_password_no_reaction, t_reduced_motion, t_mouse_giltong, t_mouse_blocked, t_mouse_all, t_keys_type, t_keys_password, t_keys_reduced_off, t_keys_mobile_lock, t_tap_all, t_tap_rules, t_tap_reduced, t_agent_preview, t_agent_rig_turn, t_agent_reduced]
+TESTS = [t_off_switch, t_preview_intro_then_login, t_single_move, t_skip, t_auto_login_no_intro, t_intro_files_missing, t_loader_missing, t_password_no_reaction, t_reduced_motion, t_mouse_giltong, t_mouse_blocked, t_mouse_all, t_keys_type, t_keys_password, t_keys_reduced_off, t_keys_mobile_lock, t_tap_all, t_tap_rules, t_tap_reduced, t_agent_preview, t_agent_rig_turn, t_agent_wifi, t_agent_reduced]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()
