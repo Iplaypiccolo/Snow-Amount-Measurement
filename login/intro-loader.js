@@ -20,7 +20,7 @@
   var BASE = 'login/intro/', LOAD_LIMIT = 5000;
   var MOUSE = !/[?&]mouse=off(&|$)/.test(root.location.search);   // 친구들 마우스 반응: 2026-10-19 기본으로 켬. 비상용 ?mouse=off 면 끔
   var KEYS = !/[?&]keys=off(&|$)/.test(root.location.search);     // 친구들 키보드 반응(아이디 입력·비밀번호 칸): 2026-10-20. 비상용 ?keys=off 면 끔
-  var AGENT = /[?&]agent=preview(&|$)/.test(root.location.search); // 비밀번호 요원 모드(2026-10-21, 길통이만 요원 그림): 미리보기 주소에서만
+  var AGENT = !/[?&]agent=off(&|$)/.test(root.location.search); // 비밀번호 요원 모드: 2026-10-22 기본으로 켬(사용자 결정, 여섯 친구 검수 확정 리그). 비상용 ?agent=off 면 예전 '눈 가리기'
   var TAP = !/[?&]tap=off(&|$)/.test(root.location.search);       // 친구 터치·클릭 반응(톡 하면 큰 동작): 2026-10-20. 비상용 ?tap=off 면 끔
   var reduce = false; try { reduce = root.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
   var mobile = Math.min(root.innerWidth, (root.screen && root.screen.width) || 9999) < 700;

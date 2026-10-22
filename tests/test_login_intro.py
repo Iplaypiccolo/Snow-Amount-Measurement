@@ -129,14 +129,15 @@ def t_reduced_motion(b, ctx, m):
     p.keyboard.press("Escape"); p.wait_for_selector("#ssIntro.rest", state="attached", timeout=2000); rc.close()
 
 MOUSE = T.URL                       # 2026-10-19부터 마우스 반응 기본
+AGENT_OFF = T.URL + "?agent=off"    # 비상용: 비밀번호 요원 모드 끔(예전 '눈 가리기')
 GBOX = """(id)=>{const CP=CharoPet,I=__ssIntro,c=I.cast.find(x=>x.id===id),L=I.info().last[id],cv=document.querySelector('#ssIntro canvas'),k=cv.width/cv.clientWidth,r=cv.getBoundingClientRect();
   const W=CP.worldMatrices(c.P,L.fp);let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;c.P.parts.forEach(pt=>{const f=L.fp[pt.id];if(!f||f.op<=.01)return;const v=pt.images[f.img]||pt.images[0];if(!v)return;const m=CP.mul(L.view,W[pt.id]);
   [[v.x,v.y],[v.x+v.w,v.y+v.h],[v.x,v.y+v.h],[v.x+v.w,v.y]].forEach(q=>{const a=CP.apply(m,q[0],q[1]);x0=Math.min(x0,a[0]);x1=Math.max(x1,a[0]);y0=Math.min(y0,a[1]);y1=Math.max(y1,a[1])})});return [r.left+x0/k,r.top+y0/k,r.left+x1/k,r.top+y1/k]}"""
 
-def open_mouse(ctx, m):
+def open_mouse(ctx, m, url=None):
     p = ctx.new_page(); p.set_viewport_size({"width": 1440, "height": 900}); p.on("pageerror", lambda e: errors.append(str(e)))
     p.route("**/*", T.route); p.route(SBM.SB + "/**", m.handle)
-    p.goto(MOUSE); p.wait_for_selector("#ssGate", state="attached", timeout=20000)
+    p.goto(url or MOUSE); p.wait_for_selector("#ssGate", state="attached", timeout=20000)
     wait_js(p, "!!(window.__ssIntro && __ssIntro.info().state === 'play')"); p.keyboard.press("Escape")
     wait_js(p, "__ssIntro.info().state === 'wait'", 4000); p.wait_for_timeout(300)
     return p
@@ -251,7 +252,7 @@ def t_keys_type(b, ctx, m):
 
 def t_keys_password(b, ctx, m):
     """비밀번호 칸: 첫 프레임에 여섯 모두 감은 눈(타자 도중이어도) → 3초 반복 자세 / 입력 글자 수와 무관 / 마우스 반응·시선 없음 / 나오면 0.65초 뒤 눈 뜸"""
-    p = open_mouse(ctx, m); p.mouse.move(700, 60)
+    p = open_mouse(ctx, m, AGENT_OFF); p.mouse.move(700, 60)   # 2026-10-22 요원 모드가 기본 → 예전 '눈 가리기'는 비상용 ?agent=off 에서 확인
     check(p.evaluate(FACE) == OPEN, f"기본 얼굴(눈 뜸): {p.evaluate(FACE)}")
     p.click("#ssU"); p.keyboard.type("ab"); p.wait_for_timeout(400)
     p.focus("#ssP"); frames(p)
@@ -276,7 +277,7 @@ def t_keys_password(b, ctx, m):
 
 def t_keys_reduced_off(b, ctx, m):
     """움직임 줄이기: 타자 동작 없음, 비밀번호 때 감은 눈(그림만, 자세는 그대로) / ?keys=off: 키보드 반응 없음(마우스는 그대로)"""
-    rc = b.new_context(reduced_motion="reduce"); p = open_mouse(rc, m)
+    rc = b.new_context(reduced_motion="reduce"); p = open_mouse(rc, m, AGENT_OFF)
     p.click("#ssU"); p.keyboard.type("abc"); frames(p); check(all(v is None for v in kbs(p).values()), "움직임 줄이기: 타자 동작 없음")
     arm = "__ssIntro.info().last.giltong.fp.armL.rot"; r0 = p.evaluate(arm)
     p.focus("#ssP"); p.wait_for_timeout(900); fc = p.evaluate(FACE)
@@ -336,7 +337,7 @@ def t_tap_all(b, ctx, m):
     mc.close()
 
 def t_tap_rules(b, ctx, m):
-    """같은 친구 연타는 다시 시작·예약 없음, 다른 친구는 동시에 / 12px 넘게 쓸면 취소 / 오래 누르면 취소 / 입력칸 누르기는 무시 / 비밀번호 칸에 있으면 톡 무시 / ?tap=off"""
+    """같은 친구 연타는 다시 시작·예약 없음, 다른 친구는 동시에 / 12px 넘게 쓸면 취소 / 오래 누르면 취소 / 입력칸 누르기는 무시 / 비밀번호 칸에 있으면 톡 무시(요원 장면 유지) / ?tap=off"""
     p = open_mouse(ctx, m); p.mouse.move(700, 60)
     x, y = center(p, "giltong"); x2, y2 = center(p, "doroduck")
     p.mouse.click(x, y); frames(p); check(tsd(p)["giltong"] == "mt_tap", "클릭(톡)으로 큰 동작")
@@ -360,7 +361,8 @@ def t_tap_rules(b, ctx, m):
     p.wait_for_timeout(400)
     p.click("#ssU"); frames(p); check(all(v is None for v in tsd(p).values()), "입력칸 누르기는 친구 톡이 아님")
     p.focus("#ssP"); p.wait_for_timeout(300); p.mouse.click(x, y); frames(p)
-    check(all(v is None for v in tsd(p).values()) and p.evaluate(FACE)["giltong"][:2] == [1, 1], "비밀번호 칸에 있으면 톡 무시·눈 감은 그대로")
+    k = kbs(p)   # 친구를 누르면 보통 웹 페이지처럼 비밀번호 칸에서 포커스가 빠져 요원 장면이 복귀(ag_out*)로 감 — 이 시험은 '톡 반응이 시작되지 않음'만 확인
+    check(all(v is None for v in tsd(p).values()) and str(k["giltong"]).startswith("ag_"), f"비밀번호 칸에 있으면 톡 무시(톡 동작 없이 요원 장면/복귀만) {k}")
     p.click("#ssU"); p.wait_for_timeout(900)
     q = ctx.new_page(); q.set_viewport_size({"width": 1440, "height": 900}); q.route("**/*", T.route); q.route(SBM.SB + "/**", m.handle)
     q.goto(T.URL + "?tap=off"); q.wait_for_selector("#ssGate", state="attached", timeout=20000)
@@ -541,9 +543,11 @@ def t_agent_preview(b, ctx, m):
     p.wait_for_timeout(700)
     check(not p.evaluate("document.documentElement.classList.contains('ss-agent')"), "어두운 장면 꺼짐")
     G.typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".topnav", state="visible")
-    # 기본 주소에서는 요원 모드 없음
+    # 기본 주소에서도 요원 모드, 비상용 ?agent=off 는 예전 동작
     q = open_mouse(ctx, m); q.focus("#ssP"); q.wait_for_timeout(1500)
-    check(kbs(q)["giltong"] == "kb_private_hold" and not q.evaluate("document.documentElement.classList.contains('ss-agent')"), "기본 주소는 지금처럼(요원 모드 없음)")
+    check(kbs(q)["giltong"] in ("ag_in", "ag_hold") and q.evaluate("document.documentElement.classList.contains('ss-agent')"), f"기본 주소에서도 요원 모드(2026-10-22 기본으로 켬) {kbs(q)}")
+    q2 = open_mouse(ctx, m, AGENT_OFF); q2.focus("#ssP"); q2.wait_for_timeout(1500)
+    check(kbs(q2)["giltong"] == "kb_private_hold" and not q2.evaluate("document.documentElement.classList.contains('ss-agent')"), "비상용 ?agent=off 면 예전 '눈 가리기'(어두운 장면 없음)")
 
 def t_agent_reduced(b, ctx, m):
     """요원 모드 + 움직임 줄이기: 비밀번호 칸에 들어가면 완성 자세(선글라스·사선 대형)로 바로, 숫자는 멈춤"""

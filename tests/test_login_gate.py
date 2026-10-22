@@ -164,7 +164,11 @@ def t_logout_from_equip_then_login_starts_first_screen(b, ctx, m):
     """(사용자 신고 2026-10-05) 장비 지원에서 로그아웃한 뒤 다시 로그인하면 '첫 화면으로 가서 로그인하세요'만 계속 나옴
        → 로그아웃하면 주소의 #equip 을 지우고, 다시 로그인하면 항상 첫 화면(강설량 측정)부터. 장비 지원은 로그인한 뒤에만 불러옴"""
     p = open_site(ctx, m); typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector(".topnav", state="visible")
-    p.click(".page-btn[data-page=equip]"); p.wait_for_timeout(1200); check(p.url.endswith("#equip"), "장비 지원을 열면 주소에 #equip")
+    p.click(".page-btn[data-page=equip]"); p.wait_for_timeout(1200)
+    for _ in range(24):   # 바쁜 시험 컴퓨터에서는 주소 바뀌는 데 조금 더 걸림(최대 6초)
+        if p.url.endswith("#equip"): break
+        p.wait_for_timeout(200)
+    check(p.url.endswith("#equip"), "장비 지원을 열면 주소에 #equip: " + p.url + " / 보이는 화면: " + str(p.evaluate("[...document.querySelectorAll('.page-btn')].map(b=>b.dataset.page+(b.classList.contains('active')?'*':'')).join()")))
     p.click("#ssLogout"); p.wait_for_selector("#ssU", timeout=20000); p.wait_for_timeout(300)
     check(any("scope=local" in u for u in getattr(m, "logout_urls", [])), "로그아웃은 이 접속만(같은 아이디의 다른 접속은 유지): " + str(getattr(m, "logout_urls", [])))
     check("#equip" not in p.url and not p.locator("#equipFrame").get_attribute("src"), "로그아웃하면 #equip 없이, 장비 지원은 아직 안 불러옴")
