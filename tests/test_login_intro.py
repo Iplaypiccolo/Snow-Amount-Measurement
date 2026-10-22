@@ -394,7 +394,7 @@ RIG_SCEN = """async ([cid, R, exitA, exitGlass, reA]) => {
 
 def t_agent_rig_turn(b, ctx, m):
     """검수 확정 리그(길통이·차로차로): 정면→12→24→35 가 그림 파츠 여섯 동시 교체, 원래 파츠와 겹쳐 보이지 않음 / 12·24·35(안경 전)·안경 나타나는 중에 떠나면
-       그 각도에서 아래로만 복귀(35도로 튀지 않음), 복귀 중 다시 들어오면 그 각도에서 위로 이어 감 / 각도가 바뀌는 프레임에는 팔·날개·몸 기울기가 0"""
+       그 각도에서 아래로만 복귀(35도로 튀지 않음), 복귀 중 다시 들어오면 그 각도에서 위로 이어 감 / 12°·24°가 보이는 모든 프레임에서 팔·날개·몸 기울기가 0(움직임은 35°에서만)"""
     p = ctx.new_page(); p.set_viewport_size({"width": 1440, "height": 900}); p.on("pageerror", lambda e: errors.append(str(e)))
     p.route("**/*", T.route); p.route(SBM.SB + "/**", m.handle)
     p.goto(T.URL + "?agent=preview"); p.wait_for_selector("#ssGate", state="attached", timeout=20000)
@@ -420,8 +420,8 @@ def t_agent_rig_turn(b, ctx, m):
             ra = [r["a"] for r in rec if r.get("reAt")][0]
             re2 = ph("re"); check(re2[:1] == [ra] and mono(re2, True) and re2[-1:] == [35], f"{name}: 다시 들어오면 {ra}°에서 위로 이어 감 {sorted(set(re2))}")
             o2 = ph("out2"); check(o2[:1] == [35] and mono(o2, False), f"{name}: 복귀 35→24→12→정면")
-        sw = [r for i, r in enumerate(rec) if i and r["a"] != rec[i - 1]["a"] and r["a"]]
-        check(all(r["arm"] < 0.5 for r in sw), f"{name}: 각도가 바뀌는 프레임에는 움직임이 0 {[round(r['arm'], 1) for r in sw]}")
+        mid = [r for r in rec if r["a"] in (12, 24)]   # 패키지 규칙: 움직임(팔·날개·몸 기울기)은 35°에서만 → 12°·24° 그림이 보이는 모든 프레임에서 0
+        check(all(r["arm"] < 0.5 for r in mid), f"{name}: 12°·24°가 보이는 프레임에는 움직임이 0 {sorted(set(round(r['arm'], 1) for r in mid))}")
         if glass:
             gmax = max(r["g"] for r in rec if r["ph"] == "out"); gex = [r["g"] for r in rec if r["ph"] == "in"][-1]
             check(gmax <= gex + 0.02, f"{name}: 안경이 반쯤일 때 떠나도 더 진해지지 않음(떠날 때 {gex}, 복귀 중 최대 {gmax})")

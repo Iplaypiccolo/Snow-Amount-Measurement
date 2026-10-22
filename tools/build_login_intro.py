@@ -40,6 +40,50 @@ def webp(uri, fit=None):
     return new if len(new) < len(uri) else uri
 
 
+def crop_rig(p, rig, side=900):
+    """검수 확정 리그 그림(1254×1254 전체 캔버스, 94% 안팎이 투명 여백)을 보이는 부분만 잘라 넣고, 그 그림의 그리기 사각형(drawRect)을
+    잘라 낸 만큼 옮기고 줄임 → 화면에 놓이는 자리·크기는 똑같고, 브라우저가 매 프레임 처리하는 넓이만 약 1/15 로(2026-10-22 렉 원인).
+    원본(차로차로 저장소)의 전체 캔버스 그림·좌표는 그대로. 줄이는 비율은 예전과 같음(캔버스 긴 변 side px 기준)."""
+    done = {}
+    for pt in p['parts']:
+        for v in pt['images']:
+            a = v['asset']
+            if a not in rig or not p['assets'][a].startswith('data:image/png'): continue
+            if a not in done:
+                im = Image.open(io.BytesIO(base64.b64decode(p['assets'][a].split(',', 1)[1]))).convert('RGBA'); W, H = im.size
+                bb = im.getchannel('A').getbbox()
+                if not bb: done[a] = None; continue
+                k = min(1.0, side / max(W, H)); pad = 2
+                x0, y0, x1, y1 = max(0, bb[0] - pad), max(0, bb[1] - pad), min(W, bb[2] + pad), min(H, bb[3] + pad)
+                sub = im.crop((x0, y0, x1, y1))
+                if k < 1: sub = sub.resize((max(1, round((x1 - x0) * k)), max(1, round((y1 - y0) * k))), Image.LANCZOS)
+                b = io.BytesIO(); sub.save(b, 'WEBP', quality=92, method=6)
+                p['assets'][a] = 'data:image/webp;base64,' + base64.b64encode(b.getvalue()).decode()
+                done[a] = (x0 / W, y0 / H, (x1 - x0) / W, (y1 - y0) / H)
+            r = done[a]
+            if r: v['x'], v['y'], v['w'], v['h'] = v['x'] + r[0] * v['w'], v['y'] + r[1] * v['h'], r[2] * v['w'], r[3] * v['h']
+
+
+def crop_sparse(p, min_side=256, max_share=0.6):
+    """그 밖의 큰 그림(예전 요원 그림 등) 중 보이는 부분이 넓이의 60% 미만인 것도 같은 방식으로 잘라 냄(자리·크기는 drawRect 로 그대로)."""
+    done = {}
+    for pt in p['parts']:
+        for v in pt['images']:
+            a = v['asset']; u = p['assets'].get(a, '')
+            if len(u) < 300: continue   # 1×1 자리 채움
+            if a not in done:
+                im = Image.open(io.BytesIO(base64.b64decode(u.split(',', 1)[1]))).convert('RGBA'); W, H = im.size
+                bb = im.getchannel('A').getbbox(); done[a] = None
+                if bb and max(W, H) >= min_side:
+                    pad = 2; x0, y0, x1, y1 = max(0, bb[0] - pad), max(0, bb[1] - pad), min(W, bb[2] + pad), min(H, bb[3] + pad)
+                    if (x1 - x0) * (y1 - y0) < max_share * W * H:
+                        b = io.BytesIO(); im.crop((x0, y0, x1, y1)).save(b, 'WEBP', quality=92, method=6)
+                        p['assets'][a] = 'data:image/webp;base64,' + base64.b64encode(b.getvalue()).decode()
+                        done[a] = (x0 / W, y0 / H, (x1 - x0) / W, (y1 - y0) / H)
+            r = done[a]
+            if r: v['x'], v['y'], v['w'], v['h'] = v['x'] + r[0] * v['w'], v['y'] + r[1] * v['h'], r[2] * v['w'], r[3] * v['h']
+
+
 def h8(p): return hashlib.md5(p.read_bytes()).hexdigest()[:8]
 
 
@@ -70,14 +114,16 @@ def main():
         drawn = {}
         for pt in p['parts']:
             for v in pt['images']: drawn[v['asset']] = max(drawn.get(v['asset'], 0), v['w'])
-        rig = set()   # 검수 확정 리그(1254×1254 전체 캔버스 그림): 긴 변 900px 로 줄임(캔버스 통째로 줄여 좌표는 그대로, 여백 자르지 않음)
+        rig = set()   # 검수 확정 리그(1254×1254 전체 캔버스 그림): crop_rig 가 보이는 부분만 잘라 900px 비율로 줄이고 drawRect 로 자리 그대로
         for pt in p['parts']:
             if pt['id'] in ((p.get('agent') or {}).get('rig') or {}).get('parts', []): rig.update(v['asset'] for v in pt['images'])
+        crop_rig(p, rig)   # 투명 여백 잘라 내고 자리는 drawRect 로 그대로(렉 원인 해결)
         def fit(k):   # 요원 그림: 그림 좌표 크기(원본 파츠와 같은 밀도), 35도 새 그림(cam4_)은 긴 변 700px 까지(로그인 화면에서 친구 키 최대 수백 px)
-            if k in rig: return 900 if drawn.get(k, 0) else None   # 검수 확정 리그: 900px(PC 화면에서 캔버스가 약 440 CSS px → 고해상도 화면 약 880px)
+            if k in rig: return None   # 검수 확정 리그: crop_rig 가 이미 잘라·줄여 넣음(캔버스 1254 → 900px 비율, PC 화면에서 캔버스가 약 440 CSS px → 고해상도 화면 약 880px)
             if k.startswith('cam4_'): return 700 if drawn.get(k, 0) else None
             return drawn.get(k) if '_agent_' in k else None
         p['assets'] = {k: webp(v, fit(k)) if v.startswith('data:image/png') else v for k, v in p['assets'].items()}
+        crop_sparse(p)   # 다른 큰 그림도 투명 여백 잘라 냄(렉 원인)
         out = OUT / 'chars' / (cid + '.json')
         out.write_text(json.dumps(p, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
         V[cid] = h8(out); total += out.stat().st_size

@@ -23,6 +23,7 @@ html.ss-v2 body.authed #ssScene{display:none}
 html.ss-v2 .ss-agent-bg{position:absolute;inset:0;opacity:0;transition:opacity .45s var(--glide);background:radial-gradient(90% 70% at 30% 75%,#0d1f17 0%,#050b08 70%)}
 html.ss-v2 .ss-agent-bg canvas{position:absolute;inset:0;width:100%;height:100%}
 html.ss-v2.ss-agent .ss-agent-bg{opacity:1}
+html.ss-v2.ss-agent .ss-snow{visibility:hidden;transition:visibility 0s linear .45s}   /* 2026-10-22 렉 줄이기: 어두운 배경이 다 덮은 뒤(0.45초) 눈 층(전체 화면 그림자 필터)을 숨김, 나오면 바로 보임 */
 html.ss-v2 .ss-snow{position:absolute;inset:0;width:100%;height:100%;filter:drop-shadow(0 1px 1.5px rgba(82,106,124,.35))}
 
 /* 로그인 잠금 화면(auth/gate.js 의 상자 구조는 그대로, 모양만) */

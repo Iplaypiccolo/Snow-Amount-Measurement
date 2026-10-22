@@ -16,7 +16,7 @@
   var doc = root.document, html = doc.documentElement;
   html.classList.add('ss-ready');   // 이 파일이 실행됨 → login-v2.css 의 '잠깐 가리기'를 품(아래 CSS 설명)
   if (/[?&]intro=off(&|$)/.test(root.location.search)) return;   // 비상용: 주소 끝에 ?intro=off 를 붙이면 예전 로그인 화면(인트로 없음)
-  var V = /*@@V@@*/{"charo-pet.js":"0f53decd","charo-intro.js":"f1d248ad","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"da96174b","charocharo":"69bbff47","chumdani":"22fbc250","giltong":"9d4cef84","tira":"f36478a1","tarotaro":"e19cac7e","doroduck":"3b71ccaf","fx":"99ec5eb7"};
+  var V = /*@@V@@*/{"charo-pet.js":"0f53decd","charo-intro.js":"f1d248ad","welcome-fx.js":"5ded5479","intro-cast.js":"9d32f06a","charo-mouse.js":"da96174b","charocharo":"fae19817","chumdani":"423a8fd0","giltong":"23adfb93","tira":"8e3f422a","tarotaro":"3e9cae4b","doroduck":"43b1c2c7","fx":"99ec5eb7"};
   var BASE = 'login/intro/', LOAD_LIMIT = 5000;
   var MOUSE = !/[?&]mouse=off(&|$)/.test(root.location.search);   // 친구들 마우스 반응: 2026-10-19 기본으로 켬. 비상용 ?mouse=off 면 끔
   var KEYS = !/[?&]keys=off(&|$)/.test(root.location.search);     // 친구들 키보드 반응(아이디 입력·비밀번호 칸): 2026-10-20. 비상용 ?keys=off 면 끔
@@ -186,10 +186,11 @@
   function agentScene(ov) {
     var bg = doc.createElement('div'); bg.className = 'ss-agent-bg'; bg.innerHTML = '<canvas></canvas>';
     scene.appendChild(bg);
-    var cv = bg.querySelector('canvas'), ctx = cv.getContext('2d'), raf = 0, on = false, offAt = 0, cols = [], w = 0, h = 0, dpr = 1, t0 = 0, seed = 11;
+    var cv = bg.querySelector('canvas'), ctx = cv.getContext('2d'), raf = 0, on = false, offAt = 0, cols = [], w = 0, h = 0, dpr = 1, t0 = 0, seed = 11, acc = 0, FILL = {};
+    // 2026-10-22 렉 줄이기: 장식 숫자는 표준 해상도(dpr 1)·초당 30번만 다시 그리고, 글자마다 만들던 색 문자열을 미리 만들어 둠(모양은 같음)
     function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
     function fit() {
-      dpr = Math.min(2, root.devicePixelRatio || 1); w = cv.clientWidth; h = cv.clientHeight; cv.width = w * dpr; cv.height = h * dpr; cols = []; seed = 11;
+      dpr = 1; w = cv.clientWidth; h = cv.clientHeight; cv.width = w * dpr; cv.height = h * dpr; cols = []; seed = 11;
       for (var x = 8; x < w; x += 22) cols.push({ x: x, y: rnd() * h, v: 26 + rnd() * 46, n: 6 + Math.floor(rnd() * 12), d: [] });
       cols.forEach(function (c) { for (var i = 0; i < 24; i++) c.d.push(Math.floor(rnd() * 10)); });
     }
@@ -197,17 +198,18 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h); ctx.font = '600 14px ui-monospace,Consolas,monospace'; ctx.textAlign = 'center';
       cols.forEach(function (c) {
         c.y -= c.v * dt; if (c.y < -c.n * 18) c.y = h + 20;
-        for (var i = 0; i < c.n; i++) { var a = i === 0 ? 0.85 : 0.55 * (1 - i / c.n); ctx.fillStyle = 'rgba(' + (i ? '64,200,120,' : '170,255,200,') + a.toFixed(3) + ')'; ctx.fillText(c.d[((i + Math.floor(c.y / 18)) % 24 + 24) % 24], c.x, c.y + i * 18); }
+        var F = FILL[c.n] || (FILL[c.n] = (function () { var o = []; for (var j = 0; j < c.n; j++) o.push('rgba(' + (j ? '64,200,120,' : '170,255,200,') + (j === 0 ? 0.85 : 0.55 * (1 - j / c.n)).toFixed(3) + ')'); return o; })());
+        for (var i = 0; i < c.n; i++) { ctx.fillStyle = F[i]; ctx.fillText(c.d[((i + Math.floor(c.y / 18)) % 24 + 24) % 24], c.x, c.y + i * 18); }
       });
     }
     function frame(now) {
       var dt = t0 ? Math.min(0.05, (now - t0) / 1000) : 0; t0 = now;
       if (!on && now - offAt > 600) { raf = 0; t0 = 0; return; }
-      if (!doc.hidden) draw(dt);
+      acc += dt; if (!doc.hidden && acc >= 1 / 31) { draw(acc); acc = 0; }   // 초당 30번(움직이는 거리는 지난 시간만큼 그대로)
       raf = root.requestAnimationFrame(frame);
     }
     function set(v) {
-      if (v === on) return; on = v;
+      if (v === on) return; on = v; root.__ssAgentCover = v ? root.performance.now() + 500 : 0;   // 어두운 배경이 다 나타난 시각(0.45초 전환 뒤) → 그때부터 그 아래 눈은 안 그림
       html.classList.toggle('ss-agent', v);
       if (v) { if (!w) fit(); if (reduce) draw(0); else if (!raf) raf = root.requestAnimationFrame(frame); } else offAt = root.performance.now();
     }
@@ -237,6 +239,7 @@
       raf = root.requestAnimationFrame(frame);
       if (doc.hidden) return;
       var dt = t0 ? Math.min(0.05, (now - t0) / 1000) : 0; t0 = now;
+      if (root.__ssAgentCover && now > root.__ssAgentCover) return;   // 요원 모드: 불투명한 어두운 배경이 덮고 있어 안 보임 → 그리지 않음(렉 줄이기). 나오면 그 자리에서 다시
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
       for (var i = 0; i < flakes.length; i++) {
         var f = flakes[i]; f.y += f.v * dt / h; if (f.y > 1.02) { f.y = -0.02; f.x = rnd(); }
