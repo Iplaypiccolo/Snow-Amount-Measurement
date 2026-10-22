@@ -371,9 +371,10 @@ def t_tap_reduced(b, ctx, m):
 
 # 검수 확정 리그(친구별 패키지): 그림 파츠(각도별 그림 0=12°,1=24°,2=35°), 보임 판단 파츠, 움직이는 파츠(각도가 바뀔 때 0 이어야 함)
 RIGS = {"giltong": {"pfx": "gt_verified_", "img": ["cape", "arm_far", "torso_legs", "head_hat", "arm_near", "glasses"], "main": "torso_legs", "move": ["arm_near", "root", "cape"]},
-        "charocharo": {"pfx": "charo_verified_", "img": ["wing_far", "wing_near", "wheel_far", "wheel_near", "body", "glasses"], "main": "body", "move": ["wing_near", "wing_far", "hull"]}}
+        "charocharo": {"pfx": "charo_verified_", "img": ["wing_far", "wing_near", "wheel_far", "wheel_near", "body", "glasses"], "main": "body", "move": ["wing_near", "wing_far", "hull"]},
+        "doroduck": {"pfx": "doro_verified_", "img": ["wing_far", "foot_far", "foot_near", "body", "wing_near", "glasses"], "main": "body", "move": ["wing_near", "wing_far", "hull"]}}
 RIG0 = """([cid, R]) => {const f=__ssIntro.info().last[cid].fp,I=R.img.map(k=>R.pfx+k),on=f[R.pfx+R.main].op>.5;
-  return {rig:+on,ang:[...new Set(I.map(i=>f[i].img))],glass:+(f[R.pfx+'glasses'].op>.5),eye:+(f.eyeL.op>.5),eyeImg:f.eyeL.img,mouth:+(f.mouth.op>.5),
+  return {rig:+on,ang:[...new Set(I.map(i=>f[i].img))],glass:+(f[R.pfx+'glasses'].op>.5),eye:+(f.eyeL.op>.5),eyeImg:f.eyeL.img,mouth:f.mouth?+(f.mouth.op>.5):0,
   old:Object.keys(f).filter(k=>!k.startsWith(R.pfx)&&f[k].op>.05).length}}"""
 # 친구 하나의 각도 장면을 프레임마다 기록하며, 정해 둔 각도가 '보이는 바로 그 프레임'에 비밀번호 칸을 떠나고(exitA) 복귀 중 정해 둔 각도에서 다시 들어옴(reA). 시간 운에 기대지 않음
 RIG_SCEN = """async ([cid, R, exitA, exitGlass, reA]) => {
@@ -385,11 +386,11 @@ RIG_SCEN = """async ([cid, R, exitA, exitGlass, reA]) => {
   for (let i=0;i<900;i++) { await frame(); const s=st(); s.ph=ph; rec.push(s);
     if (ph==='in' && s.a>=exitA && (!exitGlass || s.g>0.2)) { U.focus(); ph='out'; s.exitAt=1; }
     else if (ph==='out' && reA!=null && s.a>0 && s.a<=reA) { P.focus(); ph='re'; s.reAt=1; }
-    else if (ph==='out' && reA==null && s.a===0) ph='done';
+    else if (ph==='out' && s.a===0) { if (reA!=null) rec.missed=1; ph='done'; }   // 복귀가 끝날 때까지 다시 들어올 각도가 안 보였으면(느린 컴퓨터가 0.14초 단계를 건너뜀) 다시 시도
     else if (ph==='re' && s.a===35 && s.g>0.95 && s.arm<0.5) { U.focus(); ph='out2'; }
     else if (ph==='out2' && s.a===0) ph='done';
     if (ph==='done') break; }
-  return rec; }"""
+  return {rec, missed: !!rec.missed}; }"""
 
 def t_agent_rig_turn(b, ctx, m):
     """검수 확정 리그(길통이·차로차로): 정면→12→24→35 가 그림 파츠 여섯 동시 교체, 원래 파츠와 겹쳐 보이지 않음 / 12·24·35(안경 전)·안경 나타나는 중에 떠나면
@@ -405,7 +406,10 @@ def t_agent_rig_turn(b, ctx, m):
       for exitA, glass, reA, nm in ((12, False, None, "12도"), (24, False, None, "24도"), (12, False, 12, "12도→12도 재진입"), (24, False, 12, "24도→12도 재진입"),
                                     (35, False, 24, "35도(안경 전)→24도 재진입"), (35, True, None, "안경 나타나는 중")):
         name = f"{cid} {nm}"
-        rec = p.evaluate(RIG_SCEN, [cid, R, exitA, glass, reA])
+        for _try in range(3):   # 느린 컴퓨터에서 0.14~0.15초짜리 단계 프레임이 건너뛰어지면 그 장면만 다시
+            got = p.evaluate(RIG_SCEN, [cid, R, exitA, glass, reA])
+            if not got["missed"]: break
+        rec = got["rec"]; check(not got["missed"], f"{name}: 다시 들어올 각도({reA}°) 프레임을 세 번 다 놓침(컴퓨터가 너무 느림)")
         ph = lambda k: [r["a"] for r in rec if r["ph"] == k]
         check(rec[-1]["a"] == 0 and len(rec) < 900, f"{name}: 장면 끝까지 진행 {[(r['ph'], r['a']) for r in rec[-5:]]}")
         check(all(r["same"] and r["old"] == 0 for r in rec if r["a"]), f"{name}: 새 파츠 여섯 동시 교체·원래 파츠와 겹침 없음")
@@ -438,7 +442,7 @@ def t_agent_preview(b, ctx, m):
     g = p.evaluate(G0); check(g["eyeImg"] == 0 and g["eye"] == 1 and g["mouth"] == 1 and g["glass"] == 0 and g["rig"] == 0, f"첫 프레임: 정면 평소 얼굴 그대로(길통이 새 리그는 아직 숨김) {g}")
     check(p.evaluate("document.documentElement.classList.contains('ss-agent')"), "어두운 장면 켜짐")
     k = kbs(p); check(all(k[c] == "ag_in" for c in ORDER), f"여섯 모두 요원 동작 {k}")
-    D0 = "(()=>{const f=__ssIntro.info().last.doroduck.fp;return [f.body.img,+(f.k_agentGlasses.op>.5),+(f.eyeL.op>.5),+(f.beak.op>.5),+(f.sign.op>.5),+(f.wingRf.op>.5)]})()"
+    D0 = ("""(()=>(""" + RIG0 + """)(['doroduck',""" + json.dumps(RIGS["doroduck"]) + """]))()""")   # 도로덕도 검수 확정 리그
     V0 = """(()=>{const L=__ssIntro.info().last,c=L.chumdani.fp,t=L.tarotaro.fp;return {ch:[c.body.img,+(c.k_agentGlasses.op>.5),+(c.eyeL.op>.5),+(c.wifi0.op>.5),+(c.m_sparkle.op>.5)],tt:[t.bodyImg.img,+(t.k_agentGlasses.op>.5),+(t.eyes.op>.5),+(t.m_eyeL.op>.5),+(t.excl.op>.5)]}})()"""
     T0 = "(()=>{const f=__ssIntro.info().last.tira.fp;return {head:+(f.headImg.op>.5),headImg:f.headImg.img,body:+(f.k_agentBody.op>.5),buried:+!!f.k_agentBuried,snow:+!!f.k_agentSnow,glass:+(f.k_agentGlasses.op>.5),face:+(f.m_face.op>.5),orig:+(f.body.op>.5)}})()"
     check(p.evaluate("(()=>{const a=__ssIntro.cast.find(c=>c.id==='tira').P.agent;return !a.bury&&!a.puffs&&a.version===4})()"), "티라: 머리 박기·눈가루 설정 없음(v4)")
@@ -449,7 +453,7 @@ def t_agent_preview(b, ctx, m):
     p.wait_for_timeout(500); g = p.evaluate(G0)
     check(g["rig"] == 1 and g["ang"] == [2] and g["glass"] == 1 and g["eye"] == 0 and g["mouth"] == 0 and g["old"] == 0, f"길통이: 새 리그 35도(여섯 파츠 같은 그림 번호)·선글라스, 원래 파츠 모두 숨김 {g}")
     cc = p.evaluate(C0); check(cc["rig"] == 1 and cc["ang"] == [2] and cc["glass"] == 1 and cc["eye"] == 0 and cc["mouth"] == 0 and cc["old"] == 0, f"차로차로: 새 리그 35도(여섯 파츠 같은 그림 번호)·선글라스, 원래 파츠(옛 요원 바퀴·안경 포함) 모두 숨김 {cc}")
-    d = p.evaluate(D0); check(d == [2, 1, 0, 1, 0, 0], f"도로덕: 사선 몸통·선글라스·원본 부리, 원래 눈·팻말·앞 가림 날개 숨김 {d}")
+    d = p.evaluate(D0); check(d["rig"] == 1 and d["ang"] == [2] and d["glass"] == 1 and d["eye"] == 0 and d["old"] == 0, f"도로덕: 새 리그 35도(여섯 파츠 같은 그림 번호)·선글라스, 원래 파츠(팻말·옛 날개·옛 안경 포함) 모두 숨김 {d}")
     v = p.evaluate(V0); check(v["ch"] == [2, 1, 0, 1, 0] and v["tt"] == [3, 1, 0, 0, 0], f"첨다니(사선 트럭·선글라스·약한 신호)·타로타로(사선 차체·선글라스), 원래 눈 숨김 {v}")
     p.wait_for_timeout(700); tt = p.evaluate(T0)
     check(tt["body"] == 1 and tt["glass"] == 1 and tt["snow"] == 0 and tt["buried"] == 0 and tt["head"] == 0 and tt["orig"] == 0, f"티라: 사선 몸체·선글라스 유지 {tt}")
@@ -475,15 +479,17 @@ def t_agent_preview(b, ctx, m):
       for(let i=0;i<300;i++){await fr();const f=__ssIntro.info().last.giltong.fp,a=f.gt_verified_torso_legs.op>.5?[12,24,35][f.gt_verified_torso_legs.img]:0;if(a&&a<=24)break;}
       P.focus();await fr();await fr();}""")
     k = kbs(p); g = p.evaluate(G0)
-    cg = p.evaluate("(()=>{const f=__ssIntro.info().last.doroduck.fp;return +(f.k_agentGlasses.op>.5)})()")
-    check(k["doroduck"] in ("ag_in", "ag_hold") and cg == 1, f"(예전 친구 도로덕) 나오는 중에 다시 들어오면 처음부터가 아니라 경계 자세(선글라스 쓴 채)로 이어 감 {k['doroduck']} {cg}")
+    cg = p.evaluate("(()=>{const f=__ssIntro.info().last.tira.fp;return +(f.k_agentGlasses.op>.5)})()")
+    check(k["tira"] in ("ag_in", "ag_hold") and cg == 1, f"(예전 친구 티라) 나오는 중에 다시 들어오면 처음부터가 아니라 경계 자세(선글라스 쓴 채)로 이어 감 {k['tira']} {cg}")
+    d2 = p.evaluate(D0); check(k["doroduck"] == "ag_in" and d2["rig"] == 1 and d2["glass"] == 0, f"도로덕: 나오는 중에 다시 들어오면 돌던 중간에서 이어 감 {k['doroduck']} {d2}")
     c2 = p.evaluate(C0); check(k["charocharo"] == "ag_in" and c2["rig"] == 1 and c2["glass"] == 0, f"차로차로: 나오는 중에 다시 들어오면 돌던 중간에서 이어 감 {k['charocharo']} {c2}")
     check(k["giltong"] == "ag_in" and g["rig"] == 1 and g["glass"] == 0, f"길통이: 나오는 중에 다시 들어오면 정면부터가 아니라 돌던 중간에서 이어 감(선글라스 완성 자세로 튀지 않음; 각도 순서는 t_agent_rig_turn) {k['giltong']} {g}")
     p.focus("#ssU"); p.wait_for_timeout(1000); g = p.evaluate(G0)
     check(g["rig"] == 0 and g["glass"] == 0 and g["eye"] == 1 and g["eyeImg"] == 0 and g["mouth"] == 1, f"원래 얼굴·정면(새 리그 숨김) {g}")
     cc = p.evaluate(C0); check(cc["rig"] == 0 and cc["eye"] == 1 and cc["eyeImg"] == 0 and cc["glass"] == 0, f"차로차로 원래 얼굴(새 리그 숨김) {cc}")
     check(p.evaluate("__ssIntro.cast.find(c=>c.id==='giltong').drawOrder") is None, "원래 앞뒤 순서")
-    d = p.evaluate(D0); check(d[0] == 0 and d[1] == 0 and d[2] == 1 and d[3] == 1 and d[4] == 0, f"도로덕 원래 모습(팻말은 로그인 대기 때처럼 숨김) {d}")
+    d = p.evaluate(D0); dd = p.evaluate("(()=>{const f=__ssIntro.info().last.doroduck.fp;return [+(f.beak.op>.5),+(f.sign.op>.5)]})()")
+    check(d["rig"] == 0 and d["eye"] == 1 and dd == [1, 0], f"도로덕 원래 모습(새 리그 숨김, 팻말은 로그인 대기 때처럼 숨김) {d} {dd}")
     v = p.evaluate(V0); check(v["ch"][0] == 0 and v["ch"][1] == 0 and v["ch"][2] == 1 and v["tt"][0] == 0 and v["tt"][1] == 0 and v["tt"][3] == 1, f"첨다니·타로타로 원래 모습(타로타로 마우스용 점눈 포함) {v}")
     tt = p.evaluate(T0); check(tt["head"] == 1 and tt["headImg"] == 0 and tt["body"] == 0 and tt["orig"] == 1 and tt["face"] == 1, f"티라 원래 얼굴(마우스용 얼굴 포함) {tt}")
     bx = {c: p.evaluate(GBOX, c) for c in ORDER}
@@ -507,6 +513,8 @@ def t_agent_reduced(b, ctx, m):
     check(f == [2, 1, 0, 1], f"움직임 줄이기: 바로 완성 자세(길통이 35도·선글라스·팔 내림·대형) {f}")
     c = p.evaluate("(()=>{const f=__ssIntro.info().last.charocharo.fp;return [f.charo_verified_body.img,+(f.charo_verified_glasses.op>.5),+(f.charo_verified_hull.rot).toFixed(2)]})()")
     check(c == [2, 1, 0], f"움직임 줄이기: 차로차로도 35도·선글라스·몸 기울기 0 {c}")
+    d = p.evaluate("(()=>{const f=__ssIntro.info().last.doroduck.fp;return [f.doro_verified_body.img,+(f.doro_verified_glasses.op>.5),+(f.doro_verified_hull.rot).toFixed(2)]})()")
+    check(d == [2, 1, 0], f"움직임 줄이기: 도로덕도 35도·선글라스·몸 기울기 0 {d}")
     rc.close()
 
 TESTS = [t_off_switch, t_preview_intro_then_login, t_single_move, t_skip, t_auto_login_no_intro, t_intro_files_missing, t_loader_missing, t_password_no_reaction, t_reduced_motion, t_mouse_giltong, t_mouse_blocked, t_mouse_all, t_keys_type, t_keys_password, t_keys_reduced_off, t_keys_mobile_lock, t_tap_all, t_tap_rules, t_tap_reduced, t_agent_preview, t_agent_rig_turn, t_agent_reduced]
