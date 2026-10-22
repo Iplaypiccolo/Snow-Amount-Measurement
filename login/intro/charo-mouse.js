@@ -452,7 +452,13 @@
           var s = st[c.id], A = c.P && c.P.agent, L = info.last[c.id]; if (!s || !s.agK || !A || !L) return;
           var K = s.agK, W = null;
           function at(pid) { if (!W) W = CP.worldMatrices(c.P, L.fp); var m = CP.mul(L.view, W[pid]); ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]); }
-          if (A.glint && K.id === A.in && K.tt >= A.glint.t[0] && K.tt <= A.glint.t[1]) {
+          if (A.glint && A.glint.style === 'cross' && K.id === A.in && K.tt >= A.glint.t[0] && K.tt <= A.glint.t[1]) {   // 검수 확정 리그(티라): 자료 참고 코드와 같은 흰 십자, 밝기는 자료 키(smoothstep)
+            var gk = A.glint.keys, gv = 0;
+            for (var gi = 1; gi < gk.length; gi++) if (K.tt <= gk[gi].t) { var gu = (K.tt - gk[gi - 1].t) / (gk[gi].t - gk[gi - 1].t); gu = gu * gu * (3 - 2 * gu); gv = gk[gi - 1].v + (gk[gi].v - gk[gi - 1].v) * gu; break; }
+            if (gv > 0) { var gr = A.glint.r * (0.65 + 0.35 * gv), gx = A.glint.at[0], gy = A.glint.at[1];
+              at(A.glint.part); ctx.globalAlpha = gv; ctx.strokeStyle = '#fff'; ctx.lineWidth = A.glint.lineWidth || 2.8; ctx.lineCap = 'round';
+              ctx.beginPath(); ctx.moveTo(gx - gr, gy); ctx.lineTo(gx + gr, gy); ctx.moveTo(gx, gy - gr); ctx.lineTo(gx, gy + gr); ctx.stroke(); ctx.lineCap = 'butt'; }
+          } else if (A.glint && K.id === A.in && K.tt >= A.glint.t[0] && K.tt <= A.glint.t[1]) {
             var u = (K.tt - A.glint.t[0]) / (A.glint.t[1] - A.glint.t[0]), a = Math.sin(Math.PI * u), r = A.glint.r * a, x = A.glint.at[0], y = A.glint.at[1];
             at(A.glint.part); ctx.globalAlpha = a; ctx.fillStyle = '#fff'; ctx.beginPath();
             ctx.moveTo(x, y - r); ctx.lineTo(x + r * .2, y - r * .2); ctx.lineTo(x + r, y); ctx.lineTo(x + r * .2, y + r * .2); ctx.lineTo(x, y + r); ctx.lineTo(x - r * .2, y + r * .2); ctx.lineTo(x - r, y); ctx.lineTo(x - r * .2, y - r * .2);
