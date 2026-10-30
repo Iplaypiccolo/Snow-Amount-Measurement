@@ -54,7 +54,7 @@ def bid(p, name): return ev(p, f"S.branches.find(b => b.name === '{name}').id")
 # ---------------------------------------------------------------- 테스트 목록
 def t_load(p):
     names = p.locator(".tab:visible").all_inner_texts()
-    check(names == ["이동 현황", "기관별 장비", "지사별 요청·편성", "기관별 배정", "로그 기록"], names)
+    check(names == ["이동 현황", "지사별 요청·편성", "기관별 장비", "기관별 배정", "로그 기록"], names)   # 2026-10-30 순서 바꿈
     check(p.locator("#dateInput").input_value() == day(p, 0), "오늘 날짜로 시작")
     check(not p.locator("#loading").is_visible(), "불러오는 중 표시가 사라져야 함")
 
