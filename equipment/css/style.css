@@ -691,12 +691,12 @@ table.alloc { min-width: 760px; }
    색은 테마 변수(--ink-soft·--surface·--line)로 섞어 밝게·어둡게 모두 맞춤. 0·빈칸 판단은 value 속성을 봄(입력 중에는 app.js 가 속성을 맞춤) */
 /* ① 조용한 입력칸: 테두리·바탕을 숨기고, 줄에 마우스를 올리거나 칸을 누르면 나타남 */
 #branchTable tbody input.ci:not([type=checkbox]), #branchTable tbody select.ci, #branchTable tbody .tpick,
-#allocTable tbody input.ci, #eqTable tbody .slot select.ci, #eqTable tbody .slot input.ci, #eqTable tbody select[data-vs], #eqTable tbody .pnum input.ci {
+#allocTable tbody input.ci, :is(#eqTable, #teamTable) tbody .slot select.ci, :is(#eqTable, #teamTable) tbody .slot input.ci, :is(#eqTable, #teamTable) tbody select[data-vs], :is(#eqTable, #teamTable) tbody .pnum input.ci {
   border-color: transparent; background-color: transparent; box-shadow: none; }
 #branchTable tbody tr:hover input.ci:not([type=checkbox]):not(:disabled), #branchTable tbody tr:hover select.ci:not(:disabled), #branchTable tbody tr:hover .tpick,
-#allocTable tbody tr:hover input.ci, #eqTable tbody tr:hover .slot select.ci:not(:disabled), #eqTable tbody tr:hover .slot input.ci:not(:disabled), #eqTable tbody tr:hover select[data-vs], #eqTable tbody tr:hover .pnum input.ci {
+#allocTable tbody tr:hover input.ci, :is(#eqTable, #teamTable) tbody tr:hover .slot select.ci:not(:disabled), :is(#eqTable, #teamTable) tbody tr:hover .slot input.ci:not(:disabled), :is(#eqTable, #teamTable) tbody tr:hover select[data-vs], :is(#eqTable, #teamTable) tbody tr:hover .pnum input.ci {
   border-color: var(--line); background-color: var(--surface); }
-#branchTable tbody input.ci:focus, #branchTable tbody select.ci:focus, #allocTable tbody input.ci:focus, #eqTable tbody select.ci:focus, #eqTable tbody input.ci:focus {
+#branchTable tbody input.ci:focus, #branchTable tbody select.ci:focus, #allocTable tbody input.ci:focus, :is(#eqTable, #teamTable) tbody select.ci:focus, :is(#eqTable, #teamTable) tbody input.ci:focus {
   border-color: var(--ink); background-color: var(--surface); }
 #branchTable tr.locked input.ci:disabled, #branchTable tr.locked select.ci:disabled { background: transparent; color: var(--ink); font-weight: 600; }
 /* ② 값이 없는 칸(0·빈칸·'지사 선택')은 흐리게 → 값이 있는 칸만 눈에 들어옴 */
@@ -705,17 +705,17 @@ table.alloc { min-width: 760px; }
 #branchTable input.num:focus, #allocTable input.num:focus { color: var(--ink); }
 #branchTable input[type=date][value=""], #branchTable .arr select:disabled { color: color-mix(in srgb, var(--ink-soft) 38%, var(--surface)); opacity: 1; }
 #branchTable .arr:has(input[type=date][value=""]) { color: color-mix(in srgb, var(--ink-soft) 38%, var(--surface)); }
-#eqTable .slot select:has(option[value=""]:checked) { color: color-mix(in srgb, var(--ink-soft) 45%, var(--surface)); }
-#eqTable .slot input.tm::placeholder { color: color-mix(in srgb, var(--ink-soft) 32%, var(--surface)); }
-#eqTable .slot input.tm:placeholder-shown ~ .btn, #eqTable .slot .btn.sm { opacity: 0; }
-#eqTable tbody tr:hover .slot .btn.sm { opacity: 1; }
+:is(#eqTable, #teamTable) .slot select:has(option[value=""]:checked) { color: color-mix(in srgb, var(--ink-soft) 45%, var(--surface)); }
+:is(#eqTable, #teamTable) .slot input.tm::placeholder { color: color-mix(in srgb, var(--ink-soft) 32%, var(--surface)); }
+:is(#eqTable, #teamTable) .slot input.tm:placeholder-shown ~ .btn, :is(#eqTable, #teamTable) .slot .btn.sm { opacity: 0; }
+:is(#eqTable, #teamTable) tbody tr:hover .slot .btn.sm { opacity: 1; }
 /* 지원이 아닌 장비 줄: 꺼진 칸들 대신 줄 전체를 흐리게 */
-#eqTable .slot select:disabled, #eqTable .slot input:disabled, #eqTable .slot .btn:disabled { visibility: hidden; }
-#eqTable tbody tr:has(select[data-vs]):not(:has(select[data-vs] option[value="O"]:checked)) td { background: color-mix(in srgb, var(--ink-soft) 5%, transparent); }
-#eqTable tbody tr:has(select[data-vs]):not(:has(select[data-vs] option[value="O"]:checked)) td:nth-child(-n+3) { opacity: .55; }
+:is(#eqTable, #teamTable) .slot select:disabled, :is(#eqTable, #teamTable) .slot input:disabled, :is(#eqTable, #teamTable) .slot .btn:disabled { visibility: hidden; }
+:is(#eqTable, #teamTable) tbody tr:has(select[data-vs]):not(:has(select[data-vs] option[value="O"]:checked)) td { background: color-mix(in srgb, var(--ink-soft) 5%, transparent); }
+:is(#eqTable, #teamTable) tbody tr:has(select[data-vs]):not(:has(select[data-vs] option[value="O"]:checked)) td:nth-child(-n+3) { opacity: .55; }
 /* ③ 줄 따라가기: 한 줄 건너 옅은 바탕 + 마우스를 올린 줄 표시 */
-#branchTable tbody tr[data-b]:nth-child(even) td, #allocTable tbody tr:nth-child(even) td, #eqTable tbody tr:nth-child(even) td { background-image: linear-gradient(color-mix(in srgb, var(--ink-soft) 6%, transparent), color-mix(in srgb, var(--ink-soft) 6%, transparent)); }
-#branchTable tbody tr[data-b]:hover td, #allocTable tbody tr:hover td, #eqTable tbody tr:hover td { background-image: linear-gradient(color-mix(in srgb, var(--ink-soft) 14%, transparent), color-mix(in srgb, var(--ink-soft) 14%, transparent)); }
+#branchTable tbody tr[data-b]:nth-child(even) td, #allocTable tbody tr:nth-child(even) td, :is(#eqTable, #teamTable) tbody tr:nth-child(even) td { background-image: linear-gradient(color-mix(in srgb, var(--ink-soft) 6%, transparent), color-mix(in srgb, var(--ink-soft) 6%, transparent)); }
+#branchTable tbody tr[data-b]:hover td, #allocTable tbody tr:hover td, :is(#eqTable, #teamTable) tbody tr:hover td { background-image: linear-gradient(color-mix(in srgb, var(--ink-soft) 14%, transparent), color-mix(in srgb, var(--ink-soft) 14%, transparent)); }
 /* ④ 묶음 구분선: 같은 묶음(24시 예보 / 대설특보 / 직접입력 / 지사 요청 / 도착 / 타지사 / 저장 / 편성 / 확정)끼리 세로선으로 나눔 */
 #branchTable thead tr:first-child th:nth-child(n+2):not(.adm0),
 #branchTable thead tr:nth-child(2) th:nth-child(1), #branchTable thead tr:nth-child(2) th:nth-child(5), #branchTable thead tr:nth-child(2) th:nth-child(8), #branchTable thead tr:nth-child(2) th:nth-child(10):not(.adm0),
@@ -727,17 +727,25 @@ table.alloc { min-width: 760px; }
   box-shadow: inset 1px 0 0 var(--line); }
 #allocTable thead tr:first-child th:nth-child(n+2), #allocTable thead tr:nth-child(2) th:nth-child(odd) { border-left: 1px solid var(--line); }
 #allocTable tbody td:nth-child(even), #allocTable tfoot td:nth-child(even) { box-shadow: inset 1px 0 0 var(--line); }
-#eqTable th.dayh { border-left: 1px solid var(--line); }
-#eqTable td[data-cell] { box-shadow: inset 1px 0 0 var(--line); }
+:is(#eqTable, #teamTable) th.dayh { border-left: 1px solid var(--line); }
+:is(#eqTable, #teamTable) td[data-cell] { box-shadow: inset 1px 0 0 var(--line); }
 /* ⑤ 제목 줄: 묶음 이름은 진하게, 단위·둘째 줄은 작게. 지사 이름은 굵게 */
-#branchTable thead tr:first-child th, #allocTable thead tr:first-child th, #eqTable thead th { font-size: 13.5px; font-weight: 700; color: var(--ink); background: color-mix(in srgb, var(--ink-soft) 9%, var(--bg)); }
+#branchTable thead tr:first-child th, #allocTable thead tr:first-child th, :is(#eqTable, #teamTable) thead th { font-size: 13.5px; font-weight: 700; color: var(--ink); background: color-mix(in srgb, var(--ink-soft) 9%, var(--bg)); }
 #branchTable thead tr:nth-child(2) th, #allocTable thead tr:nth-child(2) th { font-size: 12px; font-weight: 500; color: var(--ink-soft); }
 #branchTable tbody tr[data-b] td:first-child, #allocTable tbody td:first-child { font-weight: 600; }
 #branchTable tbody tr[data-b]:not(.active):not(.locked) td:first-child { color: var(--ink-soft); }   /* 굵기는 그대로(바꾸면 칸 폭이 흔들림) */
 /* 터치 화면(마우스 없음): ①로 숨긴 입력칸 테두리를 옅게 남기고, 기관별 장비의 [＋]도 늘 보임 */
 @media (hover: none) {
   #branchTable tbody input.ci:not([type=checkbox]):not(:disabled), #branchTable tbody select.ci:not(:disabled), #branchTable tbody .tpick,
-  #allocTable tbody input.ci:not(:disabled), #eqTable tbody .slot select.ci:not(:disabled), #eqTable tbody .slot input.ci:not(:disabled), #eqTable tbody select[data-vs]:not(:disabled), #eqTable tbody .pnum input.ci:not(:disabled) {
+  #allocTable tbody input.ci:not(:disabled), :is(#eqTable, #teamTable) tbody .slot select.ci:not(:disabled), :is(#eqTable, #teamTable) tbody .slot input.ci:not(:disabled), :is(#eqTable, #teamTable) tbody select[data-vs]:not(:disabled), :is(#eqTable, #teamTable) tbody .pnum input.ci:not(:disabled) {
     border-color: color-mix(in srgb, var(--line) 60%, transparent); }
-  #eqTable .slot input.tm:placeholder-shown ~ .btn, #eqTable .slot .btn.sm { opacity: 1; }
+  :is(#eqTable, #teamTable) .slot input.tm:placeholder-shown ~ .btn, :is(#eqTable, #teamTable) .slot .btn.sm { opacity: 1; }
 }
+
+/* ===== 강원 신속대응팀(강원본부 지원장비, 2026-10-30) ===== */
+/* 이동 현황: 지역본부 다음 겹세로줄 */
+.matrix th.tm.orgh, .matrix tr:nth-child(2) th.tm.c1, .matrix td.tm.c1 { border-left: 4px double var(--mline, var(--line)); }
+.matrix .tm:not(.tot) { background: color-mix(in srgb, var(--plow) 5%, var(--surface)); }
+.team-tg { display: inline-flex; align-items: center; gap: 5px; margin-left: 12px; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer; white-space: nowrap; }
+.team-tg input { width: 16px; height: 16px; cursor: pointer; }
+table.eq.team { min-width: 720px; }

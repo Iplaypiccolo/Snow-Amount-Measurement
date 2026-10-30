@@ -120,6 +120,8 @@
   frame.addEventListener('load', function(){ applyEqTab(); paintTheme(); });
   // 안쪽 화면이 스스로 탭을 바꾼 경우(권한이 바뀌어 이동 현황으로 돌아가는 등) 메뉴도 따라감
   window.SSEqTabChanged = function(name){ eqTab = name; paintEq(); };
+  // '강원본부 지원장비' 메뉴: 관리자·강원본부 계정만(안쪽 장비 화면이 권한을 확인해 알려 줌, 2026-10-30)
+  window.SSEqTeamTab = function(on){ var b = document.getElementById('eqTeamBtn'); if (b) b.hidden = !on; if (!on && eqTab === 'gwteam') { eqTab = 'move'; paintEq(); } };
   theme.querySelectorAll('[data-eqtheme]').forEach(function(b){ b.addEventListener('click', function(){
     var d = frameDoc(); var t = d && d.querySelector('[data-theme-set="' + b.dataset.eqtheme + '"]'); if (t) t.click(); paintTheme();
   }); });

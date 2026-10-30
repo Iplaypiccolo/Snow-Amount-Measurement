@@ -54,7 +54,7 @@ def bid(p, name): return ev(p, f"S.branches.find(b => b.name === '{name}').id")
 # ---------------------------------------------------------------- 테스트 목록
 def t_load(p):
     names = p.locator(".tab:visible").all_inner_texts()
-    check(names == ["이동 현황", "지사별 요청·편성", "기관별 장비", "기관별 배정", "로그 기록"], names)   # 2026-10-30 순서 바꿈
+    check(names == ["이동 현황", "지사별 요청·편성", "기관별 장비", "기관별 배정", "강원본부 지원장비", "로그 기록"], names)   # 2026-10-30 순서 바꿈, 강원본부 지원장비(관리자·강원본부만)
     check(p.locator("#dateInput").input_value() == day(p, 0), "오늘 날짜로 시작")
     check(not p.locator("#loading").is_visible(), "불러오는 중 표시가 사라져야 함")
 
@@ -1079,7 +1079,44 @@ def t_alloc_follow_assign(p):
     tab(p, "alloc"); p.click("#panel-alloc [data-reload]"); p.wait_for_timeout(500)
     check(ev(p, f"[...S.alloc.keys()].some(k => k.endsWith('|{dg}'))") is False and p.locator(f"#allocTable tr[data-ab='{dg}']").count() == 0, "편성 0 확정 → 배정 지움, 표에서 빠짐")
 
-TESTS = [t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+def t_gw_team(p):
+    """강원본부 지원장비(마이그레이션 48): 탭은 관리자·강원본부만, 요청 없는 지사로도 보냄(강원 지사가 목록 맨 위), 요청·편성·기관별 장비는 그대로,
+    이동 현황 = 지역본부 다음 겹세로줄 뒤 '강원 신속대응팀' 열(제설차만) + 합계·아래 카드에 더해짐, 체크박스 하나로 함께 빼고 넣음(기억), 로그 기록"""
+    d0, hc = day(p, 0), bid(p, "홍천")
+    car = "movesOn(S.date).filter(m => m.v.type === '제설차').length"; tot0 = ev(p, car)
+    for uid, on in (("admin1", True), ("hq-gw", True), ("br1", False), ("eq-sg", False), ("viewer", False)):
+        as_user(p, uid); check(p.locator("#teamTabBtn").is_visible() == on, f"{uid}: 탭 보임 {on}")
+    as_user(p, "hq-gw"); tab(p, "gwteam")
+    check(p.locator("#teamTable tbody td:first-child .plate").all_inner_texts() == ["원주", "홍천", "대관령", "강릉"], "4대, 이름 고정")
+    check(p.locator(rsel("GW1", d0)).is_disabled(), "미정이면 경로 칸이 꺼져 있음")
+    p.select_option("#teamTable select[data-vs=GW1]", "O"); p.wait_for_timeout(100)
+    groups = ev(p, f"[...document.querySelector(\"{rsel('GW1', d0)}\").querySelectorAll('optgroup')].map(g => g.label)")
+    check(groups[0] == "강원" and len(groups) >= 9 and not any("편성 확정 전" in g for g in groups), f"모든 본부, 강원 먼저: {groups}")
+    check(not ev(p, f"hasReq('{hc}')") and not ev(p, f"isFixed('{hc}')"), "홍천은 요청·편성 없음")
+    p.select_option(rsel("GW1", d0), hc); p.wait_for_timeout(100)
+    t = f"input[data-fk='t:{d0}:GW1:0']"; p.fill(t, "0730"); p.press(t, "Tab"); p.wait_for_timeout(150)
+    reqs0 = ev(p, "JSON.stringify(S.reqs)")
+    check(ev(p, "teamDirty() && !fleetDirty()") and p.locator("#save-fleet").is_hidden(), "기관별 장비 저장 바와 따로")
+    p.click("#save-gwteam [data-save]"); p.wait_for_timeout(300)
+    check("확정했습니다" in toast(p) and route(p, "GW1", d0) == ["홍천"] and ev(p, f"recOf('{d0}', 'GW1').times[0]") == "07:30", toast(p))
+    check(ev(p, "JSON.stringify(S.reqs)") == reqs0 and not ev(p, "teamDirty()"), "지사 요청·편성 숫자는 그대로")
+    tab(p, "move")
+    heads = [h.strip() for h in p.locator("#matrix thead tr:first-child th").all_inner_texts()]
+    check(heads[-1] == "강원 신속대응팀" and heads[-2] == "지역본부", f"지역본부 다음: {heads}")
+    check(ev(p, "getComputedStyle(document.querySelector('#matrix th.tm.orgh')).borderLeftStyle") == "double" and p.locator("#matrix thead tr:nth-child(2) th.tm").count() == 1, "겹세로줄, 제설차 칸 하나")
+    tr = p.locator("#matrix tbody tr", has=p.locator("th[scope=row]", has_text="홍천"))
+    check(tr.locator("td.tm").inner_text().strip().startswith("1") and tr.locator("td.tot.c1").inner_text().strip().startswith("1"), "홍천: 신속대응팀 1대, 합계 1대")
+    check(ev(p, car) == tot0 + 1 and p.locator(f"#destList [data-bid='{hc}'] .vrow.team").count() == 1, "합계·아래 홍천 카드에 더해짐")
+    p.uncheck("#showTeam"); p.wait_for_timeout(200)
+    check(p.locator("#matrix .tm").count() == 0 and "홍천" not in rows(p) and p.locator("#destList .vrow.team").count() == 0 and ev(p, car) == tot0, "끄면 열·합계·카드에서 함께 빠짐")
+    p.check("#showTeam"); p.wait_for_timeout(200); check(p.locator("#matrix th.tm").count() == 2, "다시 켜면 보임")
+    as_user(p, "br1"); check(ev(p, "Api.saveTeam(S.round, [], [{ team_id: 'GW2', status: 'O' }]).then(r => r.ok)") is False, "지사 계정은 서버가 거절")
+    as_user(p, "admin1"); tab(p, "log")
+    check("신속대응팀 경로" in p.locator("#logTable").inner_text() and "신속대응팀 원주" in p.locator("#logTable").inner_text(), "로그 기록에 남음")
+    tab(p, "move"); p.uncheck("#showTeam"); p.reload(); p.wait_for_selector("#matrix tbody tr")
+    check(not p.locator("#showTeam").is_checked() and p.locator("#matrix .tm").count() == 0, "끈 상태를 이 브라우저에 기억")
+
+TESTS = [t_gw_team, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,

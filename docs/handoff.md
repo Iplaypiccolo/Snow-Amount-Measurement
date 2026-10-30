@@ -44,6 +44,12 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-10-30 · 커밋 (이 기록 커밋 하나) · 강원본부 지원장비(강원 신속대응팀) 탭 + 이동 현황 열 (migration 48, 실서버 적용함)
+- **서버**(`20261030_48_gw_team.sql`, 되돌리기 시험 `supabase/tests/gw_team_test.sql` 27/27 → 적용, 사용자 확인): 표 `gw_team`(원주·홍천·대관령·강릉 GW1~4 고정)·`gw_team_status`(기준일자별 지원 여부)·`gw_team_routes`(날짜별 경로), 저장 `save_gw_team`, 권한 `private.gw_team_editor()`(관리자·강원본부 hq 계정). 기준일자 만들 때 지원 여부 이어받기(`zz_gw_team_carry`), 지울 때 그 기간 팀 경로 지움(`zz_gw_team_round_del`). 지금 있던 기준일자에는 4대 '미정' 한 줄씩.
+- **화면**(`equipment/js/app.js`·`api.js`·`index.html`·`sample-data.js`, 첫 화면 `index.html`·`boot.js`): 탭 '강원본부 지원장비'(기관별 배정 다음, 관리자·강원본부만 — 위쪽 메뉴 버튼은 안쪽 화면이 `SSEqTeamTab` 으로 알려 줌). 팀 장비는 화면에서 장비 모양(`S.team`, org = '강원 신속대응팀')으로 기관별 장비의 칸 그리기(slotCell)·경로·지원 여부 지도를 함께 쓰고, 변경은 장비 번호로 나눠(`draftKeys`/`sdraftKeys`) 각자 [확정]. API 는 팀 경로·지원 여부를 장비 것과 같은 모양으로 합쳐 줌(team_id → vehicle_id). 이동 현황: 겹세로줄 뒤 열(제설차 하나), 합계·카드에 더함, 체크박스 `#showTeam`(localStorage `eq_show_team`). 아래 지원기관 버튼 줄에는 안 넣음(340px 폭).
+- 시험: `t_gw_team`(새 — 탭 권한, 강원 먼저, 요청 숫자 그대로, 열·겹세로줄·합계·카드, 체크박스·기억, 로그), 탭 목록 고침, 가짜 서버에 새 표 3개.
+— ✍ Claude Code 작성
+
 ### 2026-10-30 · 커밋 (이 기록 커밋 하나) · 장비 지원 탭 순서 바꿈
 - 사용자 요청: 이동 현황 → **지사별 요청·편성 → 기관별 장비** → 기관별 배정 → 로그 기록 (위쪽 메뉴 `index.html` 과 장비 화면 안 `equipment/index.html` 둘 다). 시험 `test_equipment.py` 탭 이름 순서 고침, 58/58.
 - 같이 요청받은 '강원본부 지원장비' 탭(강원 신속대응팀 제설차 4대, 독립 시스템)은 검토 질문을 사용자에게 보냄 — 답을 받고 작업.

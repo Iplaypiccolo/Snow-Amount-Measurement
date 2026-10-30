@@ -6,6 +6,8 @@
    - 저장은 "바뀐 칸만" 보내고, 한 번의 [확정]/[저장]은 서버 함수 하나로 "전부 되거나 전부 안 되게" 처리합니다.
      · 기관별 장비 [확정] → save_fleet(장비 도공번호·지원 여부, (날짜, 장비)별 경로 — 경로는 관리자)
      · 지사별 요청·편성 [저장] → save_requests(기준일자, 지사별 바뀐 열)
+     · 강원본부 지원장비 [확정] → save_gw_team(기준일자, 경로, 지원 여부) — 강원 신속대응팀 4대, 기관별 장비와 따로(마이그레이션 48).
+       화면에서는 팀 장비도 장비처럼 다루려고 경로·지원 여부를 기관별 장비 것과 같은 모양으로 합쳐 돌려줌(team_id → vehicle_id, 번호 GW1~GW4)
      · 대설 특보 → warning_status(서버가 5분마다 기상청에서 받은 것) / 특보구역 관리(관리자) → branch_zone_list + branch_zone_overrides
      · 장비 추가(addVehicle): 장비 번호(id)는 보내지 않고 서버가 매김(여러 계정이 동시에 넣어도 겹치지 않게). 지역본부 장비(org = '지역본부')는 지원 여부 '지원'도 서버가 함께 만듦(마이그레이션 44)
    - 모든 함수는 Promise 를 돌려줍니다. 실패하면 { ok:false, message } 입니다.
@@ -21,6 +23,8 @@ const Api = (() => {
     // 지역본부 장비(마이그레이션 44)
     "SA004": "이 지사의 '타지사 지원 가능' 대수가 확정된 뒤에 장비를 등록할 수 있습니다.", "SA005": "지역본부 장비는 자기(출발) 지사로 보낼 수 없습니다.",
     "SA006": "기관별 배정 합계는 그 지사의 편성 대수(제설차·제설기 각각)보다 많을 수 없습니다." };
+  const TEAM_ERR = { "42501": "강원본부 지원장비는 관리자와 강원본부 계정만 고칠 수 있습니다.", "23514": "다른 기준일자가 맡은 날짜이거나, 그날 지원 가능이 아닌 장비의 경로입니다. 새로고침(F5) 후 다시 확인해 주세요.", "22023": "저장할 내용이 없거나 기준일자가 없습니다." };
+  const isTeamId = id => /^GW\d+$/.test(String(id || ""));
   const POOL = "지역본부", VCOLS = "id,org,type,plate,status,sort,active,blower_s,blower_l,hidden_after,round_id,home_branch,rented";
   // over = 이 요청에서만 쓰는 오류 설명(예: { "23503": "…" }) — 같은 오류 번호라도 상황마다 뜻이 달라서
   const fail = (r, fallback, over) => { const c = r && r.json && r.json.code; return { ok: false, message: (over && over[c]) || ERR[c] || fallback || "저장하지 못했습니다. 잠시 후 다시 시도해 주세요.", code: c }; };
@@ -30,7 +34,8 @@ const Api = (() => {
   const ALLOC_ERR = { "23514": "편성이 확정된 지사에만 배정할 수 있습니다.", "23503": "없는 기관·지사·기준일자입니다." };
   const VDEL_ERR = { "23503": "경로 기록이 있는 장비는 지울 수 없습니다. [숨기기]를 쓰세요." };
   const NET = () => ({ ok: false, message: (window.SSAuth && SSAuth.NET_MSG) || "서버에 연결할 수 없습니다." });
-  const EQUIP_TABS = "vehicles,vehicle_routes,round_vehicle_status,round_requests,round_allocations,support_rounds,branch_zone_overrides";
+  const EQUIP_TABS = "vehicles,vehicle_routes,round_vehicle_status,round_requests,round_allocations,support_rounds,branch_zone_overrides,gw_team_routes,gw_team_status";
+  const asVeh = x => ({ ...x, vehicle_id: x.team_id });          // 팀 경로·지원 여부를 장비 것과 같은 모양으로
 
   /* ---------- 서버(Supabase) ---------- */
   // 서버는 한 번에 1,000줄까지만 돌려주고 그 이상은 말없이 자름 → 줄 수가 늘 수 있는 표(장비·경로·지원 여부)는 1,000줄씩 나눠 끝까지 읽음.
@@ -45,11 +50,11 @@ const Api = (() => {
     load() {
       const R = SSAuth.rest;
       return Promise.all([SSAuth.restore(), R("hqs?select=id,name,sort,is_private&order=sort"), R("branches?select=id,name,hq_id,status&order=id"),
-        restAll("vehicles?select=" + VCOLS + "&order=sort,id"), R("support_rounds?select=id,name,start_date,days&order=start_date.desc"), R("equip_orgs?select=name")])
-        .then(([me, h, b, v, s, o]) => {
+        restAll("vehicles?select=" + VCOLS + "&order=sort,id"), R("support_rounds?select=id,name,start_date,days&order=start_date.desc"), R("equip_orgs?select=name"), R("gw_team?select=id,name,sort&order=sort")])
+        .then(([me, h, b, v, s, o, t]) => {
           if (!me.ok) return { ok: false, message: me.message || "로그인이 필요합니다.", login: true };
           if (![h, b, v, s].every(r => r.ok)) return { ok: false, message: "자료를 불러오지 못했습니다." };
-          return { ok: true, me: me.me, hqs: h.json, branches: b.json.filter(x => x.status !== "closed"), vehicles: v.json, rounds: s.json, orgs: (o.json || []).map(x => x.name), holdings: null };
+          return { ok: true, me: me.me, hqs: h.json, branches: b.json.filter(x => x.status !== "closed"), vehicles: v.json, rounds: s.json, orgs: (o.json || []).map(x => x.name), team: t.ok ? t.json || [] : [], holdings: null };
         }).catch(NET);
     },
     reload() {         // [새로고침] 버튼: 다른 아이디가 바꿨을 수 있는 장비·기준일자 목록만 다시 읽음(본부·지사·로그인은 그대로). 나머지 표는 화면이 이어서 읽음
@@ -57,15 +62,23 @@ const Api = (() => {
       return Promise.all([restAll("vehicles?select=" + VCOLS + "&order=sort,id"), R("support_rounds?select=id,name,start_date,days&order=start_date.desc")])
         .then(([v, s]) => v.ok && s.ok ? { ok: true, vehicles: v.json, rounds: s.json } : fail(v.ok ? s : v, "자료를 불러오지 못했습니다.")).catch(NET);
     },
-    routes(from, to) {
-      return restAll(`vehicle_routes?select=date,vehicle_id,stops,revised,times,confirmed_at&date=gte.${from}&date=lte.${to}&order=date,vehicle_id`).then(r => r.ok ? { ok: true, rows: r.json } : fail(r, "경로를 불러오지 못했습니다.")).catch(NET);
+    routes(from, to) {        // 장비 경로 + 강원 신속대응팀 경로(같은 모양)
+      return Promise.all([restAll(`vehicle_routes?select=date,vehicle_id,stops,revised,times,confirmed_at&date=gte.${from}&date=lte.${to}&order=date,vehicle_id`),
+        restAll(`gw_team_routes?select=date,team_id,stops,revised,times,confirmed_at&date=gte.${from}&date=lte.${to}&order=date,team_id`)])
+        .then(([r, t]) => r.ok && t.ok ? { ok: true, rows: r.json.concat(t.json.map(asVeh)) } : fail(r.ok ? t : r, "경로를 불러오지 못했습니다.")).catch(NET);
     },
-    statuses(ids) {      // 기준일자별 지원 여부(마이그레이션 38). 기준일자마다 따로, 1,000줄이 넘으면 나눠 읽음
-      return Promise.all(ids.map(id => restAll(`round_vehicle_status?select=round_id,vehicle_id,status,off_from,updated_at&round_id=eq.${+id}&order=vehicle_id`)))
+    statuses(ids) {      // 기준일자별 지원 여부(마이그레이션 38) + 강원 신속대응팀(48). 기준일자마다 따로, 1,000줄이 넘으면 나눠 읽음
+      return Promise.all([...ids.map(id => restAll(`round_vehicle_status?select=round_id,vehicle_id,status,off_from,updated_at&round_id=eq.${+id}&order=vehicle_id`)),
+        restAll(`gw_team_status?select=round_id,team_id,status,off_from,updated_at&round_id=in.(${ids.map(Number).join(",")})&order=round_id,team_id`).then(r => r.ok ? { ...r, json: r.json.map(asVeh) } : r)])
         .then(rs => rs.every(r => r.ok) ? { ok: true, rows: rs.flatMap(r => r.json) } : fail(rs.find(r => !r.ok), "지원 여부를 불러오지 못했습니다.")).catch(NET);
     },
     vehicleHistory(vid) {
-      return SSAuth.rest(`vehicle_routes?select=date,vehicle_id,stops,revised,times&vehicle_id=eq.${encodeURIComponent(vid)}&order=date.desc&limit=400`).then(r => r.ok ? { ok: true, rows: r.json } : fail(r)).catch(NET);
+      const q = isTeamId(vid) ? `gw_team_routes?select=date,team_id,stops,revised,times&team_id=eq.${encodeURIComponent(vid)}&order=date.desc&limit=400`
+        : `vehicle_routes?select=date,vehicle_id,stops,revised,times&vehicle_id=eq.${encodeURIComponent(vid)}&order=date.desc&limit=400`;
+      return SSAuth.rest(q).then(r => r.ok ? { ok: true, rows: r.json } : fail(r)).catch(NET);
+    },
+    saveTeam(round, routes, status) {      // routes = [{date, team_id, stops, times}], status = [{team_id, status, off_from}]
+      return SSAuth.authed("/rest/v1/rpc/save_gw_team", { method: "POST", body: { p_round: round, p_routes: routes, p_status: status } }).then(r => r.ok ? { ok: true, result: r.json } : fail(r, null, TEAM_ERR)).catch(NET);
     },
     requests(round) {
       return SSAuth.rest(`round_requests?select=round_id,branch_id,req_truck,req_blower,assigned_truck,assigned_blower,offer_truck,saved_at,arrive_at,reason,confirmed,warn_level,warn_zones,warn_base,warn_at,warn_note,fc_snow,fc_pcp,fc_pop,fc_tmin,fc_tmin_at,fc_tmfc,fc_at,wx_manual,wx_snow,wx_pcp,wx_tmin,wx_tmin_at,wx_level,wx_fc,wx_ef&round_id=eq.${+round}`)
@@ -137,6 +150,8 @@ const Api = (() => {
     const bname = id => (db.branches.find(b => b.id === id) || {}).name || "";
     const poolNameOk = v => { const pfx = bname(v.home_branch) + (v.rented ? "임차" : ""); return !!bname(v.home_branch) && String(v.plate).startsWith(pfx) && /^\d{1,5}$/.test(String(v.plate).slice(pfx.length)); };
     const err = (c, msg) => ({ ok: false, message: msg || ERR[c], code: c });
+    // 강원 신속대응팀(마이그레이션 48): 관리자 또는 강원본부 계정만
+    const teamOk = () => !!actor && (actor.role === "admin" || (actor.role === "hq" && (db.hqs.find(h => h.id === actor.hq_id) || {}).name === "강원"));
     // 서버 흉내(마이그레이션 46): 편성이 확정될 때 배정이 편성보다 많으면 — 편성 0 은 그 종류 배정을 지우고, 한 기관만 배정받았으면 그 기관을 편성 대수로(여러 기관이면 그대로)
     const followAssign = (rid, q) => [["truck", "assigned_truck"], ["blower", "assigned_blower"]].forEach(([f, af]) => {
       const mine = db.allocations.filter(a => a.round_id === rid && a.branch_id === q.branch_id && a[f] > 0), cap = q[af] || 0, sum = mine.reduce((n, a) => n + a[f], 0);
@@ -170,12 +185,32 @@ const Api = (() => {
       setActor(a) { actor = a; },
       load(today) {
         db = makeSample(today);
-        return done({ ok: true, me: null, hqs: clone(db.hqs), branches: clone(db.branches), vehicles: clone(db.vehicles), rounds: clone(db.rounds), orgs: db.orgs.slice(), holdings: clone(db.holdings) });
+        return done({ ok: true, me: null, hqs: clone(db.hqs), branches: clone(db.branches), vehicles: clone(db.vehicles), rounds: clone(db.rounds), orgs: db.orgs.slice(), team: clone(db.team), holdings: clone(db.holdings) });
       },
       reload() { return done({ ok: true, vehicles: clone(db.vehicles), rounds: clone(db.rounds) }); },
-      statuses(ids) { return done({ ok: true, rows: clone(db.status.filter(x => ids.includes(x.round_id))) }); },
-      routes(from, to) { return done({ ok: true, rows: clone(db.routes.filter(r => r.date >= from && r.date <= to)) }); },
-      vehicleHistory(vid) { return done({ ok: true, rows: clone(db.routes.filter(r => r.vehicle_id === vid).sort((a, b) => b.date.localeCompare(a.date))) }); },
+      statuses(ids) { return done({ ok: true, rows: clone([...db.status.filter(x => ids.includes(x.round_id)), ...db.teamStatus.filter(x => ids.includes(x.round_id)).map(asVeh)]) }); },
+      routes(from, to) { return done({ ok: true, rows: clone([...db.routes, ...db.teamRoutes.map(asVeh)].filter(r => r.date >= from && r.date <= to)) }); },
+      vehicleHistory(vid) { return done({ ok: true, rows: clone((isTeamId(vid) ? db.teamRoutes.filter(r => r.team_id === vid) : db.routes.filter(r => r.vehicle_id === vid)).sort((a, b) => b.date.localeCompare(a.date))) }); },
+      saveTeam(round, routes, status) {      // 서버 save_gw_team 흉내: 관리자·강원본부만, 지원 여부 먼저 → 경로(그 날짜를 맡은 기준일자에서 '지원'인 날만). 하나라도 안 되면 전부 취소
+        if (!teamOk()) return done(err("42501", TEAM_ERR["42501"]));
+        const rd = db.rounds.find(r => r.id === +round); if (!rd || (!routes.length && !status.length)) return done(err("22023", TEAM_ERR["22023"]));
+        if (status.some(x => !["", "O", "X", "M"].includes(x.status || "") || (x.status === "O" && x.off_from && x.off_from < rd.start_date))) return done(err("23514", TEAM_ERR["23514"]));
+        if (routes.some(r => (gov(r.date) || {}).id !== +round || r.stops.some(b => !db.branches.some(x => x.id === b)) || new Set(r.stops).size !== r.stops.length)) return done(err("23514", TEAM_ERR["23514"]));
+        const keep = clone(db.teamStatus), row = tid => db.teamStatus.find(x => x.round_id === +round && x.team_id === tid);
+        status.forEach(x => { let w = row(x.team_id); if (!w) { w = { round_id: +round, team_id: x.team_id, status: "", off_from: null }; db.teamStatus.push(w); }
+          w.status = x.status || ""; w.off_from = w.status === "O" ? x.off_from || null : null; w.updated_at = new Date().toISOString(); });
+        const ok = (tid, d) => { const g = gov(d), w = g && db.teamStatus.find(x => x.round_id === g.id && x.team_id === tid); return !!w && w.status === "O" && (!w.off_from || d < w.off_from); };
+        if (routes.some(r => r.stops.length && !ok(r.team_id, r.date))) { db.teamStatus = keep; return done(err("23514", TEAM_ERR["23514"])); }
+        status.forEach(x => log("수정", "gw_team_status", `gw_team_status:${round},${x.team_id}`, null, { status: x.status, off_from: x.off_from || null }));
+        routes.forEach(r => {
+          const i = db.teamRoutes.findIndex(x => x.date === r.date && x.team_id === r.team_id), t = `gw_team_routes:${r.date},${r.team_id}`;
+          const nr = { date: r.date, team_id: r.team_id, stops: r.stops.slice(), revised: false, times: r.times ? r.times.slice() : null, confirmed_at: new Date().toISOString() };
+          if (!r.stops.length) { if (i >= 0) { log("삭제", "gw_team_routes", t, clone(db.teamRoutes[i]), null); db.teamRoutes.splice(i, 1); } }
+          else if (i < 0) { db.teamRoutes.push(nr); log("추가", "gw_team_routes", t, null, clone(nr)); }
+          else { log("수정", "gw_team_routes", t, { stops: db.teamRoutes[i].stops, times: db.teamRoutes[i].times }, { stops: nr.stops, times: nr.times }); db.teamRoutes[i] = nr; }
+        });
+        return done({ ok: true });
+      },
       requests(round) { return done({ ok: true, rows: clone(db.requests.filter(r => r.round_id === +round)) }); },
       allocations(round) { return done({ ok: true, rows: clone(db.allocations.filter(a => a.round_id === +round)) }); },
       saveAllocations(round, rows) {       // 서버 save_allocations 흉내: 관리자만, 편성이 확정된 지사만, 둘 다 0 이면 줄 삭제
@@ -310,6 +345,8 @@ const Api = (() => {
           const gone = p && p.status === "O" && p.off_from && p.off_from <= date;
           db.status.push({ round_id: r.id, vehicle_id: v.id, status: gone ? "X" : st, off_from: !gone && p && p.status === "O" ? p.off_from || null : null, updated_at: new Date().toISOString() });
         });
+        db.team.forEach(t => { const p = prev && db.teamStatus.find(x => x.round_id === prev.id && x.team_id === t.id), gone = p && p.status === "O" && p.off_from && p.off_from <= date;      // 강원 신속대응팀도 이어받음(마이그레이션 48)
+          db.teamStatus.push({ round_id: r.id, team_id: t.id, status: gone ? "X" : p ? p.status : "", off_from: !gone && p && p.status === "O" ? p.off_from || null : null, updated_at: new Date().toISOString() }); });
         return done({ ok: true, round: clone(r) });
       },
       deleteRound(id) {
@@ -320,6 +357,9 @@ const Api = (() => {
         db.requests.filter(x => x.round_id === +id).forEach(x => log("삭제", "round_requests", `round_requests:${id},${x.branch_id}`, clone(x), null));
         db.requests = db.requests.filter(x => x.round_id !== +id); db.status = db.status.filter(x => x.round_id !== +id); db.rounds = db.rounds.filter(x => x.id !== +id);
         db.vehicles = db.vehicles.filter(x => x.round_id !== +id); db.allocations = db.allocations.filter(x => x.round_id !== +id);      // 그 기준일자에 딸린 지역본부 장비·배정도 함께
+        const rEnd = addD(r.start_date, (r.days || 4) - 1);                                                                                // 강원 신속대응팀: 그 기간 경로·지원 여부도 함께(마이그레이션 48)
+        db.teamRoutes.filter(x => x.date >= r.start_date && x.date <= rEnd).forEach(x => log("삭제", "gw_team_routes", `gw_team_routes:${x.date},${x.team_id}`, clone(x), null));
+        db.teamRoutes = db.teamRoutes.filter(x => !(x.date >= r.start_date && x.date <= rEnd)); db.teamStatus = db.teamStatus.filter(x => x.round_id !== +id);
         log("삭제", "support_rounds", "support_rounds:" + id, r, null);
         return done({ ok: true });
       },

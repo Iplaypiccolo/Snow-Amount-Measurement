@@ -9,7 +9,7 @@
 <title>제설장비 지원 현황</title>
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../fonts/pretendard.css?v=5aa1c40c">
-<link rel="stylesheet" href="css/style.css?v=c2487b7f">
+<link rel="stylesheet" href="css/style.css?v=ce3bdd50">
 <script src="../auth/auth.js?v=3a94d92b"></script>
 <script>
 /* 로그인 잠금(가벼운 확인): 로그인 정보가 이 브라우저에 없으면 화면을 만들지 않고 안내만 보여 줍니다(?sample=1 시연 화면은 예외).
@@ -43,6 +43,7 @@ if (!/[?&]sample(=|&|$)/.test(location.search) && (!window.SSAuth || !SSAuth.has
     <button class="tab" role="tab" aria-selected="false" data-tab="branch">지사별 요청·편성</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="fleet">기관별 장비</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="alloc">기관별 배정</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="gwteam" id="teamTabBtn" hidden>강원본부 지원장비</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="log" id="logTabBtn" hidden>로그 기록</button>
   </nav>
 </header>
@@ -101,6 +102,18 @@ if (!/[?&]sample(=|&|$)/.test(location.search) && (!window.SSAuth || !SSAuth.has
     </div>
   </section>
 
+  <!-- ===== 강원본부 지원장비: 강원 신속대응팀 제설차 4대(마이그레이션 48). 관리자·강원본부만, 기관별 장비·배정과 따로 ===== -->
+  <section class="panel" id="panel-gwteam" hidden>
+    <div class="round-bar" id="teamRound"></div>
+    <div class="toolbar" id="teamFilters"></div>
+    <div class="table-wrap tall"><table class="eq team" id="teamTable"></table></div>
+    <div class="savebar" id="save-gwteam" hidden>
+      <span class="save-state" aria-live="polite"></span>
+      <button type="button" class="btn" data-revert="gwteam">되돌리기</button>
+      <button type="button" class="btn primary" data-save="gwteam">확정</button>
+    </div>
+  </section>
+
   <!-- ===== 로그 기록 (log.view 권한) ===== -->
   <section class="panel" id="panel-log" hidden>
     <div class="perm" id="perm-log"></div>
@@ -114,8 +127,8 @@ if (!/[?&]sample(=|&|$)/.test(location.search) && (!window.SSAuth || !SSAuth.has
 <div class="tip" id="tip" hidden role="tooltip"></div>
 <div class="toast" id="toast" hidden role="status"></div>
 <!-- 코드는 아래 순서대로 불러옵니다 (순서가 중요합니다). auth.js 는 위 <head> 에서 먼저 불러옴 -->
-<script src="js/sample-data.js?v=f9f37bc7"></script>
-<script src="js/api.js?v=126e8502"></script>
-<script src="js/app.js?v=4d494b91"></script>
+<script src="js/sample-data.js?v=8e2c2fb9"></script>
+<script src="js/api.js?v=568152e4"></script>
+<script src="js/app.js?v=7c9530f5"></script>
 </body>
 </html>

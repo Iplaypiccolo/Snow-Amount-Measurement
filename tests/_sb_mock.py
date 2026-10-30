@@ -317,6 +317,9 @@ class Mock:
                     p = next((x for x in self.rstatus if prev and x["round_id"] == prev["id"] and x["vehicle_id"] == v["id"]), None)
                     self.rstatus.append({"round_id": nr["id"], "vehicle_id": v["id"], "status": p["status"] if p else "", "off_from": None, "updated_at": "2026-10-08T00:00:00Z"})
                 return send(200, dict(nr, carried=len(self.vehicles)))
+            if tbl in ("gw_team", "gw_team_routes", "gw_team_status") and req.method == "GET":     # 강원 신속대응팀(마이그레이션 48): 4대 고정, 경로·지원 여부는 비어 있음
+                if not self.usable(u): return send(200, [])
+                return send(200, [{"id": f"GW{i + 1}", "name": n, "sort": i + 1} for i, n in enumerate(["원주", "홍천", "대관령", "강릉"])] if tbl == "gw_team" else [])
             if tbl == "round_vehicle_status" and req.method == "GET":
                 if not self.usable(u): return send(200, [])
                 return send(200, [x for x in self.rstatus if "eq.%d" % x["round_id"] in q.get("round_id", [""])])
