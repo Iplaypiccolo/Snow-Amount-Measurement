@@ -44,6 +44,15 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-10-30 · 커밋 (이 기록 커밋 하나) · 사용법 안내(첫 로그인 · [? 사용법])
+- **새 파일** `guide/guide.js`·`guide/guide.css`(첫 화면 `index.html` 이 불러옴, `boot.js` 가 앱 시작 뒤 `SSGuide.init()`+`auto('snow')`, 장비 지원을 열 때 `auto('equip')`). 서버·DB 변경 없음.
+- 강설량 측정: 첫 장(접속 계정) → 계정별 메뉴 표 → 탭(24시간 예보·연도별 신적설·관측소 지도·관할 고속도로·데이터 출처·예보 격자 편입[grid.edit]) → [? 사용법]. 장비 지원: 지원 절차 그림(SVG, 넓으면 가로·좁으면 세로, 지금 계정 단계에 '내 역할') → 계정별 탭 표 → 탭(이동 현황·요청·편성·기관별 장비·기관별 배정·강원본부 지원장비[관리자·강원본부]·로그 기록[log.view]) → [? 사용법].
+- 탭 설명 중에는 뒤 화면도 그 탭으로 바꾸고, 끝나면 보던 탭으로 돌아감. 키보드 ←·→·Esc. 강원본부 판단 = 계정의 hq_id 로 `hqs` 이름이 '강원'인지(안내 내용만 다름).
+- '봤음' = localStorage `ss_guide:<snow|equip>:<아이디>` (브라우저 기준, 사용자 결정). 자동 시험 중(`navigator.webdriver`)에는 저절로 안 열림, `?guide=auto` 로 강제.
+- 시험 `tests/test_guide.py` 6개(자동으로 열림·닫힘·다시 안 열림·다른 아이디·[사용법]·계정별 탭(강원본부/다른 본부/지사/기계화부)·지원 절차 그림·휴대폰 폭), `run_all_tests` 에 추가.
+- 참고: 앞서 장비 지원 화면 틀 판번호(UI_VERSION)를 올리려던 변경은 사용자가 멈춰서 넣지 않음.
+— ✍ Claude Code 작성
+
 ### 2026-10-30 · 커밋 (이 기록 커밋 하나) · 강원본부 지원장비(강원 신속대응팀) 탭 + 이동 현황 열 (migration 48, 실서버 적용함)
 - **서버**(`20261030_48_gw_team.sql`, 되돌리기 시험 `supabase/tests/gw_team_test.sql` 27/27 → 적용, 사용자 확인): 표 `gw_team`(원주·홍천·대관령·강릉 GW1~4 고정)·`gw_team_status`(기준일자별 지원 여부)·`gw_team_routes`(날짜별 경로), 저장 `save_gw_team`, 권한 `private.gw_team_editor()`(관리자·강원본부 hq 계정). 기준일자 만들 때 지원 여부 이어받기(`zz_gw_team_carry`), 지울 때 그 기간 팀 경로 지움(`zz_gw_team_round_del`). 지금 있던 기준일자에는 4대 '미정' 한 줄씩.
 - **화면**(`equipment/js/app.js`·`api.js`·`index.html`·`sample-data.js`, 첫 화면 `index.html`·`boot.js`): 탭 '강원본부 지원장비'(기관별 배정 다음, 관리자·강원본부만 — 위쪽 메뉴 버튼은 안쪽 화면이 `SSEqTeamTab` 으로 알려 줌). 팀 장비는 화면에서 장비 모양(`S.team`, org = '강원 신속대응팀')으로 기관별 장비의 칸 그리기(slotCell)·경로·지원 여부 지도를 함께 쓰고, 변경은 장비 번호로 나눠(`draftKeys`/`sdraftKeys`) 각자 [확정]. API 는 팀 경로·지원 여부를 장비 것과 같은 모양으로 합쳐 줌(team_id → vehicle_id). 이동 현황: 겹세로줄 뒤 열(제설차 하나), 합계·카드에 더함, 체크박스 `#showTeam`(localStorage `eq_show_team`). 아래 지원기관 버튼 줄에는 안 넣음(340px 폭).

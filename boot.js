@@ -67,6 +67,8 @@
         var gv = document.getElementById('view-grid'); if (gv && gv.parentNode) gv.parentNode.removeChild(gv);          // 권한이 없으면 화면 자체를 없앰
         var gb = document.getElementById('tabGridBtn'); if (gb && gb.parentNode) gb.parentNode.removeChild(gb);
       }
+      // 사용법 안내(guide/guide.js): 위쪽 [사용법] 버튼 + 이 브라우저·아이디로 처음이면 강설량 측정 안내(장비 지원에서 따로 연 예보 창은 빼고)
+      if (window.SSGuide) { SSGuide.init(); if (!fc) SSGuide.auto('snow'); }
     };
     document.body.appendChild(s);
   }).catch(function(err){
@@ -109,7 +111,7 @@
     equip.style.display = (name === 'equip') ? 'block' : 'none';
     theme.hidden = name !== 'equip';
     if(name === 'equip' && !frame.getAttribute('src')){ frame.setAttribute('src', frame.dataset.src); }
-    if(name === 'equip'){ paintEq(); applyEqTab(); paintTheme(); }
+    if(name === 'equip'){ paintEq(); applyEqTab(); paintTheme(); if (window.SSGuide) SSGuide.auto('equip'); }   // 장비 지원을 처음 열면 그 페이지 사용법(지원 과정 그림)
     if(name === 'snow'){ setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, 50); } // 지도 크기 다시 맞춤
     try{ history.replaceState(null, '', name === 'equip' ? '#equip' : location.pathname + location.search); }catch(e){}
   }
