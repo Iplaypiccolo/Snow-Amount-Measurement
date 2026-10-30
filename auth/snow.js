@@ -1,10 +1,12 @@
 /* ============================================================
    auth/snow.js — 일 신적설을 서버(Supabase)의 요약본(snapshots)에서 읽는 부품
    - 요약본은 시즌별로 나뉘어 있습니다(2026-10-05, 내려받는 양 줄이기):
-       'snow'          = 목록 { version:2, seasons:[{ label, days, data_days, stations }] }
+       'snow'          = 목록 { version:3, seasons:[{ label:'2025-26', start, end(YYYYMMDD), ongoing, days, data_days, stations, partial }] }
+                         시즌 = 첫눈 ~ 마지막 눈(진행 중이면 자료가 있는 마지막 날), partial = 24시각을 다 못 받은 최근 날짜(2026-10-30, 마이그레이션 47)
        'snow:<시즌>'   = { dates:[YYYYMMDD…], st:{ 관측소번호:[값|null…] } } — 화면이 쓰는 관측소(좌표 있는 곳)만
      처음에는 가장 최근 시즌 하나만 받고, 다른 시즌은 고를 때(loadSeason) 받습니다.
-     예전 모양(version 1: 'snow' 한 줄에 모든 시즌)도 그대로 읽습니다.
+     관측소 지도에서 받지 않은 시즌의 날짜를 고르면 그 하루만 원자료(snow_daily)에서 받습니다(loadDate).
+     예전 모양(version 1: 'snow' 한 줄에 모든 시즌, version 2: 11.15~3.15 이름)도 그대로 읽습니다.
    - 화면이 예전부터 쓰던 모양(SNOW_DATA)으로 바꿔 줍니다: { seasons:{ 시즌:{ dates, branches:{} } }, stationData:{ 관측소:{ 날짜:값 } } }
      지사별 값(branches)은 비워 두고, 화면이 관할에 맞춰 계산합니다(JurisCore.rebuildAllSeries / reapply).
      덧붙임: index(서버에 있는 시즌 목록), recent(드롭다운에 보일 최근 3시즌), older(그 이전 시즌 — 엑셀로만 받음)
@@ -109,6 +111,24 @@
       return data;
     });
   }
+  // 하루치(YYYYMMDD): 받아 둔 시즌에 있으면 그대로, 아니면 원자료(snow_daily)에서 그날 값만 받아 stationData 에 넣음. 반환: Promise<data>
+  function loadDate(data, ymd) {
+    if (!/^\d{8}$/.test(ymd || '')) return Promise.reject(new Error('bad_date'));
+    var have = Object.keys(data.seasons).some(function (l) { return data.seasons[l].dates.indexOf(ymd) !== -1; });
+    data._days = data._days || {};
+    if (have || data._days[ymd]) return Promise.resolve(data);
+    var iso = ymd.slice(0, 4) + '-' + ymd.slice(4, 6) + '-' + ymd.slice(6);
+    return root.SSAuth.rest('snow_daily?date=eq.' + iso + '&select=station_id,value&limit=5000').then(function (r) {
+      if (!r.ok || !Array.isArray(r.json)) throw new Error('snow_load_failed');
+      r.json.forEach(function (x) { var rec = data.stationData[String(x.station_id)] || (data.stationData[String(x.station_id)] = {}); rec[ymd] = x.value; });
+      data._days[ymd] = true;
+      return data;
+    });
+  }
+  // 그 날짜가 든 시즌(목록의 한 줄) 또는 null
+  function seasonOf(data, ymd) {
+    return (data.index || []).filter(function (x) { return x.start && x.start <= ymd && ymd <= x.end; })[0] || null;
+  }
   // 아직 안 받은 시즌을 모두 한 번에(관할 미리보기의 '전체 시즌 최대' 계산용)
   function loadAll(data) {
     var labels = (data.index || []).map(function (x) { return x.label; }).filter(function (l) { return !data.seasons[l]; });
@@ -119,6 +139,6 @@
       return data;
     });
   }
-  var api = { load: load, loadSeason: loadSeason, loadAll: loadAll, fromSnapshot: fromSnapshot, addSeason: addSeason, RECENT: RECENT };
+  var api = { load: load, loadSeason: loadSeason, loadAll: loadAll, loadDate: loadDate, seasonOf: seasonOf, fromSnapshot: fromSnapshot, addSeason: addSeason, RECENT: RECENT };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.SSSnow = api;
 })(typeof window !== 'undefined' ? window : this);

@@ -48,10 +48,10 @@ tools/run_all_tests.py     모든 자동 시험을 한 번에 실행하고 결�
 tools/reference_check.py   DB 와 data/*.json 이 같은지 확인하는 검증 SQL 생성
 tools/fill_section_gaps.py  구간 사이 끊김을 실제 도로망으로 메우는 도구(결과 docs/section-gaps-report.md)
 supabase/functions/account-admin/  계정 발급·초기화·비활성화·비밀번호 일괄 설정 함수(Edge Function)
-admin/                  관리 콘솔(로그인, 비밀번호 변경, 계정 관리, 비밀번호 일괄 설정 엑셀표, 적설 자료 올리기, 접속 로그) — docs/admin-console.md
+admin/                  관리 콘솔(로그인, 비밀번호 변경, 계정 관리, 비밀번호 일괄 설정 엑셀표, 접속 로그) — docs/admin-console.md
 boot.js                 첫 화면 시작 코드(보안 정책 CSP 때문에 index.html 밖으로 뺌)
 auth/snow.js            적설: 서버 요약본(snapshots 'snow')을 읽어 화면 자료로 바꿈
-supabase/functions/import-snow/  기상청 메모장(txt) → 서버 적설 표(snow_daily) → 요약본 (관리 콘솔 "적설 자료" 탭이 부름)
+supabase/functions/collect-snow/ 일 신적설 자동 수집(기상청 kma_snow1, 11.1~4.30 매일) → 서버 적설 표(snow_daily) → 요약본
 tools/check_gaps_against_source.py  끊긴 구간을 원본 도로망과 대조(원본에 있는데 빠진 곳만 잇기) — docs/section-gaps-source-check.md
 .github/workflows/supabase-keepalive.yml  서버 깨우기(월·목, 비밀값 없음) — docs/server-keepalive.md
 tests/test_import_snow.mjs · tests/test_snow_snapshot.js · supabase/tests/save_check_test.sql  적설 넣기·요약본 계산·저장 검사 시험
@@ -94,14 +94,11 @@ tests/test_jurisdiction_ui.py    관할 변경 탭 화면 자동 테스트
   `15/15 통과` 처럼 나오면 정상입니다. 하나라도 `FAIL` 이면 어디가 틀렸는지 함께 표시됩니다.
 - 현재는 샘플 데이터이며 **저장해도 새로고침하면 사라집니다.** (서버 미연결)
 
-## 데이터 갱신 방식 — 기상청 메모장(txt) → 관리 콘솔
+## 데이터 갱신 방식 — 서버 자동 수집
 
-기상청 API를 자동으로 호출하는 서버는 두지 않습니다 (기상청이 클라우드 IP 를 막음). 대신:
-
-1. `https://apihub.kma.go.kr` 접속 후 콘솔에서 데이터 수집 스크립트 실행 → txt 파일 다운로드 (스크립트는 사이트 "데이터 출처" 탭에 있음)
-2. 관리자가 **관리 콘솔 → 적설 자료** 탭에서 txt 파일 선택 → **[검사]**(새 값·바뀔 값 개수 확인) → **[저장]**
-   - 서버(Supabase)에 저장되어 **모든 사용자 화면에 바로 반영**됩니다. 저장소에 파일을 올릴 필요가 없습니다.
-   - 날짜를 보고 시즌(11.15~익년 3.15)에 들어가며, 결측(-99.9)은 저장하지 않습니다. 이미 있는 값과 다르면 "덮어쓰기"를 켜야 바뀝니다.
+1. 매년 **11월 1일 ~ 익년 4월 30일**, 서버(Supabase)가 매일 01:10(한국 시각)에 전날 하루치를 기상청 API허브(`kma_snow1.php`)에서 받아 저장합니다. 못 받은 시각은 11:40까지 30분마다 다시 받습니다.
+2. 시즌은 그 기간의 **첫눈 ~ 마지막 눈**(지사 관측소 260곳 중 한 곳이라도 0.1cm 이상인 날)이고 이름은 "2025-26 시즌"처럼 씁니다.
+3. 손으로 올리는 기능(관리 콘솔 '적설 자료')은 2026-10-30 없앴습니다.
 
 ## 신적설 계산 방식
 

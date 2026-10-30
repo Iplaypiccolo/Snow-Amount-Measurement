@@ -1,7 +1,7 @@
 /* 일 신적설 자동 수집 함수(supabase/functions/collect-snow/core.mjs) 자동 테스트 — 기상청 글 읽기, 가짜 DB 로 24시각 받기·남은 시각만·다시 받기·시간 제한·권한
    실행: node tests/test_collect_snow.mjs   (저장소 맨 위 폴더에서) */
 import assert from 'node:assert/strict';
-import { parseSnow, parseSnow2, compareDay, handle, seriesStats, SNOW_URL } from '../supabase/functions/collect-snow/core.mjs';
+import { parseSnow, handle, SNOW_URL } from '../supabase/functions/collect-snow/core.mjs';
 
 const results = [];
 async function test(name, fn) { try { await fn(); results.push([name, true]); } catch (e) { results.push([name, false, String(e.message).split('\n')[0]]); } }
@@ -83,28 +83,6 @@ await test('권한: 서버 안 토큰·관리자만. 날짜 지정·비교(dry)�
   assert.equal(w3.planArg, '2025-01-01'); assert.equal(b3.dry, true); assert.equal(w3.fetched.length, 24, '비교는 24시각 모두');
   assert.equal(w3.puts.length, 1, '비교는 그날 최댓값으로 한 번'); assert.equal(w3.puts[0][3], true); assert.deepEqual(w3.puts[0][2], { 90: 2.3, 100: 9 });
   assert.equal(w3.fin.length, 0, '비교는 기록·요약본 안 바꿈'); assert.equal(b3.hours, 24); assert.equal(b3.stations, 2);
-});
-await test('시험 호출(probe): 저장 없이 시각별 요약 — 늘어남·줄어듦 개수, 값이 큰 관측소', async () => {
-  const s = seriesStats([{ a: 0, b: 1 }, { a: 1, b: 1 }, null, { a: 0.5, b: 3 }, { a: 0.2, b: 3 }]);
-  assert.equal(s.stations, 2); assert.deepEqual(s.present, [2, 2, null, 2, 2]);
-  assert.deepEqual(s.up, [0, 1, 0, 0, 0]); assert.deepEqual(s.down, [0, 0, 0, 0, 1], '빈 시각을 건너 비교하지 않음');
-  assert.equal(s.top[0][0], 'b');
-  const w = world(); const [, b] = await call(w, { probe: '20260202', sd: 'day' });
-  assert.equal(b.probe, '20260202'); assert.equal(w.fetched.length, 24); assert.equal(w.puts.length, 0, '저장 안 함'); assert.equal(w.fin.length, 0); assert.equal(w.planArg, undefined, '계획(snow_plan)도 안 부름');
-});
-await test('비교(compare): 기간 조회 글 읽기 — 빈칸으로 나뉜 칸, -999 = 없음, 이름에 빈칸이 있어도 뒤에서부터', async () => {
-  const txt = '#START7777\n# YYMMDDHHMI STN ...\n' +
-    '202602021200    93           북춘천 127.75443000  37.94738000 000-----    5.8    5.5 -999.0    5.5    0.0    5.8    0.3\n' +
-    '202602021200   338          둔 내 128.21068000  37.50568000 000----- -999.0 -999.0 -999.0 -999.0 -999.0 -999.0 -999.0\n#7777END\n';
-  const r = parseSnow2(txt);
-  assert.equal(r.length, 2); assert.deepEqual(r[0], { tm: '202602021200', stn: '93', tot: 5.8, day: 5.5, d01: 5.5, h01: 0.3 });
-  assert.equal(r[1].stn, '338'); assert.equal(r[1].h01, null); assert.equal(parseSnow2('오류'), null);
-});
-await test('비교(compare): 관측소별 그날 SD_DAY·SD_D01 최댓값, SD_H01 합 ↔ 우리 값', async () => {
-  const rows = [{ stn: '1', day: 2, d01: 2, h01: 1 }, { stn: '1', day: 3, d01: 1.5, h01: 2 }, { stn: '2', day: null, d01: null, h01: null }, { stn: '3', day: null, d01: 0, h01: 0 }];
-  const c = compareDay(rows, { 1: 3, 2: 4, 3: 0, 4: 1 });
-  assert.equal(c.day.same, 1); assert.equal(c.d01.diff, 1); assert.deepEqual(c.d01.top[0], ['1', 3, 2]); assert.equal(c.h01.same, 2, '1 + 2 = 3, 3 은 0 = 0');
-  assert.equal(c.day.onlyOurs, 2, '2·4 는 기상청 SD_DAY 없음'); assert.equal(c.day.onlyOurs0, 1); assert.equal(c.h01.zero, 1, '3 은 둘 다 0'); assert.equal(c.h01.onlyOurs, 2);
 });
 await test('키가 없으면 부르지 않음', async () => {
   const w = world({ key: '' }); const [, b] = await call(w); assert.equal(b.error, 'no_key'); assert.equal(w.fetched.length, 0);

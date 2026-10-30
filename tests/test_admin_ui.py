@@ -63,7 +63,7 @@ def t_login_session_logout(b, m):
     login(p, "admin-01", "wrong-password-xx"); check("올바르지 않습니다" in p.locator(".msg.err").inner_text(), "로그인 실패 문구")
     check(p.evaluate("sessionStorage.getItem('ss_session')") is None, "실패했는데 세션이 저장됨")
     login(p, "admin-01", ADMIN_PW); p.wait_for_selector(".tabs")
-    check(p.locator(".tabs button").all_inner_texts() == ["계정 관리", "산하기관 아이디 관리", "적설 자료", "접속 로그", "내 정보"], p.locator(".tabs button").all_inner_texts())
+    check(p.locator(".tabs button").all_inner_texts() == ["계정 관리", "산하기관 아이디 관리", "접속 로그", "내 정보"], p.locator(".tabs button").all_inner_texts())
     check("관리자1" in p.locator("#who").inner_text(), "상단 이름")
     ss = p.evaluate("sessionStorage.getItem('ss_session')"); check(ss and ADMIN_PW not in ss and "password" not in ss.lower(), "세션에 비밀번호가 저장됨")
     check(p.evaluate("localStorage.length") == 0, "localStorage 사용 금지")
@@ -194,22 +194,10 @@ def t_users_tab(b, m):
     check(m.fn_calls[-1] == {"action": "disable", "username": "exwonju"}, "비활성화 호출")
     p.locator("tr", has_text="exwonju").locator("button[data-a=enable]").click(); p.wait_for_selector("tr:has-text('exwonju') .tag.warn")
 
-def t_snow_upload_tab(b, m):
-    """적설 자료 탭: 메모장 파일 → [검사](plan) → [저장](load). 검사 전에는 저장 버튼이 꺼져 있고, 파일을 바꾸면 다시 검사해야 함"""
-    dl = []; p = new_page(b, m, dl); login(p, "admin-01", ADMIN_PW); p.click('.tabs button[data-t=snow]'); p.wait_for_selector("#sup table")
-    check(p.locator("#sload").is_disabled(), "검사 전에는 저장 꺼짐")
-    p.click("#splan"); p.wait_for_timeout(200); check("파일을 먼저" in p.locator("#sm").inner_text(), "파일 없이 검사하면 안내")
-    txt = "#### DATE 20251201 ####" + chr(10) + "202512010900, 90, x, x, x, x, 3.5" + chr(10)
-    p.set_input_files("#sf", files=[{"name": "snow.txt", "mimeType": "text/plain", "buffer": txt.encode("utf-8")}])
-    p.click("#splan"); p.wait_for_selector("#sm >> text=새 값")
-    check(m.snow_calls[-1] == {"action": "plan", "txt": txt, "overwrite": False}, m.snow_calls[-1])
-    check("결측(-99.9)이라 뺌 1" in p.locator("#sm").inner_text() and not p.locator("#sload").is_disabled(), "검사 결과 표시·저장 켜짐")
-    p.click("#sload"); p.wait_for_selector("#sm >> text=저장한 값")
-    check(m.snow_calls[-1]["action"] == "load" and m.snow_calls[-1]["txt"] == txt and any("저장할까요" in d for d in dl), "확인 후 같은 내용으로 저장")
-    check(p.locator("#sload").is_disabled(), "저장 뒤에는 다시 검사해야 저장 가능")
-    p.check("#sow"); check(p.locator("#sload").is_disabled(), "옵션을 바꾸면 다시 검사")
-    check(p.locator("#gplan").count() == 0, "예전 파일 옮기기 버튼은 없앰(이전 끝남)")
-    check("txt by admin-01" in p.locator("#sup").inner_text(), "최근 저장 기록 표시")
+def t_no_snow_tab(b, m):
+    """적설 자료 탭은 없앰(2026-10-30, 자동 수집만) — 관리자에게도 안 보임"""
+    p = new_page(b, m); login(p, "admin-01", ADMIN_PW); p.wait_for_selector(".tabs")
+    check("적설 자료" not in p.locator(".tabs").inner_text() and p.locator('.tabs button[data-t=snow]').count() == 0, p.locator(".tabs button").all_inner_texts())
 
 def t_audit_tab(b, m):
     p = new_page(b, m); login(p, "admin-01", ADMIN_PW); p.click('.tabs button[data-t=audit]'); p.wait_for_selector("#rows table")
@@ -298,16 +286,16 @@ def org_sub(b, m, sub, dialogs=None):
 def t_perm_tab(b, m):
     """권한·순서: 체크칸·묶음 전체 켜기·위치(○○ 다음) → 바꾼 계정만 update 로 보냄, 관리자는 표에 없음"""
     dl = []; p = org_sub(b, m, "perm", dl); p.wait_for_selector("table.perm")
-    check(p.locator("table.perm th.pc").count() == 10, "권한 10개 열(hq.supply.edit 없앰)")
+    check(p.locator("table.perm th.pc").count() == 9, "권한 9개 열(hq.supply.edit·snow.upload 없앰)")
     users = [x.get_attribute("data-u") for x in p.locator("input.pchk[data-p='juris.edit']").all()]
     check("admin-01" not in users and "exchungju" in users and "equip-01" in users, users)
     check(p.locator("input.pchk[data-u=exchungju][data-p='juris.request']").is_checked() and not p.locator("input.pchk[data-u=exchungju][data-p='grid.edit']").is_checked(), "지사 기본 권한 표시")
     check(p.locator("#psave").is_disabled(), "바꾼 것이 없으면 저장 못 함")
     p.check("input.pchk[data-u=exchungju][data-p='grid.edit']"); check(p.locator("tr.dirty").count() == 1 and "1개" in p.locator("#psave").inner_text(), "바꾼 줄 표시")
-    p.click("button.gall[data-g=H01][data-p='snow.upload']")              # 수도권 묶음(지사 5개) 모두 켜기
-    check(all(p.locator(f"input.pchk[data-u={u}][data-p='snow.upload']").is_checked() for u in ("exincheon", "exsiheung", "exgunpo", "exhwaseong", "exdisabled")), "묶음 전체 켜기")
-    p.click("button.gall[data-g=H01][data-p='snow.upload']"); check(not p.locator("input.pchk[data-u=exincheon][data-p='snow.upload']").is_checked(), "다시 누르면 끄기")
-    p.click("button.gall[data-g=H01][data-p='snow.upload']")
+    p.click("button.gall[data-g=H01][data-p='grid.edit']")              # 수도권 묶음(지사 5개) 모두 켜기
+    check(all(p.locator(f"input.pchk[data-u={u}][data-p='grid.edit']").is_checked() for u in ("exincheon", "exsiheung", "exgunpo", "exhwaseong", "exdisabled")), "묶음 전체 켜기")
+    p.click("button.gall[data-g=H01][data-p='grid.edit']"); check(not p.locator("input.pchk[data-u=exincheon][data-p='grid.edit']").is_checked(), "다시 누르면 끄기")
+    p.click("button.gall[data-g=H01][data-p='grid.edit']")
     p.uncheck("input.pchk[data-u=equip-01][data-p='equip.edit.own']")
     n0 = len(m.fn_calls); p.click("#psave"); p.wait_for_selector(".msg.ok")
     call = m.fn_calls[n0]; check(call["action"] == "update", call)
@@ -315,7 +303,7 @@ def t_perm_tab(b, m):
     check(set(items) == {"exchungju", "exincheon", "exsiheung", "exgunpo", "exhwaseong", "exdisabled", "equip-01"}, sorted(items))
     check(items["exchungju"]["perms"] == ["juris.request", "grid.edit", "req.edit.own"] and "sort" not in items["exchungju"], items["exchungju"])
     check(items["equip-01"]["perms"] == [], items["equip-01"])
-    check(m.users["exincheon"]["profile"]["perms"] == ["juris.request", "snow.upload", "req.edit.own"], m.users["exincheon"]["profile"]["perms"])
+    check(m.users["exincheon"]["profile"]["perms"] == ["juris.request", "grid.edit", "req.edit.own"], m.users["exincheon"]["profile"]["perms"])
     for _ in range(50):   # 저장 뒤 목록을 다시 읽는 동안 기다림(가끔 늦음). 관리 콘솔은 CSP 가 있어 wait_for_function(문자열)을 쓰면 시험이 바쁠 때 'unsafe-eval' 페이지 오류가 남 → 직접 반복 확인
         if p.evaluate("document.querySelectorAll('tr.dirty').length === 0 && document.getElementById('psave').disabled"): break
         p.wait_for_timeout(100)
@@ -363,16 +351,15 @@ def t_new_accounts(b, m):
     p.fill("#nuser", "Bad Id"); p.fill("#nname", "x"); p.click("#nmake"); check("영문 소문자" in p.locator("#m").inner_text(), "아이디 형식 검사")
 
 def t_tabs_by_permission(b, m):
-    """관리자가 아니어도 권한이 있으면 그 탭만 보임(적설 자료 = snow.upload, 접속 로그 = log.view)"""
-    m.users["exchungju"]["profile"].update(must_change=False, perms=["juris.request", "req.edit.own", "snow.upload", "log.view"])
+    """관리자가 아니어도 권한이 있으면 그 탭만 보임(접속 로그 = log.view)"""
+    m.users["exchungju"]["profile"].update(must_change=False, perms=["juris.request", "req.edit.own", "log.view"])
     p = new_page(b, m); login(p, "exchungju", TEMP_PW); p.wait_for_selector(".tabs")
-    check(p.locator(".tabs button").all_inner_texts() == ["적설 자료", "접속 로그", "내 정보"], p.locator(".tabs button").all_inner_texts())
-    p.wait_for_selector("#sup table"); check("txt by admin-01" in p.locator("#sup").inner_text(), "올린 기록도 보임")
+    check(p.locator(".tabs button").all_inner_texts() == ["접속 로그", "내 정보"], p.locator(".tabs button").all_inner_texts())
     p.click('.tabs button[data-t=audit]'); p.wait_for_selector("#rows table"); check(p.locator("#rows tbody tr").count() == 3, "접속 로그 보임")
-    p.click('.tabs button[data-t=me]'); check("snow.upload" in p.locator("#pane").inner_text(), "내 권한 표시")
+    p.click('.tabs button[data-t=me]'); check("log.view" in p.locator("#pane").inner_text(), "내 권한 표시")
 
 TESTS = [t_login_session_logout, t_unregistered_and_disabled, t_forced_change, t_checklist_live, t_sheet_rows_and_paste, t_sheet_validation_display, t_sheet_save_payload,
-         t_sheet_partial_and_validation_errors, t_sheet_random_csv_filter, t_sheet_unsaved_guard_and_clear, t_users_tab, t_snow_upload_tab, t_audit_tab, t_non_admin_cannot_use_admin_apis, t_xss_and_csp, t_token_refresh, t_fast_tab_switching_no_errors, t_sheet_hierarchy_order, t_users_tab_order, t_set_then_branch_logs_in_directly, t_perm_tab, t_new_accounts, t_tabs_by_permission]
+         t_sheet_partial_and_validation_errors, t_sheet_random_csv_filter, t_sheet_unsaved_guard_and_clear, t_users_tab, t_no_snow_tab, t_audit_tab, t_non_admin_cannot_use_admin_apis, t_xss_and_csp, t_token_refresh, t_fast_tab_switching_no_errors, t_sheet_hierarchy_order, t_users_tab_order, t_set_then_branch_logs_in_directly, t_perm_tab, t_new_accounts, t_tabs_by_permission]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch(); b.new_context()

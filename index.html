@@ -250,10 +250,31 @@
   #view-snowtable{display:flex;}
 
   .side .toolbar{flex-wrap:wrap;}
-  #dateSelect{
-    padding:6px 8px; border:1px solid var(--line); border-radius:4px;
-    font-size:12.5px; font-family:var(--sans); background:#f8fafc;
+  /* 관측소 지도 날짜 고르기(달력) — 시즌 기간 밖의 날·달은 누를 수 없음 */
+  .date-pick{position:relative;}
+  .date-btn{
+    padding:6px 10px; border:1px solid var(--line); border-radius:4px; cursor:pointer;
+    font-size:12.5px; font-family:var(--sans); background:#f8fafc; color:var(--ink); min-width:130px; text-align:left;
   }
+  .date-btn.loading{color:var(--muted);}
+  .date-pop{
+    position:absolute; right:0; top:calc(100% + 4px); z-index:1200; width:260px; padding:10px;
+    background:#fff; border:1px solid var(--line); border-radius:6px; box-shadow:0 6px 20px rgba(16,36,58,.18);
+  }
+  .date-pop[hidden]{display:none;}
+  .cal-head{display:flex; align-items:center; gap:6px; margin-bottom:8px;}
+  .cal-head select{flex:1; padding:4px 6px; border:1px solid var(--line); border-radius:4px; font-size:12.5px; font-family:var(--sans);}
+  .cal-nav{width:28px; height:28px; border:1px solid var(--line); border-radius:4px; background:#f8fafc; cursor:pointer; font-size:15px;}
+  .cal-grid{display:grid; grid-template-columns:repeat(7, 1fr); gap:2px; text-align:center;}
+  .cal-w{font-size:11px; color:var(--muted); padding:2px 0;}
+  .cal-d{height:30px; border:0; border-radius:4px; background:#eef4f9; color:var(--ink); font-family:var(--mono); font-size:12px; cursor:pointer;}
+  .cal-d:hover:not(:disabled){background:#d6e6f2;}
+  .cal-d.sel{background:var(--accent); color:#fff; font-weight:700;}
+  .cal-d:disabled, .cal-nav:disabled{background:transparent; color:#c4ccd3; cursor:default;}
+  .cal-foot{margin-top:8px; text-align:right;}
+  .cal-clear{border:0; background:none; color:var(--accent-dark); font-size:12px; cursor:pointer; font-family:var(--sans);}
+  .cal-empty{font-size:12.5px; color:var(--muted); padding:8px;}
+  table.snowtable .partial-tag{font-size:9.5px; color:#c97a2b; font-weight:700;}
 
   /* ---- 연도별 신적설 탭 ---- */
   .snow-toolbar{
@@ -417,7 +438,11 @@
     <div class="side">
       <div class="toolbar">
         <input type="text" id="searchBox" placeholder="본부 · 지사 · 관측소명 검색" />
-        <select id="dateSelect"><option value="">일자 선택(신적설)</option></select>
+        <span class="date-pick">
+          <input type="hidden" id="dateSelect" value="">
+          <button type="button" class="date-btn" id="dateBtn" aria-haspopup="dialog">일자 선택(신적설)</button>
+          <div class="date-pop" id="datePop" role="dialog" aria-label="신적설 일자 고르기" hidden></div>
+        </span>
       </div>
       <div class="unit-note">단위 — 관측소 개수: 대 · 일 신적설량: cm</div>
       <div class="tablewrap" id="tree"></div>
@@ -435,7 +460,6 @@
         <label>지난 시즌 <select id="oldSeasonSelect"></select></label>
         <button class="upload-btn" id="oldSeasonXlsxBtn" type="button">⬇ 엑셀(xlsx) 받기</button>
       </span>
-      <a class="upload-btn" id="snowAdminLink" href="admin/" hidden>+ 적설 자료 올리기(관리 콘솔)</a>
     </div>
     <div class="snowtable-wrap" id="snowTableWrap"></div>
   </div>
@@ -481,14 +505,15 @@
       <p>지사의 특정 일자 값 = 그 지사에 배정된 관측소들의 그날 값 중 <b>최댓값</b>. 지사의 시즌 합계 = 기간 내 일별 값의 합. 본부의 일자별 값 = 소속 지사 일자값의 평균. 본부의 시즌 평균 = <b>소속 지사 시즌 합계를 전부 더한 뒤 지사 수로 나눈 값</b>.</p>
 
       <h3>8. 조회 기간 및 보유 현황</h3>
-      <p>매 시즌 11월 15일 ~ 익년 3월 15일만 조회합니다. 연도별 신적설·관측소 지도에서는 <b>최근 3시즌</b>을 고를 수 있고, 그 이전 시즌은 연도별 신적설의 <b>[지난 시즌] → 엑셀 받기</b>로 받습니다. 현재 보유 중인 시즌은 아래 표와 같습니다 (자동으로 최신 상태를 표시).</p>
+      <p>매년 <b>11월 1일 ~ 익년 4월 30일</b> 자료를 받습니다. 시즌은 그 기간의 <b>첫눈 ~ 마지막 눈</b>(지사에 배정된 관측소 260곳 중 한 곳이라도 일 신적설 0.1cm 이상인 날)이고, 이름은 <b>"2025-26 시즌"</b>처럼 씁니다. 오늘이 그 기간 안이면 <b>진행 중</b>(첫눈 ~ 자료가 있는 마지막 날)이며, 첫눈 전에는 지난 시즌을 보여 줍니다.
+      연도별 신적설에서는 <b>최근 3시즌</b>을 고를 수 있고, 그 이전 시즌은 <b>[지난 시즌] → 엑셀 받기</b>로 받습니다. 관측소 지도의 달력에서는 모든 시즌의 날짜를 고를 수 있습니다(고른 날의 값만 받음). 현재 보유 중인 시즌은 아래 표와 같습니다 (자동으로 최신 상태를 표시).</p>
       <table class="seasons-table" id="seasonsTable">
-        <thead><tr><th>시즌</th><th>보유 일수</th><th>자료 있는 날짜 수</th></tr></thead>
-        <tbody><tr><td colspan="3">불러오는 중...</td></tr></tbody>
+        <thead><tr><th>시즌</th><th>기간</th><th>일수</th><th>자료 있는 날짜 수</th></tr></thead>
+        <tbody><tr><td colspan="4">불러오는 중...</td></tr></tbody>
       </table>
 
       <h3>9. 새로운 기간 데이터 추가</h3>
-      <p>시즌(11.15~3.15) 동안 매일 <b>01:10</b>에 서버가 <b>전날</b> 자료를 위 6번과 같은 방법(00~23시 24번 조회 → 관측소별 최댓값)으로 받아 저장합니다. 기상청 응답이 늦어 못 받은 시각은 오전 11:40까지 30분마다 그 시각만 다시 받습니다.</p>
+      <p>11월 1일 ~ 4월 30일 동안 매일 <b>01:10</b>에 서버가 <b>전날</b> 자료를 위 6번과 같은 방법(00~23시 24번 조회 → 관측소별 최댓값)으로 받아 저장합니다. 기상청 응답이 늦어 못 받은 시각은 오전 11:40까지 30분마다 그 시각만 다시 받습니다. 아직 24시각을 다 받지 못한 날은 연도별 신적설 표에 <b>'수집 중'</b>으로 표시되며, 시즌 합계에는 받은 만큼 들어갑니다.</p>
 
       <h3>10. 화면 디자인 참고</h3>
       <p>화면 색·카드 모양은 Figma 커뮤니티의 <b>UKO – UI Kit &amp; Dashboard Design System</b>(CC BY 4.0)을, 화면 다듬기 점검 항목은 <b>Taste Skill</b>의 redesign 규칙(MIT)을 참고했습니다. 색(겨울·눈)과 내용은 이 사이트에 맞게 새로 정했고, 그 파일들의 로고·그림은 쓰지 않았습니다. 글꼴은 <b>Pretendard</b>(SIL OFL 1.1)입니다.</p>
@@ -509,8 +534,8 @@
 <script src="auth/auth.js?v=3a94d92b"></script>
 <script src="auth/events.js?v=0c959479"></script>
 <script src="auth/gate.js?v=309218bc"></script>
-<script src="auth/snow.js?v=2f5aaf21"></script>
-<script src="boot.js?v=702cf420"></script>
+<script src="auth/snow.js?v=21f5a422"></script>
+<script src="boot.js?v=b619b278"></script>
 <script src="login/intro-loader.js?v=2c2f6b9d"></script>
 </body>
 </html>

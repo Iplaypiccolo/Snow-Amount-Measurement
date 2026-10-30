@@ -27,8 +27,8 @@ def snow_snapshot_text():
     return _SNAP["t"]
 
 def snow_v2_rows():
-    """시즌별 요약본(마이그레이션 31): 'snow' = 목록, 'snow:<시즌>' = 그 시즌. 화면이 쓰는 관측소(data/stations.json)만.
-    표본은 2024-25 한 시즌뿐이라, 그 값을 반으로 줄인 2020~2023 시즌을 덧붙여 5시즌으로 만듦(최근 3 + 지난 2)"""
+    """시즌별 요약본(마이그레이션 31·47): 'snow' = 목록(version 3: label 'YYYY-YY', start·end·ongoing·partial), 'snow:<시즌>' = 그 시즌. 화면이 쓰는 관측소(data/stations.json)만.
+    표본은 2024-25 한 시즌뿐이라, 그 값을 반으로 줄인 2020~2023 시즌을 덧붙여 5시즌으로 만듦(최근 3 + 지난 2). 기간은 표본 그대로 11/15~3/15, 2024-25 의 3/15 는 '수집 중'(partial)"""
     if "v2" not in _SNAP:
         base = json.loads(snow_snapshot_text())[0]["body"]["seasons"]
         real_label = sorted(base)[-1]; real = base[real_label]
@@ -42,10 +42,11 @@ def snow_v2_rows():
                 if stn not in ids: continue
                 a = [(arr[i] if y == 2024 else (None if arr[i] is None else round(arr[i] * 0.5, 1))) if i < len(arr) else None for i in range(len(dates))]
                 st[stn] = a
-            lab = f"{y}-11-15~{y + 1}-03-15"
+            lab = f"{y}-{(y + 1) % 100:02d}"
             rows["snow:" + lab] = {"key": "snow:" + lab, "body": {"dates": dates, "st": st}, "built_at": f"2026-10-0{y - 2019}T00:00:00Z"}
-            index.append({"label": lab, "days": len(dates), "data_days": sum(1 for i in range(len(dates)) if any(v[i] is not None for v in st.values())), "stations": len(st)})
-        rows["snow"] = {"key": "snow", "body": {"version": 2, "seasons": index}, "built_at": "2026-10-05T00:00:00Z"}
+            index.append({"label": lab, "start": dates[0], "end": dates[-1], "ongoing": False, "partial": [dates[-1]] if y == 2024 else None,
+                          "days": len(dates), "data_days": sum(1 for i in range(len(dates)) if any(v[i] is not None for v in st.values())), "stations": len(st)})
+        rows["snow"] = {"key": "snow", "body": {"version": 3, "seasons": index}, "built_at": "2026-10-05T00:00:00Z"}
         _SNAP["v2"] = rows
     return _SNAP["v2"]
 
@@ -54,7 +55,7 @@ DOMAIN = "snow-support.invalid"
 CORS = {"access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "*"}
 ADMIN_PW = "Admin#Pass-2026x!"
 # 서버 표 permissions 와 같은 목록(마이그레이션 15)
-PERMS = [("juris.request", "관할 구간 변경 요청", ["branch"]), ("juris.edit", "관할 변경 저장·요청 승인", []), ("grid.edit", "예보 격자 편입", []), ("snow.upload", "적설 자료 올리기", []),
+PERMS = [("juris.request", "관할 구간 변경 요청", ["branch"]), ("juris.edit", "관할 변경 저장·요청 승인", []), ("grid.edit", "예보 격자 편입", []),
          ("req.edit.own", "자기 지사 요청 입력", ["branch"]), ("req.edit.hq", "자기 본부 지사 요청 입력", ["hq"]), ("req.confirm", "요청 확정·편성·기준일자", []),
          ("equip.edit.own", "자기 기관 장비·경로 입력", ["equip"]), ("equip.edit.all", "모든 기관 장비·경로 입력", []), ("log.view", "접속·수정 기록 보기", [])]
 def default_perms(role): return [k for k, _, r in PERMS if role in r]
@@ -67,7 +68,7 @@ class Mock:
         self.requests, self.rid, self.req_calls = [], 0, []          # 구간 변경 요청(jurisdiction_requests)
         self.events = {"jurisdiction_events": [], "grid_events": []}  # 변경 이력 표 (저장하면 쌓이고, 모든 사용자가 같은 것을 읽음)
         self.event_calls, self.events_fail = [], None                 # 저장 요청 기록 / 저장·읽기 오류 흉내 (status, body)
-        self.snow_calls, self.snow_empty = [], False                  # 적설 넣기 함수 호출 기록 / 요약본이 아직 없는 상황 흉내
+        self.snow_daily_calls, self.snow_empty = [], False            # 하루치 원자료 읽기 기록 / 요약본이 아직 없는 상황 흉내
         self.add("admin-01", "관리자1", "admin", None, ADMIN_PW)
         self.add("admin-02", "관리자2", "admin", None, "Second#Admin-77qZ")
         names = [("exchungju", "충주지사", "B019", "H04"), ("exdongseoul", "동서울지사", "B006", "H02"), ("exgurye", "구례지사", "B039", "H07"), ("exwonju", "원주지사", "B011", "H03"),
@@ -262,7 +263,13 @@ class Mock:
                     else: rows = []
                 cols = sel.split(",")
                 return send(200, [{c: r.get(c) for c in cols} for r in rows])
-            if tbl == "snow_uploads": return send(200, [{"at": "2026-10-04T01:00:00Z", "date_from": "2025-12-01", "date_to": "2025-12-02", "stations": 2, "rows_written": 2, "ok": True, "note": "txt by admin-01"}] if self.can(u, "snow.upload") else [])
+            if tbl == "snow_daily":                                                       # 관측소 지도 달력에서 받지 않은 시즌의 하루치(auth/snow.js loadDate)
+                if not self.usable(u): return send(200, [])
+                d = (q.get("date") or [""])[0].replace("eq.", "").replace("-", ""); self.snow_daily_calls.append(d); out = []
+                for k, r in snow_v2_rows().items():
+                    if k == "snow" or d not in r["body"]["dates"]: continue
+                    i = r["body"]["dates"].index(d); out += [{"station_id": int(stn), "value": arr[i]} for stn, arr in r["body"]["st"].items() if arr[i] is not None]
+                return send(200, out)
             if tbl == "save_jurisdiction" and "/rpc/" in path: return self.save_rpc(u, body, send)
             if tbl == "branch_forecast": return send(200, self.branch_forecast if self.usable(u) else [])
             if tbl == "forecast_grid" and "/rpc/" in path:
@@ -337,13 +344,6 @@ class Mock:
                 if k.startswith("eq."): rows = [r for r in rows if r["kind"] == k[3:]]
                 return send(200, rows)
             return send(404, {"message": "no table"})
-        if path == "/functions/v1/import-snow":
-            if not self.can(u, "snow.upload"): return send(403, {"ok": False, "error": "forbidden", "message": "적설 자료 올리기 권한이 있는 계정만 할 수 있습니다."})
-            self.snow_calls.append(body)
-            dry = body.get("action") == "plan"
-            return send(200, {"ok": True, "action": body.get("action"), "summary": {"source": "txt" if "txt" in body else "github:main", "stations": 2, "values": 3, "dates": ["20251201", "20251202"]},
-                              "counts": {"new": 2, "changed": 0, "same": 0, "skipped_missing": 1, "skipped_out_of_season": 0, "written": 0 if dry else 2},
-                              "message": "검사만 했습니다. 데이터베이스는 바뀌지 않았습니다." if dry else "2개 값을 저장하고 요약본을 다시 만들었습니다."})
         if path == "/functions/v1/account-admin":
             if not self.active_admin(u): return send(403, {"ok": False, "error": "forbidden", "message": "관리자만 할 수 있는 작업입니다."})
             self.fn_calls.append(body)

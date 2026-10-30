@@ -136,8 +136,8 @@ begin
   perform pg_temp.chk('지원장비: snow_daily 쓰기 차단','authenticated',e,'insert into public.snow_daily values (''2099-12-01'',99001,3.5)','err:42501');
   perform pg_temp.chk('관리자: snow_daily 쓰기','authenticated',a,'insert into public.snow_daily values (''2099-12-01'',99001,3.5)','ok:1');
   perform pg_temp.chk('지사: snow_uploads 읽기 0건','authenticated',b1,'select 1 from public.snow_uploads','ok:0');
-  perform pg_temp.chk('지사: snow_uploads 기록 차단(snow.upload 없음)','authenticated',b1,'insert into public.snow_uploads (ok, rows_written) values (true, 1)','err:42501');
-  perform pg_temp.chk('관리자: snow_uploads 기록','authenticated',a,'insert into public.snow_uploads (ok, rows_written) values (true, 680)','ok:1');
+  perform pg_temp.chk('지사: snow_uploads 기록 차단','authenticated',b1,'insert into public.snow_uploads (ok, rows_written) values (true, 1)','err:42501');
+  perform pg_temp.chk('관리자도 snow_uploads 기록 차단(서버 수집만 씀, 47)','authenticated',a,'insert into public.snow_uploads (ok, rows_written) values (true, 680)','err:42501');
   perform pg_temp.chk('관리자: grid_events 기록(작성자 위조 시도)','authenticated',a,format('insert into public.grid_events (by_user, kind, payload) values (%L,''cellAdd'',''{}'')', b2),'ok:1');
   perform pg_temp.yes('grid_events 작성자는 DB가 채움(위조 불가)', (select by_user = a from public.grid_events order by id desc limit 1));
   perform pg_temp.chk('지사: grid_events 기록 차단(grid.edit 없음)','authenticated',b1,'insert into public.grid_events (kind, payload) values (''cellAdd'',''{}'')','err:42501');

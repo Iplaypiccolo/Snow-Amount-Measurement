@@ -43,7 +43,7 @@ function world(over = {}) {
   return w;
 }
 const PERMS = [
-  { key: 'juris.request', default_roles: ['branch'] }, { key: 'juris.edit', default_roles: [] }, { key: 'grid.edit', default_roles: [] }, { key: 'snow.upload', default_roles: [] },
+  { key: 'juris.request', default_roles: ['branch'] }, { key: 'juris.edit', default_roles: [] }, { key: 'grid.edit', default_roles: [] },
   { key: 'req.edit.own', default_roles: ['branch'] }, { key: 'req.edit.hq', default_roles: ['hq'] }, { key: 'req.confirm', default_roles: [] },
   { key: 'equip.edit.own', default_roles: ['equip'] }, { key: 'equip.edit.all', default_roles: [] }, { key: 'log.view', default_roles: [] },
 ];

@@ -272,51 +272,82 @@ def t_csp_blocks_injected_script(b):
     check(p.evaluate("typeof JurisCore") == "object" and p.evaluate("!!document.querySelector('#snowTableWrap table')"), "사이트 자체 스크립트는 정상 동작")
 
 def t_snow_from_server_not_public_file(b):
-    """적설은 서버 요약본(로그인 필요)에서 읽고, 공개 파일 data/snow_data.json 은 받지 않는다. 지사별 값은 화면이 계산해 예전과 같다. 관리자만 '적설 자료 올리기' 링크"""
+    """적설은 서버 요약본(로그인 필요)에서 읽고, 공개 파일 data/snow_data.json 은 받지 않는다. 지사별 값은 화면이 계산해 예전과 같다. '적설 자료 올리기' 링크는 없앰(2026-10-30)"""
     reqs = []; m = SBM.Mock()
     p = b.new_page(bypass_csp=True, viewport={"width": 1400, "height": 900}); OPENED.append(p)
     p.on("request", lambda r: reqs.append(r.url)); p.route("**/*", route); SBM.install(p, m); p.goto(URL)
     p.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)
     check(not any("snow_data.json" in u for u in reqs) and any("/rest/v1/snapshots" in u for u in reqs), [u for u in reqs if "snow" in u])
-    F = json.load(open(ROOT / "tests/fixtures/snow_sample.json", encoding="utf-8")); lab = "2024-11-15~2025-03-15"
+    F = json.load(open(ROOT / "tests/fixtures/snow_sample.json", encoding="utf-8")); lab = "2024-25"
     got = J(p, f"SNOW_DATA.seasons['{lab}'].branches['강원|||대관령']")
-    check(got == F["seasons"][lab]["branches"]["강원|||대관령"], "지사별 값이 예전 파일과 같아야 함")
+    check(got == F["seasons"]["2024-11-15~2025-03-15"]["branches"]["강원|||대관령"], "지사별 값이 예전 파일과 같아야 함")
     check(J(p, "Object.keys(SNOW_DATA.seasons).length") == 1 and J(p, "!!document.getElementById('downloadJsonBtn') || !!document.getElementById('snowFileInput')") is False, "시즌(표본 1개), 예전 JSON 저장·임시 업로드 버튼 없음")
     p.click(".tab-btn[data-tab=snowtable]"); p.wait_for_timeout(200)
-    check(p.locator("#snowAdminLink").is_visible(), "관리자에게는 적설 자료 올리기 링크")
-    p2 = b.new_page(bypass_csp=True, viewport={"width": 1400, "height": 900}); OPENED.append(p2)
-    p2.route("**/*", route); SBM.install(p2, m, "exchungju"); m.users["exchungju"]["profile"]["must_change"] = False; p2.goto(URL)
-    p2.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)
-    p2.click(".tab-btn[data-tab=snowtable]"); p2.wait_for_timeout(200)
-    check(not p2.locator("#snowAdminLink").is_visible(), "지사에게는 링크가 보이지 않음")
+    check(p.locator("#snowAdminLink").count() == 0, "적설 자료 올리기 링크 없음")
+    check(p.locator("th[data-col-h='20250315'] .partial-tag").inner_text() == "수집 중" and p.locator(".partial-tag").count() == 1, "24시각을 다 못 받은 날은 '수집 중'")
 
 def t_snow_seasons_recent_and_older(b):
-    """적설은 최근 시즌만 먼저 받음. 기간 선택 = 최근 3시즌(고르면 그때 받음), 그 이전은 [지난 시즌]에서 엑셀로만. 관할 미리보기는 전체 시즌을 받아 계산"""
+    """적설은 최근 시즌만 먼저 받음. 기간 선택 = 최근 3시즌('2024-25 시즌 (11.15~3.15)', 고르면 그때 받음), 그 이전은 [지난 시즌]에서 엑셀로만. 관할 미리보기는 전체 시즌을 받아 계산"""
     reqs = []; m = SBM.Mock()
     p = b.new_page(bypass_csp=True, viewport={"width": 1400, "height": 900}, accept_downloads=True); OPENED.append(p)
     p.on("request", lambda r: reqs.append(r.url)); p.route("**/*", route); SBM.install(p, m); p.goto(URL)
     p.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)
-    L = [f"{y}-11-15~{y + 1}-03-15" for y in range(2020, 2025)]
+    L = [f"{y}-{(y + 1) % 100:02d}" for y in range(2020, 2025)]
     check(J(p, "Object.keys(SNOW_DATA.seasons)") == [L[4]], "처음엔 최근 시즌만 받음")
     p.click(".tab-btn[data-tab=snowtable]"); p.wait_for_timeout(300)
-    check(p.locator("#seasonSelect option").all_inner_texts() == L[2:], f"기간 선택 = 최근 3시즌: {p.locator('#seasonSelect option').all_inner_texts()}")
-    check(p.locator("#oldSeasonBox").is_visible() and p.locator("#oldSeasonSelect option").all_inner_texts() == [L[1], L[0]], "지난 시즌은 오른쪽 따로(최근 것부터)")
+    vals = J(p, "Array.from(document.querySelectorAll('#seasonSelect option')).map(o => o.value)")
+    check(vals == L[2:] and p.locator("#seasonSelect option").all_inner_texts()[-1] == "2024-25 시즌 (11.15~3.15)", f"기간 선택 = 최근 3시즌: {p.locator('#seasonSelect option').all_inner_texts()}")
+    check(p.locator("#oldSeasonBox").is_visible() and J(p, "Array.from(document.querySelectorAll('#oldSeasonSelect option')).map(o => o.value)") == [L[1], L[0]], "지난 시즌은 오른쪽 따로(최근 것부터)")
     n = len([u for u in reqs if "/rest/v1/snapshots" in u])
     p.select_option("#seasonSelect", L[2]); p.wait_for_function("document.querySelector('#snowTableWrap table') && Object.keys(SNOW_DATA.seasons).length === 2", timeout=10000)
-    F = json.load(open(ROOT / "tests/fixtures/snow_sample.json", encoding="utf-8"))["seasons"][L[4]]["branches"]["강원|||대관령"]
+    F = json.load(open(ROOT / "tests/fixtures/snow_sample.json", encoding="utf-8"))["seasons"]["2024-11-15~2025-03-15"]["branches"]["강원|||대관령"]
     got = J(p, f"SNOW_DATA.seasons['{L[2]}'].branches['강원|||대관령']")
     check(got == [None if v is None else round(v * 0.5, 1) for v in F], "고른 시즌을 받아 지사별 값 계산")
     check(len([u for u in reqs if "/rest/v1/snapshots" in u]) == n + 1, "고른 시즌 한 번만 받음")
-    dates = J(p, "Array.from(document.querySelectorAll('#dateSelect option')).map(o => o.value).filter(Boolean)")
-    check(dates[0] == "20221115" and dates[-1] == "20250315", f"지도 날짜 = 받은 최근 시즌들: {dates[0]}~{dates[-1]}")
     with p.expect_download(timeout=30000) as dl:
         p.select_option("#oldSeasonSelect", L[0]); p.click("#oldSeasonXlsxBtn")
-    check(dl.value.suggested_filename == f"신적설_{L[0]}.xlsx", dl.value.suggested_filename)
-    check(p.locator("#seasonSelect option").count() == 3 and "20201115" not in J(p, "Array.from(document.querySelectorAll('#dateSelect option')).map(o => o.value)"), "지난 시즌은 기간 선택·지도 날짜에 넣지 않음")
+    check(dl.value.suggested_filename == f"신적설_{L[0]} 시즌.xlsx", dl.value.suggested_filename)
+    check(p.locator("#seasonSelect option").count() == 3, "지난 시즌은 기간 선택에 넣지 않음")
     p.click(".tab-btn[data-tab=sources]"); p.wait_for_timeout(200)
-    check(p.locator("#seasonsTable tbody tr").count() == 5, "데이터 출처: 서버에 있는 시즌 모두")
+    check(p.locator("#seasonsTable tbody tr").count() == 5 and "2020-11-15 ~ 2021-03-15" in p.locator("#seasonsTable").inner_text(), "데이터 출처: 서버에 있는 시즌 모두(기간 포함)")
     J(p, "(() => { SSEnsureAllSeasons(); return null })()"); p.wait_for_function("Object.keys(SNOW_DATA.seasons).length === 5", timeout=10000)
     check(J(p, f"SNOW_DATA.seasons['{L[1]}'].branches['강원|||대관령'].length") == 121, "관할 미리보기용: 전체 시즌을 받아 지사별 값까지")
+
+def t_snow_map_calendar(b):
+    """관측소 지도 날짜 = 달력: 처음엔 아무 날도 안 고름, 시즌 기간(첫눈~마지막 눈) 밖의 날·달은 누를 수 없음.
+    받지 않은 시즌의 날을 고르면 그 하루치만 서버 원자료에서 받음. 연도별 신적설의 칸을 누르면 그 날짜로 지도가 열림"""
+    m = SBM.Mock()
+    p = b.new_page(bypass_csp=True, viewport={"width": 1400, "height": 900}); OPENED.append(p)
+    p.route("**/*", route); SBM.install(p, m); p.goto(URL)
+    p.wait_for_function("window.JurisdictionUI && JurisdictionUI._state().inited", timeout=60000)
+    p.click(".tab-btn[data-tab=map]"); p.wait_for_timeout(200)
+    check(p.locator("#dateSelect").input_value() == "" and p.locator("#dateBtn").inner_text() == "일자 선택(신적설)", "처음엔 날짜를 고르지 않음")
+    p.click("#dateBtn"); p.wait_for_selector("#datePop .cal-grid")
+    check(p.locator("#datePop .cal-month").input_value() == "202503", "달력은 가장 최근 달부터")
+    check(p.locator("#datePop button[data-d='20250315']").is_enabled() and p.locator("#datePop button[data-d='20250316']").is_disabled(), "시즌 끝 다음 날은 비활성")
+    opts = J(p, "Array.from(document.querySelectorAll('#datePop .cal-month option')).map(o => [o.value, o.disabled])")
+    check(["202105", True] in opts and ["202011", False] in opts and opts[0][0] == "202503" and opts[-1][0] == "202011", f"시즌이 없는 달은 비활성: {opts[:3]}")
+    check(p.locator("#datePop .cal-nav[data-go='1']").is_disabled(), "마지막 달에서 다음 달 버튼 꺼짐")
+    p.select_option("#datePop .cal-month", "202011"); p.wait_for_selector("#datePop button[data-d='20201120']")
+    check(p.locator("#datePop button[data-d='20201114']").is_disabled(), "시즌 첫날 전은 비활성")
+    p.click("#datePop button[data-d='20201120']"); p.wait_for_function("document.getElementById('dateBtn').textContent === '2020-11-20' && !document.getElementById('dateBtn').classList.contains('loading')", timeout=10000)
+    check(m.snow_daily_calls == ["20201120"] and p.locator("#datePop").is_hidden(), f"받지 않은 시즌의 날은 하루치만 받음: {m.snow_daily_calls}")
+    check(J(p, "Object.keys(SNOW_DATA.seasons)") == ["2024-25"], "시즌 전체는 받지 않음")
+    sr = J(p, "SNOW_DATA.stationData['100'] ? SNOW_DATA.stationData['100']['20201120'] : 'none'")
+    check(sr != "none", "그날 값이 지도 자료에 들어감")
+    p.click("#dateBtn"); p.click("#datePop button[data-d='20201121']"); p.wait_for_timeout(300)
+    p.click("#dateBtn"); p.click("#datePop button[data-d='20201120']"); p.wait_for_timeout(300)
+    check(m.snow_daily_calls == ["20201120", "20201121"], f"한 번 받은 날은 다시 받지 않음: {m.snow_daily_calls}")
+    p.click("#dateBtn"); check(p.locator("#datePop .cal-month").input_value() == "202011", "달력은 고른 날의 달")
+    p.select_option("#datePop .cal-month", "202501"); p.click("#datePop button[data-d='20250110']"); p.wait_for_timeout(300)
+    check(len(m.snow_daily_calls) == 2 and p.locator("#dateBtn").inner_text() == "2025-01-10", "받아 둔 시즌의 날은 서버에 묻지 않음")
+    p.click("#dateBtn"); p.click("#datePop .cal-clear"); p.wait_for_timeout(200)
+    check(p.locator("#dateSelect").input_value() == "" and p.locator("#dateBtn").inner_text() == "일자 선택(신적설)", "선택 해제")
+    p.click(".tab-btn[data-tab=snowtable]"); p.wait_for_selector("#snowTableWrap td.snowcell")
+    p.locator("#snowTableWrap td.snowcell[data-date='20250105']").first.click(); p.wait_for_timeout(400)
+    check(p.locator("#view-map").is_visible() and p.locator("#dateSelect").input_value() == "20250105" and p.locator("#dateBtn").inner_text() == "2025-01-05", "표의 칸을 누르면 그 날짜로 지도")
+    p.click("#dateBtn"); check(p.locator("#datePop .cal-month").input_value() == "202501" and p.locator("#datePop button.sel").get_attribute("data-d") == "20250105", "달력도 그 달·그 날")
+    p.mouse.click(5, 300); p.wait_for_timeout(100); check(p.locator("#datePop").is_hidden(), "바깥을 누르면 닫힘")
 
 def t_snow_old_format_still_works(b):
     """서버가 아직 예전 요약본(한 줄에 모든 시즌)이어도 화면이 열림"""
@@ -654,7 +685,7 @@ def t_private_hq(b):
     check(p.locator("#statBranch").inner_text() == "59", "민자 기관이 강설량 화면 통계에 들어가면 안 됨")
     check(J(p, "HIERARCHY.hq.some(h => h.name === '민자')") is False, "HIERARCHY 에 민자 본부가 생기면 안 됨")
 
-TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload, t_new_branch_id_survives_save, t_legacy_new_branch_without_id_still_works, t_html_in_branch_name_is_text, t_new_branch_position_and_reorder, t_hq_tabs_admin_all_then_hq_only, t_branch_click_yellow_others_gray, t_unassigned_toggle, t_hq_tabs_branch_starts_with_own_hq, t_csp_blocks_injected_script, t_snow_from_server_not_public_file, t_snow_seasons_recent_and_older, t_snow_old_format_still_works, t_snow_server_empty_shows_no_data,
+TESTS = [t_tab_loads, t_view_mode_cannot_select, t_move_preview_save, t_shift_range_select, t_add_branch_and_move, t_move_branch_hq, t_save_then_everyone_sees, t_live_refresh_without_reload, t_new_branch_id_survives_save, t_legacy_new_branch_without_id_still_works, t_html_in_branch_name_is_text, t_new_branch_position_and_reorder, t_hq_tabs_admin_all_then_hq_only, t_branch_click_yellow_others_gray, t_unassigned_toggle, t_hq_tabs_branch_starts_with_own_hq, t_csp_blocks_injected_script, t_snow_from_server_not_public_file, t_snow_seasons_recent_and_older, t_snow_map_calendar, t_snow_old_format_still_works, t_snow_server_empty_shows_no_data,
          t_save_failure_keeps_pending_and_offers_file, t_history_load_failure_falls_back_and_blocks_save, t_history_paging_and_backup_export,
          t_border_on_click_view_mode, t_border_contrast_all_colors, t_admin_click_has_border, t_pick_destination_on_map, t_no_admin_checkbox_and_no_popup_move_button,
          t_save_bar_always_visible, t_unassigned_visible_and_clickable, t_assign_unassigned_to_branch, t_select_all_unassigned_row,

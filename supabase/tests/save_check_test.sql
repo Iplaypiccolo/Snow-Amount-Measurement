@@ -58,7 +58,7 @@ begin
   perform pg_temp.chk('빈 목록 거절','authenticated',a,'select public.save_jurisdiction(''[]'')','err:22023');
 
   -- 09. 적설 함수는 서버(service_role)만
-  perform pg_temp.chk('관리자도 적설 넣기 함수 직접 호출 불가','authenticated',a,'select public.admin_import_snow(''{}'', false, true)','err:42501');
+  perform pg_temp.chk('관리자도 적설 넣기 함수 직접 호출 불가','authenticated',a,'select public.snow_put(''2025-12-01'', 0, ''{}'')','err:42501');
   perform pg_temp.chk('관리자도 요약본 만들기 직접 호출 불가','authenticated',a,'select public.admin_rebuild_snow_snapshot()','err:42501');
   perform pg_temp.chk('지사: 적설 원자료 쓰기 불가','authenticated',b,'insert into public.snow_daily (date, station_id, value) values (''2025-12-01'', 90, 1)','err:42501');
   perform pg_temp.chk('지사: 요약본 읽기 가능','authenticated',b,'select 1 from public.snapshots where false','ok:0');

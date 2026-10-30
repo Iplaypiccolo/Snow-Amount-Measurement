@@ -496,35 +496,91 @@ function initApp(){
     return SSSnow.loadAll(SNOW_DATA).then(function(){ if(window.JurisCore) JurisCore.rebuildAllSeries(HIERARCHY, SNOW_DATA); });
   };
 
+  // 시즌 이름: 'YYYY-YY'(2026-10-30, 첫눈~마지막 눈) → '2025-26 시즌', 목록에서는 기간도 '(11.25~3.15)', 진행 중이면 '(11.25~진행 중)'. 예전 이름(11.15~3.15)은 그대로
+  function seasonIx(label){ return (SNOW_DATA.index || []).filter(function(x){ return x.label === label; })[0] || null; }
+  function seasonName(label){ return /^\d{4}-\d{2}$/.test(label) ? label + ' 시즌' : label; }
+  function md(d){ return (+d.slice(4,6)) + '.' + (+d.slice(6,8)); }
+  function seasonText(label){
+    var ix = seasonIx(label);
+    return (ix && ix.start && ix.end) ? seasonName(label) + ' (' + md(ix.start) + '~' + (ix.ongoing ? '진행 중' : md(ix.end)) + ')' : seasonName(label);
+  }
   function refreshSeasonOptions(){
     var sel = document.getElementById('seasonSelect');
     var labels = recentLabels();
     var prev = sel.value;
-    sel.innerHTML = labels.map(function(l){return '<option value="'+esc(l)+'">'+esc(l)+'</option>';}).join('');
+    sel.innerHTML = labels.map(function(l){return '<option value="'+esc(l)+'">'+esc(seasonText(l))+'</option>';}).join('');
     if(labels.indexOf(prev) !== -1) sel.value = prev;
     else if(labels.length) sel.value = labels[labels.length-1];
     var older = (SNOW_DATA.older || []).slice().sort().reverse();
     var osel = document.getElementById('oldSeasonSelect');
     if(osel){
-      osel.innerHTML = older.map(function(l){return '<option value="'+esc(l)+'">'+esc(l)+'</option>';}).join('');
+      osel.innerHTML = older.map(function(l){return '<option value="'+esc(l)+'">'+esc(seasonText(l))+'</option>';}).join('');
       document.getElementById('oldSeasonBox').hidden = !older.length;
     }
   }
 
-  function refreshDateOptions(){
-    var allDates = {}, recent = recentLabels();
-    Object.keys(SNOW_DATA.seasons).forEach(function(label){
-      if(recent.indexOf(label) === -1) return;                // 지난 시즌(엑셀·미리보기로만 받은 것)은 지도 날짜에 넣지 않음
-      SNOW_DATA.seasons[label].dates.forEach(function(d){ allDates[d] = true; });
-    });
-    var sorted = Object.keys(allDates).sort();
-    var sel = document.getElementById('dateSelect');
-    var prev = sel.value;
-    sel.innerHTML = '<option value="">일자 선택(신적설)</option>' + sorted.map(function(d){
-      return '<option value="'+d+'">'+d.slice(0,4)+'-'+d.slice(4,6)+'-'+d.slice(6,8)+'</option>';
-    }).join('');
-    if(sorted.indexOf(prev) !== -1) sel.value = prev;
+  // ---------- 관측소 지도 날짜 고르기(달력, 2026-10-30) ----------
+  // 고를 수 있는 날 = 시즌 기간(첫눈~마지막 눈) 안의 날. 그 밖의 날·달은 누를 수 없음. 처음엔 아무 날도 고르지 않음
+  // 고르면 그날 값만 받음(받아 둔 시즌이면 그대로, 아니면 서버 원자료에서 하루치 — SSSnow.loadDate)
+  var dateInput = document.getElementById('dateSelect'), dateBtn = document.getElementById('dateBtn'), datePop = document.getElementById('datePop');
+  var datePick = dateBtn.parentNode, calRanges = [], calMonth = null, dateSeq = 0;      // calRanges = [[시작, 끝] YYYYMMDD], calMonth = 'YYYYMM'
+  function fmtDate(d){ return d.slice(0,4)+'-'+d.slice(4,6)+'-'+d.slice(6,8); }
+  function calEnabled(ymd){ return calRanges.some(function(r){ return r[0] <= ymd && ymd <= r[1]; }); }
+  function monthEnabled(ym){ return calRanges.some(function(r){ return r[0].slice(0,6) <= ym && ym <= r[1].slice(0,6); }); }
+  function monthList(){                                       // 첫 시즌 첫 달 ~ 마지막 시즌 마지막 달
+    if(!calRanges.length) return [];
+    var last = calRanges.reduce(function(m, r){ return r[1] > m ? r[1] : m; }, '').slice(0,6), y = +calRanges[0][0].slice(0,4), m = +calRanges[0][0].slice(4,6), out = [];
+    for(;;){ var ym = y + String(m).padStart(2,'0'); out.push(ym); if(ym >= last) break; if(++m > 12){ m = 1; y++; } }
+    return out;
   }
+  function refreshDateOptions(){
+    var idx = (SNOW_DATA.index || []).filter(function(x){ return x.start && x.end; });
+    calRanges = idx.length ? idx.map(function(x){ return [x.start, x.end]; })
+      : Object.keys(SNOW_DATA.seasons).map(function(l){ var d = SNOW_DATA.seasons[l].dates; return d.length ? [d[0], d[d.length-1]] : null; }).filter(Boolean);   // 예전 모양: 받은 시즌의 날짜
+    calRanges.sort(function(a, b){ return a[0] < b[0] ? -1 : 1; });
+    if(dateInput.value && !calEnabled(dateInput.value)) setDate('');
+    if(!datePop.hidden) drawCal();
+  }
+  function drawCal(){
+    var months = monthList();
+    if(!months.length){ datePop.innerHTML = '<div class="cal-empty">고를 수 있는 날짜가 없습니다</div>'; return; }
+    if(!calMonth || months.indexOf(calMonth) === -1) calMonth = dateInput.value ? dateInput.value.slice(0,6) : months[months.length-1];
+    var en = months.filter(monthEnabled), i = en.indexOf(calMonth);
+    var y = +calMonth.slice(0,4), m = +calMonth.slice(4,6), first = new Date(y, m-1, 1).getDay(), n = new Date(y, m, 0).getDate();
+    var h = '<div class="cal-head"><button type="button" class="cal-nav" data-go="-1"'+(i <= 0 ? ' disabled' : '')+' aria-label="이전 달">‹</button>'+
+      '<select class="cal-month" aria-label="달 고르기">'+months.slice().reverse().map(function(ym){
+        return '<option value="'+ym+'"'+(ym === calMonth ? ' selected' : '')+(monthEnabled(ym) ? '' : ' disabled')+'>'+ym.slice(0,4)+'년 '+(+ym.slice(4))+'월</option>';
+      }).join('')+'</select>'+
+      '<button type="button" class="cal-nav" data-go="1"'+(i >= en.length-1 ? ' disabled' : '')+' aria-label="다음 달">›</button></div><div class="cal-grid">'+
+      ['일','월','화','수','목','금','토'].map(function(w){ return '<span class="cal-w">'+w+'</span>'; }).join('');
+    for(var k = 0; k < first; k++) h += '<span></span>';
+    for(var d = 1; d <= n; d++){
+      var ymd = calMonth + String(d).padStart(2,'0');
+      h += '<button type="button" class="cal-d'+(ymd === dateInput.value ? ' sel' : '')+'" data-d="'+ymd+'"'+(calEnabled(ymd) ? '' : ' disabled')+'>'+d+'</button>';
+    }
+    datePop.innerHTML = h + '</div><div class="cal-foot"><button type="button" class="cal-clear">선택 해제</button></div>';
+  }
+  function setDate(d){
+    dateInput.value = d || '';
+    if(d) calMonth = d.slice(0,6);
+    dateBtn.textContent = d ? fmtDate(d) : '일자 선택(신적설)';
+    var my = ++dateSeq;
+    if(!d || !window.SSSnow){ dateChanged(); return Promise.resolve(); }
+    dateBtn.classList.add('loading');
+    return SSSnow.loadDate(SNOW_DATA, d).then(function(){ if(my === dateSeq) dateChanged(); },
+      function(){ if(my === dateSeq){ dateBtn.textContent = fmtDate(d) + ' (불러오지 못함)'; dateChanged(); } })
+      .then(function(){ if(my === dateSeq) dateBtn.classList.remove('loading'); });
+  }
+  dateBtn.addEventListener('click', function(){ datePop.hidden = !datePop.hidden; if(!datePop.hidden) drawCal(); });
+  datePop.addEventListener('click', function(e){
+    var t = e.target.closest('button'); if(!t || t.disabled) return;
+    if(t.dataset.go){ var en = monthList().filter(monthEnabled), i = en.indexOf(calMonth) + Number(t.dataset.go); if(en[i]){ calMonth = en[i]; drawCal(); } return; }
+    if(t.dataset.d){ datePop.hidden = true; setDate(t.dataset.d); return; }
+    if(t.classList.contains('cal-clear')){ datePop.hidden = true; setDate(''); }
+  });
+  datePop.addEventListener('change', function(e){ if(e.target.classList.contains('cal-month')){ calMonth = e.target.value; drawCal(); } });
+  document.addEventListener('click', function(e){ if(!datePop.hidden && e.composedPath().indexOf(datePick) === -1) datePop.hidden = true; });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && !datePop.hidden){ datePop.hidden = true; dateBtn.focus(); } });
 
   function computeBranchMax(hqName, brName, date){
     if(!date) return null;
@@ -562,7 +618,7 @@ function initApp(){
     });
   }
 
-  document.getElementById('dateSelect').addEventListener('change', function(){
+  function dateChanged(){
     updateAllSnowBadges();
     // 현재 열려있는 지사가 있으면 지도 라벨도 갱신
     if(openBranch){
@@ -574,7 +630,7 @@ function initApp(){
       hqKey.forEach(function(k){ allSt = allSt.concat(rowRegistry[k].br.stations); });
       showSnowLabels(allSt);
     }
-  });
+  }
 
   function openBranchByKey(key){
     var entry = rowRegistry[key];
@@ -590,14 +646,15 @@ function initApp(){
     var index = SNOW_DATA.index || [];
     var labels = index.length ? index.map(function(x){ return x.label; }).sort() : Object.keys(SNOW_DATA.seasons).sort();
     if(labels.length === 0){
-      tbody.innerHTML = '<tr><td colspan="3">보유 중인 시즌 없음</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4">보유 중인 시즌 없음</td></tr>';
       return;
     }
     tbody.innerHTML = labels.map(function(label){
       var season = SNOW_DATA.seasons[label];
       var ix = index.filter(function(x){ return x.label === label; })[0];
       if(ix && ix.data_days != null){                          // 서버 목록에 있는 값(시즌을 받지 않아도 보임)
-        return '<tr><td>'+esc(label)+'</td><td class="mono-cell">'+ix.days+'일</td><td class="mono-cell">'+ix.data_days+'일</td></tr>';
+        var span = ix.start && ix.end ? fmtDate(ix.start)+' ~ '+(ix.ongoing ? '진행 중('+fmtDate(ix.end)+'까지)' : fmtDate(ix.end)) : '-';
+        return '<tr><td>'+esc(seasonName(label))+'</td><td class="mono-cell">'+esc(span)+'</td><td class="mono-cell">'+ix.days+'일</td><td class="mono-cell">'+ix.data_days+'일</td></tr>';
       }
       if(!season) return '';
       var branchKeys = Object.keys(season.branches);
@@ -607,7 +664,8 @@ function initApp(){
           if(season.branches[branchKeys[j]][i] != null){ daysWithData++; break; }
         }
       }
-      return '<tr><td>'+esc(label)+'</td><td class="mono-cell">'+season.dates.length+'일</td><td class="mono-cell">'+daysWithData+'일</td></tr>';
+      var dd = season.dates;
+      return '<tr><td>'+esc(seasonName(label))+'</td><td class="mono-cell">'+(dd.length ? fmtDate(dd[0])+' ~ '+fmtDate(dd[dd.length-1]) : '-')+'</td><td class="mono-cell">'+dd.length+'일</td><td class="mono-cell">'+daysWithData+'일</td></tr>';
     }).join('');
   }
 
@@ -622,11 +680,11 @@ function initApp(){
       return;
     }
     if(!season){ wrap.innerHTML = '<div style="padding:20px;color:#888;">자료 없음</div>'; return; }
-    var dates = season.dates;
+    var dates = season.dates, partial = (seasonIx(label) || {}).partial || [];     // 24시각을 다 못 받은 날(오늘 오전까지 '수집 중')
 
     var html = '<table class="snowtable"><thead><tr><th class="row-label row-label-head">본부 / 지사</th><th class="sum-col-head">지사:합계<br>본부:평균</th>';
     dates.forEach(function(d){
-      html += '<th data-col-h="'+d+'">'+d.slice(4,6)+'/'+d.slice(6,8)+'</th>';
+      html += '<th data-col-h="'+d+'">'+d.slice(4,6)+'/'+d.slice(6,8)+(partial.indexOf(d) !== -1 ? '<br><span class="partial-tag">수집 중</span>' : '')+'</th>';
     });
     html += '</tr></thead><tbody>';
 
@@ -686,8 +744,7 @@ function initApp(){
         var key = this.dataset.branch;
         var parts = key.split('|||');
         switchTab('map');
-        document.getElementById('dateSelect').value = date;
-        updateAllSnowBadges();
+        setDate(date);
         openBranchByKey(key);
       });
     });
@@ -735,8 +792,8 @@ function initApp(){
     var ws = XLSX.utils.aoa_to_sheet(rows);
     ws['!cols'] = [{wch:16},{wch:14}].concat(dates.map(function(){return {wch:9};}));
     var wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, label.slice(0,31));
-    XLSX.writeFile(wb, '신적설_'+label+'.xlsx');
+    XLSX.utils.book_append_sheet(wb, ws, seasonName(label).slice(0,31));
+    XLSX.writeFile(wb, '신적설_'+seasonName(label)+'.xlsx');
   }
 
   // 엑셀 라이브러리(약 300KB)는 첫 화면을 늦추지 않도록 [엑셀로 내보내기]를 처음 누를 때 불러옵니다.

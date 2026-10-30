@@ -54,7 +54,6 @@
       else { var ft = document.querySelector('.tab-btn[data-tab=forecast]'); if (ft) ft.click(); }   // 첫 탭 = 기관별 24시간 예보
       var can = function(p){ return !!(window.SS_CAN && window.SS_CAN(p)); };
       if (can('log.view')) { var elb = document.getElementById('eqLogBtn'); if (elb) elb.hidden = false; }   // 왼쪽 메뉴 '로그 기록': 장비 화면과 같은 권한(log.view)
-      if (can('snow.upload')) { var sal = document.getElementById('snowAdminLink'); if (sal) sal.hidden = false; }   // 적설 자료 올리기: 권한 있는 계정에만 링크(올리기는 서버가 다시 검사)
       // 지사가 올린 구간 변경 요청이 있으면 알림창·탭 표시 (요청을 승인할 수 있는 juris.edit 권한)
       if (can('juris.edit') && window.JurisRequests){ JurisRequests.startAdminWatch({
           nameOf: function(id){ var b = (window.JURIS.doc.branches || []).filter(function(x){ return x.id === id; })[0]; return b ? b.name + ' 지사' : id; },
