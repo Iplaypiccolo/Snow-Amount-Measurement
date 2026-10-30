@@ -1277,6 +1277,8 @@ function refreshKeepFocus() {   // 값을 고친 뒤 화면을 다시 그리되,
 /* ============================================================
    [10] 입력 처리 — 한 곳에서
    ============================================================ */
+// 표 가독성(2026-10-30): 0·빈칸을 흐리게 하는 CSS 가 value 속성을 보므로, 입력하는 동안에도 속성을 맞춰 둠
+document.addEventListener("input", e => { const t = e.target; if (t.matches && t.matches("input.num, input[type=date]")) t.setAttribute("value", t.value); });
 document.addEventListener("change", async e => {
   const t = e.target;
   if (t.id === "userSel") return switchUser(t.value);
