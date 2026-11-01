@@ -340,6 +340,12 @@ def t_fleet_header_stays_on_top(p):
 
 def t_theme_toggle(p):
     btns = p.locator("[data-theme-set]").all_inner_texts(); check(btns == ["라이트 모드", "다크 모드"], btns)
+    q = p.context.browser.new_page(color_scheme="dark")          # 컴퓨터가 다크 모드여도 처음엔 라이트(2026-11-01 사용자 결정)
+    try:
+        q.goto(URL); q.wait_for_selector("#matrix tbody tr", timeout=15000)
+        bg = q.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--bg').trim().toUpperCase()")
+        check(bg != "#0F151C" and q.locator("[data-theme-set=light]").get_attribute("aria-pressed") == "true", f"기본은 라이트 모드: {bg}")
+    finally: q.close()
     p.click("[data-theme-set=dark]"); p.wait_for_timeout(100)
     check(ev(p, "document.documentElement.dataset.theme") == "dark" and p.locator("[data-theme-set=dark]").get_attribute("aria-pressed") == "true", "다크 모드")
     p.reload(); p.wait_for_selector("#matrix tbody tr")

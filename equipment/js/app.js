@@ -1513,7 +1513,7 @@ setInterval(() => { if (!S.date || !$("refTime")) return; const sig = S.date + "
 // 화면 모드: [라이트 모드] [다크 모드] 두 칸 버튼. 고른 모드는 이 브라우저에 기억
 const THEME_KEY = "eq_theme", TEAM_KEY = "eq_show_team";
 try { S.showTeam = localStorage.getItem(TEAM_KEY) !== "0"; } catch (e) {}           // 기본은 보임
-function curTheme() { const r = document.documentElement.dataset.theme; return r || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); }
+function curTheme() { return document.documentElement.dataset.theme === "dark" ? "dark" : "light"; }      // 기본 라이트(2026-11-01), 고른 사람만 다크
 function paintThemeBtns() { document.querySelectorAll("[data-theme-set]").forEach(b => b.setAttribute("aria-pressed", b.dataset.themeSet === curTheme())); }
 function setTheme(t) { document.documentElement.dataset.theme = t; try { localStorage.setItem(THEME_KEY, t); } catch (e) {} paintThemeBtns(); }
 try { const t = localStorage.getItem(THEME_KEY); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}

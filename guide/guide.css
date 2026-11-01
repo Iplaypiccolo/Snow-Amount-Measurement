@@ -114,31 +114,6 @@
 .sg-tile span{font-size:12.5px;color:var(--sg-mute);line-height:1.5;}
 .sg-hint{margin:0;font-size:12.5px;color:var(--sg-mute);}
 
-/* ---- 계정별 메뉴 표 ---- */
-.sg-mx-wrap{overflow-x:auto;border-radius:14px;border:1px solid var(--sg-line);background:rgba(255,255,255,.025);}
-.sg-mx{border-collapse:collapse;width:100%;min-width:520px;font-size:12.5px;}
-.sg-mx th,.sg-mx td{padding:8px 6px;text-align:center;border-bottom:1px solid rgba(148,197,255,.1);}
-.sg-mx thead th{font-size:11.5px;font-weight:600;color:var(--sg-mute);background:rgba(255,255,255,.03);line-height:1.3;}
-.sg-mx thead th.gw{color:var(--sg-am);}
-.sg-mx tbody th{text-align:left;font-weight:700;color:#eaf2ff;white-space:nowrap;padding-left:12px;}
-.sg-mx tbody th small{display:block;font-size:10.5px;font-weight:500;color:var(--sg-mute);}
-.sg-mx tbody th em{display:inline-block;margin-left:6px;font-style:normal;font-size:10px;font-weight:800;color:#04121f;background:var(--sg-cy);padding:1px 6px;border-radius:999px;vertical-align:1px;}
-.sg-mx tbody tr:last-child th,.sg-mx tbody tr:last-child td{border-bottom:0;}
-.sg-mx tr.me{background:linear-gradient(90deg,rgba(94,231,255,.14),rgba(94,231,255,.03));box-shadow:inset 3px 0 0 var(--sg-cy);}
-.sg-mx tr.gw th{color:#ffe7a8;}
-.sg-mx tr.gw th small{color:var(--sg-am);}
-.sg-c{display:inline-block;min-width:38px;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:700;line-height:1.5;white-space:nowrap;}
-.sg-c.w{color:#04121f;background:linear-gradient(90deg,var(--sg-cy),#9fc2ff);}
-.sg-c.r{color:#cfe0f5;border:1px solid rgba(148,197,255,.35);}
-.sg-c.x{color:rgba(157,176,201,.45);}
-.sg-mx tr.gw td:nth-child(6) .sg-c.w{background:linear-gradient(90deg,#fde68a,var(--sg-am));}
-.sg-legend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:10px 0 6px;font-size:12px;color:var(--sg-mute);}
-.sg-legend .sg-c{margin-left:6px;}
-.sg-legend .sg-c:first-child{margin-left:0;}
-.sg-legend-r{margin-left:auto;font-size:11.5px;opacity:.8;}
-.sg-foot-note{margin:0;font-size:12.5px;color:var(--sg-mute);line-height:1.6;}
-.sg-foot-note b{color:#ffe7a8;}
-
 /* ---- 지원 과정 그림 ---- */
 .sg-flow-box{border-radius:16px;border:1px solid var(--sg-line);padding:10px;margin-bottom:12px;
   background:radial-gradient(80% 120% at 55% 50%,rgba(109,139,255,.12),transparent 70%),rgba(255,255,255,.02);}

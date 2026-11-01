@@ -1,7 +1,7 @@
 /* ============================================================
    guide/guide.js — 사용법 안내 (2026-10-30, 사용자 요청)
    - 로그인해서 강설량 측정이 처음 열리면 그 페이지 메뉴(탭)를 차례로 설명하고,
-     장비 지원으로 처음 넘어가면 '지원 과정' 그림 → 계정별 메뉴 → 탭 설명을 차례로 보여 줌.
+     장비 지원으로 처음 넘어가면 '지원 과정' 그림 → 탭 설명을 차례로 보여 줌. (계정별 권한 표는 2026-11-01 사용자 요청으로 뺌)
    - 오른쪽 아래 [다음](마지막은 [시작하기]) 또는 오른쪽 위 [설명 그만보기]로 닫음.
      한 번 닫으면 이 브라우저·이 아이디에서는 다시 저절로 나오지 않음(localStorage 'ss_guide:<페이지>:<아이디>', 사용자 결정 = 브라우저 기준).
    - 오른쪽 위 [사용법] 버튼을 누르면 지금 페이지의 안내를 처음부터 다시 봄.
@@ -34,45 +34,6 @@
   var ROLE = { admin: '관리자 (재난처·교통처)', gw: '강원본부', hq: '지역본부', branch: '지사', equip: '기계화부', viewer: '보기 전용' };
 
   /* ---------------- 내용 ---------------- */
-
-  // 계정별 메뉴 표: 칸 = [종류, 글자] (w = 고칠 수 있음, r = 보기, x = 안 보임)
-  var W = function (t) { return ['w', t || '입력']; }, R = function (t) { return ['r', t || '보기']; }, X = ['x', '—'];
-  var MATRIX = {
-    snow: {
-      cols: ['24시간 예보', '연도별 신적설', '관측소 지도', '관할 고속도로', '데이터 출처', '예보 격자 편입'],
-      rows: [
-        ['admin', '관리자', [R(), R(), R(), W('편집'), R(), W('편집')]],
-        ['hq', '지역본부', [R(), R(), R(), R(), R(), X], '강원 포함'],
-        ['branch', '지사', [R(), R(), R(), W('변경 요청'), R(), X]],
-        ['equip', '기계화부', [R(), R(), R(), R(), R(), X]]
-      ],
-      foot: ''
-    },
-    equip: {
-      cols: ['이동 현황', '지사별 요청·편성', '기관별 장비', '기관별 배정', '강원본부 지원장비', '로그 기록'],
-      rows: [
-        ['admin', '관리자', [R(), W('승인'), W('입력'), W('배정'), W('입력'), R()], '재난처·교통처'],
-        ['gw', '강원본부', [R(), W('입력'), R(), R(), W('입력'), X], '+ 지원장비 탭'],
-        ['hq', '다른 지역본부', [R(), W('입력'), R(), R(), X, X]],
-        ['branch', '지사', [R(), W('입력'), W('일부*'), R(), X, X]],
-        ['equip', '기계화부', [R(), R(), W('입력'), R('확인'), X, X]]
-      ],
-      foot: '<b>강원본부</b> = 지역본부 + <b>강원본부 지원장비</b> 탭<br>* 지사: 타지사 지원 확정 시 장비 등록 · 도착 시각'
-    }
-  };
-
-  function matrixHtml(page) {
-    var M = MATRIX[page], rk = roleKey(), mine = rk === 'gw' && page === 'snow' ? 'hq' : rk;
-    var h = '<div class="sg-mx-wrap"><table class="sg-mx"><thead><tr><th>계정</th>' + M.cols.map(function (c, i) {
-      return '<th' + (page === 'equip' && i === 4 ? ' class="gw"' : '') + '>' + esc(c) + '</th>'; }).join('') + '</tr></thead><tbody>';
-    M.rows.forEach(function (r) {
-      var on = r[0] === mine;
-      h += '<tr class="' + (on ? 'me' : '') + (r[0] === 'gw' ? ' gw' : '') + '"><th>' + esc(r[1]) + (r[3] ? '<small>' + esc(r[3]) + '</small>' : '') + (on ? '<em>내 계정</em>' : '') + '</th>' +
-        r[2].map(function (c) { return '<td><span class="sg-c ' + c[0] + '">' + esc(c[1]) + '</span></td>'; }).join('') + '</tr>';
-    });
-    return h + '</tbody></table></div><div class="sg-legend"><span class="sg-c w">입력</span> 수정 <span class="sg-c r">보기</span> 조회 <span class="sg-c x">—</span> 없음 <span class="sg-legend-r">기본 권한 기준</span></div>' +
-      (M.foot ? '<p class="sg-foot-note">' + M.foot + '</p>' : '');
-  }
 
   /* 지원 과정 그림(SVG) — 넓은 화면은 가로, 좁은 화면은 세로. 두 흐름이 '교통처 배정'에서 하나로 합쳐짐 */
   var FLOW = {
@@ -130,7 +91,6 @@
       { center: true, kicker: 'WELCOME', title: '제설 업무 시스템', html:
         '<div class="sg-who-card"><span class="sg-dot"></span><div><small>접속 계정</small><b>' + esc((me() || {}).display_name || '') + '</b><span class="sg-role">' + esc(ROLE[rk]) + '</span></div></div>' +
         '<div class="sg-two"><div class="sg-tile"><i class="cy"></i><b>강설량 측정</b><span>예보 · 신적설 · 관측소 · 관할</span></div><div class="sg-tile"><i class="vi"></i><b>장비 지원</b><span>요청 · 승인 · 배정 · 이동</span></div></div>' },
-      { center: true, kicker: 'ACCOUNTS', title: '계정별 메뉴', html: matrixHtml('snow') },
       { tab: 'forecast', title: '기관별 24시간 예보', desc: '향후 24시간 예상 적설 · 강수 · 최저기온',
         points: ['전국 → 본부 → 지사 → 5km 격자', '격자 선택 → 시간별 추이', '매시 갱신 · 예보 3시간 주기'] },
       { tab: 'snowtable', title: '연도별 신적설', desc: '지사 · 본부별 일 신적설(cm), 시즌 단위',
@@ -153,7 +113,6 @@
     var rk = roleKey(), gwOk = rk === 'admin' || rk === 'gw';
     var steps = [
       { center: true, wide: true, kicker: 'PROCESS', title: '장비 지원 절차', html: processHtml() },
-      { center: true, kicker: 'ACCOUNTS', title: '계정별 탭', html: matrixHtml('equip') },
       { tab: 'move', title: '이동 현황', desc: '기관 → 지사 장비 이동, 날짜별',
         points: ['날짜 선택 → 달력 · ‹ › 하루 이동', '지사 카드 시각 = 최초 도착 예상', '강원 신속대응팀 열: 체크박스 표시/숨김'] },
       { tab: 'branch', title: '지사별 요청·편성', desc: '지사 요청 → 재난처 승인(확정)',

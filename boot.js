@@ -95,7 +95,7 @@
   function paintEq(){ eqBtns.forEach(function(b){ b.classList.toggle('active', b.dataset.eqtab === eqTab); }); }
   function paintTheme(){
     var d = frameDoc(); if (!d) return;
-    var t = d.documentElement.dataset.theme || (frame.contentWindow.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    var t = d.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';   // 장비 지원 기본 = 라이트(2026-11-01)
     theme.querySelectorAll('[data-eqtheme]').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.eqtheme === t)); });
   }
   function applyEqTab(){       // 안쪽 화면이 준비됐으면 그 탭을 누름(아직이면 불러온 뒤 load 에서)
