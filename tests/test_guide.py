@@ -2,7 +2,7 @@
 사용법 안내(guide/guide.js) 자동 테스트 — 브라우저로 직접 눌러 봅니다. (Supabase 는 가짜 서버 tests/_sb_mock.py)
 확인하는 것: 처음 로그인하면 강설량 측정 안내가 저절로 열림 / [다음]·[설명 그만보기]·Esc 로 닫힘 / 한 번 닫으면 이 브라우저·아이디로는 다시 안 열림(다른 아이디는 열림) /
              [사용법] 버튼으로 다시 봄 / 장비 지원을 처음 열면 지원 과정 그림부터 / 계정별로 설명하는 탭이 다름(관리자·강원본부·다른 본부·지사·기계화부, 권한 표는 없음) /
-             안내 전에 보던 탭으로 돌아감 / 휴대폰 폭에서 화면 밖으로 안 나감
+             안내 전에 보던 탭으로 돌아감 / 탭 안 칸·버튼을 하나씩 짚음(장비 지원은 안쪽 틀) / 휴대폰 폭에서 화면 밖으로 안 나감
 - 자동 시험 중에는 안내가 저절로 열리지 않으므로(다른 시험을 가리지 않게) 주소에 ?guide=auto 를 붙여 엽니다.
 실행 (저장소 맨 위 폴더에서):  python tests/test_guide.py
 """
@@ -49,8 +49,22 @@ def titles(p):
         a = guide(p); out.append(a["title"])
         check(p.locator(".sg-next").is_visible(), "오른쪽 아래 [다음]이 보여야 함")
         p.click(".sg-next"); p.wait_for_timeout(120)
-        if len(out) > 20: raise AssertionError("안내가 끝나지 않음")
+        if len(out) > 90: raise AssertionError("안내가 끝나지 않음")
     return out
+
+def go_to(p, title, tab):
+    """[다음]을 눌러 그 탭의 그 단계까지 가서, 칸을 찾아 그릴 때까지 기다림"""
+    for _ in range(90):
+        a = guide(p)
+        if a and a["title"] == title and a["tab"] == tab: break
+        check(a, f"'{title}' 단계 전에 안내가 끝남"); p.click(".sg-next"); p.wait_for_timeout(80)
+    else: raise AssertionError(f"'{title}' 단계 없음")
+    p.wait_for_timeout(900)
+
+def ring_on(p, box, msg):
+    r = p.locator(".sg-ring").bounding_box()
+    check(r["x"] <= box["x"] + 1 and r["y"] <= box["y"] + 1 and r["x"] + r["width"] >= box["x"] + box["width"] - 1 and r["y"] + r["height"] >= box["y"] + box["height"] - 1
+          and r["width"] < box["width"] + 40 and r["height"] < box["height"] + 40, f"{msg}: 빛 테두리 {r} / 칸 {box}")
 
 def run(name, fn, browser):
     m = SBM.Mock(); prep(m); ctx = browser.new_context()
@@ -99,7 +113,8 @@ def t_stop_and_keys(b, ctx, m):
     p = open_site(ctx, m); login(p, "exchungju"); wait_open(p, "snow")
     p.click(".sg-next"); wait_js(p, "SSGuide.active().i === 1")
     check(p.locator(".tab-btn.active").get_attribute("data-tab") == "forecast" and guide(p)["title"] == "기관별 24시간 예보", "탭 설명 때는 그 탭 화면을 뒤에 띄움")
-    p.keyboard.press("ArrowRight"); wait_js(p, "SSGuide.active().i === 2"); check(p.locator(".tab-btn.active").get_attribute("data-tab") == "snowtable", "→ 키로 다음")
+    p.keyboard.press("ArrowRight"); wait_js(p, "SSGuide.active().i === 2"); check(guide(p)["title"] == "발표 기준" and p.locator(".tab-btn.active").get_attribute("data-tab") == "forecast", "→ 키로 다음(탭 안의 칸 설명)")
+    p.wait_for_timeout(600); ring_on(p, p.locator("#fc-meta").bounding_box(), "발표 기준 칸을 짚음")
     p.keyboard.press("ArrowLeft"); wait_js(p, "SSGuide.active().i === 1")
     p.wait_for_timeout(600); ring = p.locator(".sg-ring").bounding_box(); tb = p.locator(".tab-btn[data-tab=forecast]").bounding_box()
     check(ring["x"] <= tb["x"] and ring["x"] + ring["width"] >= tb["x"] + tb["width"] and ring["y"] <= tb["y"], "빛 고리가 그 탭 버튼을 둘러쌈")
@@ -120,8 +135,8 @@ def t_role_tabs(b, ctx, m):
     for u, (yes, no) in exp.items():
         p = open_site(ctx, m); login(p, u); wait_open(p, "snow")
         p.evaluate("SSGuide.stop()"); wait_closed(p)
-        st = p.evaluate("() => { SSGuide.start('snow'); const n = SSGuide.active().n; SSGuide.stop(); return n; }")
-        check(st == 7, f"{u}: 예보 격자 편입이 없으므로 강설량 안내는 7장 ({st})")
+        st = p.evaluate("() => { SSGuide.start('snow'); const t = SSGuide.active().titles; SSGuide.stop(); return t; }")
+        check("예보 격자 편입" not in st and "영역 선택" not in st, f"{u}: 예보 격자 편입(관리자) 설명이 없어야 함 {st}")
         p.click(".page-btn[data-page=equip]"); wait_open(p, "equip")
         mine = p.locator(".sg-flow.h .sg-node.me").all_text_contents()
         if u == "exgangwon": check(any("강원 신속대응팀" in x for x in mine), f"강원본부는 신속대응팀 단계가 '내 역할': {mine}")
@@ -135,11 +150,35 @@ def t_role_tabs(b, ctx, m):
 def t_branch_mine_text(b, ctx, m):
     p = open_site(ctx, m); login(p, "exchungju"); wait_open(p, "snow"); p.evaluate("SSGuide.stop()"); wait_closed(p)
     p.click(".page-btn[data-page=equip]"); wait_open(p, "equip")
-    for _ in range(2): p.click(".sg-next")
-    wait_js(p, "SSGuide.active().title === '지사별 요청·편성'")
+    go_to(p, "지사별 요청·편성", "branch")
     check("내 계정 · 지사" in p.locator(".sg-mine").inner_text() and "[저장]" in p.locator(".sg-mine").inner_text(), "지사 계정의 할 일")
     check(len(p.locator(".sg-body").inner_text()) < 260, "설명은 짧게(발표 자료처럼): " + p.locator(".sg-body").inner_text())
     check(p.locator(".eq-btn.active").get_attribute("data-eqtab") == "branch", "그 탭 화면을 뒤에 띄움")
+
+def t_element_steps(b, ctx, m):
+    """탭 소개 다음에는 그 탭의 칸·버튼을 하나씩 빛 테두리로 짚음(2026-11-01). 장비 지원은 안쪽 틀 안의 칸"""
+    p = open_site(ctx, m); login(p, "admin-01"); wait_open(p, "snow")
+    go_to(p, "시즌 선택", "snowtable"); ring_on(p, p.locator("#seasonSelect").bounding_box(), "시즌 선택 드롭다운")
+    check("최근 3시즌" in p.locator(".sg-card").inner_text() and "연도별 신적설" in p.locator(".sg-step").inner_text(), "칸 설명 + 위에 탭 이름")
+    cb, rb = p.locator(".sg-card").bounding_box(), p.locator(".sg-ring").bounding_box()
+    check(cb["y"] >= rb["y"] + rb["height"] or cb["y"] + cb["height"] <= rb["y"] or cb["x"] >= rb["x"] + rb["width"] or cb["x"] + cb["width"] <= rb["x"], "카드가 짚은 칸을 가리지 않음")
+    p.click("#sgStop"); wait_closed(p)
+    p.click(".page-btn[data-page=equip]"); wait_open(p, "equip")
+    go_to(p, "지원 여부", "fleet")
+    fr = p.frame_locator("#equipFrame"); box = fr.locator("#eqTable select[data-vs]").first.bounding_box()
+    ring_on(p, box, "기관별 장비의 지원 여부 드롭다운(안쪽 틀)")
+    check("지원 · 미정 · 지원 불가 · 정비중" in p.locator(".sg-card").inner_text(), "지원 여부 고르는 곳 설명")
+    check(p.locator(".eq-btn.active").get_attribute("data-eqtab") == "fleet", "그 탭 화면")
+    p.keyboard.press("ArrowLeft"); p.wait_for_timeout(700); check(guide(p)["tab"] == "fleet" and guide(p)["el"], "← 이전 칸")
+    # 지사 계정: 확정돼 잠긴 줄이면 칸 대신 제목 칸을 짚고 '보기' 문구
+    ctx2 = b.new_context(); q = open_site(ctx2, m); login(q, "exchungju"); wait_open(q, "snow"); q.evaluate("SSGuide.stop()"); wait_closed(q)
+    q.click(".page-btn[data-page=equip]"); wait_open(q, "equip")
+    t = q.evaluate("SSGuide.active().titles")
+    check("새 기준일자" in t, "목록에는 있어도(아래에서 건너뜀)")
+    go_to(q, "보기 거르기", "branch")
+    q.keyboard.press("ArrowLeft"); wait_js(q, "SSGuide.active().title === '기준일자'", 6000)   # 지사 계정에 없는 [새 기준일자]·[삭제]는 건너뜀
+    check("새 기준일자" not in q.evaluate("SSGuide.active().titles"), "건너뛴 단계는 목록에서도 빠짐")
+    ctx2.close()
 
 def t_no_auto_in_automation(b, ctx, m):
     p = open_site(ctx, m, auto=False); login(p, "admin-01"); wait_js(p, "!!document.getElementById('sgHelp')"); p.wait_for_timeout(1500)
@@ -153,12 +192,14 @@ def t_phone(b, ctx, m):
         check(cb["x"] >= 0 and cb["x"] + cb["width"] <= 375 and cb["y"] >= 0 and cb["y"] + cb["height"] <= 740, f"{i}장: 카드가 화면 밖 {cb}")
         nb = p.locator(".sg-next").bounding_box(); check(nb["y"] + nb["height"] <= 740, "[다음]이 화면 안")
         p.click(".sg-next"); p.wait_for_timeout(150)
-    check(p.evaluate("document.documentElement.scrollWidth <= 375"), "가로 스크롤 없음")
+    # 안내 화면 때문에 가로 스크롤이 생기면 안 됨(24시간 예보 탭은 원래 휴대폰 폭보다 넓어서 안내를 숨겼을 때와 비교)
+    w = p.evaluate("(() => { const r = document.getElementById('sgRoot'), a = document.documentElement.scrollWidth; r.style.display = 'none'; const b = document.documentElement.scrollWidth; r.style.display = ''; return [a, b]; })()")
+    check(w[0] <= max(375, w[1]), f"안내 때문에 가로 스크롤: {w}")
     p.click("#sgStop"); wait_closed(p); p.click(".page-btn[data-page=equip]"); wait_open(p, "equip")
     check(p.locator(".sg-flow.v").is_visible() and not p.locator(".sg-flow.h").is_visible(), "좁은 화면은 세로 그림")
     cb = p.locator(".sg-card").bounding_box(); check(cb["x"] >= 0 and cb["x"] + cb["width"] <= 375 and cb["y"] + cb["height"] <= 740, f"그림 카드가 화면 밖 {cb}")
 
-TESTS = [t_first_login_admin, t_stop_and_keys, t_role_tabs, t_branch_mine_text, t_no_auto_in_automation, t_phone]
+TESTS = [t_first_login_admin, t_stop_and_keys, t_role_tabs, t_branch_mine_text, t_element_steps, t_no_auto_in_automation, t_phone]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()

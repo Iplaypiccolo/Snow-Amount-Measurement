@@ -6,6 +6,8 @@
      한 번 닫으면 이 브라우저·이 아이디에서는 다시 저절로 나오지 않음(localStorage 'ss_guide:<페이지>:<아이디>', 사용자 결정 = 브라우저 기준).
    - 오른쪽 위 [사용법] 버튼을 누르면 지금 페이지의 안내를 처음부터 다시 봄.
    - 계정에 따라 보이는 탭만 설명하고, 탭마다 '내 계정이 할 일'을 한 줄 붙임(관리자 / 강원본부 / 다른 지역본부 / 지사 / 기계화부 / 보기 전용).
+   - 탭 소개 다음에는 그 탭의 칸·버튼을 하나씩 빛 테두리로 짚으며 설명(게임 튜토리얼처럼, 2026-11-01 사용자 요청).
+     장비 지원 칸은 안쪽 틀(equipment/index.html) 안에서 찾아 바깥 화면 기준 위치로 바꿔 계산. 내 계정 화면에 없는 칸은 건너뜀.
    - 자동 시험(브라우저 자동 조종) 중에는 저절로 열리지 않음(다른 시험의 클릭을 가리지 않게). 주소에 ?guide=auto 를 붙이면 시험에서도 열림.
    - 화면은 설명용이고 아무것도 저장하지 않음(이 브라우저의 '봤음' 표시만).
    ============================================================ */
@@ -84,56 +86,160 @@
       '</div>';
   }
 
-  // 탭 설명(발표 자료처럼 짧게 — 사용자 결정 2026-10-30). mine = 계정별 할 일(없으면 안 붙임). only = 그 탭이 보이는 계정에서만
+  // 칸·버튼 하나씩 짚기(게임 튜토리얼처럼 — 사용자 요청 2026-11-01)
+  //  at = 찾을 곳 목록: 앞에서부터 화면에 보이는 첫 것. 항목 = 선택자 | 함수(문서 → 칸 또는 칸 목록) | { s: 선택자·함수, desc, points }(그것으로 찾으면 문구를 바꿈)
+  //  못 찾으면(내 계정에 없는 칸, 자료 없음) 그 단계는 건너뜀. 장비 지원은 안쪽 틀 안에서 찾음
+  function shown(el) {
+    if (!el || !el.getBoundingClientRect || (el.closest && el.closest('[hidden]'))) return false;
+    var r = el.getBoundingClientRect(); if (!(r.width > 0 && r.height > 0)) return false;
+    var cs = el.ownerDocument.defaultView.getComputedStyle(el); return cs.visibility !== 'hidden' && cs.display !== 'none';
+  }
+  function q1(d, sel) { var l = d.querySelectorAll(sel); for (var i = 0; i < l.length; i++) if (shown(l[i])) return l[i]; return null; }
+  function inRow(first, others) { return function (d) { var a = q1(d, first); if (!a) return null; var tr = a.closest('tr') || d; return [a].concat((others || []).map(function (x) { return q1(tr, x); }).filter(Boolean)); }; }
+  function both(sels) { return function (d) { var l = sels.map(function (x) { return q1(d, x); }).filter(Boolean); return l.length ? l : null; }; }
+  function th(text) { return function (d) { var l = d.querySelectorAll('th'); for (var i = 0; i < l.length; i++) if (shown(l[i]) && l[i].textContent.replace(/\s+/g, ' ').trim().indexOf(text) === 0) return l[i]; return null; }; }
+  function E(tab, title, at, desc, points, more) { var o = { tab: tab, title: title, at: at, desc: desc, points: points || [] }; for (var k in more || {}) o[k] = more[k]; return o; }
+
+  // 탭 소개(발표 자료처럼 짧게 — 사용자 결정 2026-10-30) → 그 탭의 칸·버튼. mine = 계정별 할 일(없으면 안 붙임). only = 그 탭이 보이는 계정에서만
   function snowSteps() {
-    var rk = roleKey();
+    var rk = roleKey(), jEdit = can('juris.edit'), jReq = can('juris.request'), g = can('grid.edit');
     var steps = [
       { center: true, kicker: 'WELCOME', title: '제설 업무 시스템', html:
         '<div class="sg-who-card"><span class="sg-dot"></span><div><small>접속 계정</small><b>' + esc((me() || {}).display_name || '') + '</b><span class="sg-role">' + esc(ROLE[rk]) + '</span></div></div>' +
         '<div class="sg-two"><div class="sg-tile"><i class="cy"></i><b>강설량 측정</b><span>예보 · 신적설 · 관측소 · 관할</span></div><div class="sg-tile"><i class="vi"></i><b>장비 지원</b><span>요청 · 승인 · 배정 · 이동</span></div></div>' },
       { tab: 'forecast', title: '기관별 24시간 예보', desc: '향후 24시간 예상 적설 · 강수 · 최저기온',
-        points: ['전국 → 본부 → 지사 → 5km 격자', '격자 선택 → 시간별 추이', '매시 갱신 · 예보 3시간 주기'] },
+        points: ['전국 → 본부 → 지사 → 5km 격자'] },
+      E('forecast', '발표 기준', ['#fc-meta'], '기상청 예보 발표 시각 · 예보 구간', ['매시 갱신 · 예보는 3시간마다 새 발표']),
+      E('forecast', '본부 · 지사 목록', ['#fc-tree .fc-row'], '줄 클릭 → 펼치기 (본부 → 지사 → 격자)', ['적설 · 강수 · 강수확률 · 최저기온']),
+      E('forecast', '지도', ['#fmap'], '고른 본부 · 지사 · 격자 위치', ['격자에 마우스 → 24시간 추이', '격자 클릭 → 추이 고정']),
       { tab: 'snowtable', title: '연도별 신적설', desc: '지사 · 본부별 일 신적설(cm), 시즌 단위',
-        points: ['시즌 = 첫눈 ~ 마지막 눈 (11~4월)', '최근 3시즌 조회 · 이전 시즌 엑셀', '매일 새벽 전날 자료 자동 수집'] },
-      { tab: 'map', title: '관측소 지도', desc: '지사별 적설관측소 260곳',
-        points: ['달력 날짜 선택 → 관측소별 신적설', '관할 고속도로 5km 이내 (최대 8km)'] },
+        points: ['시즌 = 첫눈 ~ 마지막 눈 (11~4월)', '매일 새벽 전날 자료 자동 수집'] },
+      E('snowtable', '시즌 선택', ['#seasonSelect'], '최근 3시즌 중 고르기'),
+      E('snowtable', '엑셀 내보내기', ['#exportXlsxBtn'], '지금 보이는 표 → xlsx 파일'),
+      E('snowtable', '지난 시즌', ['#oldSeasonBox'], '이전 시즌 고르기 → [엑셀 받기]', ['화면 표는 최근 3시즌만']),
+      E('snowtable', '합계 · 평균', ['#snowTableWrap .sum-col-head'], '지사 줄 = 시즌 합계 · 본부 줄 = 지사 평균'),
+      E('snowtable', '날짜 칸', ['#snowTableWrap .sum-col-head + th'], '그날 신적설(cm) · 한 칸 = 하루'),
+      { tab: 'map', title: '관측소 지도', desc: '지사별 적설관측소',
+        points: ['관할 고속도로 5km 이내 (최대 8km)'] },
+      E('map', '요약 숫자', ['#view-map .statbar'], '노선 · 본부 · 지사 · 적설관측소 · 미분류 수'),
+      E('map', '검색', ['#searchBox'], '본부 · 지사 · 관측소 이름으로 찾기'),
+      E('map', '일자 선택', ['#dateBtn'], '날짜 고르기 → 관측소별 그날 신적설'),
+      E('map', '관측소 목록', ['#tree'], '본부 → 지사 → 관측소 · 숫자 = 관측소 수'),
+      E('map', '지도', ['#map'], '점 = 적설관측소 · 색 = 고속도로까지 거리', ['초록 0~3km · 주황 3~6km · 빨강 6~8km']),
       { tab: 'jurisdiction', title: '기관별 관할 고속도로', desc: '지사별 관할 구간 (IC·JC 단위)',
         points: ['관할 변경 → 관측소 · 신적설 재계산'],
-        mine: can('juris.edit') ? '구간 이동 · 신설 기관 · 변경 요청 처리 → [저장]' : can('juris.request') ? '구간 선택 → [구간 변경 요청]' : null },
+        mine: jEdit ? '구간 이동 · 신설 기관 · 변경 요청 처리 → [저장]' : jReq ? '구간 선택 → [구간 변경 요청]' : null },
+      E('jurisdiction', '지사 검색', ['#jr-search'], '지사 이름으로 찾기'),
+      E('jurisdiction', '+ 신설 기관', ['#jr-add'], '새 지사 만들기 → 구간 넣기'),
+      E('jurisdiction', '변경 요청', ['#jr-requests'], jEdit ? '지사가 보낸 구간 변경 요청 → 승인 · 반려' : '내가 보낸 구간 변경 요청 · 처리 상태'),
+      E('jurisdiction', '관할 목록', ['#jr-tree .jr-hqpick', '#jr-tree'], '본부 → 지사 → 구간 · km = 관할 길이', ['미지정 고속도로 = 어느 지사에도 없는 구간']),
+      E('jurisdiction', '지도', ['#jmap'], jEdit ? '구간 클릭 → 선택 → 다른 지사로 옮기기' : jReq ? '구간 클릭 → 선택 → [구간 변경 요청]' : '색 = 관할 지사'),
+      E('jurisdiction', '저장', ['#jr-savebar'], '[미리보기] 바뀌는 관측소 · [모두 취소] · [저장]', [], { only: jEdit }),
       { tab: 'sources', title: '데이터 출처', desc: '자료 출처 · 계산 방법 · 보유 시즌',
         points: ['기상청 API허브 · 국가교통정보센터'] },
-      { tab: 'grid', only: can('grid.edit'), badge: '관리자', title: '예보 격자 편입', desc: '5km 예보 격자 → 지사 편입',
-        points: ['24시간 예보 · 예상 적설의 기준', '저장 즉시 전체 적용'] },
+      E('sources', '보유 시즌', ['#seasonsTable'], '시즌별 기간 · 자료 있는 날 수'),
+      { tab: 'grid', only: g, badge: '관리자', title: '예보 격자 편입', desc: '5km 예보 격자 → 지사 편입',
+        points: ['24시간 예보 · 예상 적설의 기준'] },
+      E('grid', '편입 현황', ['#gr-summary'], '편입 격자 수 · 지사별 칸 수', [], { only: g }),
+      E('grid', '기관 검색', ['#gr-search'], '지사 이름으로 찾기', [], { only: g }),
+      E('grid', '기관 목록', ['#gr-tree .jr-hqpick', '#gr-tree'], '본부 → 지사 · 칸 = 편입 격자 수', [], { only: g }),
+      E('grid', '영역 선택', ['#gr-box'], '지도에서 끌어서 여러 칸 한꺼번에 고르기', [], { only: g }),
+      E('grid', '지도', ['#gmap'], '격자 클릭 → 고르기 → 기관에 편입 · 제외', ['색: 기관 편입 · 여러 기관 공유 · 후보'], { only: g }),
+      E('grid', '저장', ['#gr-savebar'], '[미리보기] · [모두 취소] · [저장] = 전체 적용', [], { only: g }),
       { target: '#sgHelp', kicker: 'HELP', title: '사용법 다시 보기', desc: '오른쪽 위 [? 사용법]', points: [], last: true }
     ];
-    return steps.filter(function (s) { return s.only !== false; });
+    return steps.filter(function (x) { return x.only !== false; });
   }
 
   function equipSteps() {
-    var rk = roleKey(), gwOk = rk === 'admin' || rk === 'gw';
+    var rk = roleKey(), gwOk = rk === 'admin' || rk === 'gw', lg = can('log.view');
     var steps = [
       { center: true, wide: true, kicker: 'PROCESS', title: '장비 지원 절차', html: processHtml() },
+      // 이동 현황
       { tab: 'move', title: '이동 현황', desc: '기관 → 지사 장비 이동, 날짜별',
-        points: ['날짜 선택 → 달력 · ‹ › 하루 이동', '지사 카드 시각 = 최초 도착 예상', '강원 신속대응팀 열: 체크박스 표시/숨김'] },
+        points: ['모든 계정 같은 화면 (보기 전용)'] },
+      E('move', '날짜', [both(['#prevDay', '#dateText', '#nextDay'])], '‹ › 하루씩 이동 · 날짜 클릭 → 달력'),
+      E('move', '요약 · 기준 시각', ['#summaryNote'], '그날 지원 대수 · 기준 시각', ['[새로고침] → 최신 자료']),
+      E('move', '강원 신속대응팀', ['.team-tg'], '체크 해제 → 표 · 카드에서 빠짐'),
+      E('move', '이동 표', ['#matrix'], '줄 = 피지원 지사 · 열 = 지원기관', ['칸 숫자 = 대수 (제설차 · 제설기)']),
+      E('move', '숫자', ['#matrix button.mnum'], '클릭 → 그 칸 장비 목록'),
+      E('move', '거르기', ['#filters'], '지원기관 · 장비 종류로 아래 카드 거르기'),
+      E('move', '지사 카드', ['#destList .dest-head'], '피지원 지사 · 도착 예상 시각 · 대설특보'),
+      E('move', '장비 줄', ['#destList .vrow'], '클릭 → 그 장비 경로 · 시각'),
+      // 지사별 요청·편성
       { tab: 'branch', title: '지사별 요청·편성', desc: '지사 요청 → 재난처 승인(확정)',
-        points: ['예보 · 대설특보 자동 표시', '타지사 지원 가능 = 지원 가능 제설차 대수', '확정 줄 잠김 ([취소] 후 수정)'],
+        points: ['예보 · 대설특보 자동 표시', '확정 줄 잠김 ([취소] 후 수정)'],
         mine: { branch: '요청 대수 · 도착 요청 시각 → [저장]', hq: '본부 내 전 지사 입력 → [저장]', gw: '본부 내 전 지사 입력 → [저장]',
           admin: '기준일자 생성 · 편성 대수 → [확정]' }[rk] },
+      E('branch', '기준일자', ['#roundSelBranch'], '지원 회차 고르기 · 요청 · 편성은 기준일자마다 따로'),
+      E('branch', '새 기준일자', [both(['#newRoundDate', '#roundMake'])], '날짜 → [만들기]', ['장비 지원 여부는 이전 기준일자에서 이어받음']),
+      E('branch', '기준일자 삭제', ['#roundDel'], '잘못 만든 기준일자 지우기 (되돌릴 수 없음)'),
+      E('branch', '보기 거르기', ['#branchCtl'], '요청 있는 · 확정된 · 지원 가능 · 저장 안 한 지사만'),
+      E('branch', '24시 예보', ['#branchTable th.fch'], '지사별 예상 적설 · 강수 · 확률 · 최저기온', ['숫자 클릭 → 강설량 측정의 그 지사 예보']),
+      E('branch', '대설특보', ['#branchTable th.wh'], '기상청 특보 자동 표시 (종류 · 발표 · 발효)'),
+      E('branch', '기상현황 직접입력', ['#branchTable input[aria-label$="기상현황 직접입력"]:not(:disabled)'], '체크 → 특보 종류를 직접 고름'),
+      E('branch', '지사 요청', [inRow('#branchTable input[aria-label$="요청 제설차"]:not(:disabled)', ['input[aria-label$="요청 제설기"]']),
+        { s: inRow('#branchTable tr.mine.locked input[aria-label$="요청 제설차"]', ['input[aria-label$="요청 제설기"]']), desc: '우리 지사 필요 대수 · 확정되면 잠김 (재난처 [취소] 후 수정)' },
+        { s: th('지사 요청'), desc: '지사가 넣은 필요 대수 (보기)' }], '필요한 제설차 · 제설기 대수 입력'),
+      E('branch', '도착 요청', [inRow('#branchTable input[aria-label$="도착 요청 날짜"]:not(:disabled)', ['select[aria-label$="도착 시"]', 'select[aria-label$="도착 분"]']),
+        { s: inRow('#branchTable tr.mine.locked input[aria-label$="도착 요청 날짜"]', ['select[aria-label$="도착 시"]', 'select[aria-label$="도착 분"]']), desc: '우리 지사 도착 요청 시각 · 확정되면 잠김' },
+        { s: th('도착 요청'), desc: '지사가 원하는 도착 시각 (보기)' }], '날짜 먼저 → 시 · 분'),
+      E('branch', '타지사 지원 가능', ['#branchTable input[aria-label$="타지사 지원 가능 제설차"]:not(:disabled)',
+        { s: '#branchTable tr.mine.locked input[aria-label$="타지사 지원 가능 제설차"]', desc: '우리 지사가 다른 지사에 보낼 수 있는 제설차 · 확정되면 잠김' },
+        { s: th('타지사'), desc: '다른 지사에 보낼 수 있는 제설차 (보기)' }], '우리 지사가 다른 지사에 보낼 수 있는 제설차 대수'),
+      E('branch', '저장 표시', ['#branchTable th.svh'], '지사가 [저장]한 줄 = 저장 완료'),
+      E('branch', '편성', [inRow('#branchTable input[aria-label$="편성 제설차"]:not(:disabled)', ['input[aria-label$="편성 제설기"]']),
+        { s: th('편성'), desc: '재난처가 정한 지원 대수 (보기)' }], '재난처: 실제 지원할 대수 입력'),
+      E('branch', '확정', [both(['#branchTable [data-confirm]', '#confirmAll']), { s: th('확정'), desc: '재난처 확정 여부 · 확정되면 줄 잠김' }],
+        '[확정] → 줄 잠김 · [취소]로 풀기', ['본부 줄 · 맨 위 [일괄 확정]']),
+      E('branch', '저장 막대', ['#save-branch'], '바뀐 칸 수 · [되돌리기] · [저장]', ['[저장] 전에는 반영 안 됨']),
+      // 기관별 장비
       { tab: 'fleet', title: '기관별 장비', desc: '지원기관 장비 · 날짜별 경로',
-        points: ['지원 여부: 지원 · 미정 · 지원 불가 · 정비중', '지원일 → 지사 · 도착 예상 시각 → [확정]', '차량번호 · 운전원 정보 입력 없음 (내부망)'],
+        points: ['차량번호 · 운전원 정보 입력 없음 (내부망)'],
         mine: { equip: '지원 여부 → 배정 지사 → 도착 예상 시각 → [확정]', branch: '타지사 지원 확정 시 장비 등록 · 도착 시각',
           admin: '전 기관 장비 · 경로 수정', gw: '신속대응팀 → 강원본부 지원장비 탭' }[rk] },
+      E('fleet', '기준일자', ['#roundSelFleet'], '지원 여부는 기준일자마다 따로'),
+      E('fleet', '기관 요약', ['#orgGrid > *'], '기관별 지원 · 지원 불가 · 정비중 · 미정 대수'),
+      E('fleet', '거르기', ['#fleetFilters'], '기관별 · 지원 장비만 보기'),
+      E('fleet', '장비 추가', [both(['#nvOrg', '#nvType', '#nvPlate', '#vehAdd'])], '기관 · 종류 · 도공번호 → [추가]'),
+      E('fleet', '지원일 칸 수', ['#colsSel'], '표에 보이는 날짜 칸 수'),
+      E('fleet', '지원일 1', ['#day1In'], '첫 날짜 · 나머지 칸은 하루씩 자동'),
+      E('fleet', '지원 여부', ['#eqTable select[data-vs]', { s: '#eqTable tbody td .status', desc: '기관이 정한 지원 여부 (보기)' }],
+        '드롭다운 → 지원 · 미정 · 지원 불가 · 정비중', ['지원 → 날짜 칸이 열림']),
+      E('fleet', '블로워', [inRow('#eqTable input[aria-label$="블로워 소"]:not(:disabled)', ['input[aria-label$="블로워 대"]'])], '장착한 블로워 체크 (소 · 대)'),
+      E('fleet', '지원 지사', ['#eqTable .slot select[data-rv]:not(:disabled)',
+        { s: '#eqTable .slot select[data-ra]:not(:disabled)', desc: '그날 갈 지사 고르기', points: ['교통처가 배정한 지사 중에서'] }], '그날 갈 지사 고르기'),
+      E('fleet', '도착 예상 시각', ['#eqTable .slot input.tm:not(:disabled)'], '그 지사 도착 시각 (예: 21:30)'),
+      E('fleet', '＋ 지사 추가', ['#eqTable .slot button[aria-label$="들르는 지사 추가"]:not(:disabled)'], '하루에 여러 지사를 들를 때'),
+      E('fleet', '이날부터 지원 불가', ['#eqTable select.offsel'], '고장 등 → 그날부터 지원 불가'),
+      E('fleet', '숨기기 · 삭제', [inRow('#eqTable [data-vhide]', ['[data-vdel]'])], '숨기기 = 목록에서만 뺌 · 삭제 = 지움'),
+      E('fleet', '확정', ['#save-fleet'], '바뀐 칸 → [확정]해야 저장', ['[되돌리기] = 마지막 확정 상태로']),
+      // 기관별 배정
       { tab: 'alloc', title: '기관별 배정', desc: '교통처: 기관 → 지사 배정 대수',
-        points: ['배정/편성: 초록 일치 · 주황 부족 · 빨강 초과', '배정 후 → 기계화부 장비 지정'],
+        points: ['편성 확정된 지사만 나옴', '배정 후 → 기계화부 장비 지정'],
         mine: { admin: '배정 대수 → [확정]', equip: '우리 기관 배정 확인' }[rk] },
+      E('alloc', '기준일자', ['#roundSelAlloc'], '배정은 기준일자마다 따로'),
+      E('alloc', '배정 대수', ['#allocTable input.num:not(:disabled)', { s: '#allocTable tbody td', desc: '교통처가 정한 배정 대수 (보기)' }], '기관 → 지사 보낼 대수 입력'),
+      E('alloc', '배정 / 편성', [th('배정 / 편성')], '지사별 배정 합 / 편성 대수', ['초록 일치 · 주황 부족 · 빨강 초과']),
+      E('alloc', '배정 / 지원 가능', [th('배정 / 지원 가능')], '기관별 배정 합 / 지원 가능 대수'),
+      E('alloc', '장비 지정', [th('장비 지정')], '기계화부가 장비까지 고른 대수'),
+      E('alloc', '확정', ['#save-alloc'], '[확정] → 기계화부에 배정 전달', ['[되돌리기] = 마지막 확정 상태로']),
+      // 강원본부 지원장비
       { tab: 'gwteam', only: gwOk, badge: '강원본부', title: '강원본부 지원장비', desc: '강원 신속대응팀 제설차 4대 (원주 · 홍천 · 대관령 · 강릉)',
-        points: ['요청 없이 전국 지사 지원', '요청 · 편성 · 배정 영향 없음 → 이동 현황만 합산', '지원 여부 → 지사 → 도착 시각 → [확정]'],
+        points: ['요청 없이 전국 지사 지원', '요청 · 편성 · 배정 영향 없음 → 이동 현황만 합산'],
         mine: rk === 'gw' ? '강원본부 전용 (타 본부 없음)' : null },
-      { tab: 'log', only: can('log.view'), badge: '권한', title: '로그 기록', desc: '장비 지원 변경 이력 (최근 300건)',
-        points: ['수정 · 삭제 불가', '칸에 마우스 → 당일 수정 기록'] },
+      E('gwteam', '지원 여부', ['#teamTable select[data-vs]'], '드롭다운 → 지원 · 미정 · 지원 불가 · 정비중', ['지원 → 날짜 칸이 열림'], { only: gwOk }),
+      E('gwteam', '지원일 1', ['#day1InTeam'], '첫 날짜 · 나머지 칸은 하루씩 자동', [], { only: gwOk }),
+      E('gwteam', '지원 지사', ['#teamTable .slot select:not(:disabled)'], '그날 갈 지사 · 옆 칸 = 도착 시각', [], { only: gwOk }),
+      E('gwteam', '확정', ['#save-gwteam'], '바뀐 칸 → [확정]해야 저장', [], { only: gwOk }),
+      // 로그 기록
+      { tab: 'log', only: lg, badge: '권한', title: '로그 기록', desc: '장비 지원 변경 이력 (최근 300건)',
+        points: ['수정 · 삭제 불가'] },
+      E('log', '거르기', ['#logFilters'], '구분(추가 · 수정 · 삭제) · 아이디 · 오늘만', [], { only: lg }),
+      E('log', '기록 표', ['#logTable thead'], '일시 · 아이디 · 구분 · 표 · 대상 · 내용 · IP', [], { only: lg }),
       { target: '#sgHelp', kicker: 'HELP', title: '사용법 다시 보기', desc: '오른쪽 위 [? 사용법]', points: [], last: true }
     ];
-    return steps.filter(function (s) { return s.only !== false; });
+    return steps.filter(function (x) { return x.only !== false; });
   }
 
   /* ---------------- 화면 ---------------- */
@@ -151,62 +257,123 @@
     return el;
   }
   function tabBtn(page, name) { return doc.querySelector(page === 'equip' ? '.eq-btn[data-eqtab="' + name + '"]' : '.tab-btn[data-tab="' + name + '"]'); }
-  function visible(el) { return !!(el && !el.hidden && el.offsetParent !== null && el.getClientRects().length); }
+  function fdoc() { var f = $('equipFrame'); try { return f && f.getAttribute('src') && f.contentDocument && f.contentDocument.readyState !== 'loading' ? f.contentDocument : null; } catch (e) { return null; } }
+  var TABNAME = { forecast: '기관별 24시간 예보', snowtable: '연도별 신적설', map: '관측소 지도', jurisdiction: '기관별 관할 고속도로', sources: '데이터 출처', grid: '예보 격자 편입',
+    move: '이동 현황', branch: '지사별 요청·편성', fleet: '기관별 장비', alloc: '기관별 배정', gwteam: '강원본부 지원장비', log: '로그 기록' };
 
-  function body(s) {
+  // 단계의 칸 찾기 → { els, item }
+  function resolve(s) {
+    var d = st.page === 'equip' ? fdoc() : doc; if (!d) return null;
+    for (var i = 0; i < s.at.length; i++) {
+      var it = s.at[i], f = it && it.s ? it.s : it, r = typeof f === 'function' ? f(d) : q1(d, f);
+      if (r && !Array.isArray(r)) r = [r];
+      if (r && r.length) return { els: r, item: it && it.s ? it : null };
+    }
+    return null;
+  }
+  // 칸들의 화면 위치(안쪽 틀이면 틀 위치를 더하고, 틀 밖은 잘라 냄)
+  function rectOf(els) {
+    var L = Infinity, T = Infinity, R = -Infinity, B = -Infinity, c = { l: 0, t: 0, r: root.innerWidth, b: root.innerHeight };
+    els.forEach(function (e) {
+      if (!e || !e.isConnected) return;
+      var w = e.ownerDocument.defaultView, fx = 0, fy = 0, fe = w !== root ? w.frameElement : null;
+      if (fe) { var fr = fe.getBoundingClientRect(); fx = fr.left; fy = fr.top; c = { l: Math.max(c.l, fr.left), t: Math.max(c.t, fr.top), r: Math.min(c.r, fr.right), b: Math.min(c.b, fr.bottom) }; }
+      var r = e.getBoundingClientRect(); L = Math.min(L, r.left + fx); T = Math.min(T, r.top + fy); R = Math.max(R, r.right + fx); B = Math.max(B, r.bottom + fy);
+    });
+    L = Math.max(L, c.l); T = Math.max(T, c.t); R = Math.min(R, c.r); B = Math.min(B, c.b);
+    return R - L >= 2 && B - T >= 2 ? { left: L, top: T, right: R, bottom: B, width: R - L, height: B - T } : null;
+  }
+
+  function body(s, item) {
     if (s.html) return s.html;
-    var h = '<p class="sg-desc">' + s.desc + '</p>';
-    if (s.points && s.points.length) h += '<ul class="sg-pts">' + s.points.map(function (p) { return '<li>' + p + '</li>'; }).join('') + '</ul>';
+    var desc = item && item.desc || s.desc, pts = item && item.points || s.points;
+    var h = '<p class="sg-desc">' + desc + '</p>';
+    if (pts && pts.length) h += '<ul class="sg-pts">' + pts.map(function (p) { return '<li>' + p + '</li>'; }).join('') + '</ul>';
     if (s.mine) h += '<div class="sg-mine"><span class="sg-mine-k">내 계정 · ' + esc(ROLE[roleKey()]) + '</span><p>' + esc(s.mine) + '</p></div>';
     return h;
   }
 
   function render() {
-    var s = st.steps[st.i], n = st.steps.length, el = st.el, card = el.querySelector('.sg-card'), ring = el.querySelector('.sg-ring');
-    var t = s.tab ? tabBtn(st.page, s.tab) : s.target ? doc.querySelector(s.target) : null;
-    if (s.tab && t && visible(t)) t.click();                                         // 그 탭 화면을 뒤에 띄워 둠
-    if (t && visible(t) && t.scrollIntoView) { try { t.scrollIntoView({ block: 'nearest', inline: 'center' }); } catch (e) {} }
-    var tgt = t && visible(t) ? t : null, center = !tgt;
-    var ico = s.tab && t ? (t.querySelector('svg') || {}).outerHTML || '' : '';
-    var pg = st.page === 'equip' ? '장비 지원' : '강설량 측정';
+    var s = st.steps[st.i], my = ++st.tok;
+    if (s.tab) {                                                                       // 그 탭 화면을 뒤에 띄워 둠
+      var b = tabBtn(st.page, s.tab);
+      if (!shown(b)) return skip();
+      if (!b.classList.contains('active')) { b.click(); st.openedAt = Date.now(); }
+    }
+    if (!s.at) { var t = s.tab ? tabBtn(st.page, s.tab) : s.target ? doc.querySelector(s.target) : null; return draw(s, t && shown(t) ? [t] : null, null); }
+    var until = (st.openedAt || 0) + 2500;                                          // 탭을 연 지 2.5초까지만 기다림(그 뒤엔 없는 칸 → 바로 건너뜀)
+    (function find() {                                                                // 화면이 그려질 때까지 잠깐 기다림(장비 지원 자료 등)
+      if (!st || st.tok !== my) return;
+      var r = resolve(s);
+      if (r) return draw(s, r.els, r.item);
+      if (Date.now() >= until) return skip();
+      setTimeout(find, 120);
+    })();
+  }
+  function skip() {                                                                   // 내 계정 화면에 없는 칸: 그 단계를 빼고 같은 방향으로
+    st.steps.splice(st.i, 1);
+    if (st.dir < 0) st.i -= 1;
+    st.i = Math.max(0, Math.min(st.steps.length - 1, st.i));
+    render();
+  }
+  function draw(s, els, item) {
+    var n = st.steps.length, el = st.el, card = el.querySelector('.sg-card'), ring = el.querySelector('.sg-ring');
+    if (els && els[0].scrollIntoView) { try { els[0].scrollIntoView(s.at ? { block: 'center', inline: 'nearest' } : { block: 'nearest', inline: 'center' }); } catch (e) {} }   // 칸은 가운데로(아래쪽 고정 막대에 가리지 않게)
+    st.cur = els;
+    var center = !els, isTab = s.tab && !s.at, tb = s.tab ? tabBtn(st.page, s.tab) : null;
+    var ico = tb ? (tb.querySelector('svg') || {}).outerHTML || '' : '';
+    var pg = st.page === 'equip' ? '장비 지원' : '강설량 측정', kick = s.kicker || (s.at ? TABNAME[s.tab] || 'STEP' : 'TAB');
+    var pct = Math.round((st.i + 1) / n * 100);
     el.querySelector('.sg-in').innerHTML =
-      '<div class="sg-head"><span class="sg-step"><i></i>' + (s.kicker || 'STEP') + ' · ' + String(st.i + 1).padStart(2, '0') + ' / ' + String(n).padStart(2, '0') + '</span><span class="sg-pg">' + pg + ' 사용법</span></div>' +
-      '<div class="sg-title">' + (ico ? '<span class="sg-ico">' + ico + '</span>' : '') + '<h2 id="sgTitle">' + esc(s.title) + '</h2>' + (s.badge ? '<span class="sg-badge">' + esc(s.badge) + '</span>' : '') + '</div>' +
-      '<div class="sg-body">' + body(s) + '</div>' +
-      '<div class="sg-foot"><div class="sg-prog" aria-hidden="true">' + st.steps.map(function (x, i) { return '<span class="' + (i < st.i ? 'done' : i === st.i ? 'now' : '') + '"></span>'; }).join('') + '</div>' +
+      '<div class="sg-head"><span class="sg-step"><i></i><b class="sg-k">' + esc(kick) + '</b> · ' + String(st.i + 1).padStart(2, '0') + ' / ' + String(n).padStart(2, '0') + '</span><span class="sg-pg">' + pg + ' 사용법</span></div>' +
+      '<div class="sg-title">' + (isTab && ico ? '<span class="sg-ico">' + ico + '</span>' : s.at ? '<span class="sg-pin" aria-hidden="true"></span>' : '') + '<h2 id="sgTitle">' + esc(s.title) + '</h2>' + (s.badge ? '<span class="sg-badge">' + esc(s.badge) + '</span>' : '') + '</div>' +
+      '<div class="sg-body">' + body(s, item) + '</div>' +
+      '<div class="sg-foot"><div class="sg-prog" aria-hidden="true"><span style="width:' + pct + '%"></span></div>' +
       '<div class="sg-btns">' + (st.i > 0 ? '<button type="button" class="sg-prev" data-sg="prev">이전</button>' : '') +
       '<button type="button" class="sg-next" data-sg="next">' + (st.i === n - 1 ? '시작하기' : '다음') + ' <span aria-hidden="true">→</span></button></div></div>';
-    card.className = 'sg-card' + (center ? ' center' : '') + (s.wide ? ' wide' : '');
+    card.className = 'sg-card' + (center ? ' center' : '') + (s.wide ? ' wide' : '') + (s.at ? ' mini' : '');
     el.classList.toggle('is-center', center);
     card.classList.remove('anim'); void card.offsetWidth; card.classList.add('anim');
-    place(tgt, card, ring);
+    place(els ? rectOf(els) : null, card, ring);
+    clearTimeout(st.rp); st.rp = setTimeout(onResize, 350);                           // 늦게 끝나는 스크롤·그리기 뒤 다시 맞춤
     var nb = card.querySelector('.sg-next'); if (nb) try { nb.focus({ preventScroll: true }); } catch (e) { nb.focus(); }
     card.querySelector('.sg-body').scrollTop = 0;
   }
-  function place(tgt, card, ring) {
+  // 카드 자리: 아래 → 위 → 오른쪽 → 왼쪽 중 들어가는 곳. 큰 칸(지도 등)이라 다 안 되면 화면 오른쪽 아래
+  function place(r, card, ring) {
     var arrow = card.querySelector('.sg-arrow');
     card.style.left = card.style.top = card.style.bottom = '';
-    if (!tgt) { ring.style.opacity = '0'; arrow.style.display = 'none'; return; }
-    var r = tgt.getBoundingClientRect(), pad = 5, vw = root.innerWidth, vh = root.innerHeight;
+    if (!r) { ring.style.opacity = '0'; arrow.style.display = 'none'; return; }
+    var pad = 5, vw = root.innerWidth, vh = root.innerHeight, gap = 18;
     ring.style.opacity = '1';
     ring.style.left = (r.left - pad) + 'px'; ring.style.top = (r.top - pad) + 'px'; ring.style.width = (r.width + pad * 2) + 'px'; ring.style.height = (r.height + pad * 2) + 'px';
-    if (vw <= 640) { arrow.style.display = 'none'; return; }                          // 휴대폰: 아래쪽 카드(CSS)
-    var cw = card.offsetWidth, ch = card.offsetHeight, below = r.bottom + 18 + ch <= vh - 8 || r.top < vh / 2;
-    var left = Math.min(Math.max(12, r.left + r.width / 2 - cw / 2), vw - cw - 12);
-    card.style.left = left + 'px';
-    card.style.top = (below ? r.bottom + 18 : Math.max(12, r.top - 18 - ch)) + 'px';
-    arrow.style.display = ''; arrow.className = 'sg-arrow ' + (below ? 'up' : 'down');
-    arrow.style.left = Math.min(Math.max(18, r.left + r.width / 2 - left), cw - 18) + 'px';
+    if (vw <= 640) {                                                                   // 휴대폰: 아래쪽 카드(CSS). 짚은 칸이 아래쪽이라 가리면 위쪽으로
+      arrow.style.display = 'none'; card.classList.toggle('top', r.bottom > vh - card.offsetHeight - 16 && r.top > card.offsetHeight + 64); return;
+    }
+    var cw = card.offsetWidth, ch = card.offsetHeight, cx = r.left + r.width / 2, cy = r.top + r.height / 2, x, y, side = null;
+    function clampX(v) { return Math.min(Math.max(12, v), vw - cw - 12); }
+    function clampY(v) { return Math.min(Math.max(12, v), vh - ch - 12); }
+    if (r.bottom + gap + ch <= vh - 8) { side = 'up'; x = clampX(cx - cw / 2); y = r.bottom + gap; }
+    else if (r.top - gap - ch >= 8) { side = 'down'; x = clampX(cx - cw / 2); y = r.top - gap - ch; }
+    else if (r.right + gap + cw <= vw - 8) { side = 'left'; x = r.right + gap; y = clampY(cy - ch / 2); }
+    else if (r.left - gap - cw >= 8) { side = 'right'; x = r.left - gap - cw; y = clampY(cy - ch / 2); }
+    else { x = vw - cw - 20; y = vh - ch - 20; }
+    card.style.left = x + 'px'; card.style.top = y + 'px';
+    if (!side) { arrow.style.display = 'none'; return; }
+    arrow.style.display = ''; arrow.className = 'sg-arrow ' + side; arrow.style.left = arrow.style.top = '';
+    if (side === 'up' || side === 'down') arrow.style.left = Math.min(Math.max(18, cx - x), cw - 18) + 'px';
+    else arrow.style.top = Math.min(Math.max(18, cy - y), ch - 18) + 'px';
   }
 
-  function go(i) { if (!st) return; st.i = Math.max(0, Math.min(st.steps.length - 1, i)); render(); }
+  function go(i) { if (!st) return; var j = Math.max(0, Math.min(st.steps.length - 1, i)); st.dir = j < st.i ? -1 : 1; st.i = j; render(); }
   function next() { if (!st) return; if (st.i >= st.steps.length - 1) stop(); else go(st.i + 1); }
   function stop() {
     if (!st) return;
-    var s = st; st = null; markSeen(s.page);
-    doc.removeEventListener('keydown', onKey, true); root.removeEventListener('resize', onResize);
+    var s = st; st = null; markSeen(s.page); clearTimeout(s.rp);
+    doc.removeEventListener('keydown', onKey, true); root.removeEventListener('resize', onResize); doc.removeEventListener('scroll', onResize, true);
+    if (s.fd) try { s.fd.removeEventListener('scroll', onResize, true); } catch (e) {}
     s.el.classList.add('out'); setTimeout(function () { if (s.el.parentNode) s.el.parentNode.removeChild(s.el); }, 220);
-    if (s.back && visible(s.back) && !s.back.classList.contains('active')) s.back.click();   // 안내 전에 보던 탭으로
+    if (s.back && shown(s.back) && !s.back.classList.contains('active')) s.back.click();   // 안내 전에 보던 탭으로
     var h = $('sgHelp'); if (h) try { h.focus({ preventScroll: true }); } catch (e) {}
   }
   function onKey(e) {
@@ -215,22 +382,23 @@
     else if (e.key === 'ArrowRight') { e.preventDefault(); next(); }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); go(st.i - 1); }
     else if (e.key === 'Tab') {                                                       // 안내 안에서만 돌게
-      var f = [].slice.call(st.el.querySelectorAll('button')).filter(visible); if (!f.length) return;
+      var f = [].slice.call(st.el.querySelectorAll('button')).filter(shown); if (!f.length) return;
       var a = doc.activeElement, i = f.indexOf(a);
       if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); } else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
     }
   }
   var rz = 0;
-  function onResize() { if (!st) return; cancelAnimationFrame(rz); rz = requestAnimationFrame(function () { if (!st) return; var s = st.steps[st.i];
-    var t = s.tab ? tabBtn(st.page, s.tab) : s.target ? doc.querySelector(s.target) : null; place(t && visible(t) ? t : null, st.el.querySelector('.sg-card'), st.el.querySelector('.sg-ring')); }); }
+  function onResize() { if (!st) return; cancelAnimationFrame(rz); rz = requestAnimationFrame(function () { if (!st) return;
+    place(st.cur ? rectOf(st.cur) : null, st.el.querySelector('.sg-card'), st.el.querySelector('.sg-ring')); }); }
 
   function start(page) {
     if (!me() || !doc.body.classList.contains('authed')) return;
     if (st) stop();
     page = page || curPage();
     var back = doc.querySelector(page === 'equip' ? '.eq-btn.active' : '.tab-btn.active');
-    st = { page: page, steps: page === 'equip' ? equipSteps() : snowSteps(), i: 0, el: build(), back: back };
-    doc.addEventListener('keydown', onKey, true); root.addEventListener('resize', onResize);
+    st = { page: page, steps: page === 'equip' ? equipSteps() : snowSteps(), i: 0, dir: 1, tok: 0, cur: null, el: build(), back: back, fd: page === 'equip' ? fdoc() : null };
+    doc.addEventListener('keydown', onKey, true); root.addEventListener('resize', onResize); doc.addEventListener('scroll', onResize, true);
+    if (st.fd) try { st.fd.addEventListener('scroll', onResize, true); } catch (e) {}   // 장비 지원 안쪽 화면이 스크롤돼도 테두리가 따라감
     render();
   }
   // 저절로 열기: 그 페이지를 이 브라우저·아이디로 처음 볼 때 한 번
@@ -256,5 +424,5 @@
     }
     return initP;
   }
-  root.SSGuide = { init: init, auto: auto, start: start, stop: stop, active: function () { return st ? { page: st.page, i: st.i, n: st.steps.length, title: st.steps[st.i].title } : null; } };
+  root.SSGuide = { init: init, auto: auto, start: start, stop: stop, active: function () { return st ? { page: st.page, i: st.i, n: st.steps.length, title: st.steps[st.i].title, tab: st.steps[st.i].tab || null, el: !!st.steps[st.i].at, titles: st.steps.map(function (x) { return x.title; }) } : null; } };
 })(window);
