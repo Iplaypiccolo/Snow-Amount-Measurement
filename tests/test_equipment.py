@@ -46,7 +46,12 @@ def toast(p): return p.locator("#toast").inner_text()
 def route(p, vid, d): return ev(p, f"routeOf('{d}', '{vid}').map(bn)")
 def rsel(vid, d, j=0): return f"select[data-fk='r:{d}:{vid}:{j}']"
 def confirm_fleet(p): p.click("#save-fleet [data-save]"); p.wait_for_timeout(300)
-def save_branch(p): p.click("#save-branch [data-save]"); p.wait_for_timeout(300)
+def save_branch(p):          # 지사별 요청·편성: 고친 줄마다 그 줄 [저장](아래 저장 막대는 2026-11-01 없앰)
+    for _ in range(40):
+        bs = p.locator("#branchTable tr.changed [data-rsave]"); n = bs.count()
+        if not n: break
+        bs.first.click(); p.wait_for_timeout(300)
+        if p.locator("#branchTable tr.changed [data-rsave]").count() >= n: break
 def rows(p): return [t.strip() for t in p.locator("#matrix tbody tr th[scope=row]").all_inner_texts()]
 def hqs(p): return [t.replace("\n", "") for t in p.locator("#matrix tbody th.hqc").all_inner_texts()]
 def bid(p, name): return ev(p, f"S.branches.find(b => b.name === '{name}').id")
@@ -192,10 +197,10 @@ def t_branch_save_confirm_and_arrive(p):
     check(h == [f"{i:02d}" for i in range(24)] and m == ["00", "10", "20", "30", "40", "50"], f"시 00~23, 분 10분 단위: {h} {m}")
     p.select_option(f"[data-arr={dg}][data-part=h]", "05"); p.wait_for_timeout(150); p.select_option(f"[data-arr={dg}][data-part=m]", "30"); p.wait_for_timeout(150)
     p.fill(f"[data-rq={ch}][data-f=req_blower]", "3"); p.press(f"[data-rq={ch}][data-f=req_blower]", "Tab"); p.wait_for_timeout(150)
-    check("2개 지사" in p.locator("#save-branch .save-state").inner_text(), p.locator("#save-branch .save-state").inner_text())
+    check("저장하지 않은 지사 2곳" in p.locator("#brDirty").inner_text() and not p.locator("#save-branch").is_visible(), p.locator("#brDirty").inner_text())
     check(p.locator(f"[data-confirm={ch}]").inner_text() == "확정" and p.locator(f"[data-confirm={dg}]").count() == 1, "확정 버튼")
     p.click(f"[data-confirm={ch}]"); p.wait_for_timeout(300)                  # 확정 = 그 지사 줄을 바로 저장(고친 요청 대수도 함께)
-    check("확정했습니다" in toast(p) and ev(p, f"S.reqs['{ch}'].confirmed") is True and ev(p, f"S.reqs['{ch}'].req_blower") == 3 and "1개 지사" in p.locator("#save-branch .save-state").inner_text(), "확정 버튼")
+    check("확정했습니다" in toast(p) and ev(p, f"S.reqs['{ch}'].confirmed") is True and ev(p, f"S.reqs['{ch}'].req_blower") == 3 and "1곳" in p.locator("#brDirty").inner_text(), "확정 버튼")
     save_branch(p); check("저장했습니다" in toast(p), toast(p))
     check(ev(p, f"S.reqs['{dg}'].arrive_at") == day(p, 0) + "T05:30" and ev(p, f"S.reqs['{ch}'].confirmed") is True and ev(p, f"S.reqs['{ch}'].req_blower") == 3, "저장값")
     p.click(f"[data-confirm={dg}]"); p.wait_for_timeout(300); check(p.locator(f"[data-unconfirm={dg}]").count() == 1, "대관령 다시 확정됨 + 취소")
@@ -880,9 +885,9 @@ def t_pool_vehicles(p):
     widths = lambda: ev(p, "[...document.querySelectorAll('#branchTable thead tr:nth-child(2) th')].map(th => Math.round(th.getBoundingClientRect().width * 2) / 2)")
     w0 = widths(); p.check(f"input[data-rq={cj}][data-f=wx_manual]"); p.wait_for_timeout(200); w1 = widths()
     check(p.locator(f"#branchTable tr[data-b='{cj}'] input.wxn").count() == 3 and w0 == w1, f"직접입력을 켜도 칸 폭이 같아야 함: {w0} → {w1}")
-    p.uncheck(f"input[data-rq={cj}][data-f=wx_manual]"); p.wait_for_timeout(200); w2 = widths(); check(w2 == w0, f"끄면 처음 그대로: {w0} → {w2}"); p.click("#save-branch [data-revert]"); p.wait_for_timeout(150)
+    p.uncheck(f"input[data-rq={cj}][data-f=wx_manual]"); p.wait_for_timeout(200); w2 = widths(); check(w2 == w0, f"끄면 처음 그대로: {w0} → {w2}"); ev(p, "(S.rdraft.clear(), refresh())"); p.wait_for_timeout(150)
     p.set_viewport_size({"width": 1920, "height": 1000}); p.wait_for_timeout(200); w3 = widths(); p.check(f"input[data-rq={cj}][data-f=wx_manual]"); p.wait_for_timeout(200); w4 = widths()
-    check(w3 == w4, f"넓은 화면에서도 칸 폭이 같아야 함: {w3} → {w4}"); p.click("#save-branch [data-revert]"); p.set_viewport_size({"width": 1440, "height": 1000}); p.wait_for_timeout(200)
+    check(w3 == w4, f"넓은 화면에서도 칸 폭이 같아야 함: {w3} → {w4}"); ev(p, "(S.rdraft.clear(), refresh())"); p.set_viewport_size({"width": 1440, "height": 1000}); p.wait_for_timeout(200)
     check(ev(p, "(() => { const t = document.querySelector('#branchTable'); return t.scrollWidth - t.parentElement.clientWidth })()") <= 8, "1440 화면에서 표가 옆으로 넘치지 않음(편성·확정 칸이 한 화면에)")
     # ── 지사(인천): 자기 줄에 지원 가능 3대, 확정 전에는 장비 등록 안내만
     as_user(p, "br-ic"); tab(p, "branch"); row = lambda b: p.locator(f"#branchTable tr[data-b='{b}']")
@@ -1023,6 +1028,30 @@ def t_pool_round_delete(p):
     p.fill("#newRoundDate", d4); p.click("#roundMake"); p.wait_for_timeout(400); p.click("#roundDel"); p.wait_for_timeout(400)
     check("경로가 있어" in toast(p) and ev(p, "S.round") != old, "기계화부 장비 경로가 있으면 여전히 거절: " + toast(p))
 
+def t_branch_bulk_save(p):
+    """2026-11-01: 아래 저장 막대(되돌리기·저장) 없앰 → 줄 [저장] · 본부 줄 [일괄 저장] · 관리자도 줄 [저장](확정과 따로)"""
+    tab(p, "branch"); ch, dg = bid(p, "춘천"), bid(p, "대관령")
+    p.click(f"[data-unconfirm={dg}]"); p.wait_for_timeout(300)
+    i = f"[data-rq={dg}][data-f=assigned_truck]"; p.fill(i, "4"); p.press(i, "Tab"); p.wait_for_timeout(150)
+    check(not p.locator("#save-branch").is_visible() and "1곳" in p.locator("#brDirty").inner_text(), "아래 저장 막대 없음, 위에 저장 안 한 지사 수")
+    check(p.locator(f"[data-rsave='{dg}']").count() == 1, "관리자: 고친 줄에 [저장]")
+    p.click(f"[data-rsave='{dg}']"); p.wait_for_timeout(300)
+    check(ev(p, f"S.reqs['{dg}'].assigned_truck") == 4 and not ev(p, f"S.reqs['{dg}'].confirmed") and not ev(p, f"!!S.reqs['{dg}'].saved_at") and not p.locator("#brDirty").is_visible(),
+          "관리자 [저장] = 편성만 저장(확정·저장 완료 아님)")
+    # 본부 계정: 본부 줄 [일괄 저장] → 그 본부에서 [저장]이 보이는 지사 모두
+    as_user(p, "hq-gw"); tab(p, "branch"); gw = ev(p, "S.hqs.find(h => h.name === '강원').id")
+    for b, v in ((ch, 2), (dg, 1)):
+        i = f"[data-rq={b}][data-f=req_truck]"; p.fill(i, str(v)); p.press(i, "Tab"); p.wait_for_timeout(150)
+    hb = p.locator(f"#branchTable tr.hq[data-hq='{gw}'] [data-rsave-hq]")
+    check(hb.count() == 1 and hb.inner_text().strip() == "일괄 저장", "본부 줄에 [일괄 저장]")
+    want = ev(p, f"S.order.filter(b => b.hq_id === '{gw}' && canReq(b) && canRowSave(b)).map(b => b.id)")
+    hb.click(); p.wait_for_timeout(400)
+    check("강원 본부" in toast(p) and f"{len(want)}개 지사를 저장했습니다" in toast(p), toast(p))
+    check(ev(p, f"S.reqs['{ch}'].req_truck") == 2 and ev(p, f"S.reqs['{dg}'].req_truck") == 1 and all(ev(p, f"!!S.reqs['{b}'].saved_at") for b in want), "고친 값 + 저장 완료")
+    check("모두 저장" in p.locator(f"#branchTable tr.hq[data-hq='{gw}'] [data-svhq]").inner_text() and p.locator("#branchTable [data-rsave]").count() == 0, "다 저장하면 '모두 저장'")
+    # 지사 계정(자기 줄 하나)에는 [일괄 저장] 없음
+    as_user(p, "br2"); tab(p, "branch"); check(p.locator("[data-rsave-hq]").count() == 0, "지사 계정은 일괄 저장 없음")
+
 def t_branch_saved(p):
     """(2026-10-15, 마이그레이션 46) 지사·본부는 요청·지원 가능이 0이어도 [저장] → '저장 완료'(타지사 지원 가능 다음 칸). 관리자 저장·확정은 남기지 않음.
     보기 버튼은 처음에 아무것도 안 눌림, [저장 안 한 지사만]은 맨 오른쪽"""
@@ -1042,10 +1071,10 @@ def t_branch_saved(p):
     # 요청 0 인 지사: 0 그대로 저장 가능
     wj = bid(p, "원주"); check(ev(p, f"rval('{wj}', 'req_truck') + rval('{wj}', 'req_blower') + rval('{wj}', 'offer_truck')") == 0, "원주는 요청·지원 가능 모두 0")
     p.click(f"[data-rsave='{wj}']"); p.wait_for_timeout(300); check(cell(wj).inner_text().strip() == "저장 완료", "0이어도 저장 → 저장 완료(요청 안 함도 알림)")
-    # 고치면 다시 [저장], 아래 [저장]으로 저장해도 저장 완료
+    # 고치면 다시 [저장] → 저장 완료
     i = f"[data-rq={wj}][data-f=offer_truck]"; p.fill(i, "1"); p.press(i, "Tab"); p.wait_for_timeout(150)
     check(cell(wj).locator("[data-rsave]").count() == 1, "저장한 뒤 고치면 다시 [저장]")
-    save_branch(p); check(cell(wj).inner_text().strip() == "저장 완료" and ev(p, f"S.reqs['{wj}'].offer_truck") == 1, "아래 [저장]도 저장 완료")
+    save_branch(p); check(cell(wj).inner_text().strip() == "저장 완료" and ev(p, f"S.reqs['{wj}'].offer_truck") == 1, "다시 [저장] → 저장 완료")
     # 관리자: 저장 안 한 지사만 / 관리자 저장은 저장 완료가 아님
     as_user(p, "admin1"); tab(p, "branch"); p.click("#onlyUnsaved"); p.wait_for_timeout(150)
     shown = ev(p, "[...document.querySelectorAll('#branchTable tr[data-b]')].map(r => r.dataset.b)")
@@ -1122,7 +1151,7 @@ def t_gw_team(p):
     tab(p, "move"); p.uncheck("#showTeam"); p.reload(); p.wait_for_selector("#matrix tbody tr")
     check(not p.locator("#showTeam").is_checked() and p.locator("#matrix .tm").count() == 0, "끈 상태를 이 브라우저에 기억")
 
-TESTS = [t_gw_team, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+TESTS = [t_gw_team, t_branch_bulk_save, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,

@@ -971,15 +971,19 @@ function hqSums(hid) {
   const rows = S.order.filter(b => b.hq_id === hid), sum = f => rows.reduce((a, b) => a + (+rval(b.id, f) || 0), 0);
   return { req_truck: sum("req_truck"), req_blower: sum("req_blower"), offer_truck: sum("offer_truck"), assigned_truck: sum("assigned_truck"), assigned_blower: sum("assigned_blower"), confirmed: rows.filter(b => rval(b.id, "confirmed")).length || "" };
 }
+// 내용이 바뀔 때만 다시 그림 — 값을 넣고 바로 [저장]을 누르면 입력칸의 change 가 누르는 도중에 와서, 버튼을 새로 그리면 그 클릭이 사라짐(2026-11-01)
+const cellH = (attrs, html) => `<td ${attrs} data-h="${esc(html)}">${html}</td>`;     // setCell 이 비교할 처음 내용을 함께 적어 둠
+function setCell(el, html) { if (el.dataset.h !== html) { el.innerHTML = html; el.dataset.h = html; } }
 function afterReq(id) {          // 지사 요청 칸을 고친 뒤: 그 줄 표시·최종 대수·본부 합계·도착 시각 칸 잠금만 고침(입력 중인 칸은 그대로)
   const b = S.brById[id], tr = document.querySelector(`#branchTable tr[data-b="${id}"]`);
   if (tr) {
     tr.classList.toggle("changed", S.rdraft.has(id)); tr.classList.add("active");
-    const sv = tr.querySelector("[data-svcell]"); if (sv && b) sv.innerHTML = saveCell(b);          // 고치면 다시 [저장]
+    const sv = tr.querySelector("[data-svcell]"); if (sv && b) setCell(sv, saveCell(b));          // 고치면 다시 [저장]
     const hasDate = !!rval(id, "arrive_at"); tr.querySelectorAll('[data-arr][data-part="h"], [data-arr][data-part="m"]').forEach(x => { x.disabled = !hasDate || isConf(id); });
   }
   const hr = b && document.querySelector(`#branchTable tr.hq[data-hq="${b.hq_id}"]`);
-  if (hr) { const sm = hqSums(b.hq_id); HQ_SUM_KEYS.forEach(k => { const c = hr.querySelector(`[data-s="${k}"]`); if (c) c.textContent = sm[k]; }); }
+  if (hr) { const sm = hqSums(b.hq_id); HQ_SUM_KEYS.forEach(k => { const c = hr.querySelector(`[data-s="${k}"]`); if (c) c.textContent = sm[k]; });
+    const sh = hr.querySelector("[data-svhq]"); if (sh) setCell(sh, bulkSaveCell(b.hq_id)); }
   afterAnyChange();
 }
 // 제목 줄이 두 줄인 표: 스크롤해도 두 줄이 겹치지 않게, 둘째 줄은 첫 줄 높이만큼 아래에 붙임(높이는 화면 폭에 따라 달라서 매번 잼)
@@ -1003,7 +1007,7 @@ function renderBranch() {
     `<button type="button" class="chip" id="onlyFixed" aria-pressed="${S.bview === "fixed"}">편성 확정된 지사만</button>` +
     `<button type="button" class="chip" id="onlyOffer" aria-pressed="${S.bview === "offer"}">지원 가능 지사만</button>` +
     `<button type="button" class="chip" id="onlyUnsaved" aria-pressed="${S.bview === "unsaved"}">저장 안 한 지사만</button>` +
-    `<span class="tb-right"></span>` +
+    `<span class="tb-right"><span class="br-dirty" id="brDirty" role="status" hidden></span></span>` +
     (S.me.role === "admin" ? `<button type="button" class="btn sm" id="zoneMgr">특보구역 관리</button>` : "") + `</div>` : "";
   if (!r) { $("branchTable").innerHTML = `<tbody><tr><td class="empty">기준일자가 없습니다.</td></tr></tbody>`; return; }
   const conf = can("req.confirm");
@@ -1020,7 +1024,7 @@ function renderBranch() {
     if (!shown.length) return;
     const closed = S.closedHq.has(hq.id), hsum = hqSums(hq.id), sc = (k, cls = "") => `<td${cls ? ` class="${cls}"` : ""} data-s="${k}">${hsum[k]}</td>`;
     h += `<tr class="hq ${closed ? "closed" : ""}" data-hq="${hq.id}" tabindex="0"><td class="l">${esc(hq.name)}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
-      ${sc("req_truck")}${sc("req_blower")}<td></td>${sc("offer_truck")}<td></td>${sc("assigned_truck", "adm adm0")}${sc("assigned_blower", "adm")}${conf ? `<td class="cf adm">${bulkCell(hq.id)}</td>` : sc("confirmed", "adm")}</tr>`;
+      ${sc("req_truck")}${sc("req_blower")}<td></td>${sc("offer_truck")}${cellH(`class="svc" data-svhq="${hq.id}"`, bulkSaveCell(hq.id))}${sc("assigned_truck", "adm adm0")}${sc("assigned_blower", "adm")}${conf ? `<td class="cf adm">${bulkCell(hq.id)}</td>` : sc("confirmed", "adm")}</tr>`;
     if (closed) return;
     shown.forEach(b => {
       const ed = canReq(b), t = `round_requests:${S.round},${b.id}`, on = has(b), d0 = dis(b.id);      // ed = 입력칸을 보임, 확정한 줄이면 비활성(d0)
@@ -1035,7 +1039,7 @@ function renderBranch() {
         <td>${num("req_truck", "요청 제설차", ed)}</td><td>${num("req_blower", "요청 제설기", ed)}</td>
         <td class="l">${arriveCell(b, ed, t)}</td>
         <td class="ofc" data-ofcell="${b.id}">${num("offer_truck", "타지사 지원 가능 제설차", ed, 99, hasOffer(b.id))}</td>
-        <td class="svc" data-svcell="${b.id}">${saveCell(b)}</td>
+        ${cellH(`class="svc" data-svcell="${b.id}"`, saveCell(b))}
         <td class="adm adm0">${num("assigned_truck", "편성 제설차", ed && conf)}</td><td class="adm">${num("assigned_blower", "편성 제설기", ed && conf)}</td>
         <td class="cf adm">${conf ? H(t, "confirmed", ok ? `<span class="status go">확정됨</span> <button type="button" class="btn sm" data-unconfirm="${b.id}">취소</button>`
                                                      : `<button type="button" class="btn sm primary" data-confirm="${b.id}">확정</button>`)
@@ -1047,8 +1051,10 @@ function renderBranch() {
   stickHead($("branchTable"));
 }
 // [저장] 칸: 지사·본부 계정은 아직 저장하지 않았거나 고친 값이 있으면 [저장](0이어도 저장 가능 — "요청 안 함"도 알림), 저장했으면 '저장 완료'
+// 관리자(req.confirm)는 고친 줄만 [저장] — 편성 대수만 저장해 두고 확정은 나중에(2026-11-01, 아래 저장 막대를 없애며)
+const canRowSave = b => canMarkSave(b) ? !isSaved(b.id) || S.rdraft.has(b.id) : can("req.confirm") && canEdit(b) && S.rdraft.has(b.id);
 function saveCell(b) {
-  if (canMarkSave(b) && (!isSaved(b.id) || S.rdraft.has(b.id))) return `<button type="button" class="btn sm" data-rsave="${esc(b.id)}" aria-label="${esc(b.name)} 지사 줄 저장">저장</button>`;
+  if (canRowSave(b)) return `<button type="button" class="btn sm" data-rsave="${esc(b.id)}" aria-label="${esc(b.name)} 지사 줄 저장">저장</button>`;
   return isSaved(b.id) ? `<span class="status go sv">저장 완료</span>` : '<span class="muted">-</span>';
 }
 // 지사 줄 저장(바뀐 열만). extra 는 그 줄에 더할 값(확정 버튼: { confirmed: true/false })
@@ -1083,6 +1089,20 @@ function bulkCell(hq) {
   const ids = scopeIds(hq), all = ids.length && ids.every(id => rval(id, "confirmed")), any = ids.some(isConf), a = hq ? ` data-hq-scope="${esc(hq)}"` : "";
   return `<span class="bulk">${all ? '<span class="status go">모두 확정</span>' : `<button type="button" class="btn sm primary" ${hq ? `data-confirm-hq="${esc(hq)}"` : 'id="confirmAll"'}>일괄 확정</button>`}` +
     (any ? `<button type="button" class="btn sm" ${hq ? `data-unconfirm-hq="${esc(hq)}"` : 'id="unconfirmAll"'}>일괄 취소</button>` : "") + `</span>`;
+}
+// 본부 줄의 저장 칸: [일괄 저장](그 본부에서 [저장]이 보이는 줄 모두) / 지사·본부 계정은 다 저장했으면 '모두 저장'(2026-11-01 사용자 요청)
+function bulkSaveCell(hq) {
+  const rows = S.order.filter(b => b.hq_id === hq && canReq(b)); if (rows.length < 2) return "";
+  const n = rows.filter(canRowSave).length;
+  if (n) return `<button type="button" class="btn sm" data-rsave-hq="${esc(hq)}" aria-label="${esc((S.hqById[hq] || {}).name || "")} 본부 ${n}개 지사 일괄 저장">일괄 저장</button>`;
+  return !can("req.confirm") && rows.every(b => isSaved(b.id) || isConf(b.id)) ? '<span class="status go sv">모두 저장</span>' : "";
+}
+function saveHq(hq) {
+  const hn = `${(S.hqById[hq] || {}).name || ""} 본부 `, ids = S.order.filter(b => b.hq_id === hq && canReq(b) && canRowSave(b)).map(b => b.id);
+  if (!ids.length) return toast(`${hn}저장할 지사가 없습니다`);
+  const blank = can("req.confirm") ? [] : ids.filter(id => !S.rdraft.has(id));      // 고치지 않은 줄 = 지금 값(대개 0) 그대로 '저장 완료'
+  if (!confirm(`${hn}${ids.length}개 지사를 저장할까요?\n${ids.map(bn).join(", ")}` + (blank.length ? `\n고치지 않은 ${blank.map(bn).join(", ")} 지사는 지금 값 그대로 저장 완료로 남습니다.` : ""))) return;
+  saveBranchRows(ids, null, `${hn}${ids.length}개 지사를 저장했습니다`);
 }
 function unconfirmAll(hq) {           // 확정된 지사를 모두 확정 취소(hq = 그 본부만)
   if (!can("req.confirm")) return;
@@ -1313,7 +1333,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !sheet.hid
 function busy(t, on) { const bar = $("save-" + t); bar.classList.toggle("busy", on); bar.querySelectorAll("button").forEach(b => { b.disabled = on || b.disabled; }); }
 function updateSavebars() {
   const fb = $("save-fleet"), bb = $("save-branch"), ab = $("save-alloc");
-  fb.hidden = !(can("equip.edit.all") || can("equip.edit.own") || myPoolN() > 0 || (canPoolAdd() && fleetDirty())); bb.hidden = !canAnyReq() || !S.round; ab.hidden = !can("equip.edit.all") || !S.round;
+  fb.hidden = !(can("equip.edit.all") || can("equip.edit.own") || myPoolN() > 0 || (canPoolAdd() && fleetDirty())); bb.hidden = true; ab.hidden = !can("equip.edit.all") || !S.round;
   const fd = fleetDirty(), bd = branchDirty(), ad = allocDirty(), td = teamDirty(), tb = $("save-gwteam");
   tb.hidden = !canTeam() || !S.round; tb.classList.toggle("dirty", td);
   tb.querySelector(".save-state").textContent = td ? `확정하지 않은 변경: 경로 ${draftKeys(true).length}칸${sdraftKeys(true).length ? ` · 지원 여부 ${sdraftKeys(true).length}대` : ""}` + (S.preview ? " (미리보기 — 확정 불가)" : "") : "변경 사항 없음";
@@ -1323,6 +1343,7 @@ function updateSavebars() {
   ab.querySelector("[data-revert]").disabled = !ad; ab.querySelector("[data-save]").disabled = !ad || S.preview;
   fb.querySelector(".save-state").textContent = fd ? `확정하지 않은 변경: 경로 ${draftKeys(false).length}칸${sdraftKeys(false).length ? ` · 지원 여부 ${sdraftKeys(false).length}대` : ""}${S.vdraft.size ? ` · 장비 ${S.vdraft.size}대` : ""}` + (S.preview ? " (미리보기 — 확정 불가)" : "") : "변경 사항 없음";
   bb.querySelector(".save-state").textContent = bd ? `저장하지 않은 변경: ${S.rdraft.size}개 지사` + (S.preview ? " (미리보기 — 저장 불가)" : "") : "변경 사항 없음";
+  const bdn = $("brDirty"); if (bdn) { bdn.textContent = bd ? `저장하지 않은 지사 ${S.rdraft.size}곳` + (S.preview ? " (미리보기 — 저장 불가)" : "") : ""; bdn.hidden = !bd; }
   fb.querySelector("[data-revert]").disabled = !fd; fb.querySelector("[data-save]").disabled = !fd || S.preview;
   bb.querySelector("[data-revert]").disabled = !bd; bb.querySelector("[data-save]").disabled = !bd || S.preview;
 }
@@ -1463,6 +1484,7 @@ document.addEventListener("click", e => {
   if ((x = c("[data-offclr]"))) { const v = vehById(x.dataset.offclr); if (v && canVeh(v)) { setStat(v.id, { off_from: null }); patchVehicle(v.id); } return; }
   if (c("#roundMake")) return makeRound();
   if (c("#confirmAll")) return confirmAll();
+  if ((x = c("[data-rsave-hq]"))) return saveHq(x.dataset.rsaveHq);                  // 본부 줄의 [일괄 저장](줄 접기보다 먼저)
   if ((x = c("[data-confirm-hq]"))) return confirmAll(x.dataset.confirmHq);          // 본부 줄의 [일괄 확정](줄 접기보다 먼저)
   if (c("#unconfirmAll")) return unconfirmAll();
   if ((x = c("[data-unconfirm-hq]"))) return unconfirmAll(x.dataset.unconfirmHq);    // 본부 줄의 [일괄 취소]
@@ -1478,7 +1500,7 @@ document.addEventListener("click", e => {
   if (c("#onlyFixed")) { S.bview = S.bview === "fixed" ? "all" : "fixed"; return renderBranch(); }
   if (c("#onlyOffer")) { S.bview = S.bview === "offer" ? "all" : "offer"; return renderBranch(); }
   if (c("#onlyUnsaved")) { S.bview = S.bview === "unsaved" ? "all" : "unsaved"; return renderBranch(); }
-  if ((x = c("[data-rsave]"))) { const b = S.brById[x.dataset.rsave]; return b && canMarkSave(b) ? saveBranchRows([b.id], null, `${b.name} 지사를 저장했습니다`) : null; }
+  if ((x = c("[data-rsave]"))) { const b = S.brById[x.dataset.rsave]; return b && canRowSave(b) ? saveBranchRows([b.id], null, `${b.name} 지사를 저장했습니다`) : null; }
   if (c("#onlyGo")) { S.fleetGo = !S.fleetGo; return renderFleet(); }
   if ((x = c("[data-fo]"))) {               // 기관 버튼: 여러 개 고르기. '모든 기관'을 누르거나 고른 것을 모두 풀면 모든 기관
     const o = x.dataset.fo; if (o === "전체") S.fleetOrgs.clear(); else if (S.fleetOrgs.has(o)) S.fleetOrgs.delete(o); else S.fleetOrgs.add(o);

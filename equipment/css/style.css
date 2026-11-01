@@ -670,7 +670,7 @@ table.alloc { min-width: 760px; }
 .alloc th.al-pool, .alloc td.al-pool { border-left: 2px solid var(--line); border-right: 2px solid var(--line); }
 .tb-sep { width: 1px; align-self: stretch; min-height: 24px; background: var(--line); margin: 0 4px; }      /* 기관 버튼들 | [지원 장비만] */
 /* 저장 칸(지사·본부의 [저장] / 저장 완료) */
-#branchTable th.svh { font-size: 12px; min-width: 64px; }
+#branchTable th.svh { font-size: 12px; width: 76px; min-width: 76px; }   /* 버튼이 생겨도 칸 폭이 그대로(줄·본부 [저장]·[일괄 저장], 2026-11-01) */
 #branchTable td.svc { white-space: nowrap; }
 #branchTable td.svc .sv { font-size: 12px; padding: 2px 6px; }
 #branchTable td.svc .btn { min-height: 28px; padding-left: 10px; padding-right: 10px; }
@@ -737,3 +737,7 @@ table.alloc { min-width: 760px; }
 .team-tg { display: inline-flex; align-items: center; gap: 5px; margin-left: 12px; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer; white-space: nowrap; }
 .team-tg input { width: 16px; height: 16px; cursor: pointer; }
 table.eq.team { min-width: 720px; }
+
+/* 지사별 요청·편성: 저장하지 않은 지사 수(아래 저장 막대 대신, 2026-11-01) · 본부 줄 [일괄 저장] */
+.br-dirty { font-size: 13px; font-weight: 700; color: var(--stop); white-space: nowrap; }
+#branchTable tr.hq td.svc .btn { white-space: nowrap; padding-left: 6px; padding-right: 6px; }
