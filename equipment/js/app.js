@@ -1211,7 +1211,7 @@ function renderLog() {
   pm.textContent = ""; pm.hidden = true;
   const users = [...new Set(S.audit.map(l => l.username || "-"))];
   $("logFilters").innerHTML = ["전체", "추가", "수정", "삭제"].map(k => `<button type="button" class="chip" data-lk="${k}" aria-pressed="${S.logKind === k}">${k === "전체" ? "모든 구분" : k}</button>`).join("") +
-    `<select class="ci" id="logUser" aria-label="아이디로 거르기"><option value="전체">모든 아이디</option>${users.map(u => `<option ${S.logUser === u ? "selected" : ""}>${esc(u)}</option>`).join("")}</select>` +
+    `<select class="ci" id="logUser" aria-label="아이디로 필터"><option value="전체">모든 아이디</option>${users.map(u => `<option ${S.logUser === u ? "selected" : ""}>${esc(u)}</option>`).join("")}</select>` +
     `<button type="button" class="chip" id="logToday" aria-pressed="${S.logToday}">오늘만</button>`;
   const rows = S.audit.filter(l => (S.logKind === "전체" || l.kind === S.logKind) && (S.logUser === "전체" || (l.username || "-") === S.logUser) && (!S.logToday || sameDay(l.at)))
     .slice().reverse().slice(0, 300).map(l => `<tr><td class="t">${esc(fmtShort(l.at))}</td><td>${esc(l.username || "-")}</td><td><span class="status ${l.kind === "삭제" ? "stop" : "go"}">${esc(l.kind)}</span></td>

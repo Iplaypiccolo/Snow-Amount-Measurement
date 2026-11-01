@@ -187,7 +187,7 @@ def t_element_steps(b, ctx, m):
     q.click(".page-btn[data-page=equip]"); wait_open(q, "equip"); q.click("#sgStop"); wait_closed(q)
     q.click(".eq-btn[data-eqtab=branch]"); wait_open(q, "equip")
     check("새 기준일자" in q.evaluate("SSGuide.active().titles"), "목록에는 있어도(아래에서 건너뜀)")
-    go_to(q, "보기 거르기", "branch")
+    go_to(q, "보기 필터", "branch")
     q.keyboard.press("ArrowLeft"); wait_js(q, "SSGuide.active().title === '기준일자'", 6000)
     check("새 기준일자" not in q.evaluate("SSGuide.active().titles"), "건너뛴 단계는 목록에서도 빠짐")
     ctx2.close()

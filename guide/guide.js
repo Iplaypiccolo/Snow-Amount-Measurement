@@ -214,7 +214,7 @@
       E('move', '이동 표', ['#matrix'], '줄 = 피지원 지사 · 열 = 지원기관', ['칸 숫자 = 대수 (제설차 · 제설기)']),
       E('move', '숫자', ['#matrix button.mnum'], '칸 숫자 = 그 기관이 그 지사에 보낸 대수', ['클릭 → 아래 지사 카드로']),
       E('move', '숫자 클릭', ['#destList .hl-card'], '그 지사 카드로 이동 · 해당 장비 강조', [], { demo: function (d) { if (!d.querySelector('#destList .hl-card')) tap(q1(d, '#matrix button.mnum')); } }),
-      E('move', '거르기', ['#filters'], '지원기관 · 장비 종류로 아래 카드 거르기'),
+      E('move', '필터', ['#filters'], '지원기관 · 장비 종류로 아래 카드 필터'),
       E('move', '지사 카드', ['#destList .dest-head'], '피지원 지사 · 도착 예상 시각 · 대설특보'),
       E('move', '장비 줄', ['#destList .vrow'], '도공번호 · 종류 · 도착 예상'),
       E('move', '장비 정보', ['#sheet'], '장비 클릭 → 들르는 지사 · 도착 예상 · 날짜별 경로 기록', ['[닫기] 또는 바깥 클릭 → 닫힘'],
@@ -224,7 +224,7 @@
       E('branch', '기준일자', ['#roundSelBranch'], '지원 회차 고르기 · 요청 · 편성은 기준일자마다 따로'),
       E('branch', '새 기준일자', [both(['#newRoundDate', '#roundMake'])], '날짜 → [만들기]', ['장비 지원 여부는 이전 기준일자에서 이어받음']),
       E('branch', '기준일자 삭제', ['#roundDel'], '잘못 만든 기준일자 지우기 (되돌릴 수 없음)'),
-      E('branch', '보기 거르기', ['#branchCtl'], '요청 있는 · 확정된 · 지원 가능 · 저장 안 한 지사만'),
+      E('branch', '보기 필터', ['#branchCtl'], '요청 있는 · 확정된 · 지원 가능 · 저장 안 한 지사만'),
       E('branch', '24시 예보', ['#branchTable th.fch'], '지사별 예상 적설 · 강수 · 확률 · 최저기온', ['숫자 클릭 → 강설량 측정의 그 지사 예보']),
       E('branch', '대설특보', ['#branchTable th.wh'], '기상청 특보 자동 표시 (종류 · 발표 · 발효)'),
       E('branch', '기상현황 직접입력', ['#branchTable input[aria-label$="기상현황 직접입력"]:not(:disabled)'], '체크 → 특보 종류를 직접 고름'),
@@ -247,7 +247,7 @@
       { tab: 'fleet', title: '기관별 장비', desc: '기관 장비의 지원 여부와 날짜별 지원 지사 · 도착 시각 입력' },
       E('fleet', '기준일자', ['#roundSelFleet'], '지원 여부는 기준일자마다 따로'),
       E('fleet', '기관 요약', ['#orgGrid > *'], '기관별 지원 · 지원 불가 · 정비중 · 미정 대수'),
-      E('fleet', '거르기', ['#fleetFilters'], '기관별 · 지원 장비만 보기'),
+      E('fleet', '필터', ['#fleetFilters'], '기관별 · 지원 장비만 보기'),
       E('fleet', '장비 추가', [both(['#nvOrg', '#nvType', '#nvPlate', '#vehAdd'])], '기관 · 종류 · 도공번호 → [추가]'),
       E('fleet', '지원일 칸 수', ['#colsSel'], '표에 보이는 날짜 칸 수'),
       E('fleet', '지원일 1', ['#day1In'], '첫 날짜 · 나머지 칸은 하루씩 자동'),
@@ -277,7 +277,7 @@
       E('gwteam', '확정', ['#save-gwteam'], '바뀐 칸 → [확정]해야 저장', [], { only: gwOk }),
       // 로그 기록
       { tab: 'log', only: lg, badge: '권한', title: '로그 기록', desc: '장비 지원 화면의 변경 이력 조회' },
-      E('log', '거르기', ['#logFilters'], '구분(추가 · 수정 · 삭제) · 아이디 · 오늘만', [], { only: lg }),
+      E('log', '필터', ['#logFilters'], '구분(추가 · 수정 · 삭제) · 아이디 · 오늘만', [], { only: lg }),
       E('log', '기록 표', ['#logTable thead'], '일시 · 아이디 · 구분 · 표 · 대상 · 내용 · IP', [], { only: lg }),
       { target: '#sgHelp', kicker: 'HELP', title: '사용법 다시 보기', desc: '오른쪽 위 [? 사용법]', points: ['다른 탭: 처음 들어갈 때 칸 · 버튼 설명'], last: true }
     ];

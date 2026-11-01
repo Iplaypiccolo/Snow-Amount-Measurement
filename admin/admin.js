@@ -209,7 +209,7 @@
     var vt = S.vt;
     sub().innerHTML = '<div class="card"><h2>비밀번호 일괄 설정</h2>' +
       '<div id="m"></div><div class="row"><label class="inline"><input type="checkbox" id="rc"> 저장 후 처음 로그인할 때 본인이 비밀번호를 바꾸게 하기</label>' +
-      '<label class="inline"><input type="checkbox" id="mk" checked> 입력한 비밀번호 가리기</label><input id="q" placeholder="본부·이름·아이디로 거르기" style="min-width:220px"></div>' +
+      '<label class="inline"><input type="checkbox" id="mk" checked> 입력한 비밀번호 가리기</label><input id="q" placeholder="본부·이름·아이디로 필터" style="min-width:220px"></div>' +
       '<div class="row"><button type="button" id="rnd">빈 칸을 무작위 비밀번호로 채우기</button><button type="button" id="clr">입력 모두 지우기</button><button type="button" id="csv">입력한 비밀번호 CSV로 받기</button><span class="sp"></span><span id="sum" class="hint"></span><button type="button" class="primary" id="save" disabled>저장</button></div>' +
       '<div class="tw sheet" id="grid">불러오는 중…</div></div>';
     loadDirectory().then(function () {
@@ -317,7 +317,7 @@
   function subPerms() {
     var vt = S.vt;
     sub().innerHTML = '<div class="card"><h2>권한·순서</h2>' +
-      '<div id="m"></div><div class="row"><input id="q" placeholder="소속·이름·아이디로 거르기" style="min-width:220px"><span class="sp"></span><span id="psum" class="hint"></span><button type="button" id="prev">되돌리기</button><button type="button" class="primary" id="psave" disabled>저장</button></div><div class="tw sheet" id="pgrid">불러오는 중…</div></div>';
+      '<div id="m"></div><div class="row"><input id="q" placeholder="소속·이름·아이디로 필터" style="min-width:220px"><span class="sp"></span><span id="psum" class="hint"></span><button type="button" id="prev">되돌리기</button><button type="button" class="primary" id="psave" disabled>저장</button></div><div class="tw sheet" id="pgrid">불러오는 중…</div></div>';
     loadDirectory().then(function () {
       if (vt !== S.vt) return;
       S.pm = { rows: S.users.filter(function (u) { return u.role !== 'admin'; }).sort(cmpHier).map(function (u) {
