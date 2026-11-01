@@ -2,7 +2,7 @@
 사용법 안내(guide/guide.js) 자동 테스트 — 브라우저로 직접 눌러 봅니다. (Supabase 는 가짜 서버 tests/_sb_mock.py)
 확인하는 것: 처음 로그인하면 강설량 측정 안내가 저절로 열림 / [다음]·[설명 그만보기]·Esc 로 닫힘 / 한 번 닫으면 이 브라우저·아이디로는 다시 안 열림(다른 아이디는 열림) /
              [사용법] 버튼으로 다시 봄 / 장비 지원을 처음 열면 지원 과정 그림부터 / 계정별로 설명하는 탭이 다름(관리자·강원본부·다른 본부·지사·기계화부, 권한 표는 없음) /
-             안내 전에 보던 탭으로 돌아감 / 탭 안 칸·버튼을 하나씩 짚음(장비 지원은 안쪽 틀) / 휴대폰 폭에서 화면 밖으로 안 나감
+             안내 전에 보던 탭으로 돌아감 / 탭 안 칸·버튼을 하나씩 짚음(장비 지원은 안쪽 틀, 안 보이는 것은 예시로 띄움) / 휴대폰 폭에서 화면 밖으로 안 나감
 - 자동 시험 중에는 안내가 저절로 열리지 않으므로(다른 시험을 가리지 않게) 주소에 ?guide=auto 를 붙여 엽니다.
 실행 (저장소 맨 위 폴더에서):  python tests/test_guide.py
 """
@@ -192,6 +192,24 @@ def t_element_steps(b, ctx, m):
     check("새 기준일자" not in q.evaluate("SSGuide.active().titles"), "건너뛴 단계는 목록에서도 빠짐")
     ctx2.close()
 
+def t_demo_steps(b, ctx, m):
+    """시연(2026-11-01): 화면에 바로 안 보이는 것은 안내가 대신 눌러 예시로 띄우고 짚음 — 닫으면 원래 보기로"""
+    p = open_site(ctx, m); login(p, "admin-01"); wait_open(p, "snow")
+    go_to(p, "5km 격자", "forecast")
+    check(p.locator("#fc-tree .jr-br.on").count() == 1 and "예시" in p.locator(".sg-card .sg-badge").inner_text(), "지사를 대신 골라 격자를 띄움 + '예시' 표시")
+    hit = p.evaluate("""(() => { const r = document.querySelector('.sg-ring').getBoundingClientRect();
+      return document.elementsFromPoint(r.left + r.width / 2, r.top + r.height / 2).some(e => e.closest && e.closest('#fmap') && e.tagName === 'path'); })()""")
+    check(hit, "빛 테두리 가운데 = 지도의 격자 한 칸")
+    p.click(".sg-next"); wait_js(p, "SSGuide.active().title === '시간별 추이'"); p.wait_for_timeout(900)
+    ring_on(p, p.locator("#fc-pin").bounding_box(), "격자 24시간 추이 그림")
+    p.click("#sgStop"); wait_closed(p); p.wait_for_timeout(500)
+    check(p.locator("#fc-tree .jr-hqpick.on").count() == 0, "안내를 닫으면 24시간 예보는 전국 보기로 돌아감")
+    p.click(".page-btn[data-page=equip]"); wait_open(p, "equip")
+    go_to(p, "장비 정보", "move")
+    fr = p.frame_locator("#equipFrame")
+    check(fr.locator("#sheet").is_visible(), "장비를 대신 눌러 정보 창을 띄움")
+    p.click(".sg-next"); p.wait_for_timeout(600); check(not fr.locator("#sheet").is_visible(), "다음 단계로 가면 정보 창을 닫음")
+
 def t_no_auto_in_automation(b, ctx, m):
     p = open_site(ctx, m, auto=False); login(p, "admin-01"); wait_js(p, "!!document.getElementById('sgHelp')"); p.wait_for_timeout(1500)
     check(not guide(p) and p.evaluate("localStorage.getItem('ss_guide:snow:admin-01')") is None, "자동 시험 중에는 저절로 열지 않음")
@@ -211,7 +229,7 @@ def t_phone(b, ctx, m):
     check(p.locator(".sg-flow.v").is_visible() and not p.locator(".sg-flow.h").is_visible(), "좁은 화면은 세로 그림")
     cb = p.locator(".sg-card").bounding_box(); check(cb["x"] >= 0 and cb["x"] + cb["width"] <= 375 and cb["y"] + cb["height"] <= 740, f"그림 카드가 화면 밖 {cb}")
 
-TESTS = [t_first_login_admin, t_stop_and_keys, t_role_tabs, t_tab_intro_role_only, t_element_steps, t_no_auto_in_automation, t_phone]
+TESTS = [t_first_login_admin, t_stop_and_keys, t_role_tabs, t_tab_intro_role_only, t_element_steps, t_demo_steps, t_no_auto_in_automation, t_phone]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()

@@ -57,6 +57,7 @@
 .sg-card.mini .sg-title h2{font-size:18px;}
 .sg-card.mini .sg-desc{font-size:15px;}
 .sg-step .sg-k{font-family:"Pretendard",-apple-system,"Malgun Gothic","Noto Sans KR",sans-serif;font-weight:700;font-size:11.5px;letter-spacing:0;}   /* 한글 이름은 고정폭 글꼴·자간을 쓰지 않음 */
+.sg-badge.demo{color:#04121f;background:linear-gradient(90deg,var(--sg-cy),#9fc2ff);}
 .sg-pin{flex:none;width:12px;height:12px;border-radius:50%;background:var(--sg-cy);box-shadow:0 0 0 4px rgba(94,231,255,.18),0 0 12px var(--sg-cy);}
 
 .sg-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}

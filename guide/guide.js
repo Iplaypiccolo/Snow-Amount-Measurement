@@ -101,6 +101,52 @@
   function th(text) { return function (d) { var l = d.querySelectorAll('th'); for (var i = 0; i < l.length; i++) if (shown(l[i]) && l[i].textContent.replace(/\s+/g, ' ').trim().indexOf(text) === 0) return l[i]; return null; }; }
   function E(tab, title, at, desc, points, more) { var o = { tab: tab, title: title, at: at, desc: desc, points: points || [] }; for (var k in more || {}) o[k] = more[k]; return o; }
 
+  // 시연(게임 튜토리얼처럼 — 2026-11-01 사용자: "격자가 지도에 안 보여 무슨 말인지 모르겠다"):
+  //  화면에 바로 안 보이는 것은 안내가 대신 눌러 예시로 띄운 뒤 짚음. 보기만 바뀌고(펼치기·고르기·열기) 자료는 바꾸지 않음.
+  //  demo(문서, undo) → 그 단계를 떠날 때 되돌릴 함수(선택). undo(이름, 함수) = 안내를 닫을 때 되돌릴 것
+  function tap(el) { if (el) el.click(); return el; }
+  function myBranch() { var m = me(); return m && m.role === 'branch' && m.branch_id ? m.branch_id : null; }
+  function fcState() { try { return root.ForecastUI && root.ForecastUI._state(); } catch (e) { return null; } }
+  function fcHq(d, undo) {                                                            // 24시간 예보: 본부 하나 펼치기(내 지사가 있으면 그 본부)
+    if (d.querySelector('#fc-tree .jr-hqpick.on')) return;
+    var fs = fcState(), b = myBranch(), hq = b && fs && fs.state && fs.state.branches[b] ? fs.state.branches[b].hq : null;
+    if (tap(hq ? d.querySelector('#fc-tree [data-fchq="' + hq + '"]') : q1(d, '#fc-tree [data-fchq]')))
+      undo('fc', function () { tap(doc.querySelector('#fc-tree .jr-hqpick.on')); });          // 닫을 때 전국 보기로
+  }
+  function fcBranch(d, undo) {                                                        // 24시간 예보: 지사 하나 고르기 → 그 지사 격자
+    fcHq(d, undo);
+    if (d.querySelector('#fc-tree .jr-br.on')) return;
+    var b = myBranch(); tap((b && d.querySelector('#fc-tree [data-fcbr="' + b + '"]')) || q1(d, '#fc-tree [data-fcbr]'));
+  }
+  function fcCell(d) {                                                                // 지도 가운데에 가깝고 추이 그림에 가리지 않는 격자 하나
+    var m = d.getElementById('fmap'), pin = d.getElementById('fc-pin'); if (!m) return null;
+    var mr = m.getBoundingClientRect(), pr = pin && !pin.hidden ? pin.getBoundingClientRect() : null, cx = mr.left + mr.width / 2, cy = mr.top + mr.height / 2, best = null, bd = Infinity;
+    [].forEach.call(m.querySelectorAll('.leaflet-overlay-pane path.leaflet-interactive'), function (el) {
+      var r = el.getBoundingClientRect(); if (r.width < 8 || r.left < mr.left || r.top < mr.top || r.right > mr.right || r.bottom > mr.bottom) return;
+      if (pr && !(r.right < pr.left || r.left > pr.right || r.bottom < pr.top || r.top > pr.bottom)) return;
+      var dd = Math.pow(r.left + r.width / 2 - cx, 2) + Math.pow(r.top + r.height / 2 - cy, 2); if (dd < bd) { bd = dd; best = el; }
+    });
+    return best;
+  }
+  function stTree(d) {                                                                // 관측소 지도: 본부 → 지사 펼치기
+    if (!d.querySelector('#tree .hq-row.open')) tap(q1(d, '#tree .hq-row'));
+    if (!d.querySelector('#tree .br-row.open')) tap(q1(d, '#tree .hq-children.expanded .br-row'));
+  }
+  function jrHq(d) { if (!d.querySelector('#jr-tree .jr-hqpick.on')) tap(q1(d, '#jr-tree [data-hqpick]')); }
+  function jrBranch(d) {                                                              // 관할: 지사 하나 → 구간 목록
+    jrHq(d);
+    if (!d.querySelector('#jr-tree .jr-br.on')) {
+      var b = myBranch(); tap((b && d.querySelector('#jr-tree .jr-br[data-id="' + b + '"]')) || q1(d, '#jr-tree .jr-hq.open .jr-br:not([data-id="NONE"])'));
+    }
+  }
+  function jrSec(d, undo) {                                                           // 관할: 구간 하나 체크(선택만, 이동·요청은 안 함)
+    jrBranch(d);
+    if (d.querySelector('#jr-tree .jr-sec.sel')) return;
+    if (tap(q1(d, '#jr-tree .jr-br.on + * .jr-sec input[type=checkbox]') || q1(d, '#jr-tree .jr-sec input[type=checkbox]')))
+      undo('jrsel', function () { tap(doc.getElementById('jr-clear')); });
+  }
+  function upTo(sel, up) { return function (d) { var a = q1(d, sel); return a ? a.closest(up) : null; }; }
+
   // 탭 소개 = 그 탭이 하는 일 한 줄(사용자 결정 2026-11-01) → 그 탭의 칸·버튼. only = 그 탭이 보이는 계정에서만
   function snowSteps() {
     var rk = roleKey(), jEdit = can('juris.edit'), jReq = can('juris.request'), g = can('grid.edit');
@@ -110,8 +156,13 @@
         '<div class="sg-two"><div class="sg-tile"><i class="cy"></i><b>강설량 측정</b><span>예보 · 신적설 · 관측소 · 관할</span></div><div class="sg-tile"><i class="vi"></i><b>장비 지원</b><span>요청 · 승인 · 배정 · 이동</span></div></div>' },
       { tab: 'forecast', title: '기관별 24시간 예보', desc: '기관별 앞으로 24시간 예상 적설 · 강수 · 최저기온 확인' },
       E('forecast', '발표 기준', ['#fc-meta'], '기상청 예보 발표 시각 · 예보 구간', ['매시 갱신 · 예보는 3시간마다 새 발표']),
-      E('forecast', '본부 · 지사 목록', ['#fc-tree .fc-row'], '줄 클릭 → 펼치기 (본부 → 지사 → 격자)', ['적설 · 강수 · 강수확률 · 최저기온']),
-      E('forecast', '지도', ['#fmap'], '고른 본부 · 지사 · 격자 위치', ['격자에 마우스 → 24시간 추이', '격자 클릭 → 추이 고정']),
+      E('forecast', '본부 목록', ['#fc-tree .fc-row'], '본부별 24시간 최대 적설 · 강수 · 확률 · 최저기온', ['본부 클릭 → 지사 목록']),
+      E('forecast', '본부 펼치기', [upTo('#fc-tree .jr-hqpick.on', '.jr-hq')], '본부 클릭 → 지사 목록 · 지도에 그 본부 격자', [], { demo: fcHq }),
+      E('forecast', '지사 고르기', [both(['#fc-tree .jr-br.on', '#fc-tree .fc-detail'])], '지사 클릭 → 그 지사 격자별 값 (적설 많은 순)', ['지명 클릭 → 지도에서 그 격자'], { demo: fcBranch }),
+      E('forecast', '5km 격자', [fcCell], '기상청 예보 단위 = 5km × 5km 칸', ['칸 색 = 예상 적설 · 칸 글자 = 적설 / 강수', '마우스 → 그 칸 24시간 추이'], { demo: fcBranch }),
+      E('forecast', '시간별 추이', ['#fc-pin'], '격자 클릭 → 24시간 추이 고정 (적설 · 강수 · 기온)', ['그림에 마우스 → 시각별 값', '지도 빈 곳 클릭 → 닫힘'],
+        { demo: function (d, undo) { fcBranch(d, undo); var pin = d.getElementById('fc-pin'); if (pin && pin.hidden) tap(q1(d, '#fc-tree tr[data-cell]')); } }),
+      E('forecast', '칸 표시 · 범례', ['#fc-legend'], '지도 칸에 보일 값 고르기 · 적설량 색 기준', [], { demo: fcBranch }),
       { tab: 'snowtable', title: '연도별 신적설', desc: '지사 · 본부별 하루 신적설을 시즌 단위로 확인' },
       E('snowtable', '시즌 선택', ['#seasonSelect'], '최근 3시즌 중 고르기'),
       E('snowtable', '엑셀 내보내기', ['#exportXlsxBtn'], '지금 보이는 표 → xlsx 파일'),
@@ -121,14 +172,20 @@
       { tab: 'map', title: '관측소 지도', desc: '기관별 관할 고속도로와 인접한 관측소의 적설량 확인' },
       E('map', '요약 숫자', ['#view-map .statbar'], '노선 · 본부 · 지사 · 적설관측소 · 미분류 수'),
       E('map', '검색', ['#searchBox'], '본부 · 지사 · 관측소 이름으로 찾기'),
-      E('map', '일자 선택', ['#dateBtn'], '날짜 고르기 → 관측소별 그날 신적설'),
-      E('map', '관측소 목록', ['#tree'], '본부 → 지사 → 관측소 · 숫자 = 관측소 수'),
+      E('map', '일자 선택', [both(['#dateBtn', '#datePop'])], '달력에서 날짜 → 관측소별 그날 신적설', ['자료 있는 날만 누를 수 있음'],
+        { demo: function (d) { var pop = d.getElementById('datePop'); if (pop && pop.hidden) tap(d.getElementById('dateBtn')); return function () { if (pop) pop.hidden = true; }; } }),
+      E('map', '관측소 목록', ['#tree .hq-row'], '본부 → 지사 → 관측소 · 숫자 = 관측소 수'),
+      E('map', '지사 펼치기', [both(['#tree .br-row.open', '#tree .br-children.expanded'])], '지사 클릭 → 관할 고속도로 근처 관측소', ['지도도 그 지사로 이동'], { demo: stTree }),
+      E('map', '관측소', ['#tree .br-children.expanded .st-row'], '관측소 이름 · 번호 · 노선', ['오른쪽 = 고속도로까지 거리(km)', '날짜를 고르면 그날 신적설'], { demo: stTree }),
       E('map', '지도', ['#map'], '점 = 적설관측소 · 색 = 고속도로까지 거리', ['초록 0~3km · 주황 3~6km · 빨강 6~8km']),
       { tab: 'jurisdiction', title: '기관별 관할 고속도로', desc: '지사마다 맡은 고속도로 구간 확인 · 변경' },
       E('jurisdiction', '지사 검색', ['#jr-search'], '지사 이름으로 찾기'),
       E('jurisdiction', '+ 신설 기관', ['#jr-add'], '새 지사 만들기 → 구간 넣기'),
       E('jurisdiction', '변경 요청', ['#jr-requests'], jEdit ? '지사가 보낸 구간 변경 요청 → 승인 · 반려' : '내가 보낸 구간 변경 요청 · 처리 상태'),
-      E('jurisdiction', '관할 목록', ['#jr-tree .jr-hqpick', '#jr-tree'], '본부 → 지사 → 구간 · km = 관할 길이', ['미지정 고속도로 = 어느 지사에도 없는 구간']),
+      E('jurisdiction', '관할 목록', ['#jr-tree .jr-hqpick', '#jr-tree'], '본부별 지사 수 · 관할 길이(km)', ['미지정 고속도로 = 어느 지사에도 없는 구간']),
+      E('jurisdiction', '지사 → 구간', [both(['#jr-tree .jr-br.on', '#jr-tree .jr-br.on + *'])], '지사 클릭 → 관할 구간(IC · JC 사이) 목록', ['지도에서 그 지사 강조'], { demo: jrBranch }),
+      E('jurisdiction', '구간 고르기', ['#jr-tree .jr-sec.sel'], '구간 체크 (또는 지도에서 구간 클릭)', [], { demo: jrSec, only: jEdit || jReq }),
+      E('jurisdiction', '선택 막대', ['#jr-selbar'], jEdit ? '이동할 지사 → [이동 대기에 추가] → [저장]' : '[구간 변경 요청] → 관리자에게 보냄', ['[선택 해제] = 취소'], { demo: jrSec, only: jEdit || jReq }),
       E('jurisdiction', '지도', ['#jmap'], jEdit ? '구간 클릭 → 선택 → 다른 지사로 옮기기' : jReq ? '구간 클릭 → 선택 → [구간 변경 요청]' : '색 = 관할 지사'),
       E('jurisdiction', '저장', ['#jr-savebar'], '[미리보기] 바뀌는 관측소 · [모두 취소] · [저장]', [], { only: jEdit }),
       { tab: 'sources', title: '데이터 출처', desc: '자료 출처와 계산 방법 안내' },
@@ -155,10 +212,13 @@
       E('move', '요약 · 기준 시각', ['#summaryNote'], '그날 지원 대수 · 기준 시각', ['[새로고침] → 최신 자료']),
       E('move', '강원 신속대응팀', ['.team-tg'], '체크 해제 → 표 · 카드에서 빠짐'),
       E('move', '이동 표', ['#matrix'], '줄 = 피지원 지사 · 열 = 지원기관', ['칸 숫자 = 대수 (제설차 · 제설기)']),
-      E('move', '숫자', ['#matrix button.mnum'], '클릭 → 그 칸 장비 목록'),
+      E('move', '숫자', ['#matrix button.mnum'], '칸 숫자 = 그 기관이 그 지사에 보낸 대수', ['클릭 → 아래 지사 카드로']),
+      E('move', '숫자 클릭', ['#destList .hl-card'], '그 지사 카드로 이동 · 해당 장비 강조', [], { demo: function (d) { if (!d.querySelector('#destList .hl-card')) tap(q1(d, '#matrix button.mnum')); } }),
       E('move', '거르기', ['#filters'], '지원기관 · 장비 종류로 아래 카드 거르기'),
       E('move', '지사 카드', ['#destList .dest-head'], '피지원 지사 · 도착 예상 시각 · 대설특보'),
-      E('move', '장비 줄', ['#destList .vrow'], '클릭 → 그 장비 경로 · 시각'),
+      E('move', '장비 줄', ['#destList .vrow'], '도공번호 · 종류 · 도착 예상'),
+      E('move', '장비 정보', ['#sheet'], '장비 클릭 → 들르는 지사 · 도착 예상 · 날짜별 경로 기록', ['[닫기] 또는 바깥 클릭 → 닫힘'],
+        { demo: function (d) { var sh = d.getElementById('sheet'); if (sh && sh.hidden) tap(q1(d, '#destList .vrow')); return function () { var bd = d.getElementById('backdrop'); if (bd && !bd.hidden) bd.click(); }; } }),
       // 지사별 요청·편성
       { tab: 'branch', title: '지사별 요청·편성', desc: '지사가 필요한 장비를 요청하고 재난처가 지원 대수를 확정' },
       E('branch', '기준일자', ['#roundSelBranch'], '지원 회차 고르기 · 요청 · 편성은 기준일자마다 따로'),
@@ -276,6 +336,7 @@
   }
 
   function render() {
+    if (st.leave) { var lv = st.leave; st.leave = null; try { lv(); } catch (e) {} }   // 앞 단계 시연 되돌리기(열어 둔 창 닫기 등)
     var s = st.steps[st.i], my = ++st.tok;
     if (s.tab) {                                                                       // 칸 설명이면 그 탭 화면을 띄움(탭 소개는 버튼만 짚음)
       var b = tabBtn(st.page, s.tab);
@@ -283,14 +344,17 @@
       if (!s.ov && !b.classList.contains('active')) { b.click(); st.openedAt = Date.now(); }
     }
     if (!s.at) { var t = s.tab ? tabBtn(st.page, s.tab) : s.target ? doc.querySelector(s.target) : null; return draw(s, t && shown(t) ? [t] : null, null); }
+    if (s.demo) st.openedAt = Date.now();                                            // 시연은 화면이 바뀔 때까지 기다림
     var until = (st.openedAt || 0) + 2500;                                          // 탭을 연 지 2.5초까지만 기다림(그 뒤엔 없는 칸 → 바로 건너뜀)
-    (function find() {                                                                // 화면이 그려질 때까지 잠깐 기다림(장비 지원 자료 등)
+    function find() {                                                                // 화면이 그려질 때까지 잠깐 기다림(장비 지원 자료 등)
       if (!st || st.tok !== my) return;
+      if (s.demo) { var dd = st.page === 'equip' ? fdoc() : doc; if (dd) try { var lv2 = s.demo(dd, function (k, f) { st.undo[k] = f; }); if (typeof lv2 === 'function' && !st.leave) st.leave = lv2; } catch (e) {} }
       var r = resolve(s);
       if (r) return draw(s, r.els, r.item);
       if (Date.now() >= until) return skip();
       setTimeout(find, 120);
-    })();
+    }
+    if (s.demo) setTimeout(find, 30); else find();                                   // 시연은 [다음] 클릭이 다 끝난 뒤(바깥 클릭에 닫히는 창이 있음)
   }
   function skip() {                                                                   // 내 계정 화면에 없는 칸: 그 단계를 빼고 같은 방향으로
     st.steps.splice(st.i, 1);
@@ -309,7 +373,7 @@
     var pct = Math.round((st.i + 1) / n * 100);
     el.querySelector('.sg-in').innerHTML =
       '<div class="sg-head"><span class="sg-step"><i></i><b class="sg-k">' + esc(kick) + '</b> · ' + String(st.i + 1).padStart(2, '0') + ' / ' + String(n).padStart(2, '0') + '</span><span class="sg-pg">' + pg + ' 사용법</span></div>' +
-      '<div class="sg-title">' + (isTab && ico ? '<span class="sg-ico">' + ico + '</span>' : s.at ? '<span class="sg-pin" aria-hidden="true"></span>' : '') + '<h2 id="sgTitle">' + esc(s.title) + '</h2>' + (s.badge ? '<span class="sg-badge">' + esc(s.badge) + '</span>' : '') + '</div>' +
+      '<div class="sg-title">' + (isTab && ico ? '<span class="sg-ico">' + ico + '</span>' : s.at ? '<span class="sg-pin" aria-hidden="true"></span>' : '') + '<h2 id="sgTitle">' + esc(s.title) + '</h2>' + (s.badge ? '<span class="sg-badge">' + esc(s.badge) + '</span>' : s.demo ? '<span class="sg-badge demo" title="안내가 대신 눌러 보여 주는 예시 — 자료는 바뀌지 않음">예시</span>' : '') + '</div>' +
       '<div class="sg-body">' + body(s, item) + '</div>' +
       '<div class="sg-foot"><div class="sg-prog" aria-hidden="true"><span style="width:' + pct + '%"></span></div>' +
       '<div class="sg-btns">' + (st.i > 0 ? '<button type="button" class="sg-prev" data-sg="prev">이전</button>' : '') +
@@ -353,6 +417,10 @@
   function stop() {
     if (!st) return;
     var s = st; st = null; if (s.mode === 'page') markSeen(s.page); markSeen(s.page + '.' + s.tab); clearTimeout(s.rp);
+    clearInterval(s.tick);
+    if (s.leave) try { s.leave(); } catch (e) {}
+    Object.keys(s.undo).forEach(function (k) { try { s.undo[k](); } catch (e) {} });       // 시연으로 바꾼 보기를 원래대로
+    if (s.css && s.css.parentNode) s.css.parentNode.removeChild(s.css);
     doc.removeEventListener('keydown', onKey, true); root.removeEventListener('resize', onResize); doc.removeEventListener('scroll', onResize, true);
     if (s.fd) try { s.fd.removeEventListener('scroll', onResize, true); } catch (e) {}
     s.el.classList.add('out'); setTimeout(function () { if (s.el.parentNode) s.el.parentNode.removeChild(s.el); }, 220);
@@ -372,6 +440,8 @@
   }
   var rz = 0;
   function onResize() { if (!st) return; cancelAnimationFrame(rz); rz = requestAnimationFrame(function () { if (!st) return;
+    var s = st.steps[st.i];
+    if (st.cur && s && s.at && st.cur.some(function (e) { return !e.isConnected; })) { var r = resolve(s); if (r) st.cur = r.els; }   // 화면이 다시 그려져 짚던 칸이 바뀐 경우(목록을 늦게 다시 그림 등)
     place(st.cur ? rectOf(st.cur) : null, st.el.querySelector('.sg-card'), st.el.querySelector('.sg-ring')); }); }
 
   // 안내 묶기(2026-11-01 사용자 결정 — "너무 많다"): 페이지 안내 = 첫 장 → 위쪽 탭 소개(탭을 바꾸지 않고 버튼만 짚음) → 지금 탭의 칸 설명 → 다시 보기.
@@ -391,7 +461,11 @@
     var back = doc.querySelector(page === 'equip' ? '.eq-btn.active' : '.tab-btn.active'), tab = onlyTab || activeTab(page) || (page === 'equip' ? 'move' : 'forecast');
     var steps = onlyTab ? tabSteps(page, onlyTab) : pageSteps(page, tab);
     if (!steps.length) return;
-    st = { page: page, tab: tab, mode: onlyTab ? 'tab' : 'page', steps: steps, i: 0, dir: 1, tok: 0, cur: null, el: build(), back: back, openedAt: Date.now(), fd: page === 'equip' ? fdoc() : null };
+    st = { page: page, tab: tab, mode: onlyTab ? 'tab' : 'page', steps: steps, i: 0, dir: 1, tok: 0, cur: null, el: build(), back: back, openedAt: Date.now(), fd: page === 'equip' ? fdoc() : null, undo: {}, leave: null, css: null };
+    st.tick = setInterval(onResize, 400);                                            // 지도 이동·늦게 그려지는 목록을 따라 테두리 위치를 맞춤
+    if (st.fd) try {                                                                   // 안내 중에는 마우스를 올려야 보이던 [＋] 등도 보이게
+      st.css = st.fd.createElement('style'); st.css.textContent = '.slot .btn.sm{opacity:1 !important}'; st.fd.head.appendChild(st.css);
+    } catch (e) {}
     doc.addEventListener('keydown', onKey, true); root.addEventListener('resize', onResize); doc.addEventListener('scroll', onResize, true);
     if (st.fd) try { st.fd.addEventListener('scroll', onResize, true); } catch (e) {}   // 장비 지원 안쪽 화면이 스크롤돼도 테두리가 따라감
     render();
