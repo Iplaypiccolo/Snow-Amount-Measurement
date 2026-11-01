@@ -151,12 +151,13 @@ def t_role_tabs(b, ctx, m):
         for x in no: check(x not in t, f"{u}: '{x}' 설명이 없어야 함 {t}")
         p.close()
 
-def t_branch_mine_text(b, ctx, m):
+def t_tab_intro_role_only(b, ctx, m):
     p = open_site(ctx, m); login(p, "exchungju"); wait_open(p, "snow"); p.evaluate("SSGuide.stop()"); wait_closed(p)
     p.click(".page-btn[data-page=equip]"); wait_open(p, "equip")
     go_to(p, "지사별 요청·편성", "branch")
-    check("내 계정 · 지사" in p.locator(".sg-mine").inner_text() and "[저장]" in p.locator(".sg-mine").inner_text(), "지사 계정의 할 일")
-    check(len(p.locator(".sg-body").inner_text()) < 260, "설명은 짧게(발표 자료처럼): " + p.locator(".sg-body").inner_text())
+    body = p.locator(".sg-body").inner_text().strip()
+    check(body == "지사가 필요한 장비를 요청하고 재난처가 지원 대수를 확정" and p.locator(".sg-body .sg-pts, .sg-body .sg-mine").count() == 0,
+          f"탭 소개는 그 탭이 하는 일 한 줄만(2026-11-01): {body!r}")
     ring_on(p, p.locator(".eq-btn[data-eqtab=branch]").bounding_box(), "위쪽 탭 버튼을 짚음")
 
 def t_element_steps(b, ctx, m):
@@ -210,7 +211,7 @@ def t_phone(b, ctx, m):
     check(p.locator(".sg-flow.v").is_visible() and not p.locator(".sg-flow.h").is_visible(), "좁은 화면은 세로 그림")
     cb = p.locator(".sg-card").bounding_box(); check(cb["x"] >= 0 and cb["x"] + cb["width"] <= 375 and cb["y"] + cb["height"] <= 740, f"그림 카드가 화면 밖 {cb}")
 
-TESTS = [t_first_login_admin, t_stop_and_keys, t_role_tabs, t_branch_mine_text, t_element_steps, t_no_auto_in_automation, t_phone]
+TESTS = [t_first_login_admin, t_stop_and_keys, t_role_tabs, t_tab_intro_role_only, t_element_steps, t_no_auto_in_automation, t_phone]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()

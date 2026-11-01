@@ -5,7 +5,7 @@
    - 오른쪽 아래 [다음](마지막은 [시작하기]) 또는 오른쪽 위 [설명 그만보기]로 닫음.
      한 번 닫으면 이 브라우저·이 아이디에서는 다시 저절로 나오지 않음(localStorage 'ss_guide:<페이지>:<아이디>', 사용자 결정 = 브라우저 기준).
    - 오른쪽 위 [사용법] 버튼을 누르면 지금 페이지의 안내를 처음부터 다시 봄.
-   - 계정에 따라 보이는 탭만 설명하고, 탭마다 '내 계정이 할 일'을 한 줄 붙임(관리자 / 강원본부 / 다른 지역본부 / 지사 / 기계화부 / 보기 전용).
+   - 계정에 따라 보이는 탭만 설명. 탭 소개는 그 탭이 하는 일 한 줄만(2026-11-01 사용자 결정 — 예전 '내 계정이 할 일'·요점은 뺌).
    - 칸·버튼을 하나씩 빛 테두리로 짚으며 설명(게임 튜토리얼처럼, 2026-11-01 사용자 요청). 페이지 안내 = 위쪽 탭 소개 → 지금(첫) 탭의 칸 설명,
      다른 탭의 칸 설명은 그 탭에 처음 들어갈 때 따로(localStorage 'ss_guide:<페이지>.<탭>:<아이디>', "너무 많다" 2026-11-01).
      장비 지원 칸은 안쪽 틀(equipment/index.html) 안에서 찾아 바깥 화면 기준 위치로 바꿔 계산. 내 계정 화면에 없는 칸은 건너뜀.
@@ -101,46 +101,39 @@
   function th(text) { return function (d) { var l = d.querySelectorAll('th'); for (var i = 0; i < l.length; i++) if (shown(l[i]) && l[i].textContent.replace(/\s+/g, ' ').trim().indexOf(text) === 0) return l[i]; return null; }; }
   function E(tab, title, at, desc, points, more) { var o = { tab: tab, title: title, at: at, desc: desc, points: points || [] }; for (var k in more || {}) o[k] = more[k]; return o; }
 
-  // 탭 소개(발표 자료처럼 짧게 — 사용자 결정 2026-10-30) → 그 탭의 칸·버튼. mine = 계정별 할 일(없으면 안 붙임). only = 그 탭이 보이는 계정에서만
+  // 탭 소개 = 그 탭이 하는 일 한 줄(사용자 결정 2026-11-01) → 그 탭의 칸·버튼. only = 그 탭이 보이는 계정에서만
   function snowSteps() {
     var rk = roleKey(), jEdit = can('juris.edit'), jReq = can('juris.request'), g = can('grid.edit');
     var steps = [
       { center: true, kicker: 'WELCOME', title: '제설 업무 시스템', html:
         '<div class="sg-who-card"><span class="sg-dot"></span><div><small>접속 계정</small><b>' + esc((me() || {}).display_name || '') + '</b><span class="sg-role">' + esc(ROLE[rk]) + '</span></div></div>' +
         '<div class="sg-two"><div class="sg-tile"><i class="cy"></i><b>강설량 측정</b><span>예보 · 신적설 · 관측소 · 관할</span></div><div class="sg-tile"><i class="vi"></i><b>장비 지원</b><span>요청 · 승인 · 배정 · 이동</span></div></div>' },
-      { tab: 'forecast', title: '기관별 24시간 예보', desc: '향후 24시간 예상 적설 · 강수 · 최저기온',
-        points: ['전국 → 본부 → 지사 → 5km 격자'] },
+      { tab: 'forecast', title: '기관별 24시간 예보', desc: '기관별 앞으로 24시간 예상 적설 · 강수 · 최저기온 확인' },
       E('forecast', '발표 기준', ['#fc-meta'], '기상청 예보 발표 시각 · 예보 구간', ['매시 갱신 · 예보는 3시간마다 새 발표']),
       E('forecast', '본부 · 지사 목록', ['#fc-tree .fc-row'], '줄 클릭 → 펼치기 (본부 → 지사 → 격자)', ['적설 · 강수 · 강수확률 · 최저기온']),
       E('forecast', '지도', ['#fmap'], '고른 본부 · 지사 · 격자 위치', ['격자에 마우스 → 24시간 추이', '격자 클릭 → 추이 고정']),
-      { tab: 'snowtable', title: '연도별 신적설', desc: '지사 · 본부별 일 신적설(cm), 시즌 단위',
-        points: ['시즌 = 첫눈 ~ 마지막 눈 (11~4월)', '매일 새벽 전날 자료 자동 수집'] },
+      { tab: 'snowtable', title: '연도별 신적설', desc: '지사 · 본부별 하루 신적설을 시즌 단위로 확인' },
       E('snowtable', '시즌 선택', ['#seasonSelect'], '최근 3시즌 중 고르기'),
       E('snowtable', '엑셀 내보내기', ['#exportXlsxBtn'], '지금 보이는 표 → xlsx 파일'),
       E('snowtable', '지난 시즌', ['#oldSeasonBox'], '이전 시즌 고르기 → [엑셀 받기]', ['화면 표는 최근 3시즌만']),
       E('snowtable', '합계 · 평균', ['#snowTableWrap .sum-col-head'], '지사 줄 = 시즌 합계 · 본부 줄 = 지사 평균'),
       E('snowtable', '날짜 칸', ['#snowTableWrap .sum-col-head + th'], '그날 신적설(cm) · 한 칸 = 하루'),
-      { tab: 'map', title: '관측소 지도', desc: '지사별 적설관측소',
-        points: ['관할 고속도로 5km 이내 (최대 8km)'] },
+      { tab: 'map', title: '관측소 지도', desc: '기관별 관할 고속도로와 인접한 관측소의 적설량 확인' },
       E('map', '요약 숫자', ['#view-map .statbar'], '노선 · 본부 · 지사 · 적설관측소 · 미분류 수'),
       E('map', '검색', ['#searchBox'], '본부 · 지사 · 관측소 이름으로 찾기'),
       E('map', '일자 선택', ['#dateBtn'], '날짜 고르기 → 관측소별 그날 신적설'),
       E('map', '관측소 목록', ['#tree'], '본부 → 지사 → 관측소 · 숫자 = 관측소 수'),
       E('map', '지도', ['#map'], '점 = 적설관측소 · 색 = 고속도로까지 거리', ['초록 0~3km · 주황 3~6km · 빨강 6~8km']),
-      { tab: 'jurisdiction', title: '기관별 관할 고속도로', desc: '지사별 관할 구간 (IC·JC 단위)',
-        points: ['관할 변경 → 관측소 · 신적설 재계산'],
-        mine: jEdit ? '구간 이동 · 신설 기관 · 변경 요청 처리 → [저장]' : jReq ? '구간 선택 → [구간 변경 요청]' : null },
+      { tab: 'jurisdiction', title: '기관별 관할 고속도로', desc: '지사마다 맡은 고속도로 구간 확인 · 변경' },
       E('jurisdiction', '지사 검색', ['#jr-search'], '지사 이름으로 찾기'),
       E('jurisdiction', '+ 신설 기관', ['#jr-add'], '새 지사 만들기 → 구간 넣기'),
       E('jurisdiction', '변경 요청', ['#jr-requests'], jEdit ? '지사가 보낸 구간 변경 요청 → 승인 · 반려' : '내가 보낸 구간 변경 요청 · 처리 상태'),
       E('jurisdiction', '관할 목록', ['#jr-tree .jr-hqpick', '#jr-tree'], '본부 → 지사 → 구간 · km = 관할 길이', ['미지정 고속도로 = 어느 지사에도 없는 구간']),
       E('jurisdiction', '지도', ['#jmap'], jEdit ? '구간 클릭 → 선택 → 다른 지사로 옮기기' : jReq ? '구간 클릭 → 선택 → [구간 변경 요청]' : '색 = 관할 지사'),
       E('jurisdiction', '저장', ['#jr-savebar'], '[미리보기] 바뀌는 관측소 · [모두 취소] · [저장]', [], { only: jEdit }),
-      { tab: 'sources', title: '데이터 출처', desc: '자료 출처 · 계산 방법 · 보유 시즌',
-        points: ['기상청 API허브 · 국가교통정보센터'] },
+      { tab: 'sources', title: '데이터 출처', desc: '자료 출처와 계산 방법 안내' },
       E('sources', '보유 시즌', ['#seasonsTable'], '시즌별 기간 · 자료 있는 날 수'),
-      { tab: 'grid', only: g, badge: '관리자', title: '예보 격자 편입', desc: '5km 예보 격자 → 지사 편입',
-        points: ['24시간 예보 · 예상 적설의 기준'] },
+      { tab: 'grid', only: g, badge: '관리자', title: '예보 격자 편입', desc: '기상청 5km 예보 격자를 지사에 연결 (24시간 예보의 기준)' },
       E('grid', '편입 현황', ['#gr-summary'], '편입 격자 수 · 지사별 칸 수', [], { only: g }),
       E('grid', '기관 검색', ['#gr-search'], '지사 이름으로 찾기', [], { only: g }),
       E('grid', '기관 목록', ['#gr-tree .jr-hqpick', '#gr-tree'], '본부 → 지사 · 칸 = 편입 격자 수', [], { only: g }),
@@ -157,8 +150,7 @@
     var steps = [
       { center: true, wide: true, kicker: 'PROCESS', title: '장비 지원 절차', html: processHtml() },
       // 이동 현황
-      { tab: 'move', title: '이동 현황', desc: '기관 → 지사 장비 이동, 날짜별',
-        points: ['모든 계정 같은 화면 (보기 전용)'] },
+      { tab: 'move', title: '이동 현황', desc: '날짜별로 어느 기관 장비가 어느 지사로 가는지 확인' },
       E('move', '날짜', [both(['#prevDay', '#dateText', '#nextDay'])], '‹ › 하루씩 이동 · 날짜 클릭 → 달력'),
       E('move', '요약 · 기준 시각', ['#summaryNote'], '그날 지원 대수 · 기준 시각', ['[새로고침] → 최신 자료']),
       E('move', '강원 신속대응팀', ['.team-tg'], '체크 해제 → 표 · 카드에서 빠짐'),
@@ -168,10 +160,7 @@
       E('move', '지사 카드', ['#destList .dest-head'], '피지원 지사 · 도착 예상 시각 · 대설특보'),
       E('move', '장비 줄', ['#destList .vrow'], '클릭 → 그 장비 경로 · 시각'),
       // 지사별 요청·편성
-      { tab: 'branch', title: '지사별 요청·편성', desc: '지사 요청 → 재난처 승인(확정)',
-        points: ['예보 · 대설특보 자동 표시', '확정 줄 잠김 ([취소] 후 수정)'],
-        mine: { branch: '요청 대수 · 도착 요청 시각 → [저장]', hq: '본부 내 전 지사 입력 → [저장]', gw: '본부 내 전 지사 입력 → [저장]',
-          admin: '기준일자 생성 · 편성 대수 → [확정]' }[rk] },
+      { tab: 'branch', title: '지사별 요청·편성', desc: '지사가 필요한 장비를 요청하고 재난처가 지원 대수를 확정' },
       E('branch', '기준일자', ['#roundSelBranch'], '지원 회차 고르기 · 요청 · 편성은 기준일자마다 따로'),
       E('branch', '새 기준일자', [both(['#newRoundDate', '#roundMake'])], '날짜 → [만들기]', ['장비 지원 여부는 이전 기준일자에서 이어받음']),
       E('branch', '기준일자 삭제', ['#roundDel'], '잘못 만든 기준일자 지우기 (되돌릴 수 없음)'),
@@ -195,10 +184,7 @@
         '[확정] → 줄 잠김 · [취소]로 풀기', ['본부 줄 · 맨 위 [일괄 확정]']),
       E('branch', '저장 막대', ['#save-branch'], '바뀐 칸 수 · [되돌리기] · [저장]', ['[저장] 전에는 반영 안 됨']),
       // 기관별 장비
-      { tab: 'fleet', title: '기관별 장비', desc: '지원기관 장비 · 날짜별 경로',
-        points: ['차량번호 · 운전원 정보 입력 없음 (내부망)'],
-        mine: { equip: '지원 여부 → 배정 지사 → 도착 예상 시각 → [확정]', branch: '타지사 지원 확정 시 장비 등록 · 도착 시각',
-          admin: '전 기관 장비 · 경로 수정', gw: '신속대응팀 → 강원본부 지원장비 탭' }[rk] },
+      { tab: 'fleet', title: '기관별 장비', desc: '기관 장비의 지원 여부와 날짜별 지원 지사 · 도착 시각 입력' },
       E('fleet', '기준일자', ['#roundSelFleet'], '지원 여부는 기준일자마다 따로'),
       E('fleet', '기관 요약', ['#orgGrid > *'], '기관별 지원 · 지원 불가 · 정비중 · 미정 대수'),
       E('fleet', '거르기', ['#fleetFilters'], '기관별 · 지원 장비만 보기'),
@@ -216,9 +202,7 @@
       E('fleet', '숨기기 · 삭제', [inRow('#eqTable [data-vhide]', ['[data-vdel]'])], '숨기기 = 목록에서만 뺌 · 삭제 = 지움'),
       E('fleet', '확정', ['#save-fleet'], '바뀐 칸 → [확정]해야 저장', ['[되돌리기] = 마지막 확정 상태로']),
       // 기관별 배정
-      { tab: 'alloc', title: '기관별 배정', desc: '교통처: 기관 → 지사 배정 대수',
-        points: ['편성 확정된 지사만 나옴', '배정 후 → 기계화부 장비 지정'],
-        mine: { admin: '배정 대수 → [확정]', equip: '우리 기관 배정 확인' }[rk] },
+      { tab: 'alloc', title: '기관별 배정', desc: '교통처가 기관별로 지사에 보낼 장비 대수를 배정' },
       E('alloc', '기준일자', ['#roundSelAlloc'], '배정은 기준일자마다 따로'),
       E('alloc', '배정 대수', ['#allocTable input.num:not(:disabled)', { s: '#allocTable tbody td', desc: '교통처가 정한 배정 대수 (보기)' }], '기관 → 지사 보낼 대수 입력'),
       E('alloc', '배정 / 편성', [th('배정 / 편성')], '지사별 배정 합 / 편성 대수', ['초록 일치 · 주황 부족 · 빨강 초과']),
@@ -226,16 +210,13 @@
       E('alloc', '장비 지정', [th('장비 지정')], '기계화부가 장비까지 고른 대수'),
       E('alloc', '확정', ['#save-alloc'], '[확정] → 기계화부에 배정 전달', ['[되돌리기] = 마지막 확정 상태로']),
       // 강원본부 지원장비
-      { tab: 'gwteam', only: gwOk, badge: '강원본부', title: '강원본부 지원장비', desc: '강원 신속대응팀 제설차 4대 (원주 · 홍천 · 대관령 · 강릉)',
-        points: ['요청 없이 전국 지사 지원', '요청 · 편성 · 배정 영향 없음 → 이동 현황만 합산'],
-        mine: rk === 'gw' ? '강원본부 전용 (타 본부 없음)' : null },
+      { tab: 'gwteam', only: gwOk, badge: '강원본부', title: '강원본부 지원장비', desc: '강원 신속대응팀 제설차 4대를 요청 없이 지사에 직접 지원' },
       E('gwteam', '지원 여부', ['#teamTable select[data-vs]'], '드롭다운 → 지원 · 미정 · 지원 불가 · 정비중', ['지원 → 날짜 칸이 열림'], { only: gwOk }),
       E('gwteam', '지원일 1', ['#day1InTeam'], '첫 날짜 · 나머지 칸은 하루씩 자동', [], { only: gwOk }),
       E('gwteam', '지원 지사', ['#teamTable .slot select:not(:disabled)'], '그날 갈 지사 · 옆 칸 = 도착 시각', [], { only: gwOk }),
       E('gwteam', '확정', ['#save-gwteam'], '바뀐 칸 → [확정]해야 저장', [], { only: gwOk }),
       // 로그 기록
-      { tab: 'log', only: lg, badge: '권한', title: '로그 기록', desc: '장비 지원 변경 이력 (최근 300건)',
-        points: ['수정 · 삭제 불가'] },
+      { tab: 'log', only: lg, badge: '권한', title: '로그 기록', desc: '장비 지원 화면의 변경 이력 조회' },
       E('log', '거르기', ['#logFilters'], '구분(추가 · 수정 · 삭제) · 아이디 · 오늘만', [], { only: lg }),
       E('log', '기록 표', ['#logTable thead'], '일시 · 아이디 · 구분 · 표 · 대상 · 내용 · IP', [], { only: lg }),
       { target: '#sgHelp', kicker: 'HELP', title: '사용법 다시 보기', desc: '오른쪽 위 [? 사용법]', points: ['다른 탭: 처음 들어갈 때 칸 · 버튼 설명'], last: true }
