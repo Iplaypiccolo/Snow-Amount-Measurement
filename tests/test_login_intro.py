@@ -102,6 +102,22 @@ def t_auto_login_no_intro(b, ctx, m):
     reqs = []; q = G.open_site(ctx, m, url=PREVIEW, reqs=reqs); q.wait_for_selector(".topnav", state="visible")
     check(q.locator("#ssIntro").count() == 0 and not intro_reqs(reqs), "자동 로그인이면 인트로가 없어야 함")
 
+def t_preload(b, ctx, m):
+    """2026-11-01 인트로 미리 받기: 페이지를 열자마자(intro-loader.js 보다 먼저) 인트로 파일을 받기 시작하고, 같은 파일을 두 번 받지 않음.
+    지문(V)은 intro-loader.js 와 intro-preload.js 가 같아야 함(다르면 받아 둔 파일을 못 씀)"""
+    import re
+    root = Path(__file__).resolve().parent.parent / "login"
+    v = [re.search(r"/\*@@V@@\*/(\{[^}]*\})", (root / f).read_text(encoding="utf-8")).group(1) for f in ("intro-loader.js", "intro-preload.js")]
+    check(json.loads(v[0]) == json.loads(v[1]), "intro-loader.js 와 intro-preload.js 의 지문(V)이 달라짐 — tools/build_login_intro.py 를 다시 실행")
+    reqs = []; p = open_preview(ctx, m, reqs=reqs); wait_js(p, "!!document.querySelector('.ss-intro.on')", 15000)
+    names = [u.split("?")[0] for u in reqs]
+    loader = next(i for i, u in enumerate(names) if u.endswith("/login/intro-loader.js"))
+    first = next(i for i, u in enumerate(names) if "/login/intro/chars/" in u)
+    check(first < loader, "캐릭터 파일을 intro-loader.js 보다 먼저 받기 시작해야 함")
+    got = p.evaluate("performance.getEntriesByType('resource').map(e => e.name).filter(u => u.includes('/login/intro/'))")
+    check(len(got) == len(set(got)) and len(got) >= 20, f"인트로 파일을 한 번씩만 받아야 함: {len(got)}개 중 중복 {len(got) - len(set(got))}")
+    check(p.evaluate("[...document.scripts].filter(s => s.src.includes('/auth/') || s.src.endsWith('boot.js') || s.src.includes('boot.js?')).every(s => s.defer)"), "화면 스크립트는 defer(한꺼번에 받기)")
+
 def t_intro_files_missing(b, ctx, m):
     p = ctx.new_page(); p.set_viewport_size({"width": 1400, "height": 900}); p.on("pageerror", lambda e: errors.append(str(e)))
     p.route("**/*", T.route); p.route(SBM.SB + "/**", m.handle); p.route("**/login/intro/chars/**", lambda r: r.abort())
@@ -570,7 +586,7 @@ def t_agent_reduced(b, ctx, m):
     check(c == [2, 1, 0, "0111"], f"움직임 줄이기: 첨다니도 35도·선글라스·기울기 0·와이파이 강함 {c}")
     rc.close()
 
-TESTS = [t_off_switch, t_preview_intro_then_login, t_single_move, t_skip, t_auto_login_no_intro, t_intro_files_missing, t_loader_missing, t_password_no_reaction, t_reduced_motion, t_mouse_giltong, t_mouse_blocked, t_mouse_all, t_keys_type, t_keys_password, t_keys_reduced_off, t_keys_mobile_lock, t_tap_all, t_tap_rules, t_tap_reduced, t_agent_preview, t_agent_rig_turn, t_agent_wifi, t_agent_reduced]
+TESTS = [t_off_switch, t_preload, t_preview_intro_then_login, t_single_move, t_skip, t_auto_login_no_intro, t_intro_files_missing, t_loader_missing, t_password_no_reaction, t_reduced_motion, t_mouse_giltong, t_mouse_blocked, t_mouse_all, t_keys_type, t_keys_password, t_keys_reduced_off, t_keys_mobile_lock, t_tap_all, t_tap_rules, t_tap_reduced, t_agent_preview, t_agent_rig_turn, t_agent_wifi, t_agent_reduced]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()

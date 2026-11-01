@@ -378,6 +378,7 @@
   <link rel="stylesheet" href="forecast/style.css?v=b0342a97">
   <link rel="stylesheet" href="auth/gate.css?v=8afc6104">
   <link rel="stylesheet" href="login/login-v2.css?v=fd865e8d">
+  <script src="login/intro-preload.js?v=6834916e"></script>
   <link rel="stylesheet" href="guide/guide.css?v=75c2024a">
 </head>
 <body>
@@ -526,19 +527,20 @@
 </div><!-- /shell -->
 
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="jurisdiction/core.js?v=5591dde2"></script>
-<script src="jurisdiction/requests.js?v=f1f6c948"></script>
-<script src="jurisdiction/ui.js?v=e953f16e"></script>
-<script src="grid/core.js?v=e04501e0"></script>
-<script src="grid/ui.js?v=7cfa34d7"></script>
-<script src="forecast/ui.js?v=91b65323"></script>
-<script src="auth/auth.js?v=3a94d92b"></script>
-<script src="auth/events.js?v=0c959479"></script>
-<script src="auth/gate.js?v=309218bc"></script>
-<script src="auth/snow.js?v=21f5a422"></script>
-<script src="guide/guide.js?v=c72d43e6"></script>
-<script src="boot.js?v=8ed7e8ed"></script>
-<script src="login/intro-loader.js?v=2c2f6b9d"></script>
+<!-- 스크립트는 defer: 한꺼번에 받고 적힌 순서대로 실행(2026-11-01 — 예전에는 하나씩 차례로 받아 첫 화면이 늦었음) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>
+<script src="jurisdiction/core.js?v=5591dde2" defer></script>
+<script src="jurisdiction/requests.js?v=f1f6c948" defer></script>
+<script src="jurisdiction/ui.js?v=e953f16e" defer></script>
+<script src="grid/core.js?v=e04501e0" defer></script>
+<script src="grid/ui.js?v=7cfa34d7" defer></script>
+<script src="forecast/ui.js?v=91b65323" defer></script>
+<script src="auth/auth.js?v=3a94d92b" defer></script>
+<script src="auth/events.js?v=0c959479" defer></script>
+<script src="auth/gate.js?v=309218bc" defer></script>
+<script src="auth/snow.js?v=21f5a422" defer></script>
+<script src="guide/guide.js?v=c72d43e6" defer></script>
+<script src="boot.js?v=8ed7e8ed" defer></script>
+<script src="login/intro-loader.js?v=2c2f6b9d" defer></script>
 </body>
 </html>

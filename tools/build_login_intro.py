@@ -6,7 +6,7 @@
   1. 재생기(charo-pet.js·charo-intro.js·welcome-fx.js)와 배치표(intro-cast.js)를 그대로 복사
   2. 캐릭터 파일 6개에서 인트로에 쓰는 동작만 남기고, 그림(PNG)을 WebP 로 다시 저장해 크기를 줄임(모양·크기·위치는 그대로)
   3. 효과 그림(배경·문구·폭죽·색종이)을 복사
-  4. login/intro-loader.js 안의 파일 지문 목록(V)을 갱신 — 파일이 바뀌면 브라우저가 새로 받게(꼬리표와 같은 역할)
+  4. login/intro-loader.js·intro-preload.js 안의 파일 지문 목록(V)을 갱신 — 파일이 바뀌면 브라우저가 새로 받게(꼬리표와 같은 역할)
 사용(저장소 맨 위에서):  python tools/build_login_intro.py <차로차로 저장소 폴더>
   그다음 python tools/stamp_assets.py 로 첫 화면 꼬리표 갱신
 """
@@ -131,10 +131,11 @@ def main():
     for a in (SRC / 'intro' / 'assets').iterdir():
         shutil.copy(a, OUT / 'assets' / a.name); total += a.stat().st_size
     V['fx'] = hashlib.md5(b''.join((OUT / 'assets' / n).read_bytes() for n in sorted(x.name for x in (OUT / 'assets').iterdir()))).hexdigest()[:8]
-    loader = ROOT / 'login' / 'intro-loader.js'
-    s = loader.read_text(encoding='utf-8')
-    s2 = re.sub(r'/\*@@V@@\*/\{[^}]*\}', '/*@@V@@*/' + json.dumps(V, separators=(',', ':')), s)
-    if s2 != s: loader.write_text(s2, encoding='utf-8')
+    for name in ('intro-loader.js', 'intro-preload.js'):       # 미리 받기(intro-preload.js)도 같은 지문을 써야 받아 둔 파일을 씀
+        loader = ROOT / 'login' / name
+        s = loader.read_text(encoding='utf-8')
+        s2 = re.sub(r'/\*@@V@@\*/\{[^}]*\}', '/*@@V@@*/' + json.dumps(V, separators=(',', ':')), s)
+        if s2 != s: loader.write_text(s2, encoding='utf-8')
     print(f'캐릭터+효과 합계 {total // 1024} KB, 지문 {V}')
 
 
