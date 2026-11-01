@@ -25,7 +25,7 @@ python tools/run_all_tests.py            # 전체 시험 (약 5분, 병렬). --f
 | 위치 | 내용 |
 |---|---|
 | `index.html`, `boot.js`, `app.js` | 첫 화면(로그인 잠금 → 강설량 측정). **CSP 때문에 HTML 안에 스크립트를 쓰지 않음**(시작 코드는 `boot.js`). 저장 후 새로고침 없이 `refreshHierarchyViews` 로 다시 그림 |
-| `guide/` | 사용법 안내(`guide.js`·`guide.css`): 로그인 후 강설량 측정·장비 지원을 처음 열 때 한 번(이 브라우저·아이디 기준 localStorage `ss_guide:<페이지>:<아이디>`), 위쪽 [? 사용법]으로 다시. 계정별로 설명하는 탭이 다름. 탭 소개 뒤 그 탭의 칸·버튼을 하나씩 빛 테두리로 짚음(장비 지원은 안쪽 틀 안의 칸, 계정 화면에 없는 칸은 건너뜀 — 화면 칸을 바꾸면 `guide.js` 의 선택자도 확인). 자동 시험 중에는 저절로 안 열림(`?guide=auto` 로 강제) — 시험 `tests/test_guide.py` |
+| `guide/` | 사용법 안내(`guide.js`·`guide.css`): 로그인 후 강설량 측정·장비 지원을 처음 열 때 한 번(이 브라우저·아이디 기준 localStorage `ss_guide:<페이지>:<아이디>`), 위쪽 [? 사용법]으로 다시. 계정별로 설명하는 탭이 다름. 위쪽 탭 소개 → 첫(지금) 탭 칸 설명, 다른 탭 칸 설명은 그 탭에 처음 들어갈 때(`ss_guide:<페이지>.<탭>:<아이디>`). 칸·버튼을 하나씩 빛 테두리로 짚음(장비 지원은 안쪽 틀 안의 칸, 계정 화면에 없는 칸은 건너뜀 — 화면 칸을 바꾸면 `guide.js` 의 선택자도 확인). 자동 시험 중에는 저절로 안 열림(`?guide=auto` 로 강제) — 시험 `tests/test_guide.py` |
 | `auth/` | `auth.js` 로그인·토큰 보관, `events.js` 변경 이력 읽기/저장(+`saveJurisdiction` 저장·승인 한 번에), `gate.js` 로그인 잠금 화면, `snow.js` 적설 요약본 읽기 |
 | `jurisdiction/` | 관할 탭: `core.js`(계산, 화면 없음), `ui.js`, `requests.js`(지사의 구간 변경 요청) |
 | `grid/` | 예보 격자 편입 탭 (`core.js` 계산, `ui.js`) |

@@ -87,6 +87,8 @@ def t_first_login_admin(b, ctx, m):
     check(t[0] == "제설 업무 시스템" and t[1] == "기관별 24시간 예보" and t[-1] == "사용법 다시 보기", t)
     check(not any("계정별" in x for x in t), f"계정별 권한 표는 뺐음(2026-11-01): {t}")
     for x in ["기관별 24시간 예보", "연도별 신적설", "관측소 지도", "기관별 관할 고속도로", "데이터 출처", "예보 격자 편입"]: check(x in t, f"관리자 강설량 안내에 '{x}' 없음: {t}")
+    check(t.index("예보 격자 편입") < t.index("발표 기준") < t.index("사용법 다시 보기") and "시즌 선택" not in t and "검색" not in t,
+          f"위쪽 탭 소개를 다 한 뒤 첫 탭(24시간 예보) 칸 설명만, 다른 탭 칸은 그 탭에 들어갈 때: {t}")
     wait_closed(p)
     check(p.evaluate("localStorage.getItem('ss_guide:snow:admin-01')") == "1", "끝까지 보면 이 브라우저에 봤음 표시")
     check(p.locator(".tab-btn.active").get_attribute("data-tab") == "forecast", "안내 전에 보던 탭(첫 탭)으로 돌아와야 함")
@@ -100,6 +102,7 @@ def t_first_login_admin(b, ctx, m):
     check(p.locator(".sg-flow.h .sg-node.merge").count() == 1 and "교통처" in p.locator(".sg-flow.h .sg-node.merge").text_content(), "합쳐지는 곳 = 교통처 배정")
     t = titles(p)
     check(t[1] == "이동 현황" and not any("계정별" in x for x in t), f"그림 다음은 바로 탭 설명: {t}")
+    check(t.index("로그 기록") < t.index("날짜") and "지원 여부" not in t and "지사 요청" not in t, f"탭 소개 다음 이동 현황 칸 설명만: {t}")
     for x in ["이동 현황", "지사별 요청·편성", "기관별 장비", "기관별 배정", "강원본부 지원장비", "로그 기록"]: check(x in t, f"관리자 장비 안내에 '{x}' 없음: {t}")
     wait_closed(p); check(p.locator(".eq-btn.active").get_attribute("data-eqtab") == "move", "장비 지원도 보던 탭(이동 현황)으로")
     # 다시 들어와도 저절로 안 열림 / [사용법]으로 다시 봄
@@ -112,9 +115,10 @@ def t_first_login_admin(b, ctx, m):
 def t_stop_and_keys(b, ctx, m):
     p = open_site(ctx, m); login(p, "exchungju"); wait_open(p, "snow")
     p.click(".sg-next"); wait_js(p, "SSGuide.active().i === 1")
-    check(p.locator(".tab-btn.active").get_attribute("data-tab") == "forecast" and guide(p)["title"] == "기관별 24시간 예보", "탭 설명 때는 그 탭 화면을 뒤에 띄움")
-    p.keyboard.press("ArrowRight"); wait_js(p, "SSGuide.active().i === 2"); check(guide(p)["title"] == "발표 기준" and p.locator(".tab-btn.active").get_attribute("data-tab") == "forecast", "→ 키로 다음(탭 안의 칸 설명)")
-    p.wait_for_timeout(600); ring_on(p, p.locator("#fc-meta").bounding_box(), "발표 기준 칸을 짚음")
+    check(guide(p)["title"] == "기관별 24시간 예보", "첫 장 다음 = 위쪽 탭 소개")
+    p.keyboard.press("ArrowRight"); wait_js(p, "SSGuide.active().i === 2"); check(guide(p)["title"] == "연도별 신적설", "→ 키로 다음 탭 소개")
+    p.wait_for_timeout(600); ring_on(p, p.locator(".tab-btn[data-tab=snowtable]").bounding_box(), "탭 소개는 위쪽 탭 버튼을 짚음")
+    check(p.locator(".tab-btn.active").get_attribute("data-tab") == "forecast", "탭 소개 때는 탭을 바꾸지 않음(들어가야 칸 설명)")
     p.keyboard.press("ArrowLeft"); wait_js(p, "SSGuide.active().i === 1")
     p.wait_for_timeout(600); ring = p.locator(".sg-ring").bounding_box(); tb = p.locator(".tab-btn[data-tab=forecast]").bounding_box()
     check(ring["x"] <= tb["x"] and ring["x"] + ring["width"] >= tb["x"] + tb["width"] and ring["y"] <= tb["y"], "빛 고리가 그 탭 버튼을 둘러쌈")
@@ -153,30 +157,37 @@ def t_branch_mine_text(b, ctx, m):
     go_to(p, "지사별 요청·편성", "branch")
     check("내 계정 · 지사" in p.locator(".sg-mine").inner_text() and "[저장]" in p.locator(".sg-mine").inner_text(), "지사 계정의 할 일")
     check(len(p.locator(".sg-body").inner_text()) < 260, "설명은 짧게(발표 자료처럼): " + p.locator(".sg-body").inner_text())
-    check(p.locator(".eq-btn.active").get_attribute("data-eqtab") == "branch", "그 탭 화면을 뒤에 띄움")
+    ring_on(p, p.locator(".eq-btn[data-eqtab=branch]").bounding_box(), "위쪽 탭 버튼을 짚음")
 
 def t_element_steps(b, ctx, m):
-    """탭 소개 다음에는 그 탭의 칸·버튼을 하나씩 빛 테두리로 짚음(2026-11-01). 장비 지원은 안쪽 틀 안의 칸"""
-    p = open_site(ctx, m); login(p, "admin-01"); wait_open(p, "snow")
-    go_to(p, "시즌 선택", "snowtable"); ring_on(p, p.locator("#seasonSelect").bounding_box(), "시즌 선택 드롭다운")
+    """탭에 처음 들어가면 그 탭의 칸·버튼을 하나씩 빛 테두리로 짚음(2026-11-01). 장비 지원은 안쪽 틀 안의 칸"""
+    p = open_site(ctx, m); login(p, "admin-01"); wait_open(p, "snow"); p.click("#sgStop"); wait_closed(p)
+    p.click(".tab-btn[data-tab=snowtable]"); wait_open(p, "snow")
+    check(guide(p)["mode"] == "tab" and guide(p)["title"] == "시즌 선택", f"연도별 신적설에 처음 들어가면 그 탭 칸 설명: {guide(p)}")
+    p.wait_for_timeout(900); ring_on(p, p.locator("#seasonSelect").bounding_box(), "시즌 선택 드롭다운")
     check("최근 3시즌" in p.locator(".sg-card").inner_text() and "연도별 신적설" in p.locator(".sg-step").inner_text(), "칸 설명 + 위에 탭 이름")
     cb, rb = p.locator(".sg-card").bounding_box(), p.locator(".sg-ring").bounding_box()
     check(cb["y"] >= rb["y"] + rb["height"] or cb["y"] + cb["height"] <= rb["y"] or cb["x"] >= rb["x"] + rb["width"] or cb["x"] + cb["width"] <= rb["x"], "카드가 짚은 칸을 가리지 않음")
+    check(all(x in ["시즌 선택", "엑셀 내보내기", "지난 시즌", "합계 · 평균", "날짜 칸"] for x in guide(p)["titles"]), f"그 탭 칸만: {guide(p)['titles']}")
     p.click("#sgStop"); wait_closed(p)
-    p.click(".page-btn[data-page=equip]"); wait_open(p, "equip")
+    check(p.evaluate("localStorage.getItem('ss_guide:snow.snowtable:admin-01')") == "1", "탭별로 봤음 표시")
+    p.click(".tab-btn[data-tab=map]"); wait_open(p, "snow"); check(guide(p)["title"] == "요약 숫자", "다른 탭도 처음이면 그 탭 칸 설명"); p.click("#sgStop"); wait_closed(p)
+    p.click(".tab-btn[data-tab=snowtable]"); p.wait_for_timeout(1200); check(not guide(p), "한 번 본 탭은 다시 안 열림")
+    p.click(".page-btn[data-page=equip]"); wait_open(p, "equip"); p.click("#sgStop"); wait_closed(p)
+    p.click(".eq-btn[data-eqtab=fleet]"); wait_open(p, "equip")
     go_to(p, "지원 여부", "fleet")
     fr = p.frame_locator("#equipFrame"); box = fr.locator("#eqTable select[data-vs]").first.bounding_box()
     ring_on(p, box, "기관별 장비의 지원 여부 드롭다운(안쪽 틀)")
     check("지원 · 미정 · 지원 불가 · 정비중" in p.locator(".sg-card").inner_text(), "지원 여부 고르는 곳 설명")
     check(p.locator(".eq-btn.active").get_attribute("data-eqtab") == "fleet", "그 탭 화면")
     p.keyboard.press("ArrowLeft"); p.wait_for_timeout(700); check(guide(p)["tab"] == "fleet" and guide(p)["el"], "← 이전 칸")
-    # 지사 계정: 확정돼 잠긴 줄이면 칸 대신 제목 칸을 짚고 '보기' 문구
+    # 지사 계정: 화면에 없는 [새 기준일자]·[삭제]는 건너뜀
     ctx2 = b.new_context(); q = open_site(ctx2, m); login(q, "exchungju"); wait_open(q, "snow"); q.evaluate("SSGuide.stop()"); wait_closed(q)
-    q.click(".page-btn[data-page=equip]"); wait_open(q, "equip")
-    t = q.evaluate("SSGuide.active().titles")
-    check("새 기준일자" in t, "목록에는 있어도(아래에서 건너뜀)")
+    q.click(".page-btn[data-page=equip]"); wait_open(q, "equip"); q.click("#sgStop"); wait_closed(q)
+    q.click(".eq-btn[data-eqtab=branch]"); wait_open(q, "equip")
+    check("새 기준일자" in q.evaluate("SSGuide.active().titles"), "목록에는 있어도(아래에서 건너뜀)")
     go_to(q, "보기 거르기", "branch")
-    q.keyboard.press("ArrowLeft"); wait_js(q, "SSGuide.active().title === '기준일자'", 6000)   # 지사 계정에 없는 [새 기준일자]·[삭제]는 건너뜀
+    q.keyboard.press("ArrowLeft"); wait_js(q, "SSGuide.active().title === '기준일자'", 6000)
     check("새 기준일자" not in q.evaluate("SSGuide.active().titles"), "건너뛴 단계는 목록에서도 빠짐")
     ctx2.close()
 

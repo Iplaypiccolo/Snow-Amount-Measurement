@@ -6,7 +6,8 @@
      한 번 닫으면 이 브라우저·이 아이디에서는 다시 저절로 나오지 않음(localStorage 'ss_guide:<페이지>:<아이디>', 사용자 결정 = 브라우저 기준).
    - 오른쪽 위 [사용법] 버튼을 누르면 지금 페이지의 안내를 처음부터 다시 봄.
    - 계정에 따라 보이는 탭만 설명하고, 탭마다 '내 계정이 할 일'을 한 줄 붙임(관리자 / 강원본부 / 다른 지역본부 / 지사 / 기계화부 / 보기 전용).
-   - 탭 소개 다음에는 그 탭의 칸·버튼을 하나씩 빛 테두리로 짚으며 설명(게임 튜토리얼처럼, 2026-11-01 사용자 요청).
+   - 칸·버튼을 하나씩 빛 테두리로 짚으며 설명(게임 튜토리얼처럼, 2026-11-01 사용자 요청). 페이지 안내 = 위쪽 탭 소개 → 지금(첫) 탭의 칸 설명,
+     다른 탭의 칸 설명은 그 탭에 처음 들어갈 때 따로(localStorage 'ss_guide:<페이지>.<탭>:<아이디>', "너무 많다" 2026-11-01).
      장비 지원 칸은 안쪽 틀(equipment/index.html) 안에서 찾아 바깥 화면 기준 위치로 바꿔 계산. 내 계정 화면에 없는 칸은 건너뜀.
    - 자동 시험(브라우저 자동 조종) 중에는 저절로 열리지 않음(다른 시험의 클릭을 가리지 않게). 주소에 ?guide=auto 를 붙이면 시험에서도 열림.
    - 화면은 설명용이고 아무것도 저장하지 않음(이 브라우저의 '봤음' 표시만).
@@ -146,7 +147,7 @@
       E('grid', '영역 선택', ['#gr-box'], '지도에서 끌어서 여러 칸 한꺼번에 고르기', [], { only: g }),
       E('grid', '지도', ['#gmap'], '격자 클릭 → 고르기 → 기관에 편입 · 제외', ['색: 기관 편입 · 여러 기관 공유 · 후보'], { only: g }),
       E('grid', '저장', ['#gr-savebar'], '[미리보기] · [모두 취소] · [저장] = 전체 적용', [], { only: g }),
-      { target: '#sgHelp', kicker: 'HELP', title: '사용법 다시 보기', desc: '오른쪽 위 [? 사용법]', points: [], last: true }
+      { target: '#sgHelp', kicker: 'HELP', title: '사용법 다시 보기', desc: '오른쪽 위 [? 사용법]', points: ['다른 탭: 처음 들어갈 때 칸 · 버튼 설명'], last: true }
     ];
     return steps.filter(function (x) { return x.only !== false; });
   }
@@ -237,7 +238,7 @@
         points: ['수정 · 삭제 불가'] },
       E('log', '거르기', ['#logFilters'], '구분(추가 · 수정 · 삭제) · 아이디 · 오늘만', [], { only: lg }),
       E('log', '기록 표', ['#logTable thead'], '일시 · 아이디 · 구분 · 표 · 대상 · 내용 · IP', [], { only: lg }),
-      { target: '#sgHelp', kicker: 'HELP', title: '사용법 다시 보기', desc: '오른쪽 위 [? 사용법]', points: [], last: true }
+      { target: '#sgHelp', kicker: 'HELP', title: '사용법 다시 보기', desc: '오른쪽 위 [? 사용법]', points: ['다른 탭: 처음 들어갈 때 칸 · 버튼 설명'], last: true }
     ];
     return steps.filter(function (x) { return x.only !== false; });
   }
@@ -295,10 +296,10 @@
 
   function render() {
     var s = st.steps[st.i], my = ++st.tok;
-    if (s.tab) {                                                                       // 그 탭 화면을 뒤에 띄워 둠
+    if (s.tab) {                                                                       // 칸 설명이면 그 탭 화면을 띄움(탭 소개는 버튼만 짚음)
       var b = tabBtn(st.page, s.tab);
       if (!shown(b)) return skip();
-      if (!b.classList.contains('active')) { b.click(); st.openedAt = Date.now(); }
+      if (!s.ov && !b.classList.contains('active')) { b.click(); st.openedAt = Date.now(); }
     }
     if (!s.at) { var t = s.tab ? tabBtn(st.page, s.tab) : s.target ? doc.querySelector(s.target) : null; return draw(s, t && shown(t) ? [t] : null, null); }
     var until = (st.openedAt || 0) + 2500;                                          // 탭을 연 지 2.5초까지만 기다림(그 뒤엔 없는 칸 → 바로 건너뜀)
@@ -312,6 +313,7 @@
   }
   function skip() {                                                                   // 내 계정 화면에 없는 칸: 그 단계를 빼고 같은 방향으로
     st.steps.splice(st.i, 1);
+    if (!st.steps.length) return stop();
     if (st.dir < 0) st.i -= 1;
     st.i = Math.max(0, Math.min(st.steps.length - 1, st.i));
     render();
@@ -369,7 +371,7 @@
   function next() { if (!st) return; if (st.i >= st.steps.length - 1) stop(); else go(st.i + 1); }
   function stop() {
     if (!st) return;
-    var s = st; st = null; markSeen(s.page); clearTimeout(s.rp);
+    var s = st; st = null; if (s.mode === 'page') markSeen(s.page); markSeen(s.page + '.' + s.tab); clearTimeout(s.rp);
     doc.removeEventListener('keydown', onKey, true); root.removeEventListener('resize', onResize); doc.removeEventListener('scroll', onResize, true);
     if (s.fd) try { s.fd.removeEventListener('scroll', onResize, true); } catch (e) {}
     s.el.classList.add('out'); setTimeout(function () { if (s.el.parentNode) s.el.parentNode.removeChild(s.el); }, 220);
@@ -391,12 +393,24 @@
   function onResize() { if (!st) return; cancelAnimationFrame(rz); rz = requestAnimationFrame(function () { if (!st) return;
     place(st.cur ? rectOf(st.cur) : null, st.el.querySelector('.sg-card'), st.el.querySelector('.sg-ring')); }); }
 
-  function start(page) {
+  // 안내 묶기(2026-11-01 사용자 결정 — "너무 많다"): 페이지 안내 = 첫 장 → 위쪽 탭 소개(탭을 바꾸지 않고 버튼만 짚음) → 지금 탭의 칸 설명 → 다시 보기.
+  // 다른 탭의 칸 설명은 그 탭에 처음 들어갈 때 따로(탭 안내). 처음 로그인하면 지금 탭 = 첫 탭(24시간 예보 / 이동 현황)
+  function pageSteps(page, tab) {
+    var all = page === 'equip' ? equipSteps() : snowSteps();
+    return all.filter(function (x) { return !x.at && !x.last; }).map(function (x) { return x.tab ? Object.assign({ ov: true }, x) : x; })
+      .concat(all.filter(function (x) { return x.at && x.tab === tab; }), all.filter(function (x) { return x.last; }));
+  }
+  function tabSteps(page, tab) { return (page === 'equip' ? equipSteps() : snowSteps()).filter(function (x) { return x.at && x.tab === tab; }); }
+  function activeTab(page) { var b = doc.querySelector(page === 'equip' ? '.eq-btn.active' : '.tab-btn.active'); return b ? (page === 'equip' ? b.dataset.eqtab : b.dataset.tab) : null; }
+
+  function start(page, onlyTab) {
     if (!me() || !doc.body.classList.contains('authed')) return;
     if (st) stop();
     page = page || curPage();
-    var back = doc.querySelector(page === 'equip' ? '.eq-btn.active' : '.tab-btn.active');
-    st = { page: page, steps: page === 'equip' ? equipSteps() : snowSteps(), i: 0, dir: 1, tok: 0, cur: null, el: build(), back: back, fd: page === 'equip' ? fdoc() : null };
+    var back = doc.querySelector(page === 'equip' ? '.eq-btn.active' : '.tab-btn.active'), tab = onlyTab || activeTab(page) || (page === 'equip' ? 'move' : 'forecast');
+    var steps = onlyTab ? tabSteps(page, onlyTab) : pageSteps(page, tab);
+    if (!steps.length) return;
+    st = { page: page, tab: tab, mode: onlyTab ? 'tab' : 'page', steps: steps, i: 0, dir: 1, tok: 0, cur: null, el: build(), back: back, openedAt: Date.now(), fd: page === 'equip' ? fdoc() : null };
     doc.addEventListener('keydown', onKey, true); root.addEventListener('resize', onResize); doc.addEventListener('scroll', onResize, true);
     if (st.fd) try { st.fd.addEventListener('scroll', onResize, true); } catch (e) {}   // 장비 지원 안쪽 화면이 스크롤돼도 테두리가 따라감
     render();
@@ -407,6 +421,12 @@
     waiting[page] = true;
     initP.then(function () { setTimeout(function () { waiting[page] = false; if (!st && !seen(page) && curPage() === page) start(page); }, page === 'equip' ? 1200 : 700); });
   }
+  // 탭에 처음 들어가면 그 탭 칸 설명(사람이 직접 누른 탭만 — 안내가 대신 누른 것은 isTrusted 가 아님). 페이지 안내를 아직 안 봤으면 페이지 안내가 먼저
+  function autoTab(page, tab) {
+    if (!AUTO || st || !tab || !seen(page) || seen(page + '.' + tab) || waiting[page + '.' + tab]) return;
+    waiting[page + '.' + tab] = true;
+    setTimeout(function () { waiting[page + '.' + tab] = false; if (!st && curPage() === page && activeTab(page) === tab && !seen(page + '.' + tab)) start(page, tab); }, page === 'equip' ? 600 : 400);
+  }
   function init() {
     if (inited || !me()) return; inited = true;
     var box = $('ssUser'), host = box && box.parentNode;
@@ -416,6 +436,11 @@
       b.onclick = function () { start(curPage()); };
       host.insertBefore(b, box);
     }
+    doc.addEventListener('click', function (e) {
+      if (!e.isTrusted || st) return;
+      var t = e.target.closest && e.target.closest('.tab-btn[data-tab], .eq-btn[data-eqtab]'); if (!t) return;
+      if (t.classList.contains('eq-btn')) autoTab('equip', t.dataset.eqtab); else autoTab('snow', t.dataset.tab);
+    });
     var m = me();
     if (m.role === 'hq' && m.hq_id && root.SSAuth && root.SSAuth.rest) {           // 강원본부인지(본부 이름) — 안내 내용만 달라짐
       initP = root.SSAuth.rest('hqs?select=id,name&id=eq.' + encodeURIComponent(m.hq_id)).then(function (r) {
@@ -424,5 +449,5 @@
     }
     return initP;
   }
-  root.SSGuide = { init: init, auto: auto, start: start, stop: stop, active: function () { return st ? { page: st.page, i: st.i, n: st.steps.length, title: st.steps[st.i].title, tab: st.steps[st.i].tab || null, el: !!st.steps[st.i].at, titles: st.steps.map(function (x) { return x.title; }) } : null; } };
+  root.SSGuide = { init: init, auto: auto, start: start, stop: stop, active: function () { return st ? { page: st.page, mode: st.mode, i: st.i, n: st.steps.length, title: st.steps[st.i].title, tab: st.steps[st.i].tab || null, el: !!st.steps[st.i].at, titles: st.steps.map(function (x) { return x.title; }) } : null; } };
 })(window);
