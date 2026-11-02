@@ -19,7 +19,7 @@ const Api = (() => {
     "55000": "확정한 지사는 확정을 취소한 뒤에 고칠 수 있습니다.",
     // 기계화부(지원장비 계정)가 지원일 1의 지사를 고를 때(마이그레이션 43)
     "SA001": "관리자가 이 기관에 배정하지 않은 지사입니다. 기관별 배정을 확인해 주세요.", "SA002": "배정받은 대수보다 많은 장비를 같은 지사로 보낼 수 없습니다.",
-    "SA003": "지원일 1의 피지원 지사 한 곳만 고를 수 있습니다(둘째 날부터·하루 여러 곳·수정본·관리자가 정한 경로는 관리자가 고칩니다).",
+    "SA003": "지원일마다 피지원 지사 한 곳만 고를 수 있습니다(하루 여러 곳·수정본·관리자가 정한 경로는 관리자가 고칩니다).",
     // 지역본부 장비(마이그레이션 44)
     "SA004": "이 지사의 '타지사 지원 가능' 대수가 확정된 뒤에 장비를 등록할 수 있습니다.", "SA005": "지역본부 장비는 자기(출발) 지사로 보낼 수 없습니다.",
     "SA006": "기관별 배정 합계는 그 지사의 편성 대수(제설차·제설기 각각)보다 많을 수 없습니다." };
@@ -253,6 +253,7 @@ const Api = (() => {
         return done({ ok: true });
       },
       saveFleet(vehicles, routes, round, status) {
+        const addDaysISO = (iso, n) => { const t = new Date(iso + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
         status = status || [];
         // 경로는 관리자(equip.route, 2026-11-02 — 'equip.edit.all' 만 받은 지원장비 아이디는 기계화부와 같음). 기계화부(지원장비)는 자기 기관 장비의 ① 정해진 경로의 도착 예상 시각 ② 지원일 1의 지사 한 곳(배정받은 지사·대수 안에서, 마이그레이션 43)
         // 지원일 칸: 자기 기관 장비(지역본부 장비는 자기 지사 것)만 — 'equip.edit.all' 이 있어도(서버 vehicle_routes_guard 흉내)
@@ -265,17 +266,18 @@ const Api = (() => {
             const k = r.date + "|" + r.vehicle_id, old = sim.get(k), v = db.vehicles.find(x => x.id === r.vehicle_id);
             if (old && JSON.stringify(old.stops) === JSON.stringify(r.stops)) continue;                 // 시각만
             if (v.org === POOL && r.stops.includes(v.home_branch)) return "SA005";                         // 지역본부 장비: 그 지사가 첫날 한 곳(자기 지사로는 못 보냄, 2026-11-02)
-            if (!rd0 || r.date !== rd0.start_date || (old && (old.revised || old.stops.length !== 1)) || r.stops.length > 1) return "SA003";
+            const inRound = rd0 && r.date >= rd0.start_date && r.date < addDaysISO(rd0.start_date, rd0.days || 4);     // 2026-11-02: 기준일자의 모든 지원일
+            if (!inRound || (old && (old.revised || old.stops.length !== 1)) || r.stops.length > 1) return "SA003";
             if (!r.stops.length) { sim.delete(k); continue; }
             const a = allocOf(v.org, r.stops[0]);
             if (!a || (v.type === "제설차" && !a.truck) || (v.type === "제설기" && !a.blower)) return "SA001";
-            sim.set(k, { ...r, revised: false }); touched.push([v, r.stops[0]]);
+            sim.set(k, { ...r, revised: false }); touched.push([v, r.stops[0], r.date]);
           }
-          for (const [v, bid] of touched) {
+          for (const [v, bid, day] of touched) {
             if (v.type === "이동정비차") continue;
-            const cur = sim.get(rd0.start_date + "|" + v.id); if (!cur || cur.stops[0] !== bid) continue;
+            const cur = sim.get(day + "|" + v.id); if (!cur || cur.stops[0] !== bid) continue;
             const a = allocOf(v.org, bid), cap = a ? (v.type === "제설차" ? a.truck : a.blower) : 0;
-            const n = [...sim.values()].filter(x => { const y = db.vehicles.find(z => z.id === x.vehicle_id); return x.date === rd0.start_date && x.stops[0] === bid && y && y.org === v.org && y.type === v.type; }).length;
+            const n = [...sim.values()].filter(x => { const y = db.vehicles.find(z => z.id === x.vehicle_id); return x.date === day && x.stops[0] === bid && y && y.org === v.org && y.type === v.type; }).length;
             if (n > cap) return "SA002";
           }
           return null;

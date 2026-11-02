@@ -173,7 +173,7 @@ def t_permissions_equip_own(p):
     p.select_option("[data-vs=V013]", "M"); p.wait_for_timeout(150); confirm_fleet(p); check("확정했습니다" in toast(p) and ev(p, "stOf(S.round, 'V013').status") == "M", toast(p))
     check(route(p, "V014", day(p, 0)) == ["양양"], "지원장비가 지원 여부를 바꿔도 경로는 그대로(경로는 관리자)")
     ev(p, f"S.draft.set(rk('{day(p, 3)}', 'V014'), {{ stops: ['{bid(p, '양양')}'], revised: false, times: [null] }}), updateSavebars()"); confirm_fleet(p)   # 화면을 우회해 경로를 보내도 서버가 막음
-    check("지원일 1" in toast(p), toast(p))      # 마이그레이션 43: 기계화부는 지원일 1의 지사 한 곳만(그 밖의 날은 관리자)
+    check("배정하지 않은 지사" in toast(p), toast(p))      # 2026-11-02(마이그레이션 53): 모든 지원일을 고르지만, 관리자가 배정한 지사만 — 충북은 양양을 배정받지 않음
     as_user(p, "br1"); tab(p, "fleet")
     check(p.locator("#eqTable select, #eqTable input:enabled, #vehAdd, #fleetReset").count() == 0 and not p.locator("#save-fleet").is_visible(), "지사는 기관별 장비에서 아무것도 못 고침")
 
@@ -820,7 +820,10 @@ def t_allocation(p):
     # ③ 서울경기 기계화부: 지원일 1 칸에서 배정받은 지사 중에 고름(남은 대수 표시, 찬 지사는 못 고름)
     as_user(p, "eq-sg"); tab(p, "fleet")
     sel = f"select[data-fk='ra:{d0}:V003']"
-    check(p.locator(sel).count() == 1 and p.locator(f"select[data-fk='ra:{day(p, 1)}:V003']").count() == 0 and p.locator("select[data-rv]").count() == 0, "지원일 1 칸만 고를 수 있음(둘째 날부터는 보기만)")
+    sel2 = f"select[data-fk='ra:{day(p, 1)}:V003']"
+    check(p.locator(sel).count() == 1 and p.locator(sel2).count() == 1 and p.locator("select[data-rv]").count() == 0, "지원일 1·2… 모두 고를 수 있음(2026-11-02, 관리자용 지사 목록은 없음)")
+    o2 = p.locator(sel2 + " option").all_inner_texts()
+    check("지원 불가(이날부터)" in o2 and "지원 불가(이날부터)" not in p.locator(sel + " option").all_inner_texts() and any(x.startswith("대관령 (") for x in o2), f"지원일 2: 배정 지사(그날 대수) + 지원 불가: {o2}")
     opts = [(o.inner_text(), o.get_attribute("value"), o.is_disabled()) for o in p.locator(sel + " option").all()]
     check(("대관령 (3/2)", dg, False) in opts and ("양양 (2/2)", yy, True) in opts and ("엄정 (1/1)", ej, True) in opts and cc not in [o[1] for o in opts], f"배정받은 지사만, 찬 지사는 못 고름: {opts}")
     check(p.locator(f"select[data-fk='ra:{d0}:V004']").count() == 0, "지원이 아닌 장비(미정)는 고를 수 없음")
@@ -829,11 +832,13 @@ def t_allocation(p):
     check(route(p, "V003", d0) == [] and "대관령 (2/2)" in p.locator(f"select[data-fk='ra:{d0}:V002']").inner_text(), "하나를 지우면 다른 칸의 남은 대수도 바뀜")
     confirm_fleet(p); check("확정했습니다" in toast(p) and ev(p, f"S.routes.has(rk('{d0}', 'V003'))") is False, toast(p))
     check(p.locator(cell("V002") + " .al-flag").count() == 0 and "지정 완료" in p.locator("#orgGrid [data-alorg='서울경기']").inner_text(), "초과가 풀리고 8대 모두 지정 완료: " + p.locator("#orgGrid [data-alorg='서울경기']").inner_text())
-    # 화면을 우회해 보내도 서버 규칙이 막음: 대수 넘김 / 배정 없는 지사 / 둘째 날
+    # 화면을 우회해 보내도 서버 규칙이 막음: 대수 넘김 / 배정 없는 지사 / 둘째 날도 그날 대수로
     put = lambda vid, d, b: ev(p, f"S.draft.set(rk('{d}', '{vid}'), {{ stops: ['{b}'], revised: false, times: [null] }}), updateSavebars()")
     put("V003", d0, dg); confirm_fleet(p); check("배정받은 대수보다" in toast(p), "대수 넘김: " + toast(p))
     put("V003", d0, cc); confirm_fleet(p); check("배정하지 않은 지사" in toast(p), "배정 없는 지사: " + toast(p))
-    ev(p, "S.draft.clear()"); put("V003", day(p, 1), yy); confirm_fleet(p); check("지원일 1" in toast(p), "둘째 날: " + toast(p))
+    ev(p, "S.draft.clear()"); used = ev(p, f"allocUsed('서울경기', '제설차', '{yy}', '{day(p, 1)}')"); cap = ev(p, f"allocCap('서울경기', '제설차', '{yy}')")
+    put("V003", day(p, 1), yy); confirm_fleet(p)                      # 2026-11-02: 둘째 날도 고를 수 있지만 대수는 '그날' 기준으로 셈
+    check(("배정받은 대수보다" in toast(p)) == (used >= cap), f"둘째 날: 그날 양양 {used}/{cap}대 — " + toast(p))
     ev(p, "S.draft.clear()"); put("V005", d0, ej); put("V007", d0, yy); confirm_fleet(p)
     check("확정했습니다" in toast(p) and route(p, "V005", d0) == ["엄정"] and route(p, "V007", d0) == ["양양"], "한 번의 확정 안에서 서로 바꾸기는 됨: " + toast(p))
     check(p.locator(f"select[data-fk='ra:{d0}:V001']").count() == 1, "V001(한 곳·최초 지원)도 고를 수 있음")
@@ -972,7 +977,9 @@ def t_pool_vehicles(p):
     check(vr(v1).locator("[data-vp], [data-vr], [data-vdel]").count() == 3 and p.locator("#eqTable select[data-rv]").count() == 0 and vr("V001").locator("input:enabled, select").count() == 0, "자기 장비만 고칠 수 있고 관리자용 지사 목록은 없음")
     ra = f"select[data-ra='{v1}'][data-rd='{d0}']"
     opts = [o for o in ev(p, f"[...document.querySelectorAll(\"{ra} option\")].map(o => o.value)") if o and o != "__del"]
-    check(opts == [dg] and p.locator(f"select[data-ra='{v1}'][data-rd='{day(p, 1)}']").count() == 0, f"첫날만, 배정받은 지사(대관령)만 고름(자기 지사 인천 없음): {opts}")
+    ra2 = f"select[data-ra='{v1}'][data-rd='{day(p, 1)}']"
+    opts2 = [o for o in ev(p, f"[...document.querySelectorAll(\"{ra2} option\")].map(o => o.value)") if o and o != "__del"]
+    check(opts == [dg] and opts2 == [dg], f"지원일 1·2 모두, 배정받은 지사(대관령)만 고름(자기 지사 인천·지원 불가 없음, 2026-11-02): {opts} {opts2}")
     ti = f"input[data-fk='t:{d0}:{v1}:0']"; p.fill(ti, "0830"); p.press(ti, "Tab"); p.wait_for_timeout(150); confirm_fleet(p)
     check("확정했습니다" in toast(p) and ev(p, f"recOf('{d0}', '{v1}').times[0]") == "08:30", "지사: 도착 예상 시각 — " + toast(p))
     check(ev(p, f"Api.saveFleet([], [{{ date: '{d0}', vehicle_id: '{v1}', stops: ['{yy}'], revised: false, times: null }}], S.round, []).then(r => r.code)") == "SA001", "서버: 배정받지 않은 지사로는 거절")

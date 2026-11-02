@@ -152,7 +152,9 @@ const orgHasAlloc = org => [...S.alloc.keys()].some(k => k.startsWith(org + "|")
 // 저장된 배정 대수. 이동정비차는 배정하지 않으므로 '배정받은 지사이면 1 이상'
 const allocCap = (org, type, bid) => { const a = S.alloc.get(ak(org, bid)); return !a ? 0 : type === "이동정비차" ? a.truck + a.blower : a[AF[type]] || 0; };
 const day1Stop = vid => { const r = curRound(); return r ? effRec(r.start_date, vid).stops[0] || null : null; };   // 지원일 1(기준일자 첫날)의 첫 지사
-const allocUsed = (org, type, bid) => S.vehicles.filter(v => v.org === org && v.type === type && shownIn(v, curRound()) && day1Stop(v.id) === bid).length;
+const stopOn = (d, vid) => effRec(d, vid).stops[0] || null;                                   // 그날의 첫 지사
+// 그 지사로 보낸 대수(그날 기준, 날짜를 안 주면 지원일 1). 2026-11-02: 기계화부·지사도 기준일자의 모든 지원일을 고르므로 날마다 셈
+const allocUsed = (org, type, bid, d) => { const r = curRound(), day = d || (r && r.start_date); return S.vehicles.filter(v => v.org === org && v.type === type && shownIn(v, r) && day && stopOn(day, v.id) === bid).length; };
 const allocBranches = (org, type) => S.order.filter(b => allocCap(org, type, b.id) > 0);
 // 배정 초과 표시: 그 기관에 배정이 있는 기준일자에서만(배정을 쓰지 않는 기준일자는 예전처럼 아무 표시 없음). "over" 대수 넘음 / "none" 배정 없는 지사
 const allocFlag = (v, bid) => { if (!bid || !orgHasAlloc(v.org)) return ""; const cap = allocCap(v.org, v.type, bid); return cap === 0 ? "none" : v.type !== "이동정비차" && allocUsed(v.org, v.type, bid) > cap ? "over" : ""; };
@@ -818,12 +820,14 @@ function slotCell(v, d, ed, confirmed) {
   const flag = d === cr.start_date ? flagTag(allocFlag(v, stops[0])) : "";       // 지원일 1: 관리자 배정을 넘겼거나 배정 없는 지사
   if (!ed) {                     // 지원장비(기계화부) 계정: 자기 기관 장비의 도착 예상 시각·지원 불가(지원일 2부터) + 지원일 1의 지사 한 곳(배정받은 지사 중, 마이그레이션 43)
     const timeEd = routeOwn(v);                                       // 예전 수준: 자기 기관(지사는 자기 지사 지역본부) 장비만 — '모든 기관' 권한이 있어도 지원일 칸은 자기 기관만
-    if (timeEd && orgHasAlloc(v.org) && d === cr.start_date && st.status === "O" && (!stops.length || (stops.length === 1 && !rec.revised))) {     // 지사도 자기 지사 지역본부 장비를(2026-11-02)
+    // 2026-11-02: 지원일 1만이 아니라 관리자가 정한 기준일자의 모든 지원일(govRound 가 지금 기준일자인 날)에서 하루 한 곳씩
+    if (timeEd && orgHasAlloc(v.org) && st.status === "O" && (!stops.length || (stops.length === 1 && !rec.revised))) {     // 지사도 자기 지사 지역본부 장비를(2026-11-02)
       const cur = stops[0] || "", list = allocBranches(v.org, v.type).filter(b => b.id !== v.home_branch), ids = new Set(list.map(b => b.id)), free = v.type === "이동정비차";
-      const full = b => !free && b.id !== cur && allocUsed(v.org, v.type, b.id) >= allocCap(v.org, v.type, b.id);
+      const full = b => !free && b.id !== cur && allocUsed(v.org, v.type, b.id, d) >= allocCap(v.org, v.type, b.id);
       const opts = `<option value="">${list.length ? "지사 선택" : "배정받은 지사 없음"}</option>` +
-        list.map(b => `<option value="${b.id}"${cur === b.id ? " selected" : ""}${full(b) ? " disabled" : ""}>${esc(b.name)}${free ? "" : ` (${allocUsed(v.org, v.type, b.id)}/${allocCap(v.org, v.type, b.id)})`}</option>`).join("") +
-        (cur && !ids.has(cur) ? `<option value="${esc(cur)}" selected>${esc(bn(cur))} (배정 없음)</option>` : "") + (cur ? `<option value="__del">지우기</option>` : "");
+        list.map(b => `<option value="${b.id}"${cur === b.id ? " selected" : ""}${full(b) ? " disabled" : ""}>${esc(b.name)}${free ? "" : ` (${allocUsed(v.org, v.type, b.id, d)}/${allocCap(v.org, v.type, b.id)})`}</option>`).join("") +
+        (cur && !ids.has(cur) ? `<option value="${esc(cur)}" selected>${esc(bn(cur))} (배정 없음)</option>` : "") +
+        (later && canVeh(v) && !isPool(v) ? `<option value="__off">지원 불가(이날부터)</option>` : "") + (cur ? `<option value="__del">지우기</option>` : "");
       return `<div class="slot${changed ? " changed" : ""}"${hvA(t)}><div class="slot-x"><select class="ci" data-ra="${vid}" data-rd="${d}" data-fk="ra:${d}:${vid}" aria-label="${esc(vname(v))} ${esc(fmtMD(d))} 피지원 지사(배정받은 지사 중)">${opts}</select>${cur ? tIn(rec.times[0], 0, false, false) : ""}</div>${flag}</div>`;
     }
     if (!stops.length) return offSel ? `<div class="slot">${offSel}</div>` : `<span class="muted">-</span>`;
@@ -1410,8 +1414,9 @@ document.addEventListener("change", async e => {
     if (t.value === "__off") { setStat(vid, { off_from: d }); return patchVehicle(vid); }          // 지원 불가(이날부터): 이날·뒷날 칸이 지원 불가로
     S.extraStop.delete(rk(d, vid)); setRoute(d, vid, readCell(vid, d)); return patchCell(vid, d);
   }
-  if (t.dataset.ra) {                       // 기계화부: 지원일 1의 피지원 지사(배정받은 지사 중 한 곳). 다른 칸의 남은 대수 표시도 바뀌므로 표를 다시 그림
-    const vid = t.dataset.ra, d = t.dataset.rd, v = vehById(vid), cr = curRound(); if (!v || !routeOwn(v) || !cr || d !== cr.start_date) return refresh();
+  if (t.dataset.ra) {                       // 기계화부·지사: 그 지원일의 피지원 지사(배정받은 지사 중 한 곳, 2026-11-02 모든 지원일). 다른 칸의 남은 대수 표시도 바뀌므로 표를 다시 그림
+    const vid = t.dataset.ra, d = t.dataset.rd, v = vehById(vid), cr = curRound(), g = govRound(d); if (!v || !routeOwn(v) || !cr || !g || g.id !== cr.id) return refresh();
+    if (t.value === "__off") { if (!canVeh(v) || isPool(v) || d <= cr.start_date) return refresh(); setStat(vid, { off_from: d }); return patchVehicle(vid); }   // 지원일 2부터: 지원 불가(이날부터)
     const rec = recOf(d, vid), val = t.value === "__del" ? "" : t.value;
     setRoute(d, vid, val ? { stops: [val], times: [rec.stops[0] === val ? rec.times[0] || null : null], revised: false } : EMPTY);
     keepFocus(() => renderFleet()); return afterAnyChange();

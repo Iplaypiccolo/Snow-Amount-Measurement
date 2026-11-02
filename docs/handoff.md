@@ -44,6 +44,14 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-02 · 커밋 (이 기록 커밋 하나) · 기계화부·지사도 모든 지원일 선택(migration 53) (Claude 채팅 작업)
+- 사용자: "기계화부·지사는 지원일 1만 고를 수 있음 → 관리자가 정한 지원일 전부", "지사는 지원일 2부터 목록이 아예 없음".
+- 화면 `slotCell`: `data-ra` 목록을 기준일자의 모든 지원일에(하루 한 곳, 배정 지사, 그날 대수 `allocUsed(...,d)`), 지원일 2부터 '지원 불가(이날부터)'(기계화부 장비). 샘플 `api.js` 도 같게.
+- **서버(사용자 승인 후 적용)**: migration 53 — `vehicle_routes_guard` 첫날 제한 → 지원일 전체, `route_alloc_cap` 날마다 셈. 적용 전 되돌리기 시험 16항목 의도대로(`supabase/tests/route_alldays_test.sql`), 적용 후 함수 본문 확인.
+- 시험 고침: `t_allocation`·`t_pool_vehicles`·`t_permissions_equip_own`. 전체 시험 331/331.
+- 못 한 것: 실제 사이트에서 기계화부·지사 계정으로 지원일 2 선택·저장.
+— ✍ Claude 채팅 작성
+
 ### 2026-11-02 · 커밋 (이 기록 커밋 하나) · 비밀번호 8자+영문·숫자 · 본부 [일괄 저장]으로 지사저장 → 본부저장 (Claude 채팅 작업)
 - 사용자가 Supabase 대시보드를 최소 8자·Letters and digits 로 정함 → `admin/policy.js`·`admin.js`·`account-admin/core.mjs` 같게, **Edge Function v7 배포**. 시험 고침(`test_account_admin`·`test_admin_policy_parity`·`test_admin_ui`).
 - 본부 계정의 본부 줄 [일괄 저장] 대상에 **지사가 저장한 줄(지사저장)도** 포함(`bulkOk`) → 고치지 않아도 한 번에 본부저장. 다 바꾸면 '모두 본부저장'. 새 시험 `t_hq_bulk_marks_branch_saved`. 서버 변경 없음.
