@@ -44,6 +44,13 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-02 · 커밋 (이 푸시의 커밋 둘) · 지원일 칸은 관리자만 — 새 권한 equip.route (Claude 채팅 작업)
+- 사용자: 지원장비 아이디 4개에 '모든 기관 장비…'(`equip.edit.all`)를 줬는데(필요) 지원일 칸까지 열림 → 지원일 칸만 관리자. 지원장비는 **예전 수준**(자기 기관 장비 첫날 한 곳·도착 시각·지원 불가)으로(사용자 선택). Claude Code 연결이 안 돼 채팅에서 작업, 최신 `a46b926` 기준으로 고침.
+- 화면(`equipment/js/app.js`): `canRoute()` = `equip.route`(지원일 칸 전부·지원일 1·칸 수·초기화·최초/수정본), 새 `canAllVeh()` = `equip.edit.all`(장비 추가 기관 목록·삭제·숨기기·숨김 취소), 새 `routeOwn(v)` = 예전 수준으로 지원일 칸을 고칠 장비(자기 기관 / 자기 지사 지역본부). `api.js` 샘플 모드·`tests/_sb_mock.py` 같은 규칙. 시험 `t_route_perm_admin_only` 추가 → `tests/test_equipment.py` 61/61.
+- **서버 migration 49(`20261102_49_route_perm.sql`)는 아직 적용 안 함**(권한 규칙 변경이라 사용자 확인 대기). 새 권한 `equip.route` + `vehicle_routes_guard`·`route_alloc_cap`·`save_fleet` 의 관리자 검사를 `equip.edit.all` → `equip.route` + `vehicle_routes` RLS 3개. 시험: `supabase/tests/route_perm_test.sql`, 롤백 합본 `route_perm_dryrun.sql`(서버에서 아직 안 돌림 — execute_sql 승인 창이 만료됨).
+- 적용 전에는 화면만 막히고 서버는 예전대로(지원장비가 화면을 우회하면 경로를 넣을 수 있음) → **적용 필요**. 적용 뒤 확인: `permissions` 에 equip.route, 지원장비 계정으로 지원일 칸 화면.
+— ✍ Claude 채팅 작성
+
 ### 2026-11-01 · 커밋 (이 기록 커밋 하나) · 지사별 요청·편성: 아래 저장 막대 없앰, 본부 [일괄 저장]
 - 사용자: "하단 되돌리기 무의미, 저장은 지사별 우측 [저장]만 — 본부는 일괄확정처럼 일괄저장 버튼".
 - `equipment/js/app.js`: `#save-branch` 늘 숨김(HTML 은 그대로 — UI_VERSION 안 올림). `canRowSave`(관리자도 고친 줄 [저장]), `bulkSaveCell`·`saveHq`(본부 줄 저장 칸 [일괄 저장] / '모두 저장'), 보기 줄 오른쪽 `#brDirty`(저장하지 않은 지사 N곳). `setCell`/`cellH`: 내용이 바뀔 때만 다시 그림 — 값 입력 직후 [저장] 클릭이 사라지던 문제 고침.
