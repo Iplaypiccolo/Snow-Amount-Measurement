@@ -1108,7 +1108,9 @@ async function saveBranchRows(ids, extra, msg) {
   if (S.reqsBad) return toast("요청·편성 자료를 불러오지 못해 저장할 수 없습니다. [다시 읽기]를 눌러 주세요.", true);
   if (S.preview) return toast("미리보기에서는 저장할 수 없습니다. '내 아이디'로 돌아오세요.", true);
   const list = ids.map(b => { const f = { ...(S.rdraft.get(b) || {}), ...(extra || {}) }, o = { branch_id: b };
-    Object.entries(f).forEach(([k, v]) => { o[k] = k === "arrive_at" ? (v ? new Date(v).toISOString() : null) : k === "reason" ? (v || "") : v; }); return { o, f }; });
+    Object.entries(f).forEach(([k, v]) => { o[k] = k === "arrive_at" ? (v ? new Date(v).toISOString() : null) : k === "reason" ? (v || "") : v; });
+    if (extra && extra.confirmed === true) o.expect_at = (S.reqs[b] || {}).updated_at ?? null;   // 확정: 내가 본 값 그대로일 때만(서버가 수정 시각을 비교, 마이그레이션 56)
+    return { o, f }; });
   if (!list.length) return;
   busy("branch", true);
   const r = await Api.saveRequests(S.round, list.map(x => x.o));
@@ -1118,10 +1120,17 @@ async function saveBranchRows(ids, extra, msg) {
     const rest = done.length ? ids.length - done.length : 0;        // 묶음 저장은 전부 저장되거나 전부 취소됨(한 줄이 막히면 나머지도 저장 안 됨)
     return toast(`${(done.length ? done : ids).map(bn).join(", ")} 지사는 이미 확정되어 고칠 수 없습니다. 확정이 취소된 뒤에 고쳐 주세요.` + (rest ? ` 나머지 ${rest}개 지사도 저장되지 않았으니 다시 눌러 주세요.` : ""), true);
   }
+  if (!r.ok && r.code === "SA007") {                    // 그사이 값이 바뀜 → 새 값을 다시 읽어 보여 줌(내가 고친 값은 그대로, 확정은 다시 눌러야 함). 묶음이면 전부 취소됨
+    const seen = ids.map(id => (S.reqs[id] || {}).updated_at ?? null);
+    await loadReqs(); refresh(); if (S.reqsBad) return;
+    const moved = ids.filter((id, i) => ((S.reqs[id] || {}).updated_at ?? null) !== seen[i]), rest = moved.length ? ids.length - moved.length : 0;
+    return toast(`${(moved.length ? moved : ids).map(bn).join(", ")} 지사의 ${r.message}` + (rest ? ` 나머지 ${rest}개 지사도 확정되지 않았습니다.` : ""), true);
+  }
   if (!r.ok) return toast(r.message, true);
   // 저장 = 누가 저장했는지 남김(지사·본부·관리자 모두, 2026-11-02). 확정·확정 취소만 한 줄(고친 값 없음)은 남기지 않음 — 서버도 같은 규칙(마이그레이션 50)
   const now = new Date().toISOString(), mark = f => !("confirmed" in f) || Object.keys(f).some(k => k !== "confirmed") ? { saved_at: now, saved_lv: myLv() } : {};
-  list.forEach(({ o, f }) => { S.reqs[o.branch_id] = { ...REQ_DEF, round_id: S.round, branch_id: o.branch_id, ...(S.reqs[o.branch_id] || {}), ...f, ...mark(f) }; S.rdraft.delete(o.branch_id); });
+  const vers = (r.result && r.result.versions) || {};   // 저장 뒤 수정 시각(마이그레이션 56) — 이걸 알아야 내 저장 뒤의 [확정]이 거절되지 않음
+  list.forEach(({ o, f }) => { S.reqs[o.branch_id] = { ...REQ_DEF, round_id: S.round, branch_id: o.branch_id, ...(S.reqs[o.branch_id] || {}), ...f, ...mark(f), updated_at: vers[o.branch_id] ?? (S.reqs[o.branch_id] || {}).updated_at }; S.rdraft.delete(o.branch_id); });
   if (extra && "confirmed" in extra) {                // 확정하면 서버가 그 순간 대설 특보·예보를 남김 → 다시 읽어 표시
     await loadReqs();
     if (extra.confirmed && ids.length === 1) { const f = fcOf(ids[0]); msg += ` (대설특보: ${wlabel(warnOf(ids[0]).level, "대설")}, 적설 ${f && f.snow != null ? fmtCm(f.snow) + "cm" : "없음"}·강수 ${f && f.pcp != null ? fmtCm(f.pcp) + "mm" : "없음"}·최저 ${f && f.tmin != null ? fmtTmp(f.tmin) + "℃" : "없음"})`; }

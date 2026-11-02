@@ -1147,6 +1147,32 @@ def t_reqs_read_fail(p):
     tab(p, "branch"); ev(p, "(Api.requests = window.__rq, null)"); p.click("#branchTable [data-reload]"); p.wait_for_timeout(400)
     check(p.locator("#confirmAll").count() == 1 and ev(p, "Object.keys(S.reqs).length") == n0 and not ev(p, "S.reqsBad"), "다시 읽기로 복구")
 
+def t_confirm_stale(p):
+    """2026-11-03(마이그레이션 56): 화면을 연 뒤 다른 사람이 값을 고치면 [확정]은 거절 → 새 값을 다시 읽어 보여 줌, 다시 누르면 확정. 일괄 확정은 전부 취소. 내가 방금 저장한 줄의 확정은 거절 안 됨"""
+    tab(p, "branch"); ch, dg = bid(p, "춘천"), bid(p, "대관령")
+    other = lambda b, n: ev(p, f"Api.saveRequests(S.round, [{{ branch_id: '{b}', req_truck: {n} }}]).then(r => r.ok)")     # 다른 사람의 저장: 서버만 바뀌고 이 화면은 그대로
+    check(ev(p, f"rval('{ch}', 'req_truck')") != 7, "시작 값"); check(other(ch, 7), "다른 사람이 저장")
+    p.click(f"[data-confirm={ch}]"); p.wait_for_timeout(300)
+    check("춘천" in toast(p) and "이번 확정은 취소" in toast(p), "못 본 값 확정 거절: " + toast(p))
+    check(ev(p, f"rval('{ch}', 'req_truck')") == 7 and not ev(p, f"isConf('{ch}')"), "새 값을 다시 읽어 보여 줌, 확정 안 됨")
+    p.click(f"[data-confirm={ch}]"); p.wait_for_timeout(300); check(ev(p, f"isConf('{ch}')"), "새 값을 본 뒤 다시 누르면 확정")
+    p.click(f"[data-unconfirm={ch}]"); p.wait_for_timeout(300); check(not ev(p, f"isConf('{ch}')"), "취소는 시각 확인 없이 됨")
+    # 내가 저장한 직후의 확정, 고치던 값 유지
+    i = f"[data-rq={ch}][data-f=req_truck]"; p.fill(i, "8"); p.press(i, "Tab"); p.wait_for_timeout(100)
+    check(other(ch, 9), "다른 사람이 또 저장"); p.click(f"[data-confirm={ch}]"); p.wait_for_timeout(300)
+    check("이번 확정은 취소" in toast(p) and ev(p, f"rval('{ch}', 'req_truck')") == 8 and ev(p, f"rbase('{ch}', 'req_truck')") == 9, "거절돼도 내가 고치던 값은 남고 서버 값은 새로 읽음")
+    ev(p, f"saveBranchRows(['{ch}'], null, '저장')"); p.wait_for_timeout(300)
+    check(ev(p, f"rbase('{ch}', 'req_truck')") == 8 and ev(p, f"!!S.reqs['{ch}'].updated_at"), "저장하면 수정 시각을 받음")
+    p.click(f"[data-confirm={ch}]"); p.wait_for_timeout(300); check(ev(p, f"isConf('{ch}')"), "내가 방금 저장한 줄의 확정은 거절 안 됨: " + toast(p))
+    p.click(f"[data-unconfirm={ch}]"); p.wait_for_timeout(300)
+    # 일괄 확정: 한 지사라도 바뀌었으면 전부 취소, 다시 누르면 전부 확정
+    if ev(p, f"isConf('{dg}')"): p.click(f"[data-unconfirm={dg}]"); p.wait_for_timeout(300)
+    check(other(dg, 5), "다른 사람이 대관령 저장"); n = ev(p, "S.order.filter(b => isConf(b.id)).length")
+    p.click("#confirmAll"); p.wait_for_timeout(300)
+    check("대관령" in toast(p) and "이번 확정은 취소" in toast(p) and "확정되지 않았습니다" in toast(p), "일괄 확정 거절: " + toast(p))
+    check(ev(p, "S.order.filter(b => isConf(b.id)).length") == n and ev(p, f"rval('{dg}', 'req_truck')") == 5, "한 지사도 확정 안 됨, 새 값 보임")
+    p.click("#confirmAll"); p.wait_for_timeout(300); check(p.locator("#confirmAll").count() == 0, "다시 누르면 전부 확정")
+
 def t_removed_hints(p):
     """2026-11-03: 강원본부 지원장비·기관별 배정의 긴 설명 문구 삭제"""
     tab(p, "gwteam"); check("직접 보내는" not in p.locator("#teamRound").inner_text() and p.locator("#roundSelTeam").count() == 1, "강원본부 지원장비 설명 없음")
@@ -1354,7 +1380,7 @@ def t_route_perm_admin_only(p):
     check("권한이 없습니다" in toast(p), "화면을 우회해 다른 기관 경로를 보내도 거절: " + toast(p))
     as_user(p, "admin1"); tab(p, "fleet"); check(p.locator("#eqTable select[data-rv]").count() > 0 and p.locator("#day1In").count() == 1, "관리자는 지원일 칸 전부")
 
-TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_reqs_read_fail, t_removed_hints, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_reqs_read_fail, t_confirm_stale, t_removed_hints, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
@@ -1434,6 +1460,14 @@ def t_server_lock_and_confirm_all(b):
     p.click(f"[data-confirm-hq='{hq}']"); p.wait_for_timeout(500)
     saved = {r["branch_id"] for r in m.round_reqs if r.get("confirmed")}
     check(set(ids) <= saved and "확정했습니다" in toast(p), f"본부 일괄 확정 = 요청 없던 지사까지 서버에 저장: {sorted(set(ids) - saved)}")
+    # 마이그레이션 56: 확정 때 내가 본 수정 시각을 보냄, 그사이 다른 사람이 저장했으면 거절 → 새 값을 읽음(서버 오류 코드 경로)
+    o = ev(p, "S.order.find(x => !isConf(x.id) && !S.reqs[x.id] && !(S.hqById[x.hq_id] || {}).is_private).id")
+    m.round_reqs.append({"round_id": 1, "branch_id": o, "req_truck": 4, "req_blower": 0, "assigned_truck": 0, "assigned_blower": 0, "confirmed": False, "updated_at": "2026-11-03T01:00:00.123456+00:00"})
+    p.click(f"[data-confirm='{o}']"); p.wait_for_timeout(500)
+    _, body = m.eq_calls[-1]; check(body["p_rows"][0].get("expect_at", "x") is None, f"빈 줄을 봤으면 null 을 보냄: {body}")
+    check("이번 확정은 취소" in toast(p) and ev(p, f"rval('{o}', 'req_truck')") == 4 and not ev(p, f"isConf('{o}')"), "못 본 값 확정 거절: " + toast(p))
+    p.click(f"[data-confirm='{o}']"); p.wait_for_timeout(500)
+    _, body = m.eq_calls[-1]; check(body["p_rows"][0].get("expect_at") == "2026-11-03T01:00:00.123456+00:00" and ev(p, f"isConf('{o}')"), f"다시 누르면 새 시각으로 확정: {body}")
     p.close()
     # 지사 화면: 관리자가 확정하기 전에 열어 둔 화면(아직 확정 전으로 보임)에서 고치고 저장
     m2 = Mock(); m2.users["exchungju"]["profile"]["must_change"] = False; m2.round_reqs[0]["confirmed"] = False

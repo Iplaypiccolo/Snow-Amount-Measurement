@@ -44,6 +44,12 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 못 본 값 확정 막기, 첫 저장 충돌 해결(마이그레이션 56 — 서버 적용 완료)
+- 사용자 확인(SQL 미리 보여 줌) 뒤 `save_requests` 교체. 표·권한 규칙·트리거는 그대로. `supabase/migrations/20261103_56_save_requests_expect.sql`, 시험 `supabase/tests/save_requests_expect_test.sql`(되돌림 시험 26개 통과. 적용 전 예전 함수는 같은 충돌 흉내에서 23505 확인).
+- `equipment/js/app.js saveBranchRows`: 확정 때 `expect_at` 전송, SA007 이면 다시 읽고 안내(고치던 값 유지), 저장 뒤 `versions` 를 `S.reqs[].updated_at` 에 반영. `equipment/js/api.js`: `updated_at` 읽기, SA007 문구, 샘플 모드 흉내. `tests/_sb_mock.py` 같은 흉내. 시험 `t_confirm_stale`.
+- 실제 두 접속이 동시에 누르는 시험은 하지 않음(줄 잠금으로 처리, 흉내 시험만 함). 200명 부하 시험·Pro 검토는 운영 전 과제로 남음.
+— ✍ Claude Code 작성
+
 ### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 일시 오류로 로그아웃 안 함, 자료 못 읽으면 표 숨김, 설명 문구 삭제
 - `auth/auth.js`: 토큰 갱신 429·5xx, 내 정보 조회 일시 오류는 세션을 지우지 않음(`BUSY_MSG`). 로그인 5xx 는 비밀번호 오류로 안내하지 않음.
 - `equipment/js/app.js`: `loadReqs` 실패 시 `S.reqsBad` — 요청·편성·배정 표 대신 [다시 읽기], `saveBranchRows` 막음. 묶음 저장 55000 안내에 '나머지도 저장 안 됨' 추가. 강원본부 지원장비·기관별 배정 설명 문구 삭제.

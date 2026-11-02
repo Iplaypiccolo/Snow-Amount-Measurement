@@ -22,7 +22,8 @@ const Api = (() => {
     "SA003": "지원일마다 피지원 지사 한 곳만 고를 수 있습니다(하루 여러 곳·수정본·관리자가 정한 경로는 관리자가 고칩니다).",
     // 지역본부 장비(마이그레이션 44)
     "SA004": "이 지사의 '타지사 지원 가능' 대수가 확정된 뒤에 장비를 등록할 수 있습니다.", "SA005": "지역본부 장비는 자기(출발) 지사로 보낼 수 없습니다.",
-    "SA006": "기관별 배정 합계는 그 지사의 편성 대수(제설차·제설기 각각)보다 많을 수 없습니다." };
+    "SA006": "기관별 배정 합계는 그 지사의 편성 대수(제설차·제설기 각각)보다 많을 수 없습니다.",
+    "SA007": "값이 방금 바뀌어 이번 확정은 취소했습니다. 새 값을 확인한 뒤 필요하면 다시 눌러 주세요." };
   const TEAM_ERR = { "42501": "강원본부 지원장비는 관리자와 강원본부 계정만 고칠 수 있습니다.", "23514": "다른 기준일자가 맡은 날짜이거나, 그날 지원 가능이 아닌 장비의 경로입니다. 새로고침(F5) 후 다시 확인해 주세요.", "22023": "저장할 내용이 없거나 기준일자가 없습니다." };
   const isTeamId = id => /^GW\d+$/.test(String(id || ""));
   const POOL = "지역본부", VCOLS = "id,org,type,plate,status,sort,active,blower_s,blower_l,hidden_after,round_id,home_branch,rented";
@@ -81,7 +82,7 @@ const Api = (() => {
       return SSAuth.authed("/rest/v1/rpc/save_gw_team", { method: "POST", body: { p_round: round, p_routes: routes, p_status: status } }).then(r => r.ok ? { ok: true, result: r.json } : fail(r, null, TEAM_ERR)).catch(NET);
     },
     requests(round) {
-      return SSAuth.rest(`round_requests?select=round_id,branch_id,req_truck,req_blower,assigned_truck,assigned_blower,offer_truck,saved_at,saved_lv,arrive_at,reason,confirmed,warn_level,warn_zones,warn_base,warn_at,warn_note,fc_snow,fc_pcp,fc_pop,fc_tmin,fc_tmin_at,fc_tmfc,fc_at,wx_manual,wx_snow,wx_pcp,wx_tmin,wx_tmin_at,wx_level,wx_fc,wx_ef&round_id=eq.${+round}`)
+      return SSAuth.rest(`round_requests?select=round_id,branch_id,req_truck,req_blower,assigned_truck,assigned_blower,offer_truck,saved_at,saved_lv,updated_at,arrive_at,reason,confirmed,warn_level,warn_zones,warn_base,warn_at,warn_note,fc_snow,fc_pcp,fc_pop,fc_tmin,fc_tmin_at,fc_tmfc,fc_at,wx_manual,wx_snow,wx_pcp,wx_tmin,wx_tmin_at,wx_level,wx_fc,wx_ef&round_id=eq.${+round}`)
         .then(r => r.ok ? { ok: true, rows: r.json } : fail(r, "요청을 불러오지 못했습니다.")).catch(NET);
     },
     allocations(round) {     // 기관별 배정(기준일자, 기관, 지사) → 제설차·제설기 대수
@@ -320,24 +321,29 @@ const Api = (() => {
         const br = id => db.branches.find(b => b.id === id);
         const ok = r => can("req.confirm") || (can("req.edit.own") && actor.branch_id === r.branch_id) || (can("req.edit.hq") && br(r.branch_id) && br(r.branch_id).hq_id === actor.hq_id);
         if (rows.some(r => !ok(r)) || (!can("req.confirm") && rows.some(r => "assigned_truck" in r || "assigned_blower" in r || "confirmed" in r))) return done({ ok: false, message: ERR["42501"] });
+        // 서버 흉내(마이그레이션 56): 확정 때 보낸 수정 시각이 지금과 다르면 전부 취소
+        const META = ["branch_id", "confirmed", "expect_at"];
+        if (rows.some(r => "expect_at" in r && (((db.requests.find(x => x.round_id === +round && x.branch_id === r.branch_id) || {}).updated_at ?? null) !== r.expect_at))) return done(err("SA007"));
         // 서버 트리거 흉내(마이그레이션 35): 확정한 줄은 확정 열 말고는 못 바꿈(취소하면서 바꾸는 것도)
-        const locked = r => { const c = db.requests.find(x => x.round_id === +round && x.branch_id === r.branch_id); return c && c.confirmed && Object.keys(r).some(k => k !== "branch_id" && k !== "confirmed" && JSON.stringify(r[k] ?? null) !== JSON.stringify(c[k] ?? null)); };
+        const locked = r => { const c = db.requests.find(x => x.round_id === +round && x.branch_id === r.branch_id); return c && c.confirmed && Object.keys(r).some(k => !META.includes(k) && JSON.stringify(r[k] ?? null) !== JSON.stringify(c[k] ?? null)); };
         if (rows.some(locked)) return done({ ok: false, message: ERR["55000"], code: "55000" });
         if (rows.some(r => "offer_truck" in r && !(r.offer_truck >= 0 && r.offer_truck <= 99))) return done(err("23514"));
+        const versions = {};
         rows.forEach(p => {
           let cur = db.requests.find(x => x.round_id === +round && x.branch_id === p.branch_id), from = {}, to = {};
           if (!cur) { cur = { round_id: +round, branch_id: p.branch_id, req_truck: 0, req_blower: 0, assigned_truck: 0, assigned_blower: 0, offer_truck: 0, arrive_at: null, reason: null, confirmed: false,
             wx_manual: false, wx_snow: null, wx_pcp: null, wx_tmin: null, wx_tmin_at: null, wx_level: null, wx_fc: null, wx_ef: null }; db.requests.push(cur); }
           const was = cur.confirmed;
-          Object.keys(p).filter(k => k !== "branch_id").forEach(k => { from[k] = cur[k]; to[k] = p[k]; cur[k] = p[k]; });
-          if (!("confirmed" in p) || Object.keys(p).some(k => k !== "branch_id" && k !== "confirmed")) Object.assign(cur, { saved_at: new Date().toISOString(), saved_lv: can("req.confirm") ? "admin" : can("req.edit.hq") ? "hq" : "branch" });   // 서버 흉내(마이그레이션 50): 누가 저장했는지
+          Object.keys(p).filter(k => k !== "branch_id" && k !== "expect_at").forEach(k => { from[k] = cur[k]; to[k] = p[k]; cur[k] = p[k]; });
+          versions[p.branch_id] = cur.updated_at = new Date().toISOString();
+          if (!("confirmed" in p) || Object.keys(p).some(k => !META.includes(k))) Object.assign(cur, { saved_at: new Date().toISOString(), saved_lv: can("req.confirm") ? "admin" : can("req.edit.hq") ? "hq" : "branch" });   // 서버 흉내(마이그레이션 50): 누가 저장했는지
           if (cur.confirmed && !was) followAssign(+round, cur);                         // 편성이 확정되면 배정이 따라감
           if (cur.confirmed && !was) { const w = warnStatus().branches[cur.branch_id]; Object.assign(cur, { warn_level: w ? w.level : null, warn_zones: w ? w.zones : [], warn_base: db.warnBase, warn_at: new Date().toISOString(), warn_note: null }); to.warn_level = cur.warn_level; }   // 서버 트리거 흉내: 확정 순간 특보 고정
           if (cur.confirmed && !was) { const f = db.forecast.find(x => x.branch_id === cur.branch_id); Object.assign(cur, { fc_snow: f ? f.max_snow_24h : null, fc_pcp: f ? f.max_pcp_24h : null, fc_pop: f && f.max_pop_24h != null ? f.max_pop_24h : null, fc_tmin: f ? f.min_tmp : null, fc_tmin_at: f ? f.min_tmp_at : null, fc_tmfc: f ? f.issued_at : null, fc_at: new Date().toISOString() }); }
           if (!cur.confirmed) Object.assign(cur, { warn_level: null, warn_zones: null, warn_base: null, warn_at: null, warn_note: null, fc_snow: null, fc_pcp: null, fc_pop: null, fc_tmin: null, fc_tmin_at: null, fc_tmfc: null, fc_at: null });
           log("수정", "round_requests", `round_requests:${round},${p.branch_id}`, from, to);
         });
-        return done({ ok: true });
+        return done({ ok: true, result: { rows: rows.length, versions } });
       },
       createRound(date) {
         if (!can("req.confirm")) return done({ ok: false, message: ERR["42501"] });
