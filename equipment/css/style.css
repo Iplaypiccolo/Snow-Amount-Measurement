@@ -747,13 +747,15 @@ table.eq.team { min-width: 720px; }
 /* ===== 1쪽 보고서 미리 보기(report.js, 2026-11-02) — 한글 양식 「신속대응팀 제설장비 지원 현황」 모양. 사이트 밝기와 상관없이 흰 종이 ===== */
 .rpt-btns { display: inline-flex; gap: 6px; margin-left: 10px; vertical-align: middle; }
 .sheet.wide { width: min(820px, 100%); }
-.rp-page { background: #fff; color: #000; border: 1px solid #ccc; box-shadow: 0 2px 10px rgba(0,0,0,.12); padding: 26px 30px; margin-top: 10px; font-family: "Malgun Gothic", "Pretendard", sans-serif; font-size: 13px; }
+.rp-wrap { width: 100%; overflow: hidden; margin-top: 10px; }   /* 종이를 화면 폭에 맞게 줄여 담는 틀(report.js fitPage) */
+.rp-page { --rp-fs: 13px; box-sizing: border-box; width: 794px; height: 1123px; overflow: hidden; transform-origin: top left; background: #fff; color: #000; border: 1px solid #ccc; box-shadow: 0 2px 10px rgba(0,0,0,.12); padding: 40px 45px; font-family: "Malgun Gothic", "Pretendard", sans-serif; font-size: 13px; }   /* A4(794×1123px) 고정 — 휴대폰에서도 같은 모양(줄여서 보임) */
 .rp-title { background: #d9d9d9; border-top: 3px double #000; border-bottom: 3px double #000; border-left: 1px solid #000; border-right: 1px solid #000; text-align: center; font-size: 24px; font-weight: 800; padding: 8px 0; letter-spacing: .02em; }
 .rp-date { text-align: right; margin: 8px 0 4px; font-size: 14px; }
-.rp-sum { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 15px; margin-bottom: 6px; }
+.rp-sum { display: flex; justify-content: space-between; gap: 10px; flex-wrap: nowrap; white-space: nowrap; font-size: 15px; margin-bottom: 6px; }
 .rp-sum .red { color: #e00; } .rp-cnt { font-weight: 700; }
 .rp-t { width: 100%; border-collapse: collapse; border: 2px solid #000; table-layout: fixed; }   /* 칸 폭 고정(colgroup, 워드와 같은 비율) */
 .rp-t th, .rp-t td { border: 1px solid #000; padding: 3px 6px; text-align: center; font-weight: 400; vertical-align: middle; }
+.rp-t tbody { font-size: var(--rp-fs); } .rp-t tbody th, .rp-t tbody td { padding-top: calc(var(--rp-fs) * .2); padding-bottom: calc(var(--rp-fs) * .2); }   /* 지사가 많으면 글자·줄을 줄여 한 장에 */
 .rp-t thead th { background: #f2f2f2; font-weight: 700; } .rp-t .rp-tot th { background: #ff0; font-weight: 700; border-bottom: 2px solid #000; }
 .rp-t tbody tr.in > * { border-top: 1px dotted #000; } .rp-t tbody tr.first > * { border-top: 2px solid #000; }
 .rp-t .rp-hq, .rp-t .rp-br { letter-spacing: .3em; white-space: nowrap; }

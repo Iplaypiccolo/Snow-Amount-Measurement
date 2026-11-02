@@ -113,12 +113,32 @@
     if(name === 'equip' && !frame.getAttribute('src')){ frame.setAttribute('src', frame.dataset.src); }
     if(name === 'equip'){ paintEq(); applyEqTab(); paintTheme(); if (window.SSGuide) SSGuide.auto('equip'); }   // 장비 지원을 처음 열면 그 페이지 사용법(지원 과정 그림)
     if(name === 'snow'){ setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, 50); } // 지도 크기 다시 맞춤
-    try{ history.replaceState(null, '', name === 'equip' ? '#equip' : location.pathname + location.search); }catch(e){}
   }
-  btns.forEach(function(b){ b.addEventListener('click', function(){ show(b.dataset.page); }); });
+  /* 뒤로가기 = 이전 탭(2026-11-02 사용자 요청). 사람이 누른 탭 바꾸기(위쪽 강설량 측정/장비 지원, 강설량 측정 탭, 장비 지원 탭)마다
+     브라우저 기록에 한 칸을 남기고, 뒤로가기(popstate)가 오면 그 칸의 화면·탭으로 되돌림. 코드가 대신 누른 클릭(isTrusted=false)은 남기지 않음 */
+  var navLock = false;
+  function snowTab(){ var a = document.querySelector('.tab-btn.active'); return a ? a.dataset.tab : null; }
+  function navState(){ return { ss: 1, sp: shell.dataset.page || 'snow', st: snowTab(), et: eqTab }; }
+  function sameNav(a, b){ return !!a && !!b && a.sp === b.sp && a.st === b.st && (a.sp !== 'equip' || a.et === b.et); }
+  function pushNav(){
+    if (navLock) return;
+    var s = navState(); if (sameNav(history.state, s)) return;
+    try{ history.pushState(s, '', s.sp === 'equip' ? '#equip' : location.pathname + location.search); }catch(e){}
+  }
+  window.addEventListener('popstate', function(e){
+    var s = e.state && e.state.ss ? e.state : (e.state && e.state.ssSheet ? null : { sp: 'snow', st: 'forecast' });   // 처음 칸(기록 없음) = 첫 화면
+    if (!s) return;
+    navLock = true;
+    try{
+      if (s.sp === 'equip' && document.body.classList.contains('authed')) { eqTab = s.et || 'move'; show('equip'); }
+      else { show('snow'); var t = s.st && document.querySelector('.tab-btn[data-tab="' + s.st + '"]'); if (t && !t.classList.contains('active')) t.click(); }
+    } finally { navLock = false; }
+  });
+  btns.forEach(function(b){ b.addEventListener('click', function(e){ show(b.dataset.page); if (e.isTrusted) pushNav(); }); });
   // 강설량 측정 메뉴: 화면 바꾸기는 app.js 가, 여기서는 그 페이지를 보여 주기만
-  document.querySelectorAll('.tab-btn').forEach(function(b){ b.addEventListener('click', function(){ if (shell.dataset.page !== 'snow') show('snow'); }); });
-  eqBtns.forEach(function(b){ b.addEventListener('click', function(){ eqTab = b.dataset.eqtab; show('equip'); }); });
+  // 탭 바꾸기(app.js 의 switchTab)가 이 다음에 돌 수도 있어 기록은 한 박자 뒤에(바뀐 탭으로 남도록)
+  document.querySelectorAll('.tab-btn').forEach(function(b){ b.addEventListener('click', function(e){ if (shell.dataset.page !== 'snow') show('snow'); if (e.isTrusted) setTimeout(pushNav, 0); }); });
+  eqBtns.forEach(function(b){ b.addEventListener('click', function(e){ eqTab = b.dataset.eqtab; show('equip'); if (e.isTrusted) pushNav(); }); });
   frame.addEventListener('load', function(){ applyEqTab(); paintTheme(); });
   // 안쪽 화면이 스스로 탭을 바꾼 경우(권한이 바뀌어 이동 현황으로 돌아가는 등) 메뉴도 따라감
   window.SSEqTabChanged = function(name){ eqTab = name; paintEq(); };
@@ -136,6 +156,7 @@
     show('snow');
     if(window.ForecastUI){ ForecastUI.openBranch(id); }
     var t = document.querySelector('.tab-btn[data-tab=forecast]'); if(t){ t.click(); }
+    pushNav();                                     // 장비 지원에서 넘어왔으면 뒤로가기로 장비 지원에 돌아감
   };
   // 새로 열거나 다시 로그인하면 항상 첫 화면(강설량 측정)부터. 예전 주소의 #equip 은 지움
   if(location.hash === '#equip'){ try{ history.replaceState(null, '', location.pathname + location.search); }catch(e){} }

@@ -1350,7 +1350,17 @@ async function setZone(code, include) {   // include: true 더함 / false 자동
   const z = await Api.zoneData(); if (z.ok) { S.zdata = z; renderZones(); renderWarnNow(); }
   await Promise.all([loadWarn(), loadAudit()]); paintWarn(); renderLog(); if (!$("panel-move").hidden) renderDest(); toast(`${bn(bid)} 지사 특보구역을 바꿨습니다`);
 }
-function closeSheet() { sheet.classList.remove("wide"); sheet.hidden = true; backdrop.hidden = true; hideTip(); if (lastFocus) lastFocus.focus(); lastFocus = null; }
+function closeSheet() { sheet.classList.remove("wide"); sheet.hidden = true; backdrop.hidden = true; hideTip(); if (lastFocus) lastFocus.focus(); lastFocus = null;
+  if (history.state && history.state.ssSheet) { try { history.back(); } catch (e) {} } }      // 창을 열 때 남긴 기록 한 칸을 지움(뒤로가기로 닫은 경우는 이미 지워짐)
+// 뒤로가기(2026-11-02 사용자 요청): 창(장비 상세·보고서 미리 보기 등)이 열리면 기록 한 칸 → 뒤로가기는 창만 닫음. 장비 화면만 따로 열었으면 이전 탭으로
+new MutationObserver(() => { if (!sheet.hidden && !(history.state && history.state.ssSheet)) { try { history.pushState({ ...(history.state || {}), ssSheet: 1 }, ""); } catch (e) {} } })
+  .observe(sheet, { attributes: true, attributeFilter: ["hidden"] });
+window.addEventListener("popstate", e => {
+  if (!sheet.hidden) return closeSheet();
+  if (window.top !== window) return;
+  const name = (e.state && e.state.eqTab) || "move", t = document.querySelector(`.tab[data-tab="${name}"]`);
+  if (t && !t.hidden && t.getAttribute("aria-selected") !== "true") t.click();
+});
 backdrop.onclick = closeSheet;
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !sheet.hidden) closeSheet(); });
 
@@ -1541,7 +1551,8 @@ document.addEventListener("click", e => {
 document.addEventListener("keydown", e => { const tr = e.target.closest && e.target.closest("tr.hq"); if (tr && e.target === tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); tr.click(); } });
 
 /* ---------- 탭·날짜·화면 모드·아이디 ---------- */
-document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+document.querySelectorAll(".tab").forEach(t => t.onclick = e => {
+  if (e && e.isTrusted && window.top === window && !(history.state && history.state.eqTab === t.dataset.tab)) { try { history.pushState({ eqTab: t.dataset.tab }, ""); } catch (er) {} }   // 장비 화면만 따로 열었을 때: 뒤로가기 = 이전 탭(2026-11-02)
   document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", x === t));
   document.querySelectorAll(".panel").forEach(p => p.hidden = p.id !== "panel-" + t.dataset.tab);
   try { if (window.top !== window && window.top.SSEqTabChanged) window.top.SSEqTabChanged(t.dataset.tab); } catch (e) {}   // 첫 화면 왼쪽 메뉴도 같은 탭 표시

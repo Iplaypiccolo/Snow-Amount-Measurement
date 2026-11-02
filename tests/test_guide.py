@@ -268,7 +268,20 @@ def t_help_and_who(b, ctx, m):
     p.click(".eq-btn[data-eqtab=move]"); p.wait_for_timeout(300); p.click("#sgHelp"); wait_open(p, "equip")
     t = titles(p); check("필터" not in t and "이동 현황" not in t and "날짜" in t, f"이동 현황: 필터 안내 없음, [사용법]은 탭 소개 없음: {t}")
 
-TESTS = [t_help_and_who, t_first_login_admin, t_stop_and_keys, t_role_tabs, t_tab_intro_role_only, t_element_steps, t_demo_steps, t_no_auto_in_automation, t_phone, t_phone_short]
+def t_back_button_tabs(b, ctx, m):
+    """2026-11-02: 첫 화면의 뒤로가기 = 이전 탭(강설량 측정 탭 ↔ 장비 지원 ↔ 장비 지원 탭). 사이트를 떠나지 않음"""
+    p = open_site(ctx, m, auto=False); login(p, "admin-01"); p.wait_for_timeout(800)
+    st = lambda: p.evaluate("[document.getElementById('shell').dataset.page, (document.querySelector('.tab-btn.active') || {}).dataset ? document.querySelector('.tab-btn.active').dataset.tab : null, (document.querySelector('.eq-btn.active') || {dataset:{}}).dataset.eqtab]")
+    p.click(".tab-btn[data-tab=map]"); p.wait_for_timeout(200)
+    p.click(".page-btn[data-page=equip]"); p.wait_for_timeout(1500)
+    p.click(".eq-btn[data-eqtab=branch]"); p.wait_for_timeout(500)
+    check(st()[0] == "equip" and st()[2] == "branch", st())
+    p.go_back(); p.wait_for_timeout(500); check(st()[0] == "equip" and st()[2] == "move", f"뒤로 → 장비 지원 이동 현황: {st()}")
+    p.go_back(); p.wait_for_timeout(500); check(st()[0] == "snow" and st()[1] == "map", f"뒤로 → 강설량 측정 관측소 지도: {st()}")
+    p.go_back(); p.wait_for_timeout(500); check(st()[0] == "snow" and st()[1] == "forecast" and p.locator("body.authed").count() == 1, f"뒤로 → 첫 탭(사이트 그대로): {st()}")
+    p.go_forward(); p.wait_for_timeout(500); check(st()[1] == "map", f"앞으로 → 관측소 지도: {st()}")
+
+TESTS = [t_help_and_who, t_first_login_admin, t_stop_and_keys, t_role_tabs, t_tab_intro_role_only, t_element_steps, t_demo_steps, t_no_auto_in_automation, t_phone, t_phone_short, t_back_button_tabs]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()

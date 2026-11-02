@@ -78,11 +78,23 @@
     sheet.classList.add("wide");
     sheet.innerHTML = `<button type="button" class="sheet-close" id="sheetClose">닫기</button><h2 id="sheetTitle">1쪽 보고서 미리 보기</h2>
       <p class="hint">이동 현황 ${esc(fmtMD(S.date))} 자료(지금 화면의 신속대응팀 체크 그대로). 워드 파일과 같은 내용입니다.</p>
-      <p><button type="button" class="btn primary" id="rptDocIn">Word 받기</button></p>${html(M)}`;
-    sheet.hidden = false; backdrop.hidden = false;
+      <p><button type="button" class="btn primary" id="rptDocIn">Word 받기</button></p><div class="rp-wrap" id="rpWrap">${html(M)}</div>`;
+    sheet.hidden = false; backdrop.hidden = false; fitPage();
     $("sheetClose").focus(); $("sheetClose").onclick = () => { sheet.classList.remove("wide"); closeSheet(); };
     $("rptDocIn").onclick = () => download();
   }
+
+  // A4 한 장 모양 그대로(2026-11-02 사용자 요청 — 휴대폰에서 표가 깨지지 않게): 종이는 늘 794×1123px(A4, 96dpi)로 그리고
+  // ① 내용이 길면 표 글자를 줄여 한 장 안에 넣고 ② 화면 폭에 맞게 종이 전체를 줄여 보여 줌(글자는 작아져도 모양은 같음)
+  const A4W = 794, A4H = 1123;
+  function fitPage() {
+    const wrap = $("rpWrap"), pg = $("rpPage"); if (!wrap || !pg) return;
+    pg.style.setProperty("--rp-fs", "13px");
+    for (let fs = 13; fs > 6 && pg.scrollHeight > A4H; fs -= 0.5) pg.style.setProperty("--rp-fs", fs + "px");
+    const k = Math.min(1, wrap.clientWidth / A4W);
+    pg.style.transform = `scale(${k})`; wrap.style.height = Math.ceil(A4H * k) + "px";
+  }
+  addEventListener("resize", () => { if (!sheet.hidden && $("rpWrap")) fitPage(); });
 
   /* ---------- 워드(.docx) ---------- */
   const x = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -169,7 +181,7 @@
     toast(`${fmtMD(M.date)} 보고서(워드)를 내려받았습니다`);
   }
 
-  window.SSReport = { model, html, docXml, files: FILES, zip, open: openPreview, download, srcLabel };
+  window.SSReport = { model, html, docXml, files: FILES, zip, open: openPreview, download, srcLabel, fitPage };
   document.addEventListener("click", e => {
     const t = e.target.closest && e.target.closest("#rptView, #rptDoc"); if (!t) return;
     if (t.id === "rptView") openPreview(); else download();

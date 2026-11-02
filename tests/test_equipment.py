@@ -1167,9 +1167,29 @@ def t_report(p):
     check("<w:pgSz w:w=\"11906\" w:h=\"16838\"/>" in doc, "A4 세로")
     check('<w:tblLayout w:type="fixed"/>' in doc and '<w:tab w:val="right"' in doc and "<w:tab/>" in doc, "칸 폭 고정, 지원장비 칸은 이름 왼쪽·대수 오른쪽 고정 위치(탭)")
     check(ev(p, "getComputedStyle(document.querySelector('#rpPage .rp-t')).tableLayout") == "fixed" and ev(p, "document.querySelectorAll('#rpPage .rp-t col').length") == 6, "미리 보기도 칸 폭 고정")
+    # A4 한 장 모양(794×1123) 그대로, 화면 폭에 맞게 줄여 보임(2026-11-02) — 휴대폰 폭에서도 표가 깨지지 않음
+    box = ev(p, "(() => { const pg = document.querySelector('#rpPage'); return [pg.offsetWidth, pg.offsetHeight, pg.scrollHeight] })()")
+    check(box[0] == 794 and box[1] == 1123 and box[2] <= 1123, f"종이 = A4 794×1123, 내용이 한 장 안: {box}")
+    p.set_viewport_size({"width": 375, "height": 800}); p.wait_for_timeout(300)
+    bb = p.locator("#rpPage").bounding_box(); sw = ev(p, "document.querySelector('#rpWrap').clientWidth")
+    check(bb["width"] <= sw + 1 and bb["width"] < 375 and abs(bb["height"] / bb["width"] - 1123 / 794) < 0.02 and ev(p, "document.documentElement.scrollWidth") <= 375,
+          f"휴대폰 폭: 종이 전체를 줄여 A4 비율 그대로(가로 스크롤 없음): {bb}")
+    p.set_viewport_size({"width": 1440, "height": 1000}); p.wait_for_timeout(200)
     p.click("#sheetClose")
     with p.expect_download() as dl2: p.click("#rptDoc")              # 이동 현황 위의 [Word 받기]도
     check(dl2.value.suggested_filename.endswith(".docx"), "위쪽 [Word 받기]")
+
+def t_back_button(p):
+    """2026-11-02: 뒤로가기 = 이전 탭(페이지를 떠나지 않음). 창(장비 상세 등)이 열려 있으면 뒤로가기는 창만 닫음"""
+    sel = lambda: ev(p, "document.querySelector('.tab[aria-selected=true]').dataset.tab")
+    tab(p, "branch"); tab(p, "fleet"); check(sel() == "fleet", sel())
+    p.go_back(); p.wait_for_timeout(300); check(sel() == "branch" and "sample=1" in p.url, f"뒤로가기 → 지사별 요청·편성: {sel()} {p.url}")
+    p.go_back(); p.wait_for_timeout(300); check(sel() == "move" and "sample=1" in p.url, f"한 번 더 → 이동 현황(아직 같은 페이지): {sel()}")
+    p.go_forward(); p.wait_for_timeout(300); check(sel() == "branch", "앞으로 가기도 탭으로")
+    tab(p, "move"); p.locator("#destList .vrow").first.click(); p.wait_for_timeout(300); check(p.locator("#sheet").is_visible(), "장비 상세 창 열림")
+    p.go_back(); p.wait_for_timeout(300); check(not p.locator("#sheet").is_visible() and sel() == "move", "뒤로가기 = 창만 닫힘, 탭은 그대로")
+    p.locator("#destList .vrow").first.click(); p.wait_for_timeout(300); p.click("#sheetClose"); p.wait_for_timeout(300)
+    p.go_back(); p.wait_for_timeout(300); check(sel() == "branch", f"[닫기]로 닫은 뒤의 뒤로가기는 바로 이전 탭으로(빈 칸 없음): {sel()}")
 
 def t_alloc_follow_assign(p):
     """(2026-10-15, 마이그레이션 46) 기관별 배정 합계는 편성보다 많을 수 없음. 편성을 줄여 다시 확정하면 — 한 기관만 배정받았으면 그 기관이 편성에 맞춰 줄고,
@@ -1253,7 +1273,7 @@ def t_route_perm_admin_only(p):
     check("권한이 없습니다" in toast(p), "화면을 우회해 다른 기관 경로를 보내도 거절: " + toast(p))
     as_user(p, "admin1"); tab(p, "fleet"); check(p.locator("#eqTable select[data-rv]").count() > 0 and p.locator("#day1In").count() == 1, "관리자는 지원일 칸 전부")
 
-TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
