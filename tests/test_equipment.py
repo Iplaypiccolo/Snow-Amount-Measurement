@@ -689,10 +689,14 @@ def t_views_and_choices_after_confirm_all(p):
     p.click("#onlyActive"); p.wait_for_timeout(150)
     want = ev(p, "S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private && hasReq(b.id)).map(b => b.id)")
     check(set(shown()) == set(want) and 0 < len(want) < total, f"일괄 확정 뒤에도 '요청 있는 지사만'이 걸러짐: {len(shown())}/{total}")
-    p.click("#onlyFixed"); p.wait_for_timeout(150)
+    p.click("#onlyFixed"); p.wait_for_timeout(150)                      # 여러 개 = 모두 만족(2026-11-02): 요청 + 편성
+    both = ev(p, "S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private && hasReq(b.id) && isFixed(b.id)).map(b => b.id)")
+    check(set(shown()) == set(both) and p.locator("#onlyFixed").get_attribute("aria-pressed") == "true" and p.locator("#onlyActive").get_attribute("aria-pressed") == "true",
+          f"[요청]+[편성] = 둘 다 만족: {len(shown())} / {len(both)}")
+    p.click("#onlyActive"); p.wait_for_timeout(150)                     # [요청]을 끄면 편성만
     fixed = ev(p, "S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private && isFixed(b.id)).map(b => b.id)")
     check(set(shown()) == set(fixed) and 0 < len(fixed) < total and p.locator("#onlyFixed").get_attribute("aria-pressed") == "true" and p.locator("#onlyActive").get_attribute("aria-pressed") == "false",
-          f"'편성 확정된 지사만' = 확정 + 편성 1대 이상: {[bn for bn in fixed]}")
+          f"'편성' = 확정 + 편성 1대 이상: {[bn for bn in fixed]}")
     check(all(ev(p, f"isConf('{x}') && (S.reqs['{x}'].assigned_truck + S.reqs['{x}'].assigned_blower) > 0") for x in shown()), "보이는 줄은 모두 편성 확정")
     p.click("#onlyFixed"); p.wait_for_timeout(150); check(len(shown()) == total, "다시 누르면 모든 지사")
     tab(p, "fleet"); d0 = day(p, 0)
@@ -884,7 +888,7 @@ def t_pool_vehicles(p):
     check([h.split(" ")[0] for h in heads] == ["지사", "24시", "대설특보", "기상현황", "지사", "도착", "타지사", "저장", "편성", "확정"] and "지원 가능" in heads[6], f"칸 순서: {heads}")
     check(ev(p, "getComputedStyle(document.querySelector('#branchTable tbody td.adm0')).borderLeftWidth") == "3px" and p.locator("#branchTable thead th.adm").count() == 5, "편성·확정 앞 굵은 경계선")
     check(ev(p, f"(() => {{ const tr = document.querySelector(\"#branchTable tr[data-b='{cj}']\"), bg = c => getComputedStyle(tr.querySelector(c)).backgroundColor; return bg('td.adm') !== bg('td.ofc') }})()"), "관리자 칸은 바탕이 다름")
-    check([x.strip() for x in p.locator("#branchCtl .chip").all_inner_texts()] == ["요청 있는 지사만", "편성 확정된 지사만", "지원 가능 지사만", "저장 안 한 지사만"], "보기 버튼 순서(저장 안 한 지사만은 맨 오른쪽)")
+    check([x.strip() for x in p.locator("#branchCtl .chip").all_inner_texts()] == ["요청", "편성", "지원", "저장안함"], "보기 버튼 순서(저장 안 한 지사만은 맨 오른쪽)")
     widths = lambda: ev(p, "[...document.querySelectorAll('#branchTable thead tr:nth-child(2) th')].map(th => Math.round(th.getBoundingClientRect().width * 2) / 2)")
     w0 = widths(); p.check(f"input[data-rq={cj}][data-f=wx_manual]"); p.wait_for_timeout(200); w1 = widths()
     check(p.locator(f"#branchTable tr[data-b='{cj}'] input.wxn").count() == 3 and w0 == w1, f"직접입력을 켜도 칸 폭이 같아야 함: {w0} → {w1}")
@@ -1043,8 +1047,9 @@ def t_branch_bulk_save(p):
     check(not p.locator("#save-branch").is_visible() and "1곳" in p.locator("#brDirty").inner_text(), "아래 저장 막대 없음, 위에 저장 안 한 지사 수")
     check(p.locator(f"[data-rsave='{dg}']").count() == 1, "관리자: 고친 줄에 [저장]")
     p.click(f"[data-rsave='{dg}']"); p.wait_for_timeout(300)
-    check(ev(p, f"S.reqs['{dg}'].assigned_truck") == 4 and not ev(p, f"S.reqs['{dg}'].confirmed") and not ev(p, f"!!S.reqs['{dg}'].saved_at") and not p.locator("#brDirty").is_visible(),
-          "관리자 [저장] = 편성만 저장(확정·저장 완료 아님)")
+    check(ev(p, f"S.reqs['{dg}'].assigned_truck") == 4 and not ev(p, f"S.reqs['{dg}'].confirmed") and ev(p, f"S.reqs['{dg}'].saved_lv") == "admin" and not p.locator("#brDirty").is_visible()
+          and p.locator(f"#branchTable td[data-svcell='{dg}']").inner_text().strip() == "본사저장",
+          "관리자 [저장] = 편성만 저장(확정 아님), 표시는 본사저장(2026-11-02)")
     # 본부 계정: 본부 줄 [일괄 저장] → 그 본부에서 [저장]이 보이는 지사 모두
     as_user(p, "hq-gw"); tab(p, "branch"); gw = ev(p, "S.hqs.find(h => h.name === '강원').id")
     for b, v in ((ch, 2), (dg, 1)):
@@ -1054,7 +1059,7 @@ def t_branch_bulk_save(p):
     want = ev(p, f"S.order.filter(b => b.hq_id === '{gw}' && canReq(b) && canRowSave(b)).map(b => b.id)")
     hb.click(); p.wait_for_timeout(400)
     check("강원 본부" in toast(p) and f"{len(want)}개 지사를 저장했습니다" in toast(p), toast(p))
-    check(ev(p, f"S.reqs['{ch}'].req_truck") == 2 and ev(p, f"S.reqs['{dg}'].req_truck") == 1 and all(ev(p, f"!!S.reqs['{b}'].saved_at") for b in want), "고친 값 + 저장 완료")
+    check(ev(p, f"S.reqs['{ch}'].req_truck") == 2 and ev(p, f"S.reqs['{dg}'].req_truck") == 1 and all(ev(p, f"S.reqs['{b}'].saved_lv") == "hq" for b in want), "고친 값 + 본부저장")
     check("모두 저장" in p.locator(f"#branchTable tr.hq[data-hq='{gw}'] [data-svhq]").inner_text() and p.locator("#branchTable [data-rsave]").count() == 0, "다 저장하면 '모두 저장'")
     # 지사 계정(자기 줄 하나)에는 [일괄 저장] 없음
     as_user(p, "br2"); tab(p, "branch"); check(p.locator("[data-rsave-hq]").count() == 0, "지사 계정은 일괄 저장 없음")
@@ -1064,7 +1069,7 @@ def t_branch_saved(p):
     보기 버튼은 처음에 아무것도 안 눌림, [저장 안 한 지사만]은 맨 오른쪽"""
     tab(p, "branch"); dg, yy, cj = bid(p, "대관령"), bid(p, "양양"), bid(p, "춘천")
     cell = lambda b: p.locator(f"#branchTable td[data-svcell='{b}']")
-    check(p.locator("#branchCtl .chip[aria-pressed=true]").count() == 0 and p.locator("#branchCtl .chip").last.inner_text() == "저장 안 한 지사만", "기본 보기 = 아무 버튼도 안 눌림, 저장 안 한 지사만은 맨 오른쪽")
+    check(p.locator("#branchCtl .chip[aria-pressed=true]").count() == 0 and p.locator("#branchCtl .chip").last.inner_text() == "저장안함", "기본 보기 = 아무 버튼도 안 눌림, [저장안함]은 맨 오른쪽")
     check(cell(cj).locator("button").count() == 0 and cell(cj).inner_text().strip() == "-", "관리자에게는 [저장] 버튼 없음(확정하면 그만)")
     as_user(p, "br2"); tab(p, "branch")                                       # 양양지사(확정된 줄)
     check(cell(yy).locator("button").count() == 0, "확정된 줄은 [저장] 없음")
@@ -1074,20 +1079,25 @@ def t_branch_saved(p):
     check(cell(cj).locator("[data-rsave]").count() == 1 and cell(dg).locator("[data-rsave]").count() == 1, "본부: 자기 본부 지사 줄마다 [저장]")
     check(ev(p, f"rval('{cj}', 'req_truck')") == 2, "춘천은 요청 있음(그대로 저장)")
     p.click(f"[data-rsave='{cj}']"); p.wait_for_timeout(300)
-    check("춘천 지사를 저장했습니다" in toast(p) and cell(cj).inner_text().strip() == "저장 완료" and ev(p, f"!!S.reqs['{cj}'].saved_at"), "바꾼 것 없이 눌러도 저장 → 저장 완료: " + toast(p))
+    check("춘천 지사를 저장했습니다" in toast(p) and cell(cj).inner_text().strip() == "본부저장" and ev(p, f"!!S.reqs['{cj}'].saved_at"), "바꾼 것 없이 눌러도 저장 → 본부저장: " + toast(p))
     # 요청 0 인 지사: 0 그대로 저장 가능
     wj = bid(p, "원주"); check(ev(p, f"rval('{wj}', 'req_truck') + rval('{wj}', 'req_blower') + rval('{wj}', 'offer_truck')") == 0, "원주는 요청·지원 가능 모두 0")
-    p.click(f"[data-rsave='{wj}']"); p.wait_for_timeout(300); check(cell(wj).inner_text().strip() == "저장 완료", "0이어도 저장 → 저장 완료(요청 안 함도 알림)")
+    p.click(f"[data-rsave='{wj}']"); p.wait_for_timeout(300); check(cell(wj).inner_text().strip() == "본부저장", "0이어도 저장 → 본부저장(요청 안 함도 알림)")
     # 고치면 다시 [저장] → 저장 완료
     i = f"[data-rq={wj}][data-f=offer_truck]"; p.fill(i, "1"); p.press(i, "Tab"); p.wait_for_timeout(150)
     check(cell(wj).locator("[data-rsave]").count() == 1, "저장한 뒤 고치면 다시 [저장]")
-    save_branch(p); check(cell(wj).inner_text().strip() == "저장 완료" and ev(p, f"S.reqs['{wj}'].offer_truck") == 1, "다시 [저장] → 저장 완료")
+    save_branch(p); check(cell(wj).inner_text().strip() == "본부저장" and ev(p, f"S.reqs['{wj}'].offer_truck") == 1, "다시 [저장] → 저장 완료")
     # 관리자: 저장 안 한 지사만 / 관리자 저장은 저장 완료가 아님
     as_user(p, "admin1"); tab(p, "branch"); p.click("#onlyUnsaved"); p.wait_for_timeout(150)
     shown = ev(p, "[...document.querySelectorAll('#branchTable tr[data-b]')].map(r => r.dataset.b)")
     check(cj not in shown and wj not in shown and dg in shown and len(shown) > 10 and p.locator("#onlyUnsaved").get_attribute("aria-pressed") == "true", f"저장 안 한 지사만: {len(shown)}줄")
     i = f"[data-rq={dg}][data-f=req_truck]"; p.fill(i, "5"); p.press(i, "Tab"); save_branch(p)
-    check(not ev(p, f"!!S.reqs['{dg}'].saved_at") and dg in ev(p, "[...document.querySelectorAll('#branchTable tr[data-b]')].map(r => r.dataset.b)"), "관리자가 고쳐 저장해도 저장 완료가 아님")
+    check(ev(p, f"S.reqs['{dg}'].saved_lv") == "admin" and ev(p, f"savedLabel('{dg}')") == "본사저장" and dg not in ev(p, "[...document.querySelectorAll('#branchTable tr[data-b]')].map(r => r.dataset.b)"),
+          "관리자가 고쳐 저장하면 본사저장 → [저장안함]에서 빠짐(2026-11-02 사용자 결정)")
+    # 지사 계정이 저장하면 지사저장(마지막에 저장한 쪽이 보임)
+    as_user(p, "br1"); tab(p, "branch"); i = f"[data-rq={dg}][data-f=req_truck]"; p.fill(i, "4"); p.press(i, "Tab"); save_branch(p)
+    check(cell(dg).inner_text().strip() == "지사저장" and ev(p, f"S.reqs['{dg}'].saved_lv") == "branch", f"지사 계정 저장 = 지사저장: {cell(dg).inner_text()}")
+    as_user(p, "admin1"); tab(p, "branch")
     p.click("#onlyUnsaved"); p.wait_for_timeout(150); check(p.locator("#branchCtl .chip[aria-pressed=true]").count() == 0, "다시 누르면 모든 지사")
 
 def t_alloc_follow_assign(p):

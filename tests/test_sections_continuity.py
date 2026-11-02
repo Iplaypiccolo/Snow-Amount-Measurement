@@ -50,14 +50,28 @@ def t_shared_points():
                 n += 1
     assert n >= 690, f"이어진 이웃 쌍 {n} (메우기 전 603쌍 → 후 697쌍)"
 def t_meta_and_ranges():
-    assert len(S) == 1011 and len({s["id"] for s in S}) == 1011
-    assert sum(1 for s in S if s["owner"] is None) == 325
+    assert len(S) == 1025 and len({s["id"] for s in S}) == 1025          # 2026-11-02: 새 고속도로 '(대략)' 14개 더함(S1012~S1025)
+    assert sum(1 for s in S if s["owner"] is None) == 339
     for s in S:
         assert len(s["coords"]) >= 2 and all(124 <= c[0] <= 132 and 33 <= c[1] <= 39 for c in s["coords"]), s["id"]
         L = length_km(s["coords"]); assert abs(L - s["km"]) <= max(0.35, s["km"] * 0.25), f"{s['id']} 길이 {s['km']}km 인데 선은 {L:.2f}km"
+def t_new_routes_approx():
+    """2026-11-02: 전국표준노드링크에 아직 없는 새 고속도로를 tools/add_new_routes_approx.py 로 대략 넣음"""
+    new = [s for s in S if s["route"].endswith(" (대략)")]
+    assert [s["id"] for s in new] == [f"S{i:04d}" for i in range(1012, 1026)], [s["id"] for s in new]
+    assert all(s["owner"] is None for s in new), "새 구간은 관할 미지정(관리자가 관할 탭에서 옮김)"
+    routes = collections.Counter(s["route"] for s in new)
+    assert routes == {"강진광주선 (대략)": 7, "함양울산선(함양~창녕) (대략)": 6, "당진청주선(아산~천안) (대략)": 1}, routes
+    near = lambda p, sid: min(dist(p, q) for q in by[sid]["coords"]) <= 900       # 기존 선의 꼭짓점과 가까움(선 위에 붙임)
+    assert near(by["S1012"]["coords"][0], "S0465") and near(by["S1019"]["coords"][0], "S0637") and near(by["S1019"]["coords"][-1], "S0532"), "강진JC·북함양JC·거창JC"
+    assert dist(by["S1024"]["coords"][-1], by["S0683"]["coords"][0]) <= 30, "창녕JC 가 함양울산선(창녕~울산) 시작점과 이어짐"
+    assert dist(by["S1025"]["coords"][-1], by["S0267"]["coords"][0]) <= 30 and near(by["S1025"]["coords"][0], "S0797"), "인주JC~아산IC 가 1단계·서부내륙선과 이어짐"
+    for s in new:
+        L = [x for x in S if x["chain"] == s["chain"]]; assert all(x["route"] == s["route"] for x in L), "새 체인(C213~C215)은 새 구간만"
 for n, f in (("지사 구간 686개는 끊김 메우기 전과 한 글자도 다르지 않다(지문)", t_branch_untouched), ("이웃 구간 사이 끊김(30m~4km)이 166곳에서 80곳 이하로 줄었다", t_gaps_reduced),
              ("남밀양IC·삼랑진IC·밀양JC 쪽 중앙고속도로가 이어졌다", t_miryang_connected), ("이어진 이웃 쌍이 690쌍 이상(메우기 전 603쌍)", t_shared_points),
-             ("구간 1,011개·미지정 325개, 좌표는 한국 범위, 길이(km)와 선 길이가 크게 어긋나지 않음", t_meta_and_ranges)):
+             ("구간 1,025개·미지정 339개, 좌표는 한국 범위, 길이(km)와 선 길이가 크게 어긋나지 않음", t_meta_and_ranges),
+             ("새 고속도로(대략) 3곳: 미지정, 번호 S1012~S1025, 분기점 끝이 기존 고속도로 선에 붙음", t_new_routes_approx)):
     test(n, f)
 ok = sum(1 for _, o, _ in res if o)
 for n, o, m in res: print(("PASS " if o else "FAIL ") + n + ("" if o else "\n   → " + m))

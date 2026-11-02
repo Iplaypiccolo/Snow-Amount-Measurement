@@ -15,10 +15,11 @@ const results = [];
 async function test(name, fn) { try { await fn(); results.push([name, true]); } catch (e) { results.push([name, false, String(e.message).split('\n')[0]]); } }
 const rejects = (f, code) => { try { build(f); } catch (e) { assert.ok(e instanceof ImportError, String(e)); assert.equal(e.code, code, e.message); return; } assert.fail('거절되어야 함: ' + code); };
 
-await test('실제 자료 변환: 구간 1,011 · 관측소 260 · 지사-관측소 384 · 격자 1,070, 합계가 원본과 같다', () => {
+// 2026-11-02: 새 고속도로 '(대략)' 14구간(S1012~S1025)을 더해 1,011 → 1,025
+await test('실제 자료 변환: 구간 1,025 · 관측소 260 · 지사-관측소 384 · 격자 1,070, 합계가 원본과 같다', () => {
   const { payload: p, summary: s } = build(files()), src = files();
-  assert.equal(p.sections.length, 1011); assert.equal(p.stations.length, 260); assert.equal(p.branch_stations.length, 384); assert.equal(p.grid_assign.length, 1070);
-  assert.deepEqual(s, { sections: 1011, sections_unassigned: 325, section_points: 15174, section_km: 5602.213, stations: 260, branch_stations: 384, grid_assign: 1070, grid_cells: 934 });   // 기관이 한 곳 이상 편입된 격자 934칸
+  assert.equal(p.sections.length, 1025); assert.equal(p.stations.length, 260); assert.equal(p.branch_stations.length, 384); assert.equal(p.grid_assign.length, 1070);
+  assert.deepEqual(s, { sections: 1025, sections_unassigned: 339, section_points: 15347, section_km: 5734.713, stations: 260, branch_stations: 384, grid_assign: 1070, grid_cells: 934 });   // 기관이 한 곳 이상 편입된 격자 934칸
   assert.equal(s.sections_unassigned, src.sections.sections.filter((x) => x.owner == null).length);
   assert.equal(s.section_points, src.sections.sections.reduce((a, x) => a + x.coords.length, 0));
 });
@@ -30,7 +31,7 @@ await test('구간이 하나도 변하지 않는다: 각 칸이 원본과 같고
     assert.deepEqual([r.id, r.route, r.from_name, r.to_name, r.km, r.owner_id, r.chain, r.ord], [o.id, o.route, o['from'], o.to, o.km, o.owner, o.chain, o.order]);
     assert.deepEqual(r.coords, o.coords);
   });
-  assert.equal(p.sections.filter((r) => r.owner_id === null).length, 325);
+  assert.equal(p.sections.filter((r) => r.owner_id === null).length, 339);
 });
 
 await test('관측소·지사별 관측소: 모든 관측소가 있고 좌표·거리·노선이 원본과 같다', () => {
@@ -109,14 +110,14 @@ await test('인증: 로그인 안 함 · 엉뚱한 토큰 · 관리자가 아닌
 
 await test('plan: 관리자는 요약만 받고 DB 에는 아무것도 넣지 않는다', async () => {
   const w = world(); admin(w); const r = await J(await call(w, { action: 'plan' }, { jwt: 'jwt-a' }));
-  assert.equal(r.status, 200); assert.equal(r.body.summary.sections, 1011); assert.equal(r.body.summary.section_km, 5602.213); assert.equal(w.imported, null);
+  assert.equal(r.status, 200); assert.equal(r.body.summary.sections, 1025); assert.equal(r.body.summary.section_km, 5734.713); assert.equal(w.imported, null);
   assert.equal(w.fetched.length, 6); assert.ok(w.fetched.every((u) => u.startsWith('https://raw.githubusercontent.com/Iplaypiccolo/Snow-Amount-Measurement/main/data/')));
 });
 
 await test('load: 시작 토큰으로 한 번만 가능하고, 넣은 개수가 요약과 같다', async () => {
   const w = world(); const tok = 'boot-xyz'; w.boot = { hash: await hex(tok), expires_at: '2026-10-03T10:15:00Z' };
   const r = await J(await call(w, { action: 'load', ref: 'abc1234' }, { boot: tok }));
-  assert.equal(r.status, 200); assert.equal(r.body.ok, true); assert.deepEqual(r.body.counts, { sections: 1011, stations: 260, branch_stations: 384, grid_assign: 1070 }); assert.equal(w.imported.sections.length, 1011);
+  assert.equal(r.status, 200); assert.equal(r.body.ok, true); assert.deepEqual(r.body.counts, { sections: 1025, stations: 260, branch_stations: 384, grid_assign: 1070 }); assert.equal(w.imported.sections.length, 1025);
   assert.ok(w.fetched[0].includes('/abc1234/data/'), 'ref 로 지정한 커밋에서 읽음'); assert.equal(w.boot, null);
   assert.equal((await call(w, { action: 'load' }, { boot: tok })).status, 403);               // 재사용 불가
   w.boot = { hash: await hex(tok), expires_at: '2026-10-03T09:59:00Z' }; assert.equal((await call(w, { action: 'load' }, { boot: tok })).status, 403);   // 만료

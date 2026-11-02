@@ -81,7 +81,7 @@ const Api = (() => {
       return SSAuth.authed("/rest/v1/rpc/save_gw_team", { method: "POST", body: { p_round: round, p_routes: routes, p_status: status } }).then(r => r.ok ? { ok: true, result: r.json } : fail(r, null, TEAM_ERR)).catch(NET);
     },
     requests(round) {
-      return SSAuth.rest(`round_requests?select=round_id,branch_id,req_truck,req_blower,assigned_truck,assigned_blower,offer_truck,saved_at,arrive_at,reason,confirmed,warn_level,warn_zones,warn_base,warn_at,warn_note,fc_snow,fc_pcp,fc_pop,fc_tmin,fc_tmin_at,fc_tmfc,fc_at,wx_manual,wx_snow,wx_pcp,wx_tmin,wx_tmin_at,wx_level,wx_fc,wx_ef&round_id=eq.${+round}`)
+      return SSAuth.rest(`round_requests?select=round_id,branch_id,req_truck,req_blower,assigned_truck,assigned_blower,offer_truck,saved_at,saved_lv,arrive_at,reason,confirmed,warn_level,warn_zones,warn_base,warn_at,warn_note,fc_snow,fc_pcp,fc_pop,fc_tmin,fc_tmin_at,fc_tmfc,fc_at,wx_manual,wx_snow,wx_pcp,wx_tmin,wx_tmin_at,wx_level,wx_fc,wx_ef&round_id=eq.${+round}`)
         .then(r => r.ok ? { ok: true, rows: r.json } : fail(r, "요청을 불러오지 못했습니다.")).catch(NET);
     },
     allocations(round) {     // 기관별 배정(기준일자, 기관, 지사) → 제설차·제설기 대수
@@ -328,7 +328,7 @@ const Api = (() => {
             wx_manual: false, wx_snow: null, wx_pcp: null, wx_tmin: null, wx_tmin_at: null, wx_level: null, wx_fc: null, wx_ef: null }; db.requests.push(cur); }
           const was = cur.confirmed;
           Object.keys(p).filter(k => k !== "branch_id").forEach(k => { from[k] = cur[k]; to[k] = p[k]; cur[k] = p[k]; });
-          if (!can("req.confirm")) cur.saved_at = new Date().toISOString();          // 서버 흉내(마이그레이션 46): 지사·본부 계정의 저장 = 저장 완료
+          if (!("confirmed" in p) || Object.keys(p).some(k => k !== "branch_id" && k !== "confirmed")) Object.assign(cur, { saved_at: new Date().toISOString(), saved_lv: can("req.confirm") ? "admin" : can("req.edit.hq") ? "hq" : "branch" });   // 서버 흉내(마이그레이션 50): 누가 저장했는지
           if (cur.confirmed && !was) followAssign(+round, cur);                         // 편성이 확정되면 배정이 따라감
           if (cur.confirmed && !was) { const w = warnStatus().branches[cur.branch_id]; Object.assign(cur, { warn_level: w ? w.level : null, warn_zones: w ? w.zones : [], warn_base: db.warnBase, warn_at: new Date().toISOString(), warn_note: null }); to.warn_level = cur.warn_level; }   // 서버 트리거 흉내: 확정 순간 특보 고정
           if (cur.confirmed && !was) { const f = db.forecast.find(x => x.branch_id === cur.branch_id); Object.assign(cur, { fc_snow: f ? f.max_snow_24h : null, fc_pcp: f ? f.max_pcp_24h : null, fc_pop: f && f.max_pop_24h != null ? f.max_pop_24h : null, fc_tmin: f ? f.min_tmp : null, fc_tmin_at: f ? f.min_tmp_at : null, fc_tmfc: f ? f.issued_at : null, fc_at: new Date().toISOString() }); }

@@ -307,6 +307,8 @@ class Mock:
                     cur = next((x for x in self.round_reqs if x["round_id"] == rid and x["branch_id"] == r["branch_id"]), None)
                     if not cur: cur = {"round_id": rid, "branch_id": r["branch_id"], "req_truck": 0, "req_blower": 0, "assigned_truck": 0, "assigned_blower": 0, "confirmed": False}; self.round_reqs.append(cur)
                     cur.update({k: v for k, v in r.items() if k != "branch_id"})
+                    if "confirmed" not in r or any(k not in ("branch_id", "confirmed") for k in r):       # 누가 저장했는지(마이그레이션 50) — 확정·취소만이면 남기지 않음
+                        cur.update(saved_at="2026-11-02T04:00:00Z", saved_lv="admin" if self.can(u, "req.confirm") else "hq" if self.can(u, "req.edit.hq") else "branch")
                 return send(200, {"rows": len(body["p_rows"])})
             if tbl == "create_round" and "/rpc/" in path:          # 새 기준일자 + 전체 장비 지원 여부 이어받기(마이그레이션 38)
                 self.eq_calls.append((tbl, body)); d = body["p_date"]
