@@ -265,7 +265,7 @@ const Api = (() => {
             if (!routeOk(r.vehicle_id)) return "42501";
             const k = r.date + "|" + r.vehicle_id, old = sim.get(k), v = db.vehicles.find(x => x.id === r.vehicle_id);
             if (old && JSON.stringify(old.stops) === JSON.stringify(r.stops)) continue;                 // 시각만
-            if (v.org === POOL && r.stops.includes(v.home_branch)) return "SA005";                         // 지역본부 장비: 그 지사가 첫날 한 곳(자기 지사로는 못 보냄, 2026-11-02)
+            if (v.org === POOL) return "42501";                                                        // 지역본부 장비의 지사는 관리자만(마이그레이션 55), 지사는 위의 시각만
             const inRound = rd0 && r.date >= rd0.start_date && r.date < addDaysISO(rd0.start_date, rd0.days || 4);     // 2026-11-02: 기준일자의 모든 지원일
             if (!inRound || (old && (old.revised || old.stops.length !== 1)) || r.stops.length > 1) return "SA003";
             if (!r.stops.length) { sim.delete(k); continue; }
@@ -287,7 +287,7 @@ const Api = (() => {
         if (vehicles.some(v => !vehOk(v.id)) || status.some(x => !vehOk(x.vehicle_id))) return done({ ok: false, message: ERR["42501"], code: "42501" });
         const vof = id => db.vehicles.find(x => x.id === id) || {};
         if (status.some(x => vof(x.vehicle_id).org === POOL && (x.status !== "O" || x.off_from))) return done(err("23514", "지역본부 장비의 지원 여부는 늘 '지원'입니다."));
-        if (routes.some(r => { const h = vof(r.vehicle_id).home_branch; return h && r.stops.includes(h); })) return done(err("SA005"));
+        if (can("equip.route") && routes.some(r => { const h = vof(r.vehicle_id).home_branch; return h && r.stops.includes(h); })) return done(err("SA005"));   // 지사 계정은 아래에서 먼저 42501(서버와 같은 순서, 55)
         if (!can("equip.route")) { const c = ownRoutesErr(); if (c) return done({ ok: false, message: ERR[c], code: c }); }
         if (!can("equip.route")) routes = routes.map(r => { const x = db.routes.find(y => y.date === r.date && y.vehicle_id === r.vehicle_id); return { ...r, revised: !!(x && x.revised) }; });
         if (!can("equip.edit.all") && vehicles.some(v => Object.keys(v).some(k => !["id", "plate", "blower_s", "blower_l", "rented"].includes(k)))) return done({ ok: false, message: ERR["42501"] });

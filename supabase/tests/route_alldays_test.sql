@@ -43,9 +43,9 @@ begin
   perform pg_temp.chk('기계화부: 하루 두 곳 거절','authenticated',e1,format(sf,'2099-12-03','V9001','["B002","B003"]',rid),'err:SA003');
   perform pg_temp.chk('관리자: 지원일 3 두 곳','authenticated',a,format(sf,'2099-12-03','V9001','["B002","B003"]',rid),'ok:1');
   perform pg_temp.chk('기계화부: 관리자가 정한 두 곳은 못 바꿈','authenticated',e1,format(sf,'2099-12-03','V9001','["B002"]',rid),'err:SA003');
-  perform pg_temp.chk('지사: 자기 지역본부 장비 지원일 2','authenticated',b,format(sf,'2099-12-02','V9003','["B002"]',rid),'ok:1');
-  perform pg_temp.chk('지사: 지원일 2 배정 넘김','authenticated',b,format(sf,'2099-12-02','V9004','["B002"]',rid),'err:SA002');
-  perform pg_temp.chk('지사: 지원일 3 자기 지사로 거절','authenticated',b,format(sf,'2099-12-03','V9003','["B001"]',rid),'err:SA005');
+  perform pg_temp.chk('지사: 자기 지역본부 장비 지원일 2 도 거절(55부터 관리자만)','authenticated',b,format(sf,'2099-12-02','V9003','["B002"]',rid),'err:42501');
+  perform pg_temp.chk('지사: 지원일 2 다른 장비도 거절(55)','authenticated',b,format(sf,'2099-12-02','V9004','["B002"]',rid),'err:42501');
+  perform pg_temp.chk('지사: 지원일 3 자기 지사로 거절(55)','authenticated',b,format(sf,'2099-12-03','V9003','["B001"]',rid),'err:42501');
   perform pg_temp.chk('다른 지사: 남의 지역본부 장비 거절','authenticated',cc,format(sf,'2099-12-02','V9003','["B002"]',rid),'err:42501');
   perform pg_temp.chk('기계화부: 자기가 정한 지원일 2 지우기','authenticated',e1,format(sf,'2099-12-02','V9001','[]',rid),'ok:1');
   perform pg_temp.yes('지원일 2 V9005=B003, 지원일 1 V9005=B002, 지원일 4 V9001=B003 이 남음',

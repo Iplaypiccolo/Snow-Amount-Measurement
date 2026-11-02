@@ -823,7 +823,8 @@ function slotCell(v, d, ed, confirmed) {
   if (!ed) {                     // 지원장비(기계화부) 계정: 자기 기관 장비의 도착 예상 시각·지원 불가(지원일 2부터) + 지원일 1의 지사 한 곳(배정받은 지사 중, 마이그레이션 43)
     const timeEd = routeOwn(v);                                       // 예전 수준: 자기 기관(지사는 자기 지사 지역본부) 장비만 — '모든 기관' 권한이 있어도 지원일 칸은 자기 기관만
     // 2026-11-02: 지원일 1만이 아니라 관리자가 정한 기준일자의 모든 지원일(govRound 가 지금 기준일자인 날)에서 하루 한 곳씩
-    if (timeEd && orgHasAlloc(v.org) && st.status === "O" && (!stops.length || (stops.length === 1 && !rec.revised))) {     // 지사도 자기 지사 지역본부 장비를(2026-11-02)
+    // 지역본부 장비의 지사는 관리자만(마이그레이션 55) — 지사 계정은 아래 칸에서 정해진 지사 이름을 보고 도착 시각만 넣음
+    if (timeEd && !isPool(v) && orgHasAlloc(v.org) && st.status === "O" && (!stops.length || (stops.length === 1 && !rec.revised))) {
       const cur = stops[0] || "", list = allocBranches(v.org, v.type).filter(b => b.id !== v.home_branch), ids = new Set(list.map(b => b.id)), free = v.type === "이동정비차";
       const full = b => !free && b.id !== cur && allocUsed(v.org, v.type, b.id, d) >= allocCap(v.org, v.type, b.id);
       const opts = `<option value="">${list.length ? "지사 선택" : "배정받은 지사 없음"}</option>` +
@@ -1433,8 +1434,8 @@ document.addEventListener("change", async e => {
     if (t.value === "__off") { setStat(vid, { off_from: d }); return patchVehicle(vid); }          // 지원 불가(이날부터): 이날·뒷날 칸이 지원 불가로
     S.extraStop.delete(rk(d, vid)); setRoute(d, vid, readCell(vid, d)); return patchCell(vid, d);
   }
-  if (t.dataset.ra) {                       // 기계화부·지사: 그 지원일의 피지원 지사(배정받은 지사 중 한 곳, 2026-11-02 모든 지원일). 다른 칸의 남은 대수 표시도 바뀌므로 표를 다시 그림
-    const vid = t.dataset.ra, d = t.dataset.rd, v = vehById(vid), cr = curRound(), g = govRound(d); if (!v || !routeOwn(v) || !cr || !g || g.id !== cr.id) return refresh();
+  if (t.dataset.ra) {                       // 기계화부: 그 지원일의 피지원 지사(배정받은 지사 중 한 곳, 2026-11-02 모든 지원일). 다른 칸의 남은 대수 표시도 바뀌므로 표를 다시 그림
+    const vid = t.dataset.ra, d = t.dataset.rd, v = vehById(vid), cr = curRound(), g = govRound(d); if (!v || isPool(v) || !routeOwn(v) || !cr || !g || g.id !== cr.id) return refresh();
     if (t.value === "__off") { if (!canVeh(v) || isPool(v) || d <= cr.start_date) return refresh(); setStat(vid, { off_from: d }); return patchVehicle(vid); }   // 지원일 2부터: 지원 불가(이날부터)
     const rec = recOf(d, vid), val = t.value === "__del" ? "" : t.value;
     setRoute(d, vid, val ? { stops: [val], times: [rec.stops[0] === val ? rec.times[0] || null : null], revised: false } : EMPTY);

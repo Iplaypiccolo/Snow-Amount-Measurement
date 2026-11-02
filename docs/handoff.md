@@ -44,6 +44,12 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-02 · 커밋 (이 기록 커밋 하나) · 지역본부 장비의 피지원 지사는 관리자만 (migration 55)
+- 사용자: "지사는 지원일자별 선택을 못 하게, 기계화부만 선택하고 지사는 관리자가 정해 주게". 사용자 확인 뒤 실서버 적용, 되돌림 시험 15/15.
+- `supabase/migrations/20261102_55_pool_route_admin.sql`: `private.vehicle_routes_guard` 에 한 줄(시각만 고침은 그 앞에서 통과). 시험 `supabase/tests/pool_route_admin_test.sql`, `route_alldays_test.sql` 기대값 갱신.
+- `equipment/js/app.js`: `slotCell`·`data-ra` 처리에서 지역본부 장비 제외. `equipment/js/api.js`: 샘플 모드도 42501. `guide/guide.js`, `docs/equipment-rules.md` 문구.
+— ✍ Claude Code 작성
+
 ### 2026-11-02 · 커밋 (이 기록 커밋 하나) · 지사별 요청·편성 한 화면에 더 많이
 - 사용자: "보이는 수량이 적음(모바일·컴퓨터), 글자가 작아도 좋음, 내릴 수 있는 길이가 적음".
 - `equipment/js/app.js` `fitBranch`: 표 창을 화면 아래 끝까지(렌더·탭 전환·창 크기 변경 때). `equipment/css/style.css`: 이 탭의 줄·제목·글자·위쪽 줄 축소, 휴대폰은 위쪽 줄을 한 줄씩. 칸(id) 변경 없음.

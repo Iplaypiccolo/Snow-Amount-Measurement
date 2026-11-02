@@ -881,6 +881,7 @@ def t_reload(p):
     check(ev(p, "S.sdraft.size") == 0 and ev(p, "stOf(S.round, 'V013').status") == "" and "새로 불러왔습니다" in toast(p), "버리고 다시 읽음")
     tab(p, "move"); p.click("#reloadTop"); p.wait_for_timeout(500); check("새로 불러왔습니다" in toast(p) and p.locator("#matrix tbody tr").count() > 0, "이동 현황에서도")
 
+def bn_in(p, vid, d): return p.locator(f"#eqTable td[data-cell='{d}|{vid}'] .sl-n").count() == 1
 def t_pool_vehicles(p):
     """지역본부 장비(2026-10-12, 마이그레이션 44): 지사가 '타지사 지원 가능' 대수를 내고 관리자가 확정 → 그 지사·관리자가 그 기준일자의 제설차를 등록.
     피지원 지사는 관리자만, 지사는 번호·임차·도착 시각·삭제. 이름 '인천 252호'/'인천 임차 1호'. 카드 5개·기관 버튼 여러 개·표 칸 순서·배정 '지역본부' 칸·이동 현황 연동"""
@@ -972,19 +973,15 @@ def t_pool_vehicles(p):
     p.select_option(rsel(v2, d0), dg); p.wait_for_timeout(200); check("배정 초과" in p.locator(cell(v2) + " .al-flag").inner_text(), "배정(1대)보다 많이 보내면 배정 초과")
     p.select_option(rsel(v2, d0), yy); p.wait_for_timeout(200); check("배정 없음" in p.locator(cell(v2) + " .al-flag").inner_text(), "배정이 없는 지사는 배정 없음")
     p.select_option(rsel(v2, d0), "__del"); p.wait_for_timeout(200); check(ev(p, "S.draft.size") == 0, "지움")
-    # ── 지사(인천): 자기 장비의 번호·임차·도착 시각·삭제 + 첫날 피지원 지사 한 곳(관리자가 지역본부에 배정한 지사 중, 2026-11-02)
+    # ── 지사(인천): 자기 장비의 번호·임차·도착 시각·삭제. 피지원 지사는 관리자만(마이그레이션 55)
     as_user(p, "br-ic"); tab(p, "fleet")
     check(ev(p, "[...document.querySelectorAll('#nvOrg option')].map(o => o.value)") == ["B:" + ic] and p.locator("#save-fleet").is_visible(), "지사: 자기 지사만 등록, 저장 바 보임")
     check(vr(v1).locator("[data-vp], [data-vr], [data-vdel]").count() == 3 and p.locator("#eqTable select[data-rv]").count() == 0 and vr("V001").locator("input:enabled, select").count() == 0, "자기 장비만 고칠 수 있고 관리자용 지사 목록은 없음")
-    ra = f"select[data-ra='{v1}'][data-rd='{d0}']"
-    opts = [o for o in ev(p, f"[...document.querySelectorAll(\"{ra} option\")].map(o => o.value)") if o and o != "__del"]
-    ra2 = f"select[data-ra='{v1}'][data-rd='{day(p, 1)}']"
-    opts2 = [o for o in ev(p, f"[...document.querySelectorAll(\"{ra2} option\")].map(o => o.value)") if o and o != "__del"]
-    check(opts == [dg] and opts2 == [dg], f"지원일 1·2 모두, 배정받은 지사(대관령)만 고름(자기 지사 인천·지원 불가 없음, 2026-11-02): {opts} {opts2}")
+    check(p.locator(f"select[data-ra='{v1}']").count() == 0 and bn_in(p, v1, d0), "지사: 지원일 칸에 지사 드롭다운 없음, 관리자가 정한 지사 이름만(마이그레이션 55)")
     ti = f"input[data-fk='t:{d0}:{v1}:0']"; p.fill(ti, "0830"); p.press(ti, "Tab"); p.wait_for_timeout(150); confirm_fleet(p)
     check("확정했습니다" in toast(p) and ev(p, f"recOf('{d0}', '{v1}').times[0]") == "08:30", "지사: 도착 예상 시각 — " + toast(p))
-    check(ev(p, f"Api.saveFleet([], [{{ date: '{d0}', vehicle_id: '{v1}', stops: ['{yy}'], revised: false, times: null }}], S.round, []).then(r => r.code)") == "SA001", "서버: 배정받지 않은 지사로는 거절")
-    check(ev(p, f"Api.saveFleet([], [{{ date: '{d0}', vehicle_id: '{v1}', stops: ['{ic}'], revised: false, times: null }}], S.round, []).then(r => r.code)") == "SA005", "서버: 자기 지사로는 거절")
+    check(ev(p, f"Api.saveFleet([], [{{ date: '{d0}', vehicle_id: '{v1}', stops: ['{yy}'], revised: false, times: null }}], S.round, []).then(r => r.code)") == "42501", "서버: 지사는 지사를 바꿀 수 없음(55)")
+    check(ev(p, f"Api.saveFleet([], [{{ date: '{d0}', vehicle_id: '{v1}', stops: ['{ic}'], revised: false, times: null }}], S.round, []).then(r => r.code)") == "42501", "서버: 자기 지사로도 거절(55)")
     setnum(f"[data-vp='{v2}']", 7)
     p.check(f"[data-vr='{v3}']"); p.wait_for_timeout(150); check(ev(p, f"vval(vehById('{v3}'), 'plate')") == "인천임차1" and ev(p, "S.vdraft.size") == 2, "번호·임차를 고치면 이름(저장 값)도 함께")
     confirm_fleet(p); check("확정했습니다" in toast(p) and ev(p, f"vname(vehById('{v2}'))") == "인천 임차 7호" and ev(p, f"vname(vehById('{v3}'))") == "인천 임차 1호", toast(p))
