@@ -150,6 +150,25 @@ def t_network_problems(b, ctx, m):
         m.down = True; p2 = open_site(ctx2, m); typed_login(p2, "admin-01", SBM.ADMIN_PW); check("연결할 수 없습니다" in p2.locator(".ss-msg.warn").inner_text() and not in_app(p2), "로그인 중 연결 문제")
     finally: ctx2.close()
 
+def t_server_trouble_keeps_login(b, ctx, m):
+    """2026-11-03: 서버 일시 오류(429·5xx)는 로그인을 끊지 않고, 비밀번호 오류로 안내하지 않음. 진짜 끊김(401·잘못된 열쇠)은 그대로 로그아웃"""
+    p = open_site(ctx, m); typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector("body.authed", timeout=20000)
+    def expire(ms): p.evaluate("(ms) => { const k = 'ss_session', st = sessionStorage.getItem(k) ? sessionStorage : localStorage, s = JSON.parse(st.getItem(k)); s.expires_at = Date.now() + ms; st.setItem(k, JSON.stringify(s)); }", ms)
+    status = {"v": 429}
+    p.route("**/auth/v1/token?grant_type=refresh_token", lambda r: r.fulfill(status=status["v"], content_type="application/json", body="{}"))
+    expire(30000); p.evaluate("SSAuth.authed('/rest/v1/hqs?select=id')"); check(p.evaluate("SSAuth.hasSession()"), "갱신 429 + 아직 유효: 그 열쇠로 계속")
+    expire(-1000); r = p.evaluate("SSAuth.authed('/rest/v1/hqs?select=id').then(() => 'ok', e => e.message)"); check(r == "network" and p.evaluate("SSAuth.hasSession()"), f"갱신 429 + 만료: 로그인 유지, 연결 문제로 처리 ({r})")
+    status["v"] = 503; r = p.evaluate("SSAuth.authed('/rest/v1/hqs?select=id').then(() => 'ok', e => e.message)"); check(r == "network" and p.evaluate("SSAuth.hasSession()"), f"갱신 503: 로그인 유지 ({r})")
+    status["v"] = 400; r = p.evaluate("SSAuth.authed('/rest/v1/hqs?select=id').then(() => 'ok', e => e.message)"); check(r == "no_session" and not p.evaluate("SSAuth.hasSession()"), f"갱신 400(서버가 끊음): 로그아웃 ({r})")
+    p.unroute("**/auth/v1/token?grant_type=refresh_token"); p.close()
+    # 내 정보 조회 503: 로그인 정보를 지우지 않음 / 로그인 때 서버 500: 비밀번호 오류로 안내하지 않음
+    p = open_site(ctx, m, url=T.URL + "#2"); p.evaluate("SSAuth.logout()") if p.evaluate("SSAuth.hasSession()") else None; p.reload(); p.wait_for_selector("#ssU", timeout=20000)
+    typed_login(p, "admin-01", SBM.ADMIN_PW); p.wait_for_selector("body.authed", timeout=20000)
+    p.route("**/rest/v1/profiles*", lambda r: r.fulfill(status=503, content_type="application/json", body="{}"))
+    res = p.evaluate("SSAuth.restore()"); check(res["reason"] == "network" and p.evaluate("SSAuth.hasSession()"), f"프로필 503: 로그인 유지 ({res})")
+    p.route("**/auth/v1/token?grant_type=password", lambda r: r.fulfill(status=500, content_type="application/json", body="{}"))
+    res = p.evaluate("SSAuth.login('admin-01', 'x')"); check(res["reason"] == "network" and "비밀번호" not in res["message"], f"로그인 500: {res}")
+
 def t_equipment_gate(b, ctx, m):
     ctx_new = b.new_context()
     try:
@@ -204,7 +223,7 @@ def t_no_secrets_and_safe_text(b, ctx, m):
     check("Xss#Pass" not in p.evaluate("document.body.innerHTML"), "화면 어디에도 비밀번호가 없어야 함")
 
 TESTS = [t_locked_before_login, t_wrong_and_empty, t_login_session_only, t_remember_id, t_auto_login, t_auto_login_expired, t_server_revoked, t_special_accounts,
-         t_branch_set_by_admin_enters_main_directly, t_cross_tab_logout, t_network_problems, t_equipment_gate, t_logout_from_equip_then_login_starts_first_screen, t_snow_snapshot_cached, t_no_secrets_and_safe_text]
+         t_branch_set_by_admin_enters_main_directly, t_cross_tab_logout, t_network_problems, t_server_trouble_keeps_login, t_equipment_gate, t_logout_from_equip_then_login_starts_first_screen, t_snow_snapshot_cached, t_no_secrets_and_safe_text]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()

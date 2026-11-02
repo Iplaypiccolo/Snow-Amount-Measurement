@@ -1135,6 +1135,23 @@ def t_fixed_columns(p):
     tab(p, "move"); w0 = widths("matrix"); go_date(p, day(p, 2)); check(not over("matrix"), f"이동 글자 넘침: {over('matrix')}"); check(widths("matrix") == w0, f"날짜가 바뀌어도 같은 폭: {w0} {widths('matrix')}")
     go_date(p, day(p, 0))
 
+def t_reqs_read_fail(p):
+    """2026-11-03: 요청 자료를 못 읽으면 0대·미확정으로 보여 주지 않음 — 표를 숨기고 저장·확정을 막음, [다시 읽기]로 복구"""
+    tab(p, "branch"); check(p.locator("#confirmAll").count() == 1, "처음엔 일괄 확정 있음")
+    n0 = ev(p, "Object.keys(S.reqs).length")
+    ev(p, "(window.__rq = Api.requests, Api.requests = async () => ({ ok: false, message: '시험 오류' }), null)")
+    ev(p, "reloadAll()"); p.wait_for_timeout(400)
+    check("불러오지 못했습니다" in p.locator("#branchTable").inner_text() and p.locator("#confirmAll, [data-confirm], [data-confirm-hq], #branchTable [data-rq]").count() == 0, "표를 숨겨 잘못 확정할 수 없음")
+    ev(p, "saveBranchRows([S.order[0].id], { confirmed: true }, 'x')"); p.wait_for_timeout(200); check("저장할 수 없습니다" in toast(p), "저장도 막음: " + toast(p))
+    tab(p, "alloc"); check("불러오지 못했습니다" in p.locator("#allocTable").inner_text() and "편성이 확정된 지사가 없습니다" not in p.locator("#allocTable").inner_text(), "기관별 배정도 '없음'으로 보이지 않음")
+    tab(p, "branch"); ev(p, "(Api.requests = window.__rq, null)"); p.click("#branchTable [data-reload]"); p.wait_for_timeout(400)
+    check(p.locator("#confirmAll").count() == 1 and ev(p, "Object.keys(S.reqs).length") == n0 and not ev(p, "S.reqsBad"), "다시 읽기로 복구")
+
+def t_removed_hints(p):
+    """2026-11-03: 강원본부 지원장비·기관별 배정의 긴 설명 문구 삭제"""
+    tab(p, "gwteam"); check("직접 보내는" not in p.locator("#teamRound").inner_text() and p.locator("#roundSelTeam").count() == 1, "강원본부 지원장비 설명 없음")
+    tab(p, "alloc"); check("몇 대 보낼지" not in p.locator("#allocRound").inner_text() and p.locator("#roundSelAlloc").count() == 1, "기관별 배정 설명 없음")
+
 def t_branch_saved(p):
     """(2026-10-15, 마이그레이션 46) 지사·본부는 요청·지원 가능이 0이어도 [저장] → '저장 완료'(타지사 지원 가능 다음 칸). 관리자 저장·확정은 남기지 않음.
     보기 버튼은 처음에 아무것도 안 눌림, [저장 안 한 지사만]은 맨 오른쪽"""
@@ -1337,7 +1354,7 @@ def t_route_perm_admin_only(p):
     check("권한이 없습니다" in toast(p), "화면을 우회해 다른 기관 경로를 보내도 거절: " + toast(p))
     as_user(p, "admin1"); tab(p, "fleet"); check(p.locator("#eqTable select[data-rv]").count() > 0 and p.locator("#day1In").count() == 1, "관리자는 지원일 칸 전부")
 
-TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_reqs_read_fail, t_removed_hints, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,

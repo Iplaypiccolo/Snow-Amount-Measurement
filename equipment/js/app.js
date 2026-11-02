@@ -365,11 +365,12 @@ async function ensureStatus() {          // 불러 둔 날짜 범위에 걸치�
   ids.forEach(id => S.stLoaded.add(id));
   r.rows.forEach(x => S.rstat.set(x.round_id + "|" + x.vehicle_id, { status: x.status || "", off_from: x.off_from || null, updated_at: x.updated_at || null }));
 }
-async function loadReqs() {
-  S.reqs = {};
-  if (!S.round) return;
+async function loadReqs() {        // 못 읽으면 S.reqsBad: 값이 0대·미확정으로 보여 잘못 확정·저장하지 않도록 표를 숨기고 저장을 막음(2026-11-03)
+  S.reqsBad = false;
+  if (!S.round) { S.reqs = {}; return; }
   const r = await Api.requests(S.round);
-  if (!r.ok) return toast(r.message, true);
+  S.reqs = {};
+  if (!r.ok) { S.reqsBad = true; return toast(r.message, true); }
   r.rows.forEach(x => { S.reqs[x.branch_id] = { ...x, arrive_at: localInput(x.arrive_at), reason: x.reason || null }; });
 }
 /* ---------- [새로고침]: 다른 아이디가 넣은 자료를 화면을 새로 열지 않고 다시 읽음(이동 현황·기관별 장비·지사별 요청·편성·기관별 배정 공통) ---------- */
@@ -894,7 +895,7 @@ function resetFleet() {          // 보이는 장비의 지원 여부(고른 기
    ============================================================ */
 function renderTeam() {
   const r = curRound(), ed = canTeam(), dates = windowDates();
-  $("teamRound").innerHTML = roundSel("roundSelTeam") + `<span class="hint">${r ? "강원본부가 직접 보내는 제설차 4대입니다. 지사의 요청·편성·기관별 배정과 상관없이 모든 지사로 보낼 수 있고, 이동 현황에는 '강원 신속대응팀' 열로 따로 더해집니다." : "기준일자가 없습니다."}</span>`;
+  $("teamRound").innerHTML = roundSel("roundSelTeam") + (r ? "" : `<span class="hint">기준일자가 없습니다.</span>`);
   $("teamFilters").innerHTML = ed ? `<div class="tb-row"><span class="tb-right"><label class="ctl">지원일 칸 <select class="ci" id="colsSelTeam">${Array.from({ length: 9 }, (_, k) => k + 2).map(n => `<option value="${n}" ${n === S.cols ? "selected" : ""}>${n}개</option>`).join("")}</select></label></span></div>` : "";
   const head = dates.map((d, i) => `<th class="dayh">지원일 ${i + 1}<span class="sub">` +
     (i === 0 && ed ? `<input class="ci" type="date" id="day1InTeam" value="${esc(d)}"${r ? ` min="${esc(r.start_date)}"` : ""} aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동, 기준일자보다 앞은 안 됨)">` : esc(fmtMD(d))) + `</span></th>`).join("");
@@ -1035,6 +1036,7 @@ function fitBranch() {
   w.style.maxHeight = Math.max(240, Math.floor(innerHeight - w.getBoundingClientRect().top - scrollY - 8)) + "px";
 }
 addEventListener("resize", () => { stickHead($("branchTable")); stickHead($("matrix")); stickHead($("allocTable")); fitBranch(); });
+const reqsBadHtml = () => `<tbody><tr><td class="empty">요청·편성 자료를 불러오지 못했습니다. <button type="button" class="btn sm" data-reload>다시 읽기</button></td></tr></tbody>`;
 function renderBranch() {
   const m = S.me, r = curRound();
   banner("perm-branch", canAnyReq(),
@@ -1050,6 +1052,7 @@ function renderBranch() {
     `<span class="tb-right">${myBlk ? `<span class="my-blk"><i aria-hidden="true"></i>파란 표 = 내가 입력하는 표</span>` : ""}<span class="br-dirty" id="brDirty" role="status" hidden></span></span>` +
     (S.me.role === "admin" ? `<button type="button" class="btn sm" id="zoneMgr">특보구역 관리</button>` : "") + `</div>` : "";
   if (!r) { $("branchTable").innerHTML = `<tbody><tr><td class="empty">기준일자가 없습니다.</td></tr></tbody>`; return; }
+  if (S.reqsBad) { $("branchTable").classList.remove("fixcols"); $("branchTable").style.minWidth = ""; $("branchTable").innerHTML = reqsBadHtml(); return; }
   const conf = can("req.confirm");
   // 칸 순서: 지사 | 기상(24시 예보[적설·강수·확률·기온]·대설특보·직접입력) | 지사 요청 | 도착 요청 | 타지사 지원 가능 | 저장 ║ 편성 | 확정
   // ║ = 빈 칸(blk-gap)으로 표 둘처럼 나눔: 왼쪽 = 지사·본부가 넣는 표, 오른쪽(adm) = 관리자가 넣는 표. 내 계정의 표는 파란색(mine-left / mine-right)
@@ -1102,6 +1105,7 @@ function saveCell(b) {
 }
 // 지사 줄 저장(바뀐 열만). extra 는 그 줄에 더할 값(확정 버튼: { confirmed: true/false })
 async function saveBranchRows(ids, extra, msg) {
+  if (S.reqsBad) return toast("요청·편성 자료를 불러오지 못해 저장할 수 없습니다. [다시 읽기]를 눌러 주세요.", true);
   if (S.preview) return toast("미리보기에서는 저장할 수 없습니다. '내 아이디'로 돌아오세요.", true);
   const list = ids.map(b => { const f = { ...(S.rdraft.get(b) || {}), ...(extra || {}) }, o = { branch_id: b };
     Object.entries(f).forEach(([k, v]) => { o[k] = k === "arrive_at" ? (v ? new Date(v).toISOString() : null) : k === "reason" ? (v || "") : v; }); return { o, f }; });
@@ -1111,7 +1115,8 @@ async function saveBranchRows(ids, extra, msg) {
   busy("branch", false);
   if (!r.ok && r.code === "55000") {                    // 그사이 다른 화면(관리자)에서 확정됨 → 최신으로 다시 읽고, 그 지사 줄의 고친 값은 버림
     await loadReqs(); const done = ids.filter(isConf); done.forEach(id => S.rdraft.delete(id)); refresh();
-    return toast(`${(done.length ? done : ids).map(bn).join(", ")} 지사는 이미 확정되어 고칠 수 없습니다. 확정이 취소된 뒤에 고쳐 주세요.`, true);
+    const rest = done.length ? ids.length - done.length : 0;        // 묶음 저장은 전부 저장되거나 전부 취소됨(한 줄이 막히면 나머지도 저장 안 됨)
+    return toast(`${(done.length ? done : ids).map(bn).join(", ")} 지사는 이미 확정되어 고칠 수 없습니다. 확정이 취소된 뒤에 고쳐 주세요.` + (rest ? ` 나머지 ${rest}개 지사도 저장되지 않았으니 다시 눌러 주세요.` : ""), true);
   }
   if (!r.ok) return toast(r.message, true);
   // 저장 = 누가 저장했는지 남김(지사·본부·관리자 모두, 2026-11-02). 확정·확정 취소만 한 줄(고친 값 없음)은 남기지 않음 — 서버도 같은 규칙(마이그레이션 50)
@@ -1213,7 +1218,8 @@ async function switchRound(id, force) {
 function renderAlloc() {
   const r = curRound(), ed = canRoute() && !!r, AO = [...S.orgs, POOL];        // 배정 대수는 관리자(equip.route)만 — 2026-11-02        // 칸: 기계화부 4곳(제설차·제설기) + 지역본부(제설차만)
   banner("perm-alloc");
-  $("allocRound").innerHTML = roundSel("roundSelAlloc") + `<span class="hint">${r ? "편성이 확정된 지사에 어느 기관이 제설차·제설기를 몇 대 보낼지 정합니다. 기관(기계화부)은 이 대수 안에서 지원일 1의 장비별 지사를 고릅니다(기관별 장비). 지역본부 장비는 관리자가 장비별 지사를 정하고, 여기 대수를 넘기면 '배정 초과'로 표시됩니다. 이동정비차는 배정하지 않습니다." : "기준일자가 없습니다."}</span>`;
+  $("allocRound").innerHTML = roundSel("roundSelAlloc") + (r ? "" : `<span class="hint">기준일자가 없습니다.</span>`);
+  if (S.reqsBad) { $("allocTable").classList.remove("fixcols"); $("allocTable").style.minWidth = ""; $("allocTable").innerHTML = reqsBadHtml(); return; }
   const rows = r ? S.order.filter(b => isFixed(b.id) || AO.some(o => { const a = aval(o, b.id); return a.truck + a.blower > 0; })) : [];
   if (!rows.length) { $("allocTable").classList.remove("fixcols"); $("allocTable").style.minWidth = ""; $("allocTable").innerHTML = `<tbody><tr><td class="empty">${r ? "편성이 확정된 지사가 없습니다. 지사별 요청·편성에서 편성 대수를 넣고 [확정]하면 여기에 나옵니다." : "기준일자가 없습니다."}</td></tr></tbody>`; return; }
   const sum = (bid, f) => AO.reduce((n, o) => n + (aval(o, bid)[f] || 0), 0), osum = (o, f) => rows.reduce((n, b) => n + (aval(o, b.id)[f] || 0), 0);

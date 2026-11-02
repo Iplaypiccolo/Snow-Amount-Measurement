@@ -16,6 +16,7 @@
   var DAY = 86400000;
   var AUTO_DAYS = { admin: 7, other: 30 };                      // 자동 로그인 유지 기간: 관리자는 짧게
   var NET_MSG = '서버에 연결할 수 없습니다. 인터넷 연결을 확인하세요. (회사 네트워크에서 supabase.co 접속이 막혀 있을 수도 있습니다)';
+  var BUSY_MSG = '서버가 잠시 바쁩니다. 잠시 뒤에 다시 시도하세요.';
 
   function parse(s) { try { return JSON.parse(s); } catch (e) { return null; } }
   // 브라우저 저장소를 못 쓰는 환경(일부 보안 설정·미리보기 창)에서는 이 페이지가 열려 있는 동안만 기억합니다(기능은 그대로 동작)
@@ -72,7 +73,10 @@
       var s2 = readSession(); if (!s2) throw new Error('no_session');
       if (s2.expires_at - Date.now() > 60000) return s2.access_token;                   // 다른 탭이 이미 새로 받음
       return raw('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: { refresh_token: s2.refresh_token } }).then(function (r) {
-        if (r.status >= 500 || r.status === 0) throw new Error('network');
+        if (r.status >= 500 || r.status === 0 || r.status === 429) {                    // 서버 일시 오류·접속 제한: 로그인을 끊지 않음. 아직 유효한 열쇠가 있으면 그대로 씀(2026-11-03)
+          if (s2.expires_at > Date.now()) return s2.access_token;
+          throw new Error('network');
+        }
         if (!r.ok || !r.json || !r.json.access_token) { writeSession(null); throw new Error('no_session'); }   // 서버가 로그인을 끊었거나(비밀번호 변경·비활성화 등) 만료
         var n = toSession(r.json, s2); writeSession(n); return n.access_token;
       });
@@ -87,7 +91,11 @@
     var s = readSession(); if (!s) return Promise.resolve({ ok: false, reason: 'none' });
     return rest('profiles?select=id,username,display_name,role,branch_id,org,hq_id,perms,must_change,disabled&id=eq.' + encodeURIComponent(s.user_id)).then(function (r) {
       var p = r.ok && Array.isArray(r.json) && r.json[0];
-      if (!p) { if (r.status === 401) { writeSession(null); return { ok: false, reason: 'expired', message: '로그인이 만료되었습니다. 다시 로그인하세요.' }; } writeSession(null); return { ok: false, reason: 'unregistered', message: r.ok ? '이 계정은 아직 등록되어 있지 않습니다. 관리자에게 문의하세요.' : '로그인이 만료되었습니다. 다시 로그인하세요.' }; }
+      if (!p) {
+        if (r.status === 401) { writeSession(null); return { ok: false, reason: 'expired', message: '로그인이 만료되었습니다. 다시 로그인하세요.' }; }
+        if (!r.ok) return { ok: false, reason: 'network', message: BUSY_MSG };          // 서버 일시 오류: 로그인 정보를 지우지 않고 다시 시도하게 둠(2026-11-03)
+        writeSession(null); return { ok: false, reason: 'unregistered', message: '이 계정은 아직 등록되어 있지 않습니다. 관리자에게 문의하세요.' };
+      }
       if (p.disabled) { writeSession(null); return { ok: false, reason: 'disabled', message: '비활성화된 계정입니다. 관리자에게 문의하세요.' }; }
       return { ok: true, me: p };
     }).catch(function (e) {
@@ -101,6 +109,7 @@
   function login(username, password, opt) {
     opt = opt || {}; var u = String(username || '').trim().toLowerCase();
     return raw('/auth/v1/token?grant_type=password', { method: 'POST', body: { email: u + '@' + CFG.emailDomain, password: password } }).then(function (r) {
+      if (r.status >= 500) return { ok: false, reason: 'network', message: BUSY_MSG };   // 서버 오류를 비밀번호 오류로 안내하지 않음(2026-11-03)
       if (!r.ok || !r.json || !r.json.access_token) return { ok: false, reason: 'bad', message: r.status === 429 ? '시도가 너무 많습니다. 잠시 뒤에 다시 하세요.' : '아이디 또는 비밀번호가 올바르지 않습니다.' };
       var s = toSession(r.json, { persist: !!opt.auto, username: u, auto_until: opt.auto ? Date.now() + AUTO_DAYS.other * DAY : 0 });
       writeSession(s);

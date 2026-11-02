@@ -44,6 +44,12 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 일시 오류로 로그아웃 안 함, 자료 못 읽으면 표 숨김, 설명 문구 삭제
+- `auth/auth.js`: 토큰 갱신 429·5xx, 내 정보 조회 일시 오류는 세션을 지우지 않음(`BUSY_MSG`). 로그인 5xx 는 비밀번호 오류로 안내하지 않음.
+- `equipment/js/app.js`: `loadReqs` 실패 시 `S.reqsBad` — 요청·편성·배정 표 대신 [다시 읽기], `saveBranchRows` 막음. 묶음 저장 55000 안내에 '나머지도 저장 안 됨' 추가. 강원본부 지원장비·기관별 배정 설명 문구 삭제.
+- 시험 `t_reqs_read_fail`, `t_removed_hints`(test_equipment), `t_server_trouble_keeps_login`(test_login_gate). 서버 규칙(확정 전 값 확인, 첫 저장 충돌)은 다음 커밋.
+— ✍ Claude Code 작성
+
 ### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 표 칸 폭 고정
 - 사용자: "지사별 요청·편성, 기관별 장비, 기관별 배정, 이동 현황 표가 글자 수에 따라 들쭉날쭉 — 합리적인 크기로 고정, 지원일 칸은 늘어나면 잘리지 않는 선에서 줄어도 됨".
 - `equipment/js/app.js` `fixCols(표, 폭 목록)`: colgroup + `table-layout: fixed`. null = 지원일 칸(남는 폭 나눔, 최소 `DAY_MIN` 176px). `equipment/css/style.css`: `.fixcols`, 칸 안 드롭다운이 칸 폭을 따라감. 칸(id) 변경 없음 → UI_VERSION 그대로.
