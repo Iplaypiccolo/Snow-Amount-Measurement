@@ -3,7 +3,7 @@
    - [보고서 보기]: 화면에 같은 모양으로 미리 보기 / [Word 받기]: .docx(워드) 파일로 내려받기
    - 자료는 이동 현황 표와 같은 계산(app.js 의 movesOn·장비가 지금 있는 지사 m.pos·강원 신속대응팀 체크)을 그대로 씀
    - 도착일시: 그 지사로 새로 오는 장비 중 가장 빠른 시각. 새로 오는 장비가 없고 전날부터 이어 지원 중이면 처음 온 때 + '(연속)'
-   - 지원장비 칸: 기계화부 = 기관 이름(서울경기 1), 지역본부 장비 = 출발 지사의 본부(충북본부 1), 강원 신속대응팀 = 강원팀
+   - 지원장비 칸: 기계화부 = 기관 이름(서울경기 1), 지역본부 장비 = 보낸 지사 이름(시흥 2 — 2026-11-02 사용자 요청), 강원 신속대응팀 = 강원팀
    - 아래 네모: 기계화부 N대(서울경기 10, …) / 지역본부 N대(서울경기 2대, …) / 강원 신속대응팀 N대 — 있는 것만
    - 워드 파일은 외부 프로그램 없이 여기서 직접 만듦(.docx = 압축 파일 안의 XML). 한글(HWP)에서도 열 수 있음
    ============================================================ */
@@ -14,10 +14,11 @@
   const fullDate = iso => { const [y, m, d] = iso.split("-").map(Number); return `${y}. ${m}. ${d}.(${WD[new Date(y, m - 1, d).getDay()]})`; };
   const hqOf = bid => S.hqById[(S.brById[bid] || {}).hq_id] || null;
 
-  // 표 칸에 쓰는 지원기관 이름과 정렬 순서(기계화부 기관 순서 → 지역본부(본부 순서) → 강원팀)
+  // 표 칸에 쓰는 지원기관 이름과 정렬 순서(기계화부 기관 순서 → 지역본부 장비(보낸 지사, 지사 순서) → 강원팀)
+  // 지역본부 장비는 표에는 '보낸 지사'(시흥 2), 아래 네모에는 그 지사의 본부(수도권 2대) — 2026-11-02 사용자 요청
   function srcLabel(v) {
-    if (isTeam(v)) return { label: "강원팀", key: 900 };
-    if (isPool(v)) { const h = hqOf(v.home_branch); return { label: (h ? h.name : "지역") + "본부", key: 100 + Math.max(0, S.hqs.indexOf(h)) }; }
+    if (isTeam(v)) return { label: "강원팀", key: 9000 };
+    if (isPool(v)) { const i = S.order.findIndex(b => b.id === v.home_branch); return { label: bn(v.home_branch), key: 100 + (i < 0 ? 999 : i) }; }
     const i = S.orgs.indexOf(v.org); return { label: v.org, key: i < 0 ? 50 : i };
   }
   const group = list => {          // [{label, n}] 순서대로
@@ -56,6 +57,8 @@
     return { date: d, total: moves.length, trucks, blowers, branches: groups.reduce((n, g) => n + g.rows.length, 0), groups, notes };
   }
 
+  // 표 칸 폭(워드와 미리 보기가 같음, 글자 길이와 상관없이 고정 — 2026-11-02 사용자 요청). 합 = A4 폭 - 여백 = 9906 twips
+  const COLW = [1350, 1250, 850, 2300, 2300, 1856], COLW_SUM = COLW.reduce((a, b) => a + b, 0);
   /* ---------- 미리 보기(화면) ---------- */
   const cellLines = arr => arr.map(x => `<div class="rp-src"><span>${esc(x.label)}</span><span>${x.n}</span></div>`).join("");
   function html(M) {
@@ -65,7 +68,7 @@
     }));
     return `<div class="rp-page" id="rpPage"><div class="rp-title">${TITLE}</div><div class="rp-date">${esc(fullDate(M.date))}</div>
       <div class="rp-sum"><b>□ 장비지원 : 총 ${M.total}대 (<span class="red">제설차 ${M.trucks}대, 제설기 ${M.blowers}대</span>)</b><span class="rp-cnt">※ ${M.branches}개 기관 지원</span></div>
-      <table class="rp-t"><thead><tr><th colspan="2" rowspan="2">피지원기관</th><th rowspan="2">대 수</th><th colspan="2">신속대응팀 지원장비</th><th rowspan="2">비 고<br>(도착일시)</th></tr><tr><th>제설차</th><th>제설기</th></tr>
+      <table class="rp-t"><colgroup>${COLW.map(w => `<col style="width:${(w / COLW_SUM * 100).toFixed(2)}%">`).join("")}</colgroup><thead><tr><th colspan="2" rowspan="2">피지원기관</th><th rowspan="2">대 수</th><th colspan="2">신속대응팀 지원장비</th><th rowspan="2">비 고<br>(도착일시)</th></tr><tr><th>제설차</th><th>제설기</th></tr>
       <tr class="rp-tot"><th colspan="2">계</th><th>${M.total}</th><th>${M.trucks}</th><th>${M.blowers}</th><th></th></tr></thead>
       <tbody>${body || `<tr><td colspan="6" class="c">${esc(fmtMD(M.date))}에 지원하는 장비가 없습니다.</td></tr>`}</tbody></table>
       <div class="rp-nt">※ 기관별 지원 현황</div><div class="rp-box">${M.notes.length ? M.notes.map(n => `<div>○ ${esc(n)}</div>`).join("") : "<div>○ 없음</div>"}</div></div>`;
@@ -86,7 +89,7 @@
   const FONT = '<w:rFonts w:ascii="맑은 고딕" w:hAnsi="맑은 고딕" w:eastAsia="맑은 고딕" w:cs="맑은 고딕"/>';
   const run = (t, o = {}) => `<w:r><w:rPr>${FONT}${o.b ? "<w:b/>" : ""}${o.color ? `<w:color w:val="${o.color}"/>` : ""}<w:sz w:val="${o.sz || 20}"/><w:szCs w:val="${o.sz || 20}"/></w:rPr><w:t xml:space="preserve">${x(t)}</w:t></w:r>`;
   // 단락 서식은 워드 규격 순서대로(autoSpace → spacing → ind → jc). 한글·숫자 사이 자동 띄움은 끔("20대"가 "20 대"로 보이지 않게)
-  const para = (runs, o = {}) => `<w:p><w:pPr><w:autoSpaceDE w:val="0"/><w:autoSpaceDN w:val="0"/><w:spacing w:before="${o.before || 0}" w:after="${o.after || 0}" w:line="${o.line || 240}" w:lineRule="${o.exact ? "exact" : "auto"}"/>${o.ind ? `<w:ind w:left="${o.ind}" w:right="${o.ind}"/>` : ""}${o.jc ? `<w:jc w:val="${o.jc}"/>` : ""}</w:pPr>${runs}</w:p>`;
+  const para = (runs, o = {}) => `<w:p><w:pPr>${o.tab ? `<w:tabs><w:tab w:val="right" w:pos="${o.tab}"/></w:tabs>` : ""}<w:autoSpaceDE w:val="0"/><w:autoSpaceDN w:val="0"/><w:spacing w:before="${o.before || 0}" w:after="${o.after || 0}" w:line="${o.line || 240}" w:lineRule="${o.exact ? "exact" : "auto"}"/>${o.ind ? `<w:ind w:left="${o.ind}" w:right="${o.ind}"/>` : ""}${o.jc ? `<w:jc w:val="${o.jc}"/>` : ""}</w:pPr>${runs}</w:p>`;
   const B = (v, sz = 4) => v === "nil" ? `w:val="nil"` : `w:val="${v}" w:sz="${sz}" w:space="0" w:color="000000"`;
   function cell(w, content, o = {}) {
     const bd = o.bd || {};
@@ -95,14 +98,15 @@
       `${borders ? `<w:tcBorders>${borders}</w:tcBorders>` : ""}${o.fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${o.fill}"/>` : ""}<w:vAlign w:val="center"/></w:tcPr>${content || para("")}</w:tc>`;
   }
   function docXml(M) {
-    const W = [1350, 1250, 850, 2300, 2300, 1856], TW = W.reduce((a, b) => a + b, 0);          // A4 폭 - 여백 = 9906 twips
+    const W = COLW, TW = COLW_SUM;
     const lines = M.groups.reduce((n, g) => n + g.rows.reduce((k, r) => k + Math.max(1, r.truck.length, r.blower.length), 0), 0);
     // 1쪽에 들어가게: 표에 쓸 수 있는 높이(약 175mm ≈ 496pt, 제목·요약·머리줄·아래 네모를 뺀 것)를 줄 수로 나눠 한 줄 높이를 정함(최대 18pt)
     // 글자는 줄 높이의 약 75%(5.5pt~10.5pt). 지사가 아주 많으면(줄 70개 이상) 글자가 너무 작아져 2쪽이 될 수 있음
     const hp = Math.min(18, 450 / Math.max(lines, 1)), sz = Math.max(11, Math.min(21, Math.round(hp * 0.75 * 2))), line = Math.round(hp * 20);
     const hc = (t, o = {}) => para(run(t, { sz: 19, b: 1 }), { jc: "center", before: 30, after: 30 });     // 머리줄·계: 글자 크기 고정(9.5pt)
     const c = (t, o = {}) => para(run(t, { sz, b: o.b, color: o.color }), { jc: o.jc || "center", line, exact: 1, ind: o.ind });
-    const srcCell = arr => arr.length ? arr.map(s => para(run(`${s.label} ${s.n}`, { sz }), { jc: "distribute", line, exact: 1, ind: 90 })).join("") : c("");
+    // 지원장비 칸: 이름은 왼쪽, 대수는 오른쪽 고정 위치(탭) — 이름 길이에 따라 글자 사이가 벌어지지 않게(예전 'distribute' 대신)
+    const TAB = W[3] - 80 - 120, srcCell = arr => arr.length ? arr.map(s => para(run(s.label, { sz }) + `<w:r><w:rPr>${FONT}<w:sz w:val="${sz}"/></w:rPr><w:tab/></w:r>` + run(String(s.n), { sz }), { jc: "left", line, exact: 1, ind: 120, tab: TAB })).join("") : c("");
     const thick = B("single", 12), thin = B("single", 4), dot = B("dotted", 4);
     const tblPr = (w, extra = "") => `<w:tblPr><w:tblW w:w="${w}" w:type="dxa"/><w:jc w:val="center"/>${extra}<w:tblLayout w:type="fixed"/><w:tblCellMar><w:left w:w="40" w:type="dxa"/><w:right w:w="40" w:type="dxa"/></w:tblCellMar></w:tblPr>`;
     const grid = `<w:tblGrid>${W.map(w => `<w:gridCol w:w="${w}"/>`).join("")}</w:tblGrid>`;
@@ -165,7 +169,7 @@
     toast(`${fmtMD(M.date)} 보고서(워드)를 내려받았습니다`);
   }
 
-  window.SSReport = { model, html, docXml, files: FILES, zip, open: openPreview, download };
+  window.SSReport = { model, html, docXml, files: FILES, zip, open: openPreview, download, srcLabel };
   document.addEventListener("click", e => {
     const t = e.target.closest && e.target.closest("#rptView, #rptDoc"); if (!t) return;
     if (t.id === "rptView") openPreview(); else download();

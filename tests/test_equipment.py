@@ -1147,6 +1147,11 @@ def t_report(p):
     # 지역본부 장비가 있으면 본부 단위로(서울경기 N대)
     pool = ev(p, "SSReport.model(S.date).notes.find(n => n.startsWith('지역본부'))")
     if pool: check(re.match(r"지역본부 \d+대\(.+ \d+대", pool), pool)
+    # 2026-11-02: 지역본부 장비는 표에는 보낸 지사 이름(시흥 2), 아래 네모에는 그 본부(수도권 2대)
+    sh = bid(p, "시흥")
+    lab = ev(p, f"SSReport.srcLabel({{ id: 'VX', org: POOL, type: '제설차', home_branch: '{sh}' }})")
+    check(lab["label"] == "시흥", f"지역본부 장비의 표 이름 = 보낸 지사: {lab}")
+    check(ev(p, "SSReport.srcLabel(vehById('V001')).label") == ev(p, "vehById('V001').org"), "기계화부 장비는 기관 이름 그대로")
     # 미리 보기
     p.click("#rptView"); p.wait_for_selector("#rpPage")
     pg = p.locator("#rpPage").inner_text()
@@ -1160,6 +1165,8 @@ def t_report(p):
     doc = z.read("word/document.xml").decode("utf-8"); txt = "".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", doc))
     check("신속대응팀 제설장비 지원 현황" in txt and f"총 {M['total']}대 (" in txt and row["name"] in txt and "기관별 지원 현황" in txt and M["notes"][0] in txt, txt[:300])
     check("<w:pgSz w:w=\"11906\" w:h=\"16838\"/>" in doc, "A4 세로")
+    check('<w:tblLayout w:type="fixed"/>' in doc and '<w:tab w:val="right"' in doc and "<w:tab/>" in doc, "칸 폭 고정, 지원장비 칸은 이름 왼쪽·대수 오른쪽 고정 위치(탭)")
+    check(ev(p, "getComputedStyle(document.querySelector('#rpPage .rp-t')).tableLayout") == "fixed" and ev(p, "document.querySelectorAll('#rpPage .rp-t col').length") == 6, "미리 보기도 칸 폭 고정")
     p.click("#sheetClose")
     with p.expect_download() as dl2: p.click("#rptDoc")              # 이동 현황 위의 [Word 받기]도
     check(dl2.value.suggested_filename.endswith(".docx"), "위쪽 [Word 받기]")
