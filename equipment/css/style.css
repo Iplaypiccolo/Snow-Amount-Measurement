@@ -677,24 +677,29 @@ table.alloc { min-width: 760px; }
 
 /* ===== 표 가독성 (2026-10-30 사용자 결정 — 3안: 다섯 가지 모두 + 터치 화면 보완) — 지사별 요청·편성 / 기관별 장비 / 기관별 배정 =====
    색은 테마 변수(--ink-soft·--surface·--line)로 섞어 밝게·어둡게 모두 맞춤. 0·빈칸 판단은 value 속성을 봄(입력 중에는 app.js 가 속성을 맞춤) */
-/* ① 조용한 입력칸: 테두리·바탕을 숨기고, 줄에 마우스를 올리거나 칸을 누르면 나타남
-   단, 드롭다운(select)은 고를 수 있으면 늘 테두리·바탕을 보여 줌(2026-11-01 사용자 요청 — '미정'·'지사 선택'도 꺼진 칸처럼 보이지 않게). 숨기는 것은 못 고르는 드롭다운만 */
-#branchTable tbody input.ci:not([type=checkbox]), #branchTable tbody select.ci:disabled, #branchTable tbody .tpick,
-#allocTable tbody input.ci, :is(#eqTable, #teamTable) tbody .slot select.ci:disabled, :is(#eqTable, #teamTable) tbody .slot input.ci, :is(#eqTable, #teamTable) tbody select[data-vs]:disabled, :is(#eqTable, #teamTable) tbody .pnum input.ci {
+/* ① 입력칸 모양(2026-11-02 사용자 요청으로 바꿈): 입력할 수 있는 칸(숫자·시각·날짜·드롭다운)은 늘 테두리·흰 바탕을 보여 줌 → '입력 가능'이 한눈에.
+   테두리·바탕을 숨기는 것은 입력할 수 없는(disabled) 칸만. 예전(10-30)에는 입력칸도 숨기고 마우스를 올려야 나타나서 꺼진 칸처럼 보였음 */
+#branchTable tbody input.ci:not([type=checkbox]):disabled, #branchTable tbody select.ci:disabled,
+#allocTable tbody input.ci:disabled, :is(#eqTable, #teamTable) tbody .slot select.ci:disabled, :is(#eqTable, #teamTable) tbody .slot input.ci:disabled, :is(#eqTable, #teamTable) tbody select[data-vs]:disabled, :is(#eqTable, #teamTable) tbody .pnum input.ci:disabled {
   border-color: transparent; background-color: transparent; box-shadow: none; }
+#branchTable tbody input.ci:not([type=checkbox]):not(:disabled), #branchTable tbody select.ci:not(:disabled), #branchTable tbody .tpick,
+#allocTable tbody input.ci:not(:disabled), :is(#eqTable, #teamTable) tbody .slot select.ci:not(:disabled), :is(#eqTable, #teamTable) tbody .slot input.ci:not(:disabled),
+:is(#eqTable, #teamTable) tbody select[data-vs]:not(:disabled), :is(#eqTable, #teamTable) tbody .pnum input.ci:not(:disabled) {
+  border-color: color-mix(in srgb, var(--ink-soft) 35%, var(--line)); background-color: var(--surface); box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent); }
 #branchTable tbody tr:hover input.ci:not([type=checkbox]):not(:disabled), #branchTable tbody tr:hover select.ci:not(:disabled), #branchTable tbody tr:hover .tpick,
-#allocTable tbody tr:hover input.ci, :is(#eqTable, #teamTable) tbody tr:hover .slot select.ci:not(:disabled), :is(#eqTable, #teamTable) tbody tr:hover .slot input.ci:not(:disabled), :is(#eqTable, #teamTable) tbody tr:hover select[data-vs], :is(#eqTable, #teamTable) tbody tr:hover .pnum input.ci {
-  border-color: var(--line); background-color: var(--surface); }
+#allocTable tbody tr:hover input.ci:not(:disabled), :is(#eqTable, #teamTable) tbody tr:hover .slot select.ci:not(:disabled), :is(#eqTable, #teamTable) tbody tr:hover .slot input.ci:not(:disabled), :is(#eqTable, #teamTable) tbody tr:hover select[data-vs]:not(:disabled), :is(#eqTable, #teamTable) tbody tr:hover .pnum input.ci:not(:disabled) {
+  border-color: var(--accent, var(--ink-soft)); }
 #branchTable tbody input.ci:focus, #branchTable tbody select.ci:focus, #allocTable tbody input.ci:focus, :is(#eqTable, #teamTable) tbody select.ci:focus, :is(#eqTable, #teamTable) tbody input.ci:focus {
   border-color: var(--ink); background-color: var(--surface); }
 #branchTable tr.locked input.ci:disabled, #branchTable tr.locked select.ci:disabled { background: transparent; color: var(--ink); font-weight: 600; }
 /* ② 값이 없는 칸(0·빈칸)은 흐리게 → 값이 있는 칸만 눈에 들어옴. 드롭다운의 '지사 선택'은 흐리게 하지 않음(고를 수 있는 칸, 2026-11-01) */
-#branchTable input.num[value="0"], #allocTable input.num[value="0"] { color: color-mix(in srgb, var(--ink-soft) 45%, var(--surface)); font-weight: 400; }
+#branchTable input.num[value="0"], #allocTable input.num[value="0"] { color: color-mix(in srgb, var(--ink-soft) 65%, var(--surface)); font-weight: 400; }
 #branchTable input.num:not([value="0"]), #allocTable input.num:not([value="0"]) { font-weight: 700; color: var(--ink); }
 #branchTable input.num:focus, #allocTable input.num:focus { color: var(--ink); }
-#branchTable input[type=date][value=""], #branchTable .arr select:disabled { color: color-mix(in srgb, var(--ink-soft) 38%, var(--surface)); opacity: 1; }
-#branchTable .arr:has(input[type=date][value=""]) { color: color-mix(in srgb, var(--ink-soft) 38%, var(--surface)); }
-:is(#eqTable, #teamTable) .slot input.tm::placeholder { color: color-mix(in srgb, var(--ink-soft) 32%, var(--surface)); }
+#branchTable input[type=date][value=""]:not(:disabled) { color: color-mix(in srgb, var(--ink-soft) 70%, var(--surface)); }
+#branchTable input[type=date][value=""]:disabled, #branchTable .arr select:disabled { color: color-mix(in srgb, var(--ink-soft) 38%, var(--surface)); opacity: 1; }
+#branchTable .arr:has(input[type=date][value=""]:disabled) { color: color-mix(in srgb, var(--ink-soft) 38%, var(--surface)); }
+:is(#eqTable, #teamTable) .slot input.tm::placeholder { color: color-mix(in srgb, var(--ink-soft) 60%, var(--surface)); }
 :is(#eqTable, #teamTable) .slot input.tm:placeholder-shown ~ .btn, :is(#eqTable, #teamTable) .slot .btn.sm { opacity: 0; }
 :is(#eqTable, #teamTable) tbody tr:hover .slot .btn.sm { opacity: 1; }
 /* 지원이 아닌 장비 줄: 꺼진 칸들 대신 줄 전체를 흐리게 */
@@ -724,9 +729,6 @@ table.alloc { min-width: 760px; }
 #branchTable tbody tr[data-b]:not(.active):not(.locked) td:first-child { color: var(--ink-soft); }   /* 굵기는 그대로(바꾸면 칸 폭이 흔들림) */
 /* 터치 화면(마우스 없음): ①로 숨긴 입력칸 테두리를 옅게 남기고(드롭다운은 원래 보임), 기관별 장비의 [＋]도 늘 보임 */
 @media (hover: none) {
-  #branchTable tbody input.ci:not([type=checkbox]):not(:disabled), #branchTable tbody .tpick,
-  #allocTable tbody input.ci:not(:disabled), :is(#eqTable, #teamTable) tbody .slot input.ci:not(:disabled), :is(#eqTable, #teamTable) tbody .pnum input.ci:not(:disabled) {
-    border-color: color-mix(in srgb, var(--line) 60%, transparent); }
   :is(#eqTable, #teamTable) .slot input.tm:placeholder-shown ~ .btn, :is(#eqTable, #teamTable) .slot .btn.sm { opacity: 1; }
 }
 
