@@ -44,6 +44,12 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-02 · 커밋 (이 기록 커밋 하나) · 비밀번호 8자+영문·숫자 · 본부 [일괄 저장]으로 지사저장 → 본부저장 (Claude 채팅 작업)
+- 사용자가 Supabase 대시보드를 최소 8자·Letters and digits 로 정함 → `admin/policy.js`·`admin.js`·`account-admin/core.mjs` 같게, **Edge Function v7 배포**. 시험 고침(`test_account_admin`·`test_admin_policy_parity`·`test_admin_ui`).
+- 본부 계정의 본부 줄 [일괄 저장] 대상에 **지사가 저장한 줄(지사저장)도** 포함(`bulkOk`) → 고치지 않아도 한 번에 본부저장. 다 바꾸면 '모두 본부저장'. 새 시험 `t_hq_bulk_marks_branch_saved`. 서버 변경 없음.
+- 못 한 것: 실제 사이트에서 본부 계정으로 일괄 저장·8자 비밀번호 설정.
+— ✍ Claude 채팅 작성
+
 ### 2026-11-02 · 커밋 (이 기록 커밋 하나) · 아이디 짧게(migration 52) · 비밀번호 6자 이상 (Claude 채팅 작업)
 - **아이디 74개 변경(실서버 적용, 사용자 승인)**: 본부 `exa00`~`exi00`, 지사 `ex`+본부 글자+순서(예: 충주 `exd03`, 남원 `exf07`, 영암 `exg07`, 합천 `exi11`), 기계화부 `exm01`~`exm04`. 관리자 그대로. 되돌리기 시험 → 적용 → 조회 확인(76개 아이디·이메일·identities 일치). 옛→새 표 `docs/accounts.md`.
 - **비밀번호 규칙 = 6자 이상**(공백·72바이트 초과만 거절): `admin/policy.js`·`admin.js`·`account-admin/core.mjs`(Edge Function **v6 배포**), 임시 비밀번호 8자 소문자+숫자. 추천 아이디 13개(`PRESET`)도 새 아이디로.

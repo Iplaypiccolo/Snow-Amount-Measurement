@@ -1109,17 +1109,20 @@ function bulkCell(hq) {
     (any ? `<button type="button" class="btn sm" ${hq ? `data-unconfirm-hq="${esc(hq)}"` : 'id="unconfirmAll"'}>일괄 취소</button>` : "") + `</span>`;
 }
 // 본부 줄의 저장 칸: [일괄 저장](그 본부에서 [저장]이 보이는 줄 모두) / 지사·본부 계정은 다 저장했으면 '모두 저장'(2026-11-01 사용자 요청)
+// [일괄 저장] 대상(2026-11-02 사용자 요청): 줄 [저장]이 보이는 줄 + 본부 계정이면 지사가 저장한 줄(지사저장)도 → 고치지 않아도 한 번에 '본부저장'
+//  (본부가 확인했다는 표시. 줄마다의 [저장] 버튼은 그대로 안 나옴. 확정한 줄은 빠짐)
+const bulkOk = b => canRowSave(b) || (canMarkSave(b) && isSaved(b.id) && rbase(b.id, "saved_lv") !== myLv());
 function bulkSaveCell(hq) {
   const rows = S.order.filter(b => b.hq_id === hq && canReq(b)); if (rows.length < 2) return "";
-  const n = rows.filter(canRowSave).length;
+  const n = rows.filter(bulkOk).length;
   if (n) return `<button type="button" class="btn sm" data-rsave-hq="${esc(hq)}" aria-label="${esc((S.hqById[hq] || {}).name || "")} 본부 ${n}개 지사 일괄 저장">일괄 저장</button>`;
-  return !can("req.confirm") && rows.every(b => isSaved(b.id) || isConf(b.id)) ? '<span class="status go sv">모두 저장</span>' : "";
+  return !can("req.confirm") && rows.every(b => isSaved(b.id) || isConf(b.id)) ? `<span class="status go sv">모두 ${can("req.edit.hq") ? "본부저장" : "저장"}</span>` : "";
 }
 function saveHq(hq) {
-  const hn = `${(S.hqById[hq] || {}).name || ""} 본부 `, ids = S.order.filter(b => b.hq_id === hq && canReq(b) && canRowSave(b)).map(b => b.id);
+  const hn = `${(S.hqById[hq] || {}).name || ""} 본부 `, ids = S.order.filter(b => b.hq_id === hq && canReq(b) && bulkOk(b)).map(b => b.id);
   if (!ids.length) return toast(`${hn}저장할 지사가 없습니다`);
-  const blank = can("req.confirm") ? [] : ids.filter(id => !S.rdraft.has(id));      // 고치지 않은 줄 = 지금 값(대개 0) 그대로 '저장 완료'
-  if (!confirm(`${hn}${ids.length}개 지사를 저장할까요?\n${ids.map(bn).join(", ")}` + (blank.length ? `\n고치지 않은 ${blank.map(bn).join(", ")} 지사는 지금 값 그대로 저장한 것으로 남습니다.` : ""))) return;
+  const blank = can("req.confirm") ? [] : ids.filter(id => !S.rdraft.has(id)), lab = SAVE_LV[myLv()];   // 고치지 않은 줄 = 지금 값 그대로 저장(지사가 저장한 줄도 → 본부저장)
+  if (!confirm(`${hn}${ids.length}개 지사를 ${lab}할까요?\n${ids.map(bn).join(", ")}` + (blank.length ? `\n고치지 않은 ${blank.map(bn).join(", ")} 지사는 지금 값 그대로 '${lab}'으로 남습니다.` : ""))) return;
   saveBranchRows(ids, null, `${hn}${ids.length}개 지사를 저장했습니다`);
 }
 function unconfirmAll(hq) {           // 확정된 지사를 모두 확정 취소(hq = 그 본부만)

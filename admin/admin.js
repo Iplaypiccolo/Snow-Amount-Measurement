@@ -84,11 +84,11 @@
       '<ul class="checklist" id="chk"></ul>' +
       '<label>새 비밀번호 확인<input id="n2" type="password" autocomplete="new-password"></label>' +
       '<button class="primary" id="go" type="button">변경</button> ' + (forced ? '' : '<button id="bk" type="button">돌아가기</button>') + '</div>';
-    var rules = [['6자 이상', /^[\s\S]{6,}$/]];                                   // 2026-11-02: 6자 이상이면 아무 글자
+    var rules = [['8자 이상', /^[\s\S]{8,}$/], ['영문', /[A-Za-z]/], ['숫자', /[0-9]/]];   // 2026-11-02: Supabase 'Letters and digits' 와 같게
     function check() {
       var pw = val('n'), prob = P.problems(pw, u);
       $('chk').innerHTML = rules.map(function (r) { return '<li class="' + (r[1].test(pw) ? 'pass' : '') + '">' + r[0] + '</li>'; }).join('') +
-        (prob.filter(function (x) { return !/6자/.test(x) && x !== '비밀번호를 입력하세요'; }).map(function (x) { return '<li style="color:#b3261e">' + esc(x) + '</li>'; }).join(''));
+        (prob.filter(function (x) { return !/8자|영문|숫자/.test(x) && x !== '비밀번호를 입력하세요'; }).map(function (x) { return '<li style="color:#b3261e">' + esc(x) + '</li>'; }).join(''));
     }
     $('n').oninput = check; check();
     if (!forced) $('bk').onclick = viewHome;

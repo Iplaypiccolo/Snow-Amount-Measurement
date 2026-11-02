@@ -11,7 +11,7 @@ const test = (n, f) => { try { f(); results.push([n, true]); } catch (e) { resul
 test('허용 기호 목록이 서버와 같다', () => { assert.equal(P.SYMBOLS, PW_SYMBOLS); assert.equal(P.SYMBOLS.length, 32); });
 
 test('손으로 고른 입력 60개에서 결과가 완전히 같다', () => {
-  const pws = ['123456', '12345', 'abcdef', 'ab cdef', 'Snow#Ride-2026k', 'Abcdefghij1!', 'short', '', 'SNOW#RIDE-2026K', 'snow#ride-2026k', 'SnowRide2026kk', 'Snow Ride#2026k', 'Snow#Rideeee-26k', 'Snow#Ride-1234k', 'Snow#Ride-dcba7',
+  const pws = ['123456', '12345678', 'abcdefgh', 'abcd1234', 'abc 1234', '가나다라마바사1', 'Snow#Ride-2026k', 'Abcdefghij1!', 'short', '', 'SNOW#RIDE-2026K', 'snow#ride-2026k', 'SnowRide2026kk', 'Snow Ride#2026k', 'Snow#Rideeee-26k', 'Snow#Ride-1234k', 'Snow#Ride-dcba7',
     'Snow#exchungju9Z', 'Snow#Chungju-99Z', 'A'.repeat(40) + 'a1!' + 'B'.repeat(40), '한글비밀번호열두글자이상!Aa1', 'Pässwörd#2026-Zx', 'Tab\tBad#Pass-2026', 'Ok#Pass-w0rd-xyz9', 'Zq7!Zq7!Zq7!Zq7!', '😀Snow#Ride-2026k', 'Snow#Ride-2026k\n'];
   const users = ['exd03', 'exa00', 'exm01', 'admin-01', 'exchungju', ''];
   let n = 0; for (const pw of pws) for (const u of users) { assert.deepEqual(P.problems(pw, u), passwordProblems(pw, u), JSON.stringify([pw, u])); n++; }

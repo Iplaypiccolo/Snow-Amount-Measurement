@@ -95,10 +95,10 @@ def t_forced_change(b, m):
 def t_checklist_live(b, m):
     p = new_page(b, m); login(p, "exwonju", TEMP_PW); p.wait_for_selector("#n")
     check(p.locator("#chk li.pass").count() == 0, "처음엔 통과 항목이 없어야 함")
-    check(p.locator("#chk li").count() == 1 and "6자 이상" in p.locator("#chk li").inner_text(), "규칙은 '6자 이상' 하나(2026-11-02 간단하게)")
-    p.fill("#n", "12345"); check(p.locator("#chk li.pass").count() == 0, "5자는 아직")
-    p.fill("#n", "123456"); check(p.locator("#chk li.pass").count() == 1 and p.locator("#chk li").count() == 1, "6자면 숫자만이어도 통과")
-    p.fill("#n", "abc def"); check(p.locator("#chk li").count() == 2 and "공백" in p.locator("#chk").inner_text(), "공백은 따로 알려 줌")
+    check(p.locator("#chk li").all_inner_texts() == ["8자 이상", "영문", "숫자"], "규칙 = 8자 이상·영문·숫자(2026-11-02, Supabase 와 같게)")
+    p.fill("#n", "12345678"); check(p.locator("#chk li.pass").count() == 2, "8자·숫자만 통과(영문 없음)")
+    p.fill("#n", "abcd1234"); check(p.locator("#chk li.pass").count() == 3 and p.locator("#chk li").count() == 3, "8자 영문+숫자면 모두 통과")
+    p.fill("#n", "abc 12345"); check(p.locator("#chk li").count() == 4 and "공백" in p.locator("#chk").inner_text(), "공백은 따로 알려 줌")
 
 def t_sheet_rows_and_paste(b, m):
     p = admin_sheet(b, m)
@@ -119,14 +119,15 @@ def t_sheet_validation_display(b, m):
     p.fill(f"input.pw[data-u='{users[0]}']", "short"); p.fill(f"input.pw[data-u='{users[1]}']", GOOD(1)); p.fill(f"input.pw[data-u='{users[2]}']", GOOD(1))
     p.fill(f"input.pw[data-u='{users[3]}']", "abc def")
     row = lambda u: p.locator(f"tr[data-u='{u}']")
-    check("bad" in row(users[0]).get_attribute("class") and "6자 이상" in row(users[0]).inner_text(), "짧은 비밀번호 표시")
+    check("bad" in row(users[0]).get_attribute("class") and "8자 이상" in row(users[0]).inner_text(), "짧은 비밀번호 표시")
     check("같은 비밀번호" in row(users[1]).inner_text() and "같은 비밀번호" in row(users[2]).inner_text(), "중복 표시")
     check("공백" in row(users[3]).inner_text(), "공백 표시")
     check(p.locator("#save").is_disabled() and "오류 4개" in p.locator("#sum").inner_text(), p.locator("#sum").inner_text())
     p.fill(f"input.pw[data-u='{users[0]}']", GOOD(0)); p.fill(f"input.pw[data-u='{users[2]}']", GOOD(2)); p.fill(f"input.pw[data-u='{users[3]}']", GOOD(3))
     check(p.locator("#save").is_enabled() and "입력 4개" in p.locator("#sum").inner_text() and "오류" not in p.locator("#sum").inner_text(), p.locator("#sum").inner_text())
     check("good" in row(users[0]).get_attribute("class"), "통과 표시")
-    p.fill(f"input.pw[data-u='{users[1]}']", "123456"); check("good" in row(users[1]).get_attribute("class"), "6자면 숫자만이어도 통과(2026-11-02 간단하게)")
+    p.fill(f"input.pw[data-u='{users[1]}']", "12345678"); check("영문" in row(users[1]).inner_text(), "숫자만은 거절(영문 필요)")
+    p.fill(f"input.pw[data-u='{users[1]}']", "abcd1234"); check("good" in row(users[1]).get_attribute("class"), "8자 영문+숫자 통과(2026-11-02)")
 
 def t_sheet_save_payload(b, m):
     dl = []; p = admin_sheet(b, m, dl); users = [i.get_attribute("data-u") for i in p.locator("input.pw").all()]

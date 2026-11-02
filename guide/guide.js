@@ -241,7 +241,7 @@
         { s: th('타지사'), desc: '다른 지사에 보낼 수 있는 제설차 (보기)' }], '우리 지사가 다른 지사에 보낼 수 있는 제설차 대수', [], W(BRH)),
       E('branch', '저장', ['#branchTable tr[data-b] [data-rsave]', { s: '#branchTable th.svh', desc: '저장한 줄 = 지사저장 · 본부저장 · 본사저장' }], '그 지사 줄 [저장] → 누가 저장했는지 표시',
         ['지사 계정 = 지사저장 · 본부 계정 = 본부저장 · 관리자 = 본사저장', '[저장] 전에는 반영 안 됨', '0대도 저장 = 요청 없음 알림'], W(BRH)),
-      E('branch', '일괄 저장', ['#branchTable [data-rsave-hq]'], '본부 줄 [일괄 저장] → 그 본부 지사를 한꺼번에 저장', [], W(['지역본부'])),
+      E('branch', '일괄 저장', ['#branchTable [data-rsave-hq]'], '본부 줄 [일괄 저장] → 그 본부 지사를 한꺼번에 저장', ['지사가 저장한 줄도 고치지 않고 → 본부저장(본부 확인 표시)'], W(['지역본부'])),
       E('branch', '편성', [inRow('#branchTable input[aria-label$="편성 제설차"]:not(:disabled)', ['input[aria-label$="편성 제설기"]']),
         { s: th('편성'), desc: '재난처가 정한 지원 대수 (보기)' }], '재난처: 실제 지원할 대수 입력', [], W(ADM)),
       E('branch', '확정', [both(['#branchTable [data-confirm]', '#confirmAll']), { s: th('확정'), desc: '재난처 확정 여부 · 확정되면 줄 잠김' }],

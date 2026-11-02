@@ -55,7 +55,7 @@ python tools/run_all_tests.py            # 전체 시험 (약 5분, 병렬). --f
 - 운영 DB 에 시험용 자료를 남기지 않는다. 시험 SQL 은 마지막에 일부러 오류를 내어 되돌리는 방식이다.
 
 ## 서버 요약 (자세한 것은 `docs/supabase-design.md`)
-- 로그인: 아이디 → `<아이디>@snow-support.invalid` 가짜 이메일. 계정: `admin-01`, `admin-02`, 본부 `exa00`~`exi00`, 지사 `ex`+본부 글자(a~i)+순서 두 자리(예: 충주 `exd03`), 기계화부 `exm01`~`exm04`(2026-11-02 짧게 바꿈, 표 `docs/accounts.md`). 비밀번호 규칙 = 6자 이상(화면 `admin/policy.js`·서버 `account-admin/core.mjs`·Supabase 대시보드 세 곳을 같게). 역할 `admin`/`branch`/`equip`/`hq`/`viewer` + 계정별 세부 권한 `perms`(표 `permissions`, 서버는 `private.has_perm`). 관리자는 모든 권한. 가입은 막혀 있고 계정은 관리자만 만든다. **관리자 계정은 새로 만들지 않는다**(사용자 결정).
+- 로그인: 아이디 → `<아이디>@snow-support.invalid` 가짜 이메일. 계정: `admin-01`, `admin-02`, 본부 `exa00`~`exi00`, 지사 `ex`+본부 글자(a~i)+순서 두 자리(예: 충주 `exd03`), 기계화부 `exm01`~`exm04`(2026-11-02 짧게 바꿈, 표 `docs/accounts.md`). 비밀번호 규칙 = 8자 이상·영문+숫자(Supabase 'Letters and digits', 화면 `admin/policy.js`·서버 `account-admin/core.mjs`·Supabase 대시보드 세 곳을 같게). 역할 `admin`/`branch`/`equip`/`hq`/`viewer` + 계정별 세부 권한 `perms`(표 `permissions`, 서버는 `private.has_perm`). 관리자는 모든 권한. 가입은 막혀 있고 계정은 관리자만 만든다. **관리자 계정은 새로 만들지 않는다**(사용자 결정).
 - 관할·격자 **변경은 이력(이벤트)으로 쌓고**, 화면이 기본 자료 위에 다시 적용해 계산한다(`JurisCore.reapply`). 기본 자료 읽기는 아직 파일(DB 사본과 동일)이며 DB 읽기로 옮기는 것이 다음 단계.
 - 지사의 구간 변경 요청: 표 `jurisdiction_requests`(지사 요청 → 관리자 알림 → 이동 준비 → 저장 시 승인). 요청과 연결된 저장은 DB 함수 `save_jurisdiction` 이 **저장+승인을 한 번에**(하나라도 안 되면 전부 취소).
 - 관할 이력 값은 DB 트리거가 검사(신설 기관 번호 `B000` 형식, 이름 1~20자·`< > " ' & \``금지, 실제 본부 이름).

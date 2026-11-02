@@ -12,14 +12,16 @@ export const ROLES = ['branch', 'equip', 'hq', 'viewer'];
 const MAX_SORT = 100000;
 const MAX_USERS = 100, MAX_BODY = 65536, CONCURRENCY = 6;
 
-/* ---------- 비밀번호 규칙: admin/policy.js 의 화면 검사와 똑같이 맞춰져 있음(tests 가 비교). Supabase Auth 설정(대시보드)도 6자·문자 조건 없음으로 맞출 것 ---------- */
+/* ---------- 비밀번호 규칙: admin/policy.js 의 화면 검사와 똑같이 맞춰져 있음(tests 가 비교). Supabase Auth 설정(대시보드: 8자, Letters and digits)과 같게 맞출 것 ---------- */
 export const PW_SYMBOLS = ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '-', '=', '[', ']', '{', '}', ';', "'", '\\', ':', '"', '|', '<', '>', '?', ',', '.', '/', '`', '~'].join('');   // Supabase Auth 가 "기호"로 인정하는 글자
 export function passwordProblems(pw, username) {
-  // 2026-11-02 사용자 결정: 간단하게 — 6자 이상이면 아무 글자. 공백·제어 문자(엑셀에서 붙여넣다 딸려 오는 빈칸 등)와 72바이트 초과만 막음
+  // 2026-11-02 사용자 결정: 간단하게 — 8자 이상, 영문·숫자 각 1개 이상(Supabase 대시보드 'Letters and digits' 와 같게). 공백·제어 문자와 72바이트 초과도 막음
   if (typeof pw !== 'string' || !pw) return ['비밀번호를 입력하세요'];
   const p = [];
-  if ([...pw].length < 6) p.push('6자 이상');
+  if ([...pw].length < 8) p.push('8자 이상');
   if (new TextEncoder().encode(pw).length > 72) p.push('72바이트 이하(영문 72자)');
+  if (!/[A-Za-z]/.test(pw)) p.push('영문 필요');
+  if (!/[0-9]/.test(pw)) p.push('숫자 필요');
   if (/[\s\u0000-\u001f]/.test(pw)) p.push('공백·제어 문자 불가');
   return p;
 }

@@ -8,12 +8,14 @@
   var SYMBOLS = ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '-', '=', '[', ']', '{', '}', ';', "'", '\\', ':', '"', '|', '<', '>', '?', ',', '.', '/', '`', '~'].join('');
   function chars(s) { return Array.from(s); }
   function byteLength(s) { return typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(s).length : unescape(encodeURIComponent(s)).length; }
-  // 2026-11-02 사용자 결정: 간단하게 — 6자 이상이면 아무 글자(공백·제어 문자와 72바이트 초과만 막음)
+  // 2026-11-02 사용자 결정: 간단하게 — 8자 이상, 영문·숫자 각 1개 이상(Supabase 'Letters and digits'). 공백·제어 문자와 72바이트 초과도 막음
   function problems(pw, username) {
     if (typeof pw !== 'string' || !pw) return ['비밀번호를 입력하세요'];
     var p = [];
-    if (chars(pw).length < 6) p.push('6자 이상');
+    if (chars(pw).length < 8) p.push('8자 이상');
     if (byteLength(pw) > 72) p.push('72바이트 이하(영문 72자)');
+    if (!/[A-Za-z]/.test(pw)) p.push('영문 필요');
+    if (!/[0-9]/.test(pw)) p.push('숫자 필요');
     if (/[\s\u0000-\u001f]/.test(pw)) p.push('공백·제어 문자 불가');
     return p;
   }

@@ -1060,7 +1060,7 @@ def t_branch_bulk_save(p):
     hb.click(); p.wait_for_timeout(400)
     check("강원 본부" in toast(p) and f"{len(want)}개 지사를 저장했습니다" in toast(p), toast(p))
     check(ev(p, f"S.reqs['{ch}'].req_truck") == 2 and ev(p, f"S.reqs['{dg}'].req_truck") == 1 and all(ev(p, f"S.reqs['{b}'].saved_lv") == "hq" for b in want), "고친 값 + 본부저장")
-    check("모두 저장" in p.locator(f"#branchTable tr.hq[data-hq='{gw}'] [data-svhq]").inner_text() and p.locator("#branchTable [data-rsave]").count() == 0, "다 저장하면 '모두 저장'")
+    check("모두 본부저장" in p.locator(f"#branchTable tr.hq[data-hq='{gw}'] [data-svhq]").inner_text() and p.locator("#branchTable [data-rsave]").count() == 0, "다 저장하면 '모두 본부저장'")
     # 지사 계정(자기 줄 하나)에는 [일괄 저장] 없음
     as_user(p, "br2"); tab(p, "branch"); check(p.locator("[data-rsave-hq]").count() == 0, "지사 계정은 일괄 저장 없음")
 
@@ -1099,6 +1099,23 @@ def t_branch_saved(p):
     check(cell(dg).inner_text().strip() == "지사저장" and ev(p, f"S.reqs['{dg}'].saved_lv") == "branch", f"지사 계정 저장 = 지사저장: {cell(dg).inner_text()}")
     as_user(p, "admin1"); tab(p, "branch")
     p.click("#onlyUnsaved"); p.wait_for_timeout(150); check(p.locator("#branchCtl .chip[aria-pressed=true]").count() == 0, "다시 누르면 모든 지사")
+
+def t_hq_bulk_marks_branch_saved(p):
+    """2026-11-02: 지사가 저장한 줄(지사저장)은 본부에게 줄 [저장]이 안 나오지만, 본부 줄 [일괄 저장]으로 고치지 않아도 한 번에 '본부저장'(본부가 확인했다는 표시)"""
+    tab(p, "branch"); dg, ch = bid(p, "대관령"), bid(p, "춘천"); gw = ev(p, "S.hqs.find(h => h.name === '강원').id")
+    p.click(f"[data-unconfirm={dg}]"); p.wait_for_timeout(300)
+    cell = lambda b: p.locator(f"#branchTable td[data-svcell='{b}']"); hb = lambda: p.locator(f"#branchTable tr.hq[data-hq='{gw}'] [data-svhq]")
+    as_user(p, "br1"); tab(p, "branch"); p.click(f"[data-rsave='{dg}']"); p.wait_for_timeout(300)
+    check(cell(dg).inner_text().strip() == "지사저장", "지사가 저장 → 지사저장")
+    as_user(p, "hq-gw"); tab(p, "branch")
+    check(cell(dg).locator("[data-rsave]").count() == 0 and cell(dg).inner_text().strip() == "지사저장", "본부에게 지사저장 줄의 [저장]은 안 나옴(고치지 않았으면)")
+    want = ev(p, f"S.order.filter(b => b.hq_id === '{gw}' && canReq(b) && bulkOk(b)).map(b => b.id)")
+    check(dg in want and hb().locator("[data-rsave-hq]").count() == 1, f"본부 줄 [일괄 저장]에 지사저장 줄도 들어감: {want}")
+    hb().locator("[data-rsave-hq]").click(); p.wait_for_timeout(400)
+    check(f"{len(want)}개 지사를 저장했습니다" in toast(p), toast(p))
+    check(cell(dg).inner_text().strip() == "본부저장" and all(ev(p, f"S.reqs['{b}'].saved_lv") == "hq" for b in want), "일괄 저장 → 모두 본부저장")
+    check("모두 본부저장" in hb().inner_text() and hb().locator("[data-rsave-hq]").count() == 0, "다 바꾸면 '모두 본부저장', 버튼 없음")
+    as_user(p, "br1"); tab(p, "branch"); check(cell(dg).inner_text().strip() == "본부저장", "지사 화면에서도 본부저장으로 보임(본부가 확인함)")
 
 def t_alloc_follow_assign(p):
     """(2026-10-15, 마이그레이션 46) 기관별 배정 합계는 편성보다 많을 수 없음. 편성을 줄여 다시 확정하면 — 한 기관만 배정받았으면 그 기관이 편성에 맞춰 줄고,
@@ -1182,7 +1199,7 @@ def t_route_perm_admin_only(p):
     check("권한이 없습니다" in toast(p), "화면을 우회해 다른 기관 경로를 보내도 거절: " + toast(p))
     as_user(p, "admin1"); tab(p, "fleet"); check(p.locator("#eqTable select[data-rv]").count() > 0 and p.locator("#day1In").count() == 1, "관리자는 지원일 칸 전부")
 
-TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_bulk_save, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,

@@ -67,11 +67,12 @@ await test('비밀번호 생성(2026-11-02 간단하게): 8자, 소문자+숫자
 });
 const GOOD = (i) => `Snow#Ride-${2026 + i}k`;            // 규칙을 모두 만족하는 서로 다른 비밀번호
 
-await test('비밀번호 규칙(2026-11-02 간단하게): 6자 이상이면 아무 글자, 공백·제어 문자·72바이트 초과만 거절', () => {
+await test('비밀번호 규칙(2026-11-02): 8자 이상 + 영문·숫자 각 1개(Supabase Letters and digits), 공백·72바이트 초과 거절', () => {
   const bad = (pw, u = 'exd03') => passwordProblems(pw, u).join('|');
-  for (const ok of ['123456', 'abcdef', 'exd031', 'aaaaaa', 'Snow#Ride-2026k', '한글비번여섯', 'abcd1234']) assert.deepEqual(passwordProblems(ok, 'exd03'), [], ok);
-  assert.match(bad('12345'), /6자 이상/); assert.match(bad('abc de'), /공백/); assert.match(bad('abc\tdef'), /공백/);
-  assert.match(bad('A'.repeat(73)), /72/);
+  for (const ok of ['abcd1234', 'exd03abc', 'aaaaaaa1', 'Snow#Ride-2026k', '한글비번ab12', 'A1234567']) assert.deepEqual(passwordProblems(ok, 'exd03'), [], ok);
+  assert.match(bad('abc1234'), /8자 이상/); assert.match(bad('12345678'), /영문/); assert.match(bad('abcdefgh'), /숫자/); assert.match(bad('가나다라마바사1'), /영문/);
+  assert.match(bad('abcd 1234'), /공백/); assert.match(bad('abcd\t1234'), /공백/);
+  assert.match(bad('A'.repeat(72) + '1'), /72/);
   assert.equal(passwordProblems('', 'x')[0], '비밀번호를 입력하세요'); assert.equal(passwordProblems(null, 'x')[0], '비밀번호를 입력하세요');
   assert.ok(PW_SYMBOLS.includes('!') && PW_SYMBOLS.includes('#') && !PW_SYMBOLS.includes('가'));
 });
@@ -101,7 +102,7 @@ await test('일괄 설정: 하나라도 규칙에 어긋나거나 중복되면 �
   const r = await J(await call(w, { action: 'set_passwords', items: [{ username: 'exa1', password: GOOD(1) }, { username: 'exb2', password: 'shrt' }, { username: 'exc3', password: GOOD(1) }, { username: 'exa1', password: GOOD(4) }, { username: 'NOT VALID', password: GOOD(5) }] }, { jwt: 'jwt-admin' }));
   assert.equal(r.status, 400); assert.equal(r.body.error, 'validation');
   const by = Object.fromEntries(r.body.details.map((d) => [d.index, d.error]));
-  assert.match(by[1], /6자 이상/); assert.match(by[2], /같은 비밀번호/); assert.match(by[3], /같은 아이디/); assert.match(by[4], /아이디 형식/);
+  assert.match(by[1], /8자 이상/); assert.match(by[2], /같은 비밀번호/); assert.match(by[3], /같은 아이디/); assert.match(by[4], /아이디 형식/);
   assert.equal(JSON.stringify([...w.users.values()]), before); assert.equal(w.sessionsRevoked.length, 0);
   assert.equal((await J(await call(w, { action: 'set_passwords', items: [] }, { jwt: 'jwt-admin' }))).status, 400);
   assert.equal((await J(await call(w, { action: 'set_passwords', items: Array.from({ length: 101 }, (_, i) => ({ username: 'ex' + String(i).padStart(3, '0') + 'a', password: GOOD(i) })) }, { jwt: 'jwt-admin' }))).status, 400);
