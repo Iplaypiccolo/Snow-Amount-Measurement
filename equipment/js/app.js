@@ -1028,14 +1028,15 @@ function renderBranch() {
   $("branchRound").innerHTML = roundSel("roundSelBranch") +
     (can("req.confirm") && r ? `<button type="button" class="btn danger" id="roundDel">기준일자 삭제</button>` : "") +
     (can("req.confirm") ? `<span class="sep"></span><label class="ctl">새 기준일자 <input class="ci" type="date" id="newRoundDate" value="${esc(nextRoundMin() > todayISO() ? nextRoundMin() : todayISO())}" min="${esc(nextRoundMin())}"></label><button type="button" class="btn" id="roundMake">만들기</button>` : "");
+  const myBlk = can("req.confirm") ? "right" : canAnyReq() ? "left" : "";
   $("branchCtl").innerHTML = r ? `<div class="tb-row"><span class="tb-label">보기</span>` + BVIEWS.map(([k, id, lab, tip]) => `<button type="button" class="chip" id="${id}" data-bv="${k}" aria-pressed="${S.bviews.has(k)}" title="${tip}">${lab}</button>`).join("") +
-    `<span class="tb-right"><span class="br-dirty" id="brDirty" role="status" hidden></span></span>` +
+    `<span class="tb-right">${myBlk ? `<span class="my-blk"><i aria-hidden="true"></i>파란 표 = 내가 입력하는 표</span>` : ""}<span class="br-dirty" id="brDirty" role="status" hidden></span></span>` +
     (S.me.role === "admin" ? `<button type="button" class="btn sm" id="zoneMgr">특보구역 관리</button>` : "") + `</div>` : "";
   if (!r) { $("branchTable").innerHTML = `<tbody><tr><td class="empty">기준일자가 없습니다.</td></tr></tbody>`; return; }
   const conf = can("req.confirm");
   // 칸 순서: 지사 | 기상(24시 예보[적설·강수·확률·기온]·대설특보·직접입력) | 지사 요청 | 도착 요청 | 타지사 지원 가능 | 저장 ║ 편성 | 확정
-  // ║ 왼쪽 = 지사가 넣는 칸, 오른쪽(adm) = 관리자가 넣는 칸(굵은 경계선 + 옅은 바탕)
-  let h = `<thead><tr><th class="l" rowspan="2">지사</th><th colspan="4" class="fch">24시 예보 <small class="fcbase" id="fcBaseHead" data-bt="fc" tabindex="0">${esc(fcBase())}</small></th><th colspan="3" class="wh">대설특보 발표 <small class="fcbase" id="wBaseHead" data-bt="warn" tabindex="0">${esc(warnBase())}</small></th><th class="wxh" rowspan="2">기상현황<br>직접입력</th><th colspan="2">지사 요청</th><th class="l" rowspan="2">도착 요청</th><th class="ofh" rowspan="2">타지사<br>지원 가능<small class="thsub">제설차</small></th><th class="svh" rowspan="2">저장</th><th colspan="2" class="adm adm0">편성</th><th class="adm">확정</th></tr>
+  // ║ = 빈 칸(blk-gap)으로 표 둘처럼 나눔: 왼쪽 = 지사·본부가 넣는 표, 오른쪽(adm) = 관리자가 넣는 표. 내 계정의 표는 파란색(mine-left / mine-right)
+  let h = `<thead><tr><th class="l" rowspan="2">지사</th><th colspan="4" class="fch">24시 예보 <small class="fcbase" id="fcBaseHead" data-bt="fc" tabindex="0">${esc(fcBase())}</small></th><th colspan="3" class="wh">대설특보 발표 <small class="fcbase" id="wBaseHead" data-bt="warn" tabindex="0">${esc(warnBase())}</small></th><th class="wxh" rowspan="2">기상현황<br>직접입력</th><th colspan="2">지사 요청</th><th class="l" rowspan="2">도착 요청</th><th class="ofh" rowspan="2">타지사<br>지원 가능<small class="thsub">제설차</small></th><th class="svh" rowspan="2">저장</th><th class="blk-gap" rowspan="2" aria-hidden="true"></th><th colspan="2" class="adm adm0">편성</th><th class="adm">확정</th></tr>
     <tr><th class="fch c-sn">적설<small class="thsub">cm</small></th><th class="fch c-sn">강수<small class="thsub">mm</small></th><th class="fch">확률<small class="thsub">%</small></th><th class="fch tmh c-sn" title="24시간 중 가장 낮은 기온">기온<small class="thsub">최저 ℃</small></th><th class="wh c-wk">종류</th><th class="wh c-wt">발표</th><th class="wh c-wt c-we">발효</th><th>제설차</th><th>제설기</th><th class="adm adm0">제설차</th><th class="adm">제설기</th><th class="cf adm">${conf ? bulkCell(null) : ""}</th></tr></thead><tbody>`;
   const has = b => hasReq(b.id) || S.rdraft.has(b.id);                  // 요청 있음(입력 중 포함)
   const mine = b => (m.branch_id === b.id) || (can("req.edit.hq") && !can("req.confirm") && b.hq_id === m.hq_id);
@@ -1047,7 +1048,7 @@ function renderBranch() {
     if (!shown.length) return;
     const closed = S.closedHq.has(hq.id), hsum = hqSums(hq.id), sc = (k, cls = "") => `<td${cls ? ` class="${cls}"` : ""} data-s="${k}">${hsum[k]}</td>`;
     h += `<tr class="hq ${closed ? "closed" : ""}" data-hq="${hq.id}" tabindex="0"><td class="l">${esc(hq.name)}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
-      ${sc("req_truck")}${sc("req_blower")}<td></td>${sc("offer_truck")}${cellH(`class="svc" data-svhq="${hq.id}"`, bulkSaveCell(hq.id))}${sc("assigned_truck", "adm adm0")}${sc("assigned_blower", "adm")}${conf ? `<td class="cf adm">${bulkCell(hq.id)}</td>` : sc("confirmed", "adm")}</tr>`;
+      ${sc("req_truck")}${sc("req_blower")}<td></td>${sc("offer_truck")}${cellH(`class="svc" data-svhq="${hq.id}"`, bulkSaveCell(hq.id))}<td class="blk-gap" aria-hidden="true"></td>${sc("assigned_truck", "adm adm0")}${sc("assigned_blower", "adm")}${conf ? `<td class="cf adm">${bulkCell(hq.id)}</td>` : sc("confirmed", "adm")}</tr>`;
     if (closed) return;
     shown.forEach(b => {
       const ed = canReq(b), t = `round_requests:${S.round},${b.id}`, on = has(b), d0 = dis(b.id);      // ed = 입력칸을 보임, 확정한 줄이면 비활성(d0)
@@ -1062,7 +1063,7 @@ function renderBranch() {
         <td>${num("req_truck", "요청 제설차", ed)}</td><td>${num("req_blower", "요청 제설기", ed)}</td>
         <td class="l">${arriveCell(b, ed, t)}</td>
         <td class="ofc" data-ofcell="${b.id}">${num("offer_truck", "타지사 지원 가능 제설차", ed, 99, hasOffer(b.id))}</td>
-        ${cellH(`class="svc" data-svcell="${b.id}"`, saveCell(b))}
+        ${cellH(`class="svc" data-svcell="${b.id}"`, saveCell(b))}<td class="blk-gap" aria-hidden="true"></td>
         <td class="adm adm0">${num("assigned_truck", "편성 제설차", ed && conf)}</td><td class="adm">${num("assigned_blower", "편성 제설기", ed && conf)}</td>
         <td class="cf adm">${conf ? H(t, "confirmed", ok ? `<span class="status go">확정됨</span> <button type="button" class="btn sm" data-unconfirm="${b.id}">취소</button>`
                                                      : `<button type="button" class="btn sm primary" data-confirm="${b.id}">확정</button>`)
@@ -1071,6 +1072,7 @@ function renderBranch() {
     });
   });
   $("branchTable").innerHTML = h + "</tbody>";
+  $("branchTable").classList.toggle("mine-right", myBlk === "right"); $("branchTable").classList.toggle("mine-left", myBlk === "left");
   stickHead($("branchTable"));
 }
 // [저장] 칸: 지사·본부 계정은 아직 저장하지 않았거나 고친 값이 있으면 [저장](0이어도 저장 가능 — "요청 안 함"도 알림), 저장했으면 '저장 완료'

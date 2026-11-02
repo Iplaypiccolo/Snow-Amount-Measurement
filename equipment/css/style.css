@@ -15,6 +15,7 @@
   --stop-bg: #FBE9E9;
   --wait: #6B7785;
   --wait-bg: #EDF0F3;
+  --mine: #1D5FD1;         /* 지사별 요청·편성: 내 계정이 입력하는 표 */
   --radius: 10px;
   --font: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
   box-sizing: border-box;
@@ -24,6 +25,7 @@
 }
 /* 기본은 라이트 모드(2026-11-01 사용자 결정 — 컴퓨터가 다크 모드여도 따라가지 않음). [다크 모드]를 누른 사람만 어둡게 */
 :root[data-theme="dark"] {
+  --mine: #7FB0FF;
   --bg: #0F151C; --surface: #18212B; --ink: #E7EDF2; --ink-soft: #97A5B2;
   --line: #2A3643; --go: #4CC398; --go-bg: #12342A; --stop: #F07272; --stop-bg: #3A1C1E;
   --wait: #97A5B2; --wait-bg: #232E3A; color-scheme: dark;
@@ -645,7 +647,6 @@ table.alloc { min-width: 760px; }
 .eq tr.pool.changed td:first-child { box-shadow: inset 3px 0 0 var(--plow); }
 .pool-wait { margin-left: 4px; }
 /* 지사별 요청·편성: 지사가 넣는 칸 ║ 관리자가 넣는 칸(편성·확정) — 굵은 경계선 + 옅은 바탕 */
-.branch th.adm0, .branch td.adm0 { border-left: 3px solid var(--ink-soft); }
 .branch td.adm { background: color-mix(in srgb, var(--ink-soft) 7%, transparent); }
 .branch thead th.adm { background: color-mix(in srgb, var(--ink-soft) 12%, var(--bg)); }
 .branch tr.hq td.adm { background: color-mix(in srgb, var(--ink-soft) 12%, var(--bg)); }
@@ -710,13 +711,13 @@ table.alloc { min-width: 760px; }
 #branchTable tbody tr[data-b]:nth-child(even) td, #allocTable tbody tr:nth-child(even) td, :is(#eqTable, #teamTable) tbody tr:nth-child(even) td { background-image: linear-gradient(color-mix(in srgb, var(--ink-soft) 6%, transparent), color-mix(in srgb, var(--ink-soft) 6%, transparent)); }
 #branchTable tbody tr[data-b]:hover td, #allocTable tbody tr:hover td, :is(#eqTable, #teamTable) tbody tr:hover td { background-image: linear-gradient(color-mix(in srgb, var(--ink-soft) 14%, transparent), color-mix(in srgb, var(--ink-soft) 14%, transparent)); }
 /* ④ 묶음 구분선: 같은 묶음(24시 예보 / 대설특보 / 직접입력 / 지사 요청 / 도착 / 타지사 / 저장 / 편성 / 확정)끼리 세로선으로 나눔 */
-#branchTable thead tr:first-child th:nth-child(n+2):not(.adm0),
+#branchTable thead tr:first-child th:nth-child(n+2):not(.adm0):not(.blk-gap),
 #branchTable thead tr:nth-child(2) th:nth-child(1), #branchTable thead tr:nth-child(2) th:nth-child(5), #branchTable thead tr:nth-child(2) th:nth-child(8), #branchTable thead tr:nth-child(2) th:nth-child(10):not(.adm0),
 #branchTable thead tr:nth-child(2) th:nth-child(12) {
   border-left: 1px solid var(--line); }
 /* 내용 칸은 테두리 대신 안쪽 그림자(폭을 차지하지 않음 — 직접입력을 켜거나 값이 바뀌어도 칸 폭이 그대로) */
 #branchTable tbody tr > td:nth-child(2), #branchTable tbody tr > td:nth-child(6), #branchTable tbody tr > td:nth-child(9), #branchTable tbody tr > td:nth-child(10), #branchTable tbody tr > td:nth-child(12),
-#branchTable tbody tr > td:nth-child(13), #branchTable tbody tr > td:nth-child(14), #branchTable tbody tr > td:nth-child(17) {
+#branchTable tbody tr > td:nth-child(13), #branchTable tbody tr > td:nth-child(14), #branchTable tbody tr > td:nth-child(18) {
   box-shadow: inset 1px 0 0 var(--line); }
 #allocTable thead tr:first-child th:nth-child(n+2), #allocTable thead tr:nth-child(2) th:nth-child(odd) { border-left: 1px solid var(--line); }
 #allocTable tbody td:nth-child(even), #allocTable tfoot td:nth-child(even) { box-shadow: inset 1px 0 0 var(--line); }
@@ -764,3 +765,35 @@ table.eq.team { min-width: 720px; }
 .rp-src span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .rp-t td, .rp-t th { overflow: hidden; }
 .rp-nt { margin: 12px 0 6px; font-size: 14px; }
 .rp-box { border: 1.5px dashed #000; padding: 8px 16px; font-size: 14px; line-height: 1.8; }
+
+/* 지사별 요청·편성: 표 둘로 나눔(2026-11-02 사용자 요청 — 진한 세로줄 대신 빈 칸). 위치는 그대로, 칸만 비움 */
+#panel-branch .table-wrap { border: 0; border-radius: 0; }
+#branchTable thead tr:first-child th:first-child { text-align: center; }
+#branchTable .blk-gap { width: 10px; min-width: 10px; padding: 0 !important; background: var(--bg) !important; background-image: none !important; border-top: 0; border-bottom: 0; box-shadow: none !important;
+  border-left: 1px solid var(--line); border-right: 1px solid var(--line); cursor: default; }
+#branchTable thead tr:first-child th:first-child, #branchTable tbody td:first-child { border-left: 1px solid var(--line); }
+#branchTable thead tr > :last-child, #branchTable tbody tr > :last-child { border-right: 1px solid var(--line); }
+#branchTable thead tr:first-child th:not(.blk-gap) { box-shadow: inset 0 1px 0 var(--line), inset 0 -1px 0 var(--line); }
+/* 내가 입력하는 표: 제목 파랑 + 위 굵은 줄 + 테두리, 내용은 옅은 파랑. 다른 표는 그대로(관리자는 왼쪽 표도 고칠 수 있으므로 흐리게 하지 않음) */
+#branchTable.mine-right thead th.adm, #branchTable.mine-left thead th:not(.adm):not(.blk-gap) { background: color-mix(in srgb, var(--mine) 20%, var(--surface)); color: var(--ink); }
+#branchTable.mine-right thead tr:first-child th.adm, #branchTable.mine-left thead tr:first-child th:not(.adm):not(.blk-gap) { box-shadow: inset 0 3px 0 var(--mine), inset 0 -1px 0 var(--line); }
+#branchTable.mine-right thead th.adm .thsub, #branchTable.mine-left thead th:not(.adm):not(.blk-gap) .thsub { color: var(--ink); }
+#branchTable.mine-right tbody tr:not(.hq):not(.locked) td.adm, #branchTable.mine-left tbody tr:not(.hq):not(.locked) td:not(.adm):not(.blk-gap) { background: color-mix(in srgb, var(--mine) 6%, transparent); }
+#branchTable.mine-right tbody tr.hq td.adm, #branchTable.mine-left tbody tr.hq td:not(.adm):not(.blk-gap) { background: color-mix(in srgb, var(--mine) 13%, var(--bg)); }
+#branchTable.mine-right .blk-gap { border-right: 2px solid var(--mine); }
+#branchTable.mine-right thead tr > :last-child, #branchTable.mine-right tbody tr > :last-child { border-right: 2px solid var(--mine); }
+#branchTable.mine-left .blk-gap { border-left: 2px solid var(--mine); }
+#branchTable.mine-left thead tr:first-child th:first-child, #branchTable.mine-left tbody td:first-child { border-left: 2px solid var(--mine); }
+#branchTable.mine-right tbody tr:last-child td.adm, #branchTable.mine-left tbody tr:last-child td:not(.adm):not(.blk-gap) { border-bottom: 2px solid var(--mine); }
+.my-blk { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+.my-blk i { width: 12px; height: 12px; border-radius: 3px; background: color-mix(in srgb, var(--mine) 20%, var(--surface)); border: 2px solid var(--mine); }
+/* 표를 나누며 넓어진 만큼 줄임: 1366·1400 화면에서 확정 칸까지 한 화면에 */
+@media (max-width: 1500px) {
+  #branchTable .arr input.ci { width: 108px; } #branchTable .arr select.ci { width: 46px; }
+  #branchTable th.svh { width: 70px; min-width: 70px; }
+  #branchTable th.c-wt { min-width: 93px; } #branchTable .wef { max-width: 85px; } #branchTable .hm select { width: 36px; }
+  #branchTable th.c-sn { min-width: 50px; } #branchTable input.ci.num.wxn { width: 40px; }
+  #branchTable input.num { width: 44px; -moz-appearance: textfield; appearance: textfield; }   /* 좁아지면 칸 가운데를 눌러도 위아래 화살표에 닿아 값이 바뀌므로 화살표를 없앰 */
+  #branchTable input.num::-webkit-outer-spin-button, #branchTable input.num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  #branchTable .arr select.ci { padding-left: 3px; padding-right: 0; }
+}

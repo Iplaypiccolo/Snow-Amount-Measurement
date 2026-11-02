@@ -144,8 +144,9 @@
   window.SSEqTabChanged = function(name){ eqTab = name; paintEq(); };
   // 새로고침(2026-11-02): 장비 지원 메뉴 줄 오른쪽 버튼 → 안쪽 화면이 다시 읽음. 안쪽 화면이 '불러오는 중'·'○○:○○ 불러옴'을 알려 줌
   var rlBtn = document.getElementById('eqReload'), rlAt = document.getElementById('eqReloadAt');
-  if (rlBtn) rlBtn.addEventListener('click', function(){ var w = null; try { w = frame.contentWindow; } catch(e){} if (w && w.SSEqReload) w.SSEqReload(); });
-  window.SSEqReloadState = function(busy, at){ if (!rlBtn) return; rlBtn.disabled = !!busy; rlBtn.textContent = busy ? '불러오는 중…' : '새로고침'; if (rlAt) rlAt.textContent = at || ''; };
+  var rlBtns = [rlBtn, document.getElementById('snReload')].filter(Boolean);          // 넓은 화면 = 탭 줄, 휴대폰 = 머리글(탭을 가리지 않게, 2026-11-02)
+  rlBtns.forEach(function(b){ b.addEventListener('click', function(){ var w = null; try { w = frame.contentWindow; } catch(e){} if (w && w.SSEqReload) w.SSEqReload(); }); });
+  window.SSEqReloadState = function(busy, at){ rlBtns.forEach(function(b){ b.disabled = !!busy; b.textContent = busy ? '불러오는 중…' : '새로고침'; }); if (rlAt) rlAt.textContent = at || ''; };
   // '강원본부 지원장비' 메뉴: 관리자·강원본부 계정만(안쪽 장비 화면이 권한을 확인해 알려 줌, 2026-10-30)
   window.SSEqTeamTab = function(on){ var b = document.getElementById('eqTeamBtn'); if (b) b.hidden = !on; if (!on && eqTab === 'gwteam') { eqTab = 'move'; paintEq(); } };
   theme.querySelectorAll('[data-eqtheme]').forEach(function(b){ b.addEventListener('click', function(){

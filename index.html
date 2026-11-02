@@ -88,7 +88,11 @@
   .sn-theme span{margin-right:4px;}
   .sn-theme button{font:inherit;font-size:12px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:7px;padding:4px 10px;cursor:pointer;}
   .sn-theme button[aria-pressed="true"]{background:var(--ice);border-color:var(--ice);color:var(--accent);font-weight:700;}
+  .sn-reload{display:none;font:inherit;font-size:12px;font-weight:600;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:7px;padding:4px 10px;cursor:pointer;white-space:nowrap;}
+  .sn-reload:disabled{opacity:.6;cursor:default;}
   @media (max-width: 860px){
+    .shell[data-page="equip"] .sn-reload{display:inline-block;}   /* 휴대폰 장비 지원: [새로고침]은 탭 위 머리글에(2026-11-02 — 탭 줄에 있으면 탭을 가림) */
+    .eq-reload{display:none;}
     .tn-row{padding:8px 12px 4px;gap:8px 12px;}
     .sn-title small{display:none;}
     .tn-tabs{padding:0 4px;}
@@ -401,6 +405,7 @@
       <div class="sn-theme" id="snTheme" role="group" aria-label="장비 지원 화면 밝기" hidden>
       <span>화면</span><button type="button" data-eqtheme="light" aria-pressed="true">밝게</button><button type="button" data-eqtheme="dark" aria-pressed="false">어둡게</button>
     </div>
+      <button type="button" class="sn-reload" id="snReload">새로고침</button>
       <div class="ss-user" id="ssUser" hidden></div>
     </div>
   </div>
@@ -428,7 +433,7 @@
 <noscript><div style="padding:40px;font-family:sans-serif;">이 화면은 JavaScript 가 켜져 있어야 로그인할 수 있습니다.</div></noscript>
 
 <div id="page-equip">
-  <iframe id="equipFrame" title="제설장비 지원 현황" data-src="equipment/index.html?v=c0996fd8"></iframe>
+  <iframe id="equipFrame" title="제설장비 지원 현황" data-src="equipment/index.html?v=02458ea9"></iframe>
 </div>
 
 <div class="app" id="page-snow">
@@ -546,8 +551,8 @@
 <script src="auth/events.js?v=0c959479" defer></script>
 <script src="auth/gate.js?v=309218bc" defer></script>
 <script src="auth/snow.js?v=21f5a422" defer></script>
-<script src="guide/guide.js?v=18f87c6f" defer></script>
-<script src="boot.js?v=12ec96cb" defer></script>
+<script src="guide/guide.js?v=22656e93" defer></script>
+<script src="boot.js?v=266e34ac" defer></script>
 <script src="login/intro-loader.js?v=2c2f6b9d" defer></script>
 </body>
 </html>

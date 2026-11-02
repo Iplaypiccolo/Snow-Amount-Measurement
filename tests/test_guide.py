@@ -210,6 +210,19 @@ def t_demo_steps(b, ctx, m):
     check(fr.locator("#sheet").is_visible(), "장비를 대신 눌러 정보 창을 띄움")
     p.click(".sg-next"); p.wait_for_timeout(600); check(not fr.locator("#sheet").is_visible(), "다음 단계로 가면 정보 창을 닫음")
 
+def t_mobile_reload(b, ctx, m):
+    """2026-11-02: 휴대폰 장비 지원 — [새로고침]을 탭 줄에서 머리글로 올림(탭 줄에 있으면 탭을 가림). 넓은 화면은 탭 줄 오른쪽 그대로"""
+    p = open_site(ctx, m, w=375, h=740, auto=False); login(p, "admin-01"); wait_js(p, "!!document.getElementById('sgHelp')")
+    check(not p.locator("#snReload").is_visible(), "강설량 측정에는 없음")
+    p.click(".page-btn[data-page=equip]"); fr = p.frame_locator("#equipFrame"); fr.locator("#matrix tbody tr").first.wait_for(timeout=20000)
+    rb, tb = p.locator("#snReload").bounding_box(), p.locator(".eq-btn[data-eqtab=move]").bounding_box()
+    check(p.locator("#snReload").is_visible() and rb["y"] + rb["height"] <= tb["y"] and rb["x"] + rb["width"] <= 375, f"탭 위, 화면 안: {rb} / 탭 {tb}")
+    check(not p.locator("#eqReload").is_visible(), "탭 줄의 새로고침은 숨김(탭을 가리지 않음)")
+    p.click("#snReload"); wait_js(p, "!document.getElementById('snReload').disabled", 15000)
+    check("새로 불러왔습니다" in fr.locator("#toast").inner_text(), "눌러서 다시 읽음")
+    p.set_viewport_size({"width": 1400, "height": 900}); p.wait_for_timeout(300)
+    check(not p.locator("#snReload").is_visible() and p.locator("#eqReload").is_visible(), "넓은 화면: 탭 줄 오른쪽 그대로")
+
 def t_no_auto_in_automation(b, ctx, m):
     p = open_site(ctx, m, auto=False); login(p, "admin-01"); wait_js(p, "!!document.getElementById('sgHelp')"); p.wait_for_timeout(1500)
     check(not guide(p) and p.evaluate("localStorage.getItem('ss_guide:snow:admin-01')") is None, "자동 시험 중에는 저절로 열지 않음")
@@ -281,7 +294,7 @@ def t_back_button_tabs(b, ctx, m):
     p.go_back(); p.wait_for_timeout(500); check(st()[0] == "snow" and st()[1] == "forecast" and p.locator("body.authed").count() == 1, f"뒤로 → 첫 탭(사이트 그대로): {st()}")
     p.go_forward(); p.wait_for_timeout(500); check(st()[1] == "map", f"앞으로 → 관측소 지도: {st()}")
 
-TESTS = [t_help_and_who, t_first_login_admin, t_stop_and_keys, t_role_tabs, t_tab_intro_role_only, t_element_steps, t_demo_steps, t_no_auto_in_automation, t_phone, t_phone_short, t_back_button_tabs]
+TESTS = [t_help_and_who, t_first_login_admin, t_stop_and_keys, t_role_tabs, t_tab_intro_role_only, t_element_steps, t_demo_steps, t_mobile_reload, t_no_auto_in_automation, t_phone, t_phone_short, t_back_button_tabs]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()

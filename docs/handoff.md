@@ -44,6 +44,11 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-02 · 커밋 (이 기록 커밋 하나) · 요청·편성 표 나눔·내 표 강조, 휴대폰 새로고침 위로
+- `equipment/js/app.js`: 줄마다 `blk-gap` 빈 칸 추가(저장 ║ 편성), `#branchTable` 에 `mine-left`/`mine-right`, 보기 줄에 `.my-blk` 안내. `equipment/css/style.css`: 진한 세로줄 삭제, 파란 강조(`--mine`), 제목 '지사' 가운데, 1500px 이하 칸 줄임·숫자 칸 화살표 없앰. 칸(id) 변경 없음 → UI_VERSION 그대로.
+- `index.html`·`boot.js`: 휴대폰(860px 이하)은 탭 줄 `.eq-reload` 를 숨기고 머리글 `#snReload` 표시(탭을 가리지 않게). `SSEqReload`·`SSEqReloadState` 를 함께 씀.
+- 시험: `t_branch_two_tables`(test_equipment), `t_mobile_reload`(test_guide). 칸 순서·경계선 시험 갱신.
+— ✍ Claude Code 작성
 ### 2026-11-02 · 커밋 (이 기록 커밋 하나) · 뒤로가기 = 이전 탭 · 보고서 미리 보기 A4 고정 (Claude 채팅 작업)
 - `boot.js`: 탭 바꾸기마다 history 기록, popstate 로 이전 화면·탭. `equipment/js/app.js`: 창 열림 = 기록 한 칸(뒤로가기 = 창 닫기), 단독 화면은 탭도. `report.js`/CSS: 미리 보기 종이 A4 고정 + 화면 폭에 맞게 축소(fitPage).
 - 시험: `t_back_button`(장비 화면 탭·창), `t_back_button_tabs`(첫 화면 탭·장비 지원), `t_report` 에 A4·휴대폰 폭 검사. 첫 화면 안에서 미리 보기를 연 뒤 뒤로가기 = 창만 닫힘(직접 확인). 전체 시험 334/334. 실제 휴대폰 뒤로가기 버튼으로는 못 해 봄.

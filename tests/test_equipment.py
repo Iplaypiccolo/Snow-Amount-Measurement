@@ -890,8 +890,9 @@ def t_pool_vehicles(p):
     # ── 지사별 요청·편성: 칸 순서, 관리자 영역 경계선, 보기 버튼 3개, 직접입력을 켜도 칸 폭 그대로
     tab(p, "branch")
     heads = [x.replace("\n", " ").strip() for x in p.locator("#branchTable thead tr:first-child th").all_inner_texts()]
+    heads = [h for h in heads if h]                 # 저장·편성 사이 빈 칸(표 나눔, 2026-11-02) 제외
     check([h.split(" ")[0] for h in heads] == ["지사", "24시", "대설특보", "기상현황", "지사", "도착", "타지사", "저장", "편성", "확정"] and "지원 가능" in heads[6], f"칸 순서: {heads}")
-    check(ev(p, "getComputedStyle(document.querySelector('#branchTable tbody td.adm0')).borderLeftWidth") == "3px" and p.locator("#branchTable thead th.adm").count() == 5, "편성·확정 앞 굵은 경계선")
+    check(ev(p, "getComputedStyle(document.querySelector('#branchTable tbody td.adm0')).borderLeftWidth") != "3px" and p.locator("#branchTable thead th.adm").count() == 5, "편성·확정 앞은 굵은 경계선 대신 빈 칸(2026-11-02)")
     check(ev(p, f"(() => {{ const tr = document.querySelector(\"#branchTable tr[data-b='{cj}']\"), bg = c => getComputedStyle(tr.querySelector(c)).backgroundColor; return bg('td.adm') !== bg('td.ofc') }})()"), "관리자 칸은 바탕이 다름")
     check([x.strip() for x in p.locator("#branchCtl .chip").all_inner_texts()] == ["요청", "편성", "지원", "저장안함"], "보기 버튼 순서(저장 안 한 지사만은 맨 오른쪽)")
     widths = lambda: ev(p, "[...document.querySelectorAll('#branchTable thead tr:nth-child(2) th')].map(th => Math.round(th.getBoundingClientRect().width * 2) / 2)")
@@ -1070,6 +1071,23 @@ def t_branch_bulk_save(p):
     check("모두 본부저장" in p.locator(f"#branchTable tr.hq[data-hq='{gw}'] [data-svhq]").inner_text() and p.locator("#branchTable [data-rsave]").count() == 0, "다 저장하면 '모두 본부저장'")
     # 지사 계정(자기 줄 하나)에는 [일괄 저장] 없음
     as_user(p, "br2"); tab(p, "branch"); check(p.locator("[data-rsave-hq]").count() == 0, "지사 계정은 일괄 저장 없음")
+
+def t_branch_two_tables(p):
+    """2026-11-02: 요청·편성 표를 빈 칸으로 둘로 나눔(위치 그대로), 내 계정의 표를 파랗게, 제목 '지사' 가운데"""
+    tab(p, "branch")
+    gaps = ev(p, """(() => [...document.querySelectorAll('#branchTable tbody tr')].every(tr => { const c = [...tr.children], g = c.findIndex(x => x.classList.contains('blk-gap')); return g >= 0 && c[g + 1].classList.contains('adm0') && c[g - 1].classList.contains('svc'); }))()""")
+    check(gaps, "모든 줄: 저장 칸과 편성 칸 사이에 빈 칸")
+    cs = lambda sel, prop: ev(p, f"getComputedStyle(document.querySelector('{sel}')).{prop}")
+    check(cs("#branchTable thead th", "textAlign") == "center" and p.locator("#branchTable thead th").first.inner_text().strip() == "지사", "제목 '지사' 가운데")
+    check(cs("#branchTable td.adm0", "borderLeftWidth") != "3px" and ev(p, "document.querySelector('#branchTable .blk-gap').getBoundingClientRect().width") >= 10, "진한 세로줄 대신 빈 칸")
+    check(ev(p, "document.querySelector('#branchTable').classList.contains('mine-right')") and "내가 입력하는 표" in p.locator("#branchCtl").inner_text(), "관리자: 오른쪽 표(편성·확정)가 내 표")
+    left, right = cs("#branchTable thead th.fch", "backgroundColor"), cs("#branchTable thead th.adm", "backgroundColor")
+    check(left != right, f"내 표 제목은 색이 다름: {left} {right}")
+    as_user(p, "br2"); tab(p, "branch")
+    check(ev(p, "(() => { const c = document.querySelector('#branchTable').classList; return c.contains('mine-left') && !c.contains('mine-right'); })()"), "지사: 왼쪽 표가 내 표")
+    as_user(p, "hq-gw"); tab(p, "branch"); check(ev(p, "document.querySelector('#branchTable').classList.contains('mine-left')"), "본부: 왼쪽 표가 내 표")
+    as_user(p, "viewer"); tab(p, "branch")
+    check(ev(p, "(() => { const c = document.querySelector('#branchTable').classList; return !c.contains('mine-left') && !c.contains('mine-right'); })()") and "내가 입력하는 표" not in p.locator("#branchCtl").inner_text(), "보기 전용: 강조 없음")
 
 def t_branch_saved(p):
     """(2026-10-15, 마이그레이션 46) 지사·본부는 요청·지원 가능이 0이어도 [저장] → '저장 완료'(타지사 지원 가능 다음 칸). 관리자 저장·확정은 남기지 않음.
@@ -1273,7 +1291,7 @@ def t_route_perm_admin_only(p):
     check("권한이 없습니다" in toast(p), "화면을 우회해 다른 기관 경로를 보내도 거절: " + toast(p))
     as_user(p, "admin1"); tab(p, "fleet"); check(p.locator("#eqTable select[data-rv]").count() > 0 and p.locator("#day1In").count() == 1, "관리자는 지원일 칸 전부")
 
-TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
