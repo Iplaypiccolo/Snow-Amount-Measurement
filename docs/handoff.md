@@ -44,6 +44,12 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-02 · 커밋 (이 기록 커밋 하나) · 배정 = 관리자만, 지사가 자기 지역본부 장비 첫날 지정 (Claude 채팅 작업)
+- 사용자: "관리자는 기관별 배정에서 대수만, 기관별 장비에서 그 기관(기계화부·지사)이 어떤 장비를 어느 지사로".
+- 화면: 배정 탭 고치기·[확정] = `canRoute()`(equip.route). 지역본부 장비 줄도 지사 계정에 첫날 지사 고르기(`select[data-ra]`, 배정받은 지사 중 자기 지사 뺌). 샘플 모드 같은 규칙. `t_pool_vehicles` 고침 → `test_equipment.py` 61/61, `test_guide.py` 9/9(지원 지사 표지 = 기계화부 · 지사).
+- migration 49 에 덧붙임(아직 **적용 전**): `round_allocations` RLS 3개 + `save_allocations` = equip.route, `vehicle_routes_guard`·`save_fleet` 지역본부 장비 = 그 지사도 첫날 한 곳(SA005 자기 지사), `vehicle_routes` ins/del 에 그 지사 조건. 시험 `route_perm_test.sql`·`route_perm_dryrun.sql` v2(지사·배정 시험 추가, 서버에서 아직 안 돌림).
+— ✍ Claude 채팅 작성
+
 ### 2026-11-02 · 커밋 (이 기록 커밋 하나) · 사용법 안내: [? 사용법]은 탭 소개 없이 · 쓰는 계정 표지 · 필터 안내 뺌 (Claude 채팅 작업)
 - `guide/guide.js`: `start(page, onlyTab, manual)` — [? 사용법](manual)은 첫 장 + 지금 탭 칸만. 칸 단계에 `who`(헬퍼 `W`, `ADM`·`BRH`·`MEC`) → 제목 옆 표지(`badges()`), 필터 단계 4개 삭제. `guide.css` 표지 색. 시험 `t_help_and_who` 추가 → `tests/test_guide.py` 9/9.
 - migration 49 는 여전히 **적용 전**(이번에도 execute_sql 승인 창에 답이 없어 롤백 시험이 돌지 않음).

@@ -637,11 +637,11 @@ const isGo = v => { const r = curRound(); return !!r && stOf(r.id, v.id).status 
 const fleetRows = () => S.vehicles.filter(v => (!S.fleetOrgs.size || S.fleetOrgs.has(v.org)) && shownIn(v, curRound()) && (!S.fleetGo || isGo(v) || S.sdraft.has(v.id)));
 const nextRoundMin = () => S.rounds.length ? addDays(S.rounds[0].start_date, 1) : "2000-01-01";       // 새 기준일자는 마지막 기준일자보다 뒤
 const hiddenNow = () => S.vehicles.filter(v => v.hidden_after && !shownIn(v, curRound()));          // 지금 고른 기준일자에서 숨겨진 장비(숨김 취소 목록)
-// 지원일 칸(경로)의 지사 선택 전부·지원일 1 날짜·지원일 칸 수·초기화·최초 지원/수정본 = 관리자(권한 equip.route)만 (2026-11-02 사용자 요청)
+// 지원일 칸(경로)의 지사 선택 전부·지원일 1 날짜·지원일 칸 수·초기화·최초 지원/수정본, 기관별 배정 대수 = 관리자(권한 equip.route)만 (2026-11-02 사용자 요청)
 const canRoute = () => can("equip.route");
 // 모든 기관 장비 추가·삭제·숨기기 = equip.edit.all(관리자 + 이 권한을 받은 지원장비 아이디). 지원일 칸은 이 권한으로 열리지 않음
 const canAllVeh = () => can("equip.edit.all");
-// 관리자가 아닌 계정이 지원일 칸에서 고칠 수 있는 장비(예전 수준): 기계화부 = 자기 기관 장비(첫날 한 곳·도착 시각), 지사 = 자기 지사 지역본부 장비(도착 시각)
+// 관리자가 아닌 계정이 지원일 칸에서 고칠 수 있는 장비: 기계화부 = 자기 기관 장비, 지사 = 자기 지사 지역본부 장비 — 둘 다 첫날 한 곳(관리자 배정 안)·도착 시각(2026-11-02)
 const routeOwn = v => !!S.me && (isPool(v) ? can("req.edit.own") && v.home_branch === S.me.branch_id : (can("equip.edit.own") || can("equip.edit.all")) && v.org === S.me.org);
 const NUM_RE = /^\d{1,5}$/;                                           // 도공번호 = 출발 기관 이름 + 숫자(예: 서울경기901). 입력은 숫자만
 const plateNum = v => { const p = vval(v, "plate") || ""; return p.startsWith(v.org) ? p.slice(v.org.length) : ""; };
@@ -804,8 +804,8 @@ function slotCell(v, d, ed, confirmed) {
   const flag = d === cr.start_date ? flagTag(allocFlag(v, stops[0])) : "";       // 지원일 1: 관리자 배정을 넘겼거나 배정 없는 지사
   if (!ed) {                     // 지원장비(기계화부) 계정: 자기 기관 장비의 도착 예상 시각·지원 불가(지원일 2부터) + 지원일 1의 지사 한 곳(배정받은 지사 중, 마이그레이션 43)
     const timeEd = routeOwn(v);                                       // 예전 수준: 자기 기관(지사는 자기 지사 지역본부) 장비만 — '모든 기관' 권한이 있어도 지원일 칸은 자기 기관만
-    if (timeEd && !isPool(v) && orgHasAlloc(v.org) && d === cr.start_date && st.status === "O" && (!stops.length || (stops.length === 1 && !rec.revised))) {
-      const cur = stops[0] || "", list = allocBranches(v.org, v.type), ids = new Set(list.map(b => b.id)), free = v.type === "이동정비차";
+    if (timeEd && orgHasAlloc(v.org) && d === cr.start_date && st.status === "O" && (!stops.length || (stops.length === 1 && !rec.revised))) {     // 지사도 자기 지사 지역본부 장비를(2026-11-02)
+      const cur = stops[0] || "", list = allocBranches(v.org, v.type).filter(b => b.id !== v.home_branch), ids = new Set(list.map(b => b.id)), free = v.type === "이동정비차";
       const full = b => !free && b.id !== cur && allocUsed(v.org, v.type, b.id) >= allocCap(v.org, v.type, b.id);
       const opts = `<option value="">${list.length ? "지사 선택" : "배정받은 지사 없음"}</option>` +
         list.map(b => `<option value="${b.id}"${cur === b.id ? " selected" : ""}${full(b) ? " disabled" : ""}>${esc(b.name)}${free ? "" : ` (${allocUsed(v.org, v.type, b.id)}/${allocCap(v.org, v.type, b.id)})`}</option>`).join("") +
@@ -1169,7 +1169,7 @@ async function switchRound(id, force) {
    [6-2] 기관별 배정 — 관리자: 편성이 확정된 지사에 기관별 제설차·제설기 대수. 기준일자 전체에 한 번(지원일 1 기준)
    ============================================================ */
 function renderAlloc() {
-  const r = curRound(), ed = can("equip.edit.all") && !!r, AO = [...S.orgs, POOL];        // 칸: 기계화부 4곳(제설차·제설기) + 지역본부(제설차만)
+  const r = curRound(), ed = canRoute() && !!r, AO = [...S.orgs, POOL];        // 배정 대수는 관리자(equip.route)만 — 2026-11-02        // 칸: 기계화부 4곳(제설차·제설기) + 지역본부(제설차만)
   banner("perm-alloc");
   $("allocRound").innerHTML = roundSel("roundSelAlloc") + `<span class="hint">${r ? "편성이 확정된 지사에 어느 기관이 제설차·제설기를 몇 대 보낼지 정합니다. 기관(기계화부)은 이 대수 안에서 지원일 1의 장비별 지사를 고릅니다(기관별 장비). 지역본부 장비는 관리자가 장비별 지사를 정하고, 여기 대수를 넘기면 '배정 초과'로 표시됩니다. 이동정비차는 배정하지 않습니다." : "기준일자가 없습니다."}</span>` + reloadBtn();
   const rows = r ? S.order.filter(b => isFixed(b.id) || AO.some(o => { const a = aval(o, b.id); return a.truck + a.blower > 0; })) : [];
@@ -1338,7 +1338,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !sheet.hid
 function busy(t, on) { const bar = $("save-" + t); bar.classList.toggle("busy", on); bar.querySelectorAll("button").forEach(b => { b.disabled = on || b.disabled; }); }
 function updateSavebars() {
   const fb = $("save-fleet"), bb = $("save-branch"), ab = $("save-alloc");
-  fb.hidden = !(can("equip.edit.all") || can("equip.edit.own") || myPoolN() > 0 || (canPoolAdd() && fleetDirty())); bb.hidden = true; ab.hidden = !can("equip.edit.all") || !S.round;
+  fb.hidden = !(can("equip.edit.all") || can("equip.edit.own") || myPoolN() > 0 || (canPoolAdd() && fleetDirty())); bb.hidden = true; ab.hidden = !canRoute() || !S.round;
   const fd = fleetDirty(), bd = branchDirty(), ad = allocDirty(), td = teamDirty(), tb = $("save-gwteam");
   tb.hidden = !canTeam() || !S.round; tb.classList.toggle("dirty", td);
   tb.querySelector(".save-state").textContent = td ? `확정하지 않은 변경: 경로 ${draftKeys(true).length}칸${sdraftKeys(true).length ? ` · 지원 여부 ${sdraftKeys(true).length}대` : ""}` + (S.preview ? " (미리보기 — 확정 불가)" : "") : "변경 사항 없음";
@@ -1401,7 +1401,7 @@ document.addEventListener("change", async e => {
     keepFocus(() => renderFleet()); return afterAnyChange();
   }
   if (t.dataset.al) {                       // 기관별 배정(관리자): 칸 하나 = (기관, 지사)의 제설차 또는 제설기 대수
-    const [org, bid] = t.dataset.al.split("|"), f = t.dataset.f, b = S.brById[bid]; if (!b || !can("equip.edit.all") || !isFixed(bid) || !["truck", "blower"].includes(f)) return refresh();
+    const [org, bid] = t.dataset.al.split("|"), f = t.dataset.f, b = S.brById[bid]; if (!b || !canRoute() || !isFixed(bid) || !["truck", "blower"].includes(f)) return refresh();
     let want = t.value === "" ? 0 : Math.max(0, Math.min(99, Math.floor(+t.value) || 0));
     const old = aval(org, bid)[f] || 0, room = asg(bid, f) - allocSum(bid, f, org);          // 편성 - 다른 기관 배정 = 이 칸에 넣을 수 있는 최대
     if (want > old && want > room) { want = Math.max(old, room); toast(`${b.name} 편성(${f === "truck" ? "제설차" : "제설기"} ${asg(bid, f)}대)보다 많이 배정할 수 없습니다`, true); }

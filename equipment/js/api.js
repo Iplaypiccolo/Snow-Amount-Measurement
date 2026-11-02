@@ -213,8 +213,8 @@ const Api = (() => {
       },
       requests(round) { return done({ ok: true, rows: clone(db.requests.filter(r => r.round_id === +round)) }); },
       allocations(round) { return done({ ok: true, rows: clone(db.allocations.filter(a => a.round_id === +round)) }); },
-      saveAllocations(round, rows) {       // 서버 save_allocations 흉내: 관리자만, 편성이 확정된 지사만, 둘 다 0 이면 줄 삭제
-        if (!can("equip.edit.all")) return done({ ok: false, message: ERR["42501"], code: "42501" });
+      saveAllocations(round, rows) {       // 서버 save_allocations 흉내: 관리자(equip.route)만, 편성이 확정된 지사만, 둘 다 0 이면 줄 삭제
+        if (!can("equip.route")) return done({ ok: false, message: ERR["42501"], code: "42501" });
         if (rows.some(x => x.org === POOL && x.blower)) return done(err("23514", "지역본부는 제설차만 배정합니다."));
         if (rows.some(x => (x.truck || x.blower) && !db.requests.some(q => q.round_id === +round && q.branch_id === x.branch_id && q.confirmed))) return done({ ok: false, message: ALLOC_ERR["23514"], code: "23514" });
         const sums = bid => db.allocations.filter(a => a.round_id === +round && a.branch_id === bid).reduce((m, a) => ({ t: m.t + a.truck, b: m.b + a.blower }), { t: 0, b: 0 });
@@ -264,7 +264,7 @@ const Api = (() => {
             if (!routeOk(r.vehicle_id)) return "42501";
             const k = r.date + "|" + r.vehicle_id, old = sim.get(k), v = db.vehicles.find(x => x.id === r.vehicle_id);
             if (old && JSON.stringify(old.stops) === JSON.stringify(r.stops)) continue;                 // 시각만
-            if (v.org === POOL) return "42501";                                                          // 지역본부 장비의 피지원 지사는 관리자만
+            if (v.org === POOL && r.stops.includes(v.home_branch)) return "SA005";                         // 지역본부 장비: 그 지사가 첫날 한 곳(자기 지사로는 못 보냄, 2026-11-02)
             if (!rd0 || r.date !== rd0.start_date || (old && (old.revised || old.stops.length !== 1)) || r.stops.length > 1) return "SA003";
             if (!r.stops.length) { sim.delete(k); continue; }
             const a = allocOf(v.org, r.stops[0]);

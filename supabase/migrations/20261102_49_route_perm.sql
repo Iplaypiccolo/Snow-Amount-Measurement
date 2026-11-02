@@ -9,15 +9,19 @@
 --   * 고치는 곳: 경로 검사 트리거 2개(vehicle_routes_guard·route_alloc_cap), 저장 함수 save_fleet, 경로 표 권한 규칙(RLS) 3개
 --     — 함수 본문은 2026-11-02 서버에 있던 그대로에서 권한 검사만 바꿈
 --   * 기관별 배정(round_allocations)·장비 추가·삭제·숨기기는 그대로 equip.edit.all
+--  추가(같은 날 사용자 결정): "관리자는 기관별 배정에서 대수만 정하고, 어떤 장비를 어느 지사로 보낼지는 그 기관(기계화부·지사)이 기관별 장비에서 정함"
+--   * 기관별 배정(round_allocations) 쓰기 = equip.route(관리자). '모든 기관' 권한(equip.edit.all)으로는 못 고침(지금은 기계화부 4개가 고칠 수 있었음)
+--   * 지사 계정(req.edit.own)도 자기 지사 지역본부 장비의 첫날 피지원 지사 한 곳을 정함 — 관리자가 '지역본부'에 배정한 지사·대수 안에서, 자기 지사는 안 됨(SA005).
+--     예전(44)에는 지역본부 장비 경로는 관리자만이었음.
 --  계정별 권한(profiles.perms)은 바꾸지 않음. equip.route 는 아무 역할에도 기본으로 주지 않음(관리 콘솔에서 줄 수 있음)
 -- ============================================================
 
 -- 1) 새 권한
 insert into public.permissions (key, label, description, default_roles) values
-  ('equip.route', '지원일 칸(경로) 전부 입력', '장비 지원 > 기관별 장비의 지원일 칸에서 모든 장비의 피지원 지사(둘째 날·하루 여러 곳·수정본 포함)를 정하고, 지원일 1 날짜·지원일 칸 수·초기화를 씀. 없으면 자기 기관 장비의 첫날 한 곳(배정 안)과 도착 시각만', '{}')
+  ('equip.route', '기관별 배정 · 지원일 칸(경로) 전부 입력', '장비 지원 > 기관별 배정 대수를 정하고, 기관별 장비의 지원일 칸에서 모든 장비의 피지원 지사(둘째 날·하루 여러 곳·수정본 포함)·지원일 1 날짜·지원일 칸 수·초기화를 씀. 없으면 자기 기관(지사는 자기 지사 지역본부) 장비의 첫날 한 곳(배정 안)과 도착 시각만', '{}')
 on conflict (key) do update set label = excluded.label, description = excluded.description;
 update public.permissions set label = '모든 기관 장비 입력·장비 삭제·숨기기',
-  description = '모든 출발 기관 장비를 추가·입력하고 [삭제]·[숨기기], 기관별 배정을 정함. 지원일 칸(경로)은 이 권한으로 열리지 않음(equip.route)'
+  description = '모든 출발 기관 장비를 추가·입력하고 [삭제]·[숨기기]. 기관별 배정·지원일 칸(경로)은 이 권한으로 열리지 않음(equip.route)'
  where key = 'equip.edit.all';
 
 -- 2) 경로 검사 트리거: 관리자 통과 = equip.route. 기계화부 검사는 '자기 기관'(equip.edit.own 또는 equip.edit.all)
@@ -30,14 +34,11 @@ declare d date; st date; v public.vehicles; a public.round_allocations;
 begin
   if (select auth.uid()) is null or private.has_perm('equip.route') then return coalesce(new, old); end if;   -- 로그인 사용자가 아닌 서버 안 작업(관리용)과 관리자는 통과
   select * into v from public.vehicles x where x.id = coalesce(new.vehicle_id, old.vehicle_id);
-  if v.org = '지역본부' then
-    if private.has_perm('req.edit.own') and v.home_branch = private.my_branch() and tg_op = 'UPDATE'
-       and (new.date, new.vehicle_id, new.stops, new.revised) is not distinct from (old.date, old.vehicle_id, old.stops, old.revised) then
-      return new;                                            -- 그 지사 계정: 도착 예상 시각만
+  if v.org = '지역본부' then                                  -- 지역본부 장비: 그 지사 계정(2026-11-02부터 첫날 한 곳도 — 아래 기계화부와 같은 규칙)
+    if not (private.has_perm('req.edit.own') and v.home_branch = private.my_branch()) then
+      raise exception 'not allowed' using errcode = '42501';
     end if;
-    raise exception 'only the admin sets the route of a pool vehicle' using errcode = '42501';
-  end if;
-  if not (private.has_perm('equip.edit.own') or private.has_perm('equip.edit.all')) or v.org is distinct from private.my_org() then
+  elsif not (private.has_perm('equip.edit.own') or private.has_perm('equip.edit.all')) or v.org is distinct from private.my_org() then
     raise exception 'not allowed' using errcode = '42501';   -- 자기 기관 장비가 아니거나 권한이 없음(권한 규칙과 같은 번호로)
   end if;
   if tg_op = 'UPDATE' and (new.date, new.vehicle_id, new.stops, new.revised) is not distinct from (old.date, old.vehicle_id, old.stops, old.revised) then
@@ -54,6 +55,7 @@ begin
   end if;
   if tg_op = 'DELETE' then return old; end if;
   if new.revised or cardinality(new.stops) <> 1 then raise exception 'one branch, first assignment only' using errcode = 'SA003'; end if;
+  if v.home_branch = new.stops[1] then raise exception 'a pool vehicle cannot be sent to its own branch' using errcode = 'SA005'; end if;
   select * into a from public.round_allocations x where x.round_id = private.governing_round(d) and x.org = v.org and x.branch_id = new.stops[1];
   if not found or (v.type = '제설차' and a.truck = 0) or (v.type = '제설기' and a.blower = 0) then
     raise exception 'branch is not allocated to this org' using errcode = 'SA001';
@@ -131,19 +133,14 @@ begin
     if private.governing_round(d) is distinct from p_round then raise exception 'date is owned by another round' using errcode = '23514'; end if;
     stp := array(select jsonb_array_elements_text(r -> 'stops'));
     tms := case when jsonb_typeof(r -> 'times') = 'array' then array(select jsonb_array_elements_text(r -> 'times')) end;   -- JSON null 은 SQL null 로
-    if not v_all and exists (select 1 from public.vehicles v where v.id = vid and v.org = '지역본부') then
-      -- 지사 계정: 자기 지사 지역본부 장비의 정해진 경로에 도착 예상 시각만
-      if not (select private.has_perm('req.edit.own')) or not exists (select 1 from public.vehicles v where v.id = vid and v.home_branch = (select private.my_branch()))
-         or not exists (select 1 from public.vehicle_routes x where x.date = d and x.vehicle_id = vid and x.stops = stp) then
-        raise exception 'route not allowed: %', vid using errcode = '42501';
-      end if;
-      update public.vehicle_routes x set times = tms where x.date = d and x.vehicle_id = vid and x.times is distinct from tms;
-      get diagnostics c = row_count; nu := nu + c;
-      continue;
-    end if;
     if not v_all then
-      -- 기계화부(지원장비): 자기 기관 장비만('모든 기관' 권한이 있어도). 같은 지사 목록이면 시각만, 아니면 첫날 한 곳 지정·지우기(트리거가 검사)
-      if not ((select private.has_perm('equip.edit.own')) or (select private.has_perm('equip.edit.all'))) or not exists (select 1 from public.vehicles v where v.id = vid and v.org = (select private.my_org())) then
+      -- 지사 계정 = 자기 지사 지역본부 장비 / 기계화부(지원장비) = 자기 기관 장비('모든 기관' 권한이 있어도).
+      -- 같은 지사 목록이면 시각만, 아니면 첫날 한 곳 지정·지우기(트리거 vehicle_routes_guard 가 배정·자기 지사 등을 검사)
+      if exists (select 1 from public.vehicles v where v.id = vid and v.org = '지역본부') then
+        if not (select private.has_perm('req.edit.own')) or not exists (select 1 from public.vehicles v where v.id = vid and v.home_branch = (select private.my_branch())) then
+          raise exception 'route not allowed: %', vid using errcode = '42501';
+        end if;
+      elsif not ((select private.has_perm('equip.edit.own')) or (select private.has_perm('equip.edit.all'))) or not exists (select 1 from public.vehicles v where v.id = vid and v.org = (select private.my_org())) then
         raise exception 'route not allowed: %', vid using errcode = '42501';
       end if;
       if cardinality(stp) = 0 then
@@ -181,11 +178,15 @@ drop policy if exists vehicle_routes_del on public.vehicle_routes;
 create policy vehicle_routes_ins on public.vehicle_routes for insert to authenticated with check (
   (select private.has_perm('equip.route'))
   or (((select private.has_perm('equip.edit.own')) or (select private.has_perm('equip.edit.all')))
-      and exists (select 1 from public.vehicles v where v.id = vehicle_id and v.org = (select private.my_org()))));
+      and exists (select 1 from public.vehicles v where v.id = vehicle_id and v.org = (select private.my_org())))
+  or ((select private.has_perm('req.edit.own'))
+      and exists (select 1 from public.vehicles v where v.id = vehicle_id and v.org = '지역본부' and v.home_branch = (select private.my_branch()))));
 create policy vehicle_routes_del on public.vehicle_routes for delete to authenticated using (
   (select private.has_perm('equip.route'))
   or (((select private.has_perm('equip.edit.own')) or (select private.has_perm('equip.edit.all')))
-      and exists (select 1 from public.vehicles v where v.id = vehicle_id and v.org = (select private.my_org()))));
+      and exists (select 1 from public.vehicles v where v.id = vehicle_id and v.org = (select private.my_org())))
+  or ((select private.has_perm('req.edit.own'))
+      and exists (select 1 from public.vehicles v where v.id = vehicle_id and v.org = '지역본부' and v.home_branch = (select private.my_branch()))));
 create policy vehicle_routes_upd on public.vehicle_routes for update to authenticated
   using ((select private.has_perm('equip.route'))
     or (((select private.has_perm('equip.edit.own')) or (select private.has_perm('equip.edit.all')))
@@ -197,3 +198,52 @@ create policy vehicle_routes_upd on public.vehicle_routes for update to authenti
         and exists (select 1 from public.vehicles v where v.id = vehicle_id and v.org = (select private.my_org())))
     or ((select private.has_perm('req.edit.own'))
         and exists (select 1 from public.vehicles v where v.id = vehicle_id and v.org = '지역본부' and v.home_branch = (select private.my_branch()))));
+
+-- 5) 기관별 배정: 쓰기 = 관리자(equip.route). 저장 함수의 '권한 없음' 검사도 같이
+drop policy if exists round_allocations_ins on public.round_allocations;
+drop policy if exists round_allocations_upd on public.round_allocations;
+drop policy if exists round_allocations_del on public.round_allocations;
+create policy round_allocations_ins on public.round_allocations for insert to authenticated with check ((select private.has_perm('equip.route')));
+create policy round_allocations_upd on public.round_allocations for update to authenticated
+  using ((select private.has_perm('equip.route'))) with check ((select private.has_perm('equip.route')));
+create policy round_allocations_del on public.round_allocations for delete to authenticated using ((select private.has_perm('equip.route')));
+
+create or replace function public.save_allocations(p_round bigint, p_rows jsonb)
+ returns jsonb
+ language plpgsql
+ set search_path to ''
+as $function$
+declare r jsonb; c int; nu int := 0; nd int := 0; t int; bl int; br text; bef jsonb; st int; sb int; qt int; qb int;
+begin
+  if jsonb_typeof(p_rows) is distinct from 'array' or jsonb_array_length(p_rows) = 0 then raise exception 'nothing to save' using errcode = '22023'; end if;
+  if jsonb_array_length(p_rows) > 2000 then raise exception 'too many rows' using errcode = '54000'; end if;
+  if not exists (select 1 from public.support_rounds where id = p_round) then raise exception 'unknown round' using errcode = '23503'; end if;
+  if not (select private.has_perm('equip.route')) then raise exception 'not allowed' using errcode = '42501'; end if;      -- 2026-11-02: 배정은 관리자만(먼저 거절)
+  select coalesce(jsonb_object_agg(x.branch_id, jsonb_build_array(x.t, x.b)), '{}'::jsonb) into bef          -- 저장 전 지사별 합계
+    from (select a.branch_id, sum(a.truck) t, sum(a.blower) b from public.round_allocations a
+           where a.round_id = p_round and a.branch_id in (select distinct e ->> 'branch_id' from jsonb_array_elements(p_rows) e) group by a.branch_id) x;
+  for r in select * from jsonb_array_elements(p_rows) loop
+    if jsonb_typeof(r) is distinct from 'object' or not (r ? 'org') or not (r ? 'branch_id') then raise exception 'bad row' using errcode = '22023'; end if;
+    t := coalesce((r ->> 'truck')::int, 0); bl := coalesce((r ->> 'blower')::int, 0);
+    if t = 0 and bl = 0 then
+      delete from public.round_allocations a where a.round_id = p_round and a.org = r ->> 'org' and a.branch_id = r ->> 'branch_id';
+      get diagnostics c = row_count; nd := nd + c;
+    else
+      if not exists (select 1 from public.round_requests q where q.round_id = p_round and q.branch_id = r ->> 'branch_id' and q.confirmed) then
+        raise exception 'branch is not confirmed in this round' using errcode = '23514';
+      end if;
+      insert into public.round_allocations as a (round_id, org, branch_id, truck, blower) values (p_round, r ->> 'org', r ->> 'branch_id', t, bl)
+      on conflict (round_id, org, branch_id) do update set truck = excluded.truck, blower = excluded.blower
+        where (a.truck, a.blower) is distinct from (excluded.truck, excluded.blower);       -- 권한이 없으면 규칙(RLS)이 거절
+      get diagnostics c = row_count; nu := nu + c;
+    end if;
+  end loop;
+  for br in select distinct e ->> 'branch_id' from jsonb_array_elements(p_rows) e loop
+    select coalesce(sum(a.truck), 0), coalesce(sum(a.blower), 0) into st, sb from public.round_allocations a where a.round_id = p_round and a.branch_id = br;
+    select coalesce(max(q.assigned_truck), 0), coalesce(max(q.assigned_blower), 0) into qt, qb from public.round_requests q where q.round_id = p_round and q.branch_id = br;
+    if (st > qt and st > coalesce((bef -> br ->> 0)::int, 0)) or (sb > qb and sb > coalesce((bef -> br ->> 1)::int, 0)) then
+      raise exception 'allocation exceeds the assigned number' using errcode = 'SA006';
+    end if;
+  end loop;
+  return jsonb_build_object('saved', nu, 'deleted', nd);
+end $function$;

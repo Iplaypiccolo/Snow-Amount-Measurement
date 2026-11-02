@@ -257,7 +257,7 @@
         '드롭다운 → 지원 · 미정 · 지원 불가 · 정비중', ['지원 → 날짜 칸이 열림'], W(MEC)),
       E('fleet', '블로워', [inRow('#eqTable input[aria-label$="블로워 소"]:not(:disabled)', ['input[aria-label$="블로워 대"]'])], '장착한 블로워 체크 (소 · 대)', [], W(MEC)),
       E('fleet', '지원 지사', ['#eqTable .slot select[data-rv]:not(:disabled)',
-        { s: '#eqTable .slot select[data-ra]:not(:disabled)', desc: '그날 갈 지사 고르기', points: ['교통처가 배정한 지사 중에서', '둘째 날 · 여러 지사 · 수정본은 관리자'] }], '그날 갈 지사 고르기', [], W(MEC)),
+        { s: '#eqTable .slot select[data-ra]:not(:disabled)', desc: '그날 갈 지사 고르기', points: ['교통처가 배정한 지사 · 대수 안에서 (첫날 한 곳)', '지사: 우리 지사 지역본부 장비', '둘째 날 · 여러 지사 · 수정본은 관리자'] }], '그날 갈 지사 고르기', [], W(['기계화부', '지사'])),
       E('fleet', '도착 예상 시각', ['#eqTable .slot input.tm:not(:disabled)'], '그 지사 도착 시각 (예: 21:30)', ['지사: 우리 지사 지역본부 장비'], W(['기계화부', '지사'])),
       E('fleet', '＋ 지사 추가', ['#eqTable .slot button[aria-label$="들르는 지사 추가"]:not(:disabled)'], '하루에 여러 지사를 들를 때', [], W(ADM)),
       E('fleet', '이날부터 지원 불가', ['#eqTable select.offsel'], '고장 등 → 그날부터 지원 불가', [], W(MEC)),
