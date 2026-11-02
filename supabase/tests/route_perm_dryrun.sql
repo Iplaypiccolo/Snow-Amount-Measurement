@@ -9,7 +9,7 @@
 --       둘째 날·하루 여러 곳·수정본·지원일 1 날짜·초기화는 equip.route(관리자)만
 --   * 고치는 곳: 경로 검사 트리거 2개(vehicle_routes_guard·route_alloc_cap), 저장 함수 save_fleet, 경로 표 권한 규칙(RLS) 3개
 --     — 함수 본문은 2026-11-02 서버에 있던 그대로에서 권한 검사만 바꿈
---   * 기관별 배정(round_allocations)·장비 추가·삭제·숨기기는 그대로 equip.edit.all
+--   * 장비 추가·삭제·숨기기는 그대로 equip.edit.all (기관별 배정은 아래 '추가' — equip.route)
 --  추가(같은 날 사용자 결정): "관리자는 기관별 배정에서 대수만 정하고, 어떤 장비를 어느 지사로 보낼지는 그 기관(기계화부·지사)이 기관별 장비에서 정함"
 --   * 기관별 배정(round_allocations) 쓰기 = equip.route(관리자). '모든 기관' 권한(equip.edit.all)으로는 못 고침(지금은 기계화부 4개가 고칠 수 있었음)
 --   * 지사 계정(req.edit.own)도 자기 지사 지역본부 장비의 첫날 피지원 지사 한 곳을 정함 — 관리자가 '지역본부'에 배정한 지사·대수 안에서, 자기 지사는 안 됨(SA005).
@@ -18,8 +18,8 @@
 -- ============================================================
 
 -- 1) 새 권한
-insert into public.permissions (key, label, description, default_roles) values
-  ('equip.route', '기관별 배정 · 지원일 칸(경로) 전부 입력', '장비 지원 > 기관별 배정 대수를 정하고, 기관별 장비의 지원일 칸에서 모든 장비의 피지원 지사(둘째 날·하루 여러 곳·수정본 포함)·지원일 1 날짜·지원일 칸 수·초기화를 씀. 없으면 자기 기관(지사는 자기 지사 지역본부) 장비의 첫날 한 곳(배정 안)과 도착 시각만', '{}')
+insert into public.permissions (key, label, description, default_roles, sort) values
+  ('equip.route', '기관별 배정 · 지원일 칸(경로) 전부 입력', '장비 지원 > 기관별 배정 대수를 정하고, 기관별 장비의 지원일 칸에서 모든 장비의 피지원 지사(둘째 날·하루 여러 곳·수정본 포함)·지원일 1 날짜·지원일 칸 수·초기화를 씀. 없으면 자기 기관(지사는 자기 지사 지역본부) 장비의 첫날 한 곳(배정 안)과 도착 시각만', '{}', 95)            -- sort 95 = '모든 기관…'(90) 바로 다음 칸
 on conflict (key) do update set label = excluded.label, description = excluded.description;
 update public.permissions set label = '모든 기관 장비 입력·장비 삭제·숨기기',
   description = '모든 출발 기관 장비를 추가·입력하고 [삭제]·[숨기기]. 기관별 배정·지원일 칸(경로)은 이 권한으로 열리지 않음(equip.route)'

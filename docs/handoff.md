@@ -44,6 +44,12 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-02 · 커밋 (이 기록 커밋 하나) · migration 49 실서버 적용 (Claude 채팅 작업)
+- `route_perm_dryrun.sql` v2 롤백 시험 **30/30 통과**(서버 변화 없음) → 사용자 승인으로 **migration 49 실제 적용**(13:00경). 조회로 확인: 권한 `equip.route`(sort 95, 아직 받은 계정 0 — 관리자는 역할로 자동), `equip.edit.all` 이름 바뀜, `vehicle_routes`·`round_allocations` 쓰기 규칙 6개·`save_fleet`·`save_allocations`·`vehicle_routes_guard`(SA005)·`route_alloc_cap` 모두 equip.route.
+- migration 파일 고침: permissions 의 `sort`(필수 칸, 95) 넣기, 머리말 정정.
+- 아직 확인 못 한 것: 실제 사이트에서 기계화부·지사 계정으로 지원일 칸·배정 탭 동작.
+— ✍ Claude 채팅 작성
+
 ### 2026-11-02 · 커밋 (이 기록 커밋 하나) · 배정 = 관리자만, 지사가 자기 지역본부 장비 첫날 지정 (Claude 채팅 작업)
 - 사용자: "관리자는 기관별 배정에서 대수만, 기관별 장비에서 그 기관(기계화부·지사)이 어떤 장비를 어느 지사로".
 - 화면: 배정 탭 고치기·[확정] = `canRoute()`(equip.route). 지역본부 장비 줄도 지사 계정에 첫날 지사 고르기(`select[data-ra]`, 배정받은 지사 중 자기 지사 뺌). 샘플 모드 같은 규칙. `t_pool_vehicles` 고침 → `test_equipment.py` 61/61, `test_guide.py` 9/9(지원 지사 표지 = 기계화부 · 지사).
