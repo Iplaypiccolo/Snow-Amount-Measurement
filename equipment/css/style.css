@@ -622,10 +622,10 @@ table.alloc { min-width: 760px; }
 .al-flag { margin-left: 4px; white-space: nowrap; }
 
 /* ---------- [새로고침] 버튼(탭마다 오른쪽 끝) ---------- */
-.rl { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
-.rl .btn { min-height: 34px; padding: 4px 14px; }
-.rl .hint { font-size: 12px; color: var(--ink-soft); font-weight: 400; }
-.summary-head p .rl { margin-left: 14px; vertical-align: middle; }
+/* 새로고침(2026-11-02): 위쪽 탭 줄 오른쪽 하나 — 머리글이 위에 붙어 있어 스크롤해도 늘 보임. 좁은 화면에서 탭 줄이 옆으로 밀려도 오른쪽에 붙어 있음 */
+.tabs-reload { margin-left: auto; position: sticky; right: 0; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; padding-left: 10px; background: var(--surface); }
+.tabs-reload .btn { min-height: 32px; padding: 3px 14px; }
+.tabs-reload .hint { font-size: 12px; color: var(--ink-soft); font-weight: 400; }
 
 /* ---------- 지역본부 장비(마이그레이션 44) ---------- */
 /* 기관 카드 5개(기계화부 4곳 + 지역본부): 같은 폭·간격. 지원할 장비가 0대인 카드는 흐리게 */

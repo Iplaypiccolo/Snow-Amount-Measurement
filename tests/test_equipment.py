@@ -846,8 +846,11 @@ def t_allocation(p):
 
 def t_reload(p):
     """새로고침 버튼(2026-10-11): 이동 현황·기관별 장비·지사별 요청·편성·기관별 배정에서, 다른 아이디가 넣은 자료를 화면을 새로 열지 않고 다시 읽음"""
-    for tb in ("move", "fleet", "branch", "alloc"):
-        tab(p, tb); check(p.locator(f"#panel-{tb} [data-reload]").count() == 1 and p.locator(f"#panel-{tb} [data-reload]").is_visible(), f"{tb} 탭에 새로고침 버튼")
+    for tb in ("move", "fleet", "branch", "alloc"):     # 2026-11-02: 탭마다 있던 버튼 → 위쪽 탭 줄 오른쪽 하나(머리글이 붙어 있어 스크롤해도 보임)
+        tab(p, tb); check(p.locator("[data-reload]").count() == 1 and p.locator("#reloadTop").is_visible() and p.locator(f"#panel-{tb} [data-reload]").count() == 0, f"{tb} 탭: 새로고침은 위쪽 한 곳")
+    tab(p, "fleet"); p.mouse.wheel(0, 3000); p.wait_for_timeout(300)
+    bb = p.locator("#reloadTop").bounding_box(); check(bb and 0 <= bb["y"] < 200, f"아래로 스크롤해도 새로고침 버튼이 화면 위쪽에 보임: {bb}")
+    p.mouse.wheel(0, -3000); p.wait_for_timeout(200)
     d0 = day(p, 0); cj, dg = bid(p, "춘천"), bid(p, "대관령")
     # 다른 아이디가 서버에 넣은 것처럼: 시연 서버 자료만 바꾸고 화면 상태(S)는 그대로 둠
     ev(p, f"""(() => {{ const u = S.me; Api.setActor({{ role: 'admin', label: '다른 관리자', username: 'other' }});
@@ -858,16 +861,16 @@ def t_reload(p):
         Api.setActor(u); return null }})()""")
     tab(p, "branch")
     check(ev(p, f"rval('{cj}', 'req_truck')") == 2 and route(p, "V004", d0) == [] and ev(p, "!vehById('V777')") and ev(p, "S.alloc.size") == 0, "누르기 전에는 화면이 예전 값 그대로")
-    p.click("#panel-branch [data-reload]"); p.wait_for_timeout(500)
+    p.click("#reloadTop"); p.wait_for_timeout(500)
     check("새로 불러왔습니다" in toast(p) and ev(p, f"rval('{cj}', 'req_truck')") == 7 and p.locator(f"#branchTable tr[data-b='{cj}'] input[data-f=req_truck]").input_value() == "7", "지사 요청이 새 값으로: " + toast(p))
     check(route(p, "V004", d0) == ["대관령"] and ev(p, "stOf(S.round, 'V004').status") == "O" and ev(p, "!!vehById('V777')") and ev(p, f"(S.alloc.get('충북|{dg}') || {{}}).truck") == 4, "경로·지원 여부·새 장비·기관별 배정도 새 값으로")
-    check("불러옴" in p.locator("#panel-branch [data-reload-at]").inner_text(), "불러온 시각 표시")
+    check("불러옴" in p.locator(".tabs-reload [data-reload-at]").inner_text(), "불러온 시각 표시")
     tab(p, "fleet"); check(p.locator("#eqTable tr[data-vrow=V777]").count() == 1, "기관별 장비 표에 새 장비")
     # 저장하지 않은 변경이 있으면 물어보고(여기서는 자동으로 '예') 버린 뒤 다시 읽음
     p.select_option("[data-vs=V013]", "M"); p.wait_for_timeout(150); check(ev(p, "S.sdraft.size") == 1, "고치는 중")
-    p.click("#panel-fleet [data-reload]"); p.wait_for_timeout(500)
+    p.click("#reloadTop"); p.wait_for_timeout(500)
     check(ev(p, "S.sdraft.size") == 0 and ev(p, "stOf(S.round, 'V013').status") == "" and "새로 불러왔습니다" in toast(p), "버리고 다시 읽음")
-    tab(p, "move"); p.click("#panel-move [data-reload]"); p.wait_for_timeout(500); check("새로 불러왔습니다" in toast(p) and p.locator("#matrix tbody tr").count() > 0, "이동 현황에서도")
+    tab(p, "move"); p.click("#reloadTop"); p.wait_for_timeout(500); check("새로 불러왔습니다" in toast(p) and p.locator("#matrix tbody tr").count() > 0, "이동 현황에서도")
 
 def t_pool_vehicles(p):
     """지역본부 장비(2026-10-12, 마이그레이션 44): 지사가 '타지사 지원 가능' 대수를 내고 관리자가 확정 → 그 지사·관리자가 그 기준일자의 제설차를 등록.
@@ -1020,7 +1023,7 @@ def t_pool_round_delete(p):
         const r = await Api.saveFleet([], [{{ date: '{d4}', vehicle_id: 'V001', stops: [], revised: false, times: null }}, {{ date: '{d4}', vehicle_id: a.vehicle.id, stops: ['{dg}'], revised: false, times: null }}], S.round, []);
         return r.ok ? a.vehicle.id : null }})()""")
     check(v, "준비: 인천 252호를 닷새째에 대관령으로(그날 기계화부 경로는 비움)")
-    tab(p, "branch"); p.click("#panel-branch [data-reload]"); p.wait_for_timeout(500); old = ev(p, "S.round"); check(route(p, v, d4) == ["대관령"], "앞 기준일자에서 보임")
+    tab(p, "branch"); p.click("#reloadTop"); p.wait_for_timeout(500); old = ev(p, "S.round"); check(route(p, v, d4) == ["대관령"], "앞 기준일자에서 보임")
     p.fill("#newRoundDate", d4); p.click("#roundMake"); p.wait_for_timeout(400); new = ev(p, "S.round")
     check(new != old and ev(p, f"effRec('{d4}', '{v}').stops.length") == 0 and ev(p, f"recOf('{d4}', '{v}').stops.length") == 1, "새 기준일자가 그날을 맡아 경로는 숨겨짐(기록은 남음)")
     tab(p, "fleet"); check(p.locator("#eqTable tr.pool").count() == 0, "새 기준일자 화면에는 그 장비가 없어 경로를 지울 칸이 없음")
@@ -1028,7 +1031,7 @@ def t_pool_round_delete(p):
     check("지웠습니다" in toast(p) and ev(p, "S.round") == old, "그래도 새 기준일자를 지울 수 있음: " + toast(p))
     check(route(p, v, d4) == ["대관령"] and ev(p, f"effRec('{d4}', '{v}').stops.length") == 1, "지우면 앞 기준일자가 다시 맡아 경로가 그대로 되살아남")
     # 기계화부 장비의 경로가 그 기간에 있으면 예전처럼 막음
-    ev(p, f"Api.saveFleet([], [{{ date: '{d4}', vehicle_id: 'V001', stops: ['{dg}'], revised: false, times: null }}], S.round, [])"); p.click("#panel-branch [data-reload]"); p.wait_for_timeout(500)
+    ev(p, f"Api.saveFleet([], [{{ date: '{d4}', vehicle_id: 'V001', stops: ['{dg}'], revised: false, times: null }}], S.round, [])"); p.click("#reloadTop"); p.wait_for_timeout(500)
     p.fill("#newRoundDate", d4); p.click("#roundMake"); p.wait_for_timeout(400); p.click("#roundDel"); p.wait_for_timeout(400)
     check("경로가 있어" in toast(p) and ev(p, "S.round") != old, "기계화부 장비 경로가 있으면 여전히 거절: " + toast(p))
 
@@ -1105,7 +1108,7 @@ def t_alloc_follow_assign(p):
         sel = f"[data-rq={b}][data-f={f}]"; p.fill(sel, str(v)); p.press(sel, "Tab"); p.wait_for_timeout(100)
     tab(p, "alloc"); check(ev(p, f"(S.alloc.get('서울경기|{yy}') || {{}}).truck") == 8, "확정을 취소한 동안에는 배정 그대로")
     tab(p, "branch"); p.click(f"[data-confirm={yy}]"); p.wait_for_timeout(350); p.click(f"[data-confirm={dg}]"); p.wait_for_timeout(350)
-    tab(p, "alloc"); p.click("#panel-alloc [data-reload]"); p.wait_for_timeout(500)
+    tab(p, "alloc"); p.click("#reloadTop"); p.wait_for_timeout(500)
     check(ev(p, f"JSON.stringify(S.alloc.get('서울경기|{yy}'))") == '{"truck":5,"blower":0}', f"한 기관만 → 편성에 맞춰 줄고 제설기(편성 0)는 지워짐: {ev(p, f'JSON.stringify(S.alloc.get(\"서울경기|{yy}\"))')}")
     check(ev(p, f"(S.alloc.get('서울경기|{dg}') || {{}}).truck") == 4 and ev(p, f"(S.alloc.get('충북|{dg}') || {{}}).truck") == 2, "여러 기관 → 자동으로 안 줄임")
     check("편성보다 많음" in p.locator(f"#allocTable tr[data-ab='{dg}']").inner_text() and "편성보다 많음" not in p.locator(f"#allocTable tr[data-ab='{yy}']").inner_text(), "여러 기관이면 '편성보다 많음' 표시")
@@ -1115,7 +1118,7 @@ def t_alloc_follow_assign(p):
     tab(p, "branch"); p.click(f"[data-unconfirm={dg}]"); p.wait_for_timeout(300)
     for f in ("assigned_truck", "assigned_blower"): sel = f"[data-rq={dg}][data-f={f}]"; p.fill(sel, "0"); p.press(sel, "Tab"); p.wait_for_timeout(100)
     p.click(f"[data-confirm={dg}]"); p.wait_for_timeout(350)
-    tab(p, "alloc"); p.click("#panel-alloc [data-reload]"); p.wait_for_timeout(500)
+    tab(p, "alloc"); p.click("#reloadTop"); p.wait_for_timeout(500)
     check(ev(p, f"[...S.alloc.keys()].some(k => k.endsWith('|{dg}'))") is False and p.locator(f"#allocTable tr[data-ab='{dg}']").count() == 0, "편성 0 확정 → 배정 지움, 표에서 빠짐")
 
 def t_gw_team(p):

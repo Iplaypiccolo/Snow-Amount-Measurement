@@ -24,7 +24,7 @@
    ============================================================ */
 // 배포 직후 브라우저에 예전 index.html(최대 10분 저장)이 남아 있으면 새 app.js 와 화면 틀이 맞지 않아 탭이 비어 보임
 // (GitHub Pages 는 ?v= 꼬리표와 관계없이 최신 파일을 줌). 판번호가 다르면 주소를 바꿔 한 번만 새로 받는다.
-const UI_VERSION = "2026101002";
+const UI_VERSION = "2026110201";
 (() => {
   const m = document.querySelector('meta[name="ui-version"]');
   if ((m && m.content) === UI_VERSION) return;
@@ -365,20 +365,27 @@ async function loadReqs() {
 }
 /* ---------- [새로고침]: 다른 아이디가 넣은 자료를 화면을 새로 열지 않고 다시 읽음(이동 현황·기관별 장비·지사별 요청·편성·기관별 배정 공통) ---------- */
 let reloading = false;
-const reloadBtn = () => `<span class="rl"><button type="button" class="btn" data-reload${reloading ? " disabled" : ""}>새로고침</button><small class="hint" data-reload-at>${S.reloadedAt ? esc(fmtShort(S.reloadedAt).split(" ")[1]) + " 불러옴" : ""}</small></span>`;
+// 새로고침 버튼은 위쪽 탭 줄 오른쪽 하나(2026-11-02 — 스크롤해도 늘 보이게). 첫 화면 안에서는 바깥 메뉴 줄의 버튼이 SSEqReload 를 부름
+function paintReload() {
+  const at = S.reloadedAt ? fmtShort(S.reloadedAt).split(" ")[1] + " 불러옴" : "";
+  document.querySelectorAll("[data-reload]").forEach(b => { b.disabled = reloading; b.textContent = reloading ? "불러오는 중…" : "새로고침"; });
+  document.querySelectorAll("[data-reload-at]").forEach(x => { x.textContent = at; });
+  try { if (window.top !== window && window.top.SSEqReloadState) window.top.SSEqReloadState(reloading, at); } catch (e) {}
+}
+window.SSEqReload = () => reloadAll();
 async function reloadAll() {
   if (reloading) return;
   if (anyDirty() && !confirm("확정·저장하지 않은 변경이 있습니다. 버리고 새로 불러올까요?")) return;
-  reloading = true; document.querySelectorAll("[data-reload]").forEach(b => { b.disabled = true; b.textContent = "불러오는 중…"; });
+  reloading = true; paintReload();
   const r = await Api.reload();
-  if (!r.ok) { reloading = false; refresh(); return toast(r.message, true); }
+  if (!r.ok) { reloading = false; paintReload(); refresh(); return toast(r.message, true); }
   S.draft.clear(); S.vdraft.clear(); S.sdraft.clear(); S.rdraft.clear(); S.adraft.clear(); S.extraStop.clear();
   S.vehicles = r.vehicles.filter(v => v.active !== false); sortVehicles();
   S.rounds = r.rounds.slice().sort((a, b) => b.start_date.localeCompare(a.start_date));
   if (!curRound()) { S.round = pickRound(); const rr = curRound(); if (rr) S.day1 = rr.start_date; }      // 보고 있던 기준일자가 지워졌으면 가장 최근 것으로
   S.loaded = null; S.routes.clear(); S.rmeta.clear(); S.rstat.clear(); S.stLoaded.clear();
   await Promise.all([ensureRoutes(), loadReqs(), loadAudit(), loadWarn(), loadAlloc()]);
-  S.reloadedAt = new Date().toISOString(); reloading = false;
+  S.reloadedAt = new Date().toISOString(); reloading = false; paintReload();
   if (!sheet.hidden) closeSheet();
   refresh(); toast("새로 불러왔습니다");
 }
@@ -416,7 +423,7 @@ async function boot() {
   S.round = pickRound(); const rr = curRound(); if (rr) S.day1 = rr.start_date;
   buildUserSel();
   await Promise.all([ensureRoutes(), loadReqs(), loadAudit(), loadWarn(), loadAlloc()]);
-  S.reloadedAt = new Date().toISOString();
+  S.reloadedAt = new Date().toISOString(); paintReload();   // 처음 연 시각도 메뉴 줄 [새로고침] 옆에
   $("loading").hidden = true; document.querySelector("main").hidden = false;
   try { refresh(); }
   catch (e) {          // 그리다가 오류가 나면 빈 탭 대신 알림(원인 찾기용)
@@ -552,7 +559,7 @@ function renderMatrix() {
   stickHead($("matrix"));
   const tr = moves.filter(m => m.v.type === "제설차").length, bl = moves.filter(m => m.v.type === "제설기").length;
   $("dateText").textContent = fmtMD(S.date); $("dateInput").value = S.date;      // 제목의 큰 날짜(누르면 달력)
-  $("summaryNote").innerHTML = `<b>제설차 ${tr}대</b> · <b>제설기 ${bl}대</b> · <span id="refTime">${esc(refTimeText())}</span>${reloadBtn()}` +
+  $("summaryNote").innerHTML = `<b>제설차 ${tr}대</b> · <b>제설기 ${bl}대</b> · <span id="refTime">${esc(refTimeText())}</span>` +
     `<label class="team-tg" title="끄면 강원 신속대응팀이 표의 열·합계와 아래 지사 카드에서 모두 빠집니다"><input type="checkbox" id="showTeam"${S.showTeam ? " checked" : ""}> ${TEAM}</label>`;
 }
 // 이동 현황 표의 숫자 → 아래 세부내역에서 그 줄(지사 카드·본부 묶음·해당 지원기관·장비 종류)로 스크롤하고 잠깐 색으로 표시
@@ -649,7 +656,7 @@ function renderFleet() {
   const choices = routeChoices(), r = curRound(), all = canAllVeh(), rt = canRoute(), pend = pendingChoices();      // all = 모든 기관 장비(추가·삭제·숨기기), rt = 지원일 칸(관리자)
   if (!rt) S.cols = 4;                                              // 관리자가 아니면 지원일 칸은 늘 기본 4칸(고르는 목록 없음)
   banner("perm-fleet");
-  $("fleetRound").innerHTML = roundSel("roundSelFleet") + (r ? "" : `<span class="hint">기준일자가 없습니다.</span>`) + reloadBtn();
+  $("fleetRound").innerHTML = roundSel("roundSelFleet") + (r ? "" : `<span class="hint">기준일자가 없습니다.</span>`);
   renderOrgGrid();
   // 기관 버튼: 여러 개를 함께 고를 수 있음('모든 기관'은 혼자). 이 기준일자에 장비가 0대인 기관은 누를 수 없음
   const cntOrg = o => S.vehicles.filter(v => v.org === o && shownIn(v, r)).length;
@@ -871,7 +878,7 @@ function resetFleet() {          // 보이는 장비의 지원 여부(고른 기
    ============================================================ */
 function renderTeam() {
   const r = curRound(), ed = canTeam(), dates = windowDates();
-  $("teamRound").innerHTML = roundSel("roundSelTeam") + `<span class="hint">${r ? "강원본부가 직접 보내는 제설차 4대입니다. 지사의 요청·편성·기관별 배정과 상관없이 모든 지사로 보낼 수 있고, 이동 현황에는 '강원 신속대응팀' 열로 따로 더해집니다." : "기준일자가 없습니다."}</span>` + reloadBtn();
+  $("teamRound").innerHTML = roundSel("roundSelTeam") + `<span class="hint">${r ? "강원본부가 직접 보내는 제설차 4대입니다. 지사의 요청·편성·기관별 배정과 상관없이 모든 지사로 보낼 수 있고, 이동 현황에는 '강원 신속대응팀' 열로 따로 더해집니다." : "기준일자가 없습니다."}</span>`;
   $("teamFilters").innerHTML = ed ? `<div class="tb-row"><span class="tb-right"><label class="ctl">지원일 칸 <select class="ci" id="colsSelTeam">${Array.from({ length: 9 }, (_, k) => k + 2).map(n => `<option value="${n}" ${n === S.cols ? "selected" : ""}>${n}개</option>`).join("")}</select></label></span></div>` : "";
   const head = dates.map((d, i) => `<th class="dayh">지원일 ${i + 1}<span class="sub">` +
     (i === 0 && ed ? `<input class="ci" type="date" id="day1InTeam" value="${esc(d)}"${r ? ` min="${esc(r.start_date)}"` : ""} aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동, 기준일자보다 앞은 안 됨)">` : esc(fmtMD(d))) + `</span></th>`).join("");
@@ -1007,7 +1014,7 @@ function renderBranch() {
     "보기만 가능합니다.");
   $("branchRound").innerHTML = roundSel("roundSelBranch") +
     (can("req.confirm") && r ? `<button type="button" class="btn danger" id="roundDel">기준일자 삭제</button>` : "") +
-    (can("req.confirm") ? `<span class="sep"></span><label class="ctl">새 기준일자 <input class="ci" type="date" id="newRoundDate" value="${esc(nextRoundMin() > todayISO() ? nextRoundMin() : todayISO())}" min="${esc(nextRoundMin())}"></label><button type="button" class="btn" id="roundMake">만들기</button>` : "") + reloadBtn();
+    (can("req.confirm") ? `<span class="sep"></span><label class="ctl">새 기준일자 <input class="ci" type="date" id="newRoundDate" value="${esc(nextRoundMin() > todayISO() ? nextRoundMin() : todayISO())}" min="${esc(nextRoundMin())}"></label><button type="button" class="btn" id="roundMake">만들기</button>` : "");
   $("branchCtl").innerHTML = r ? `<div class="tb-row"><span class="tb-label">보기</span><button type="button" class="chip" id="onlyActive" aria-pressed="${S.bview === "req"}">요청 있는 지사만</button>` +
     `<button type="button" class="chip" id="onlyFixed" aria-pressed="${S.bview === "fixed"}">편성 확정된 지사만</button>` +
     `<button type="button" class="chip" id="onlyOffer" aria-pressed="${S.bview === "offer"}">지원 가능 지사만</button>` +
@@ -1171,7 +1178,7 @@ async function switchRound(id, force) {
 function renderAlloc() {
   const r = curRound(), ed = canRoute() && !!r, AO = [...S.orgs, POOL];        // 배정 대수는 관리자(equip.route)만 — 2026-11-02        // 칸: 기계화부 4곳(제설차·제설기) + 지역본부(제설차만)
   banner("perm-alloc");
-  $("allocRound").innerHTML = roundSel("roundSelAlloc") + `<span class="hint">${r ? "편성이 확정된 지사에 어느 기관이 제설차·제설기를 몇 대 보낼지 정합니다. 기관(기계화부)은 이 대수 안에서 지원일 1의 장비별 지사를 고릅니다(기관별 장비). 지역본부 장비는 관리자가 장비별 지사를 정하고, 여기 대수를 넘기면 '배정 초과'로 표시됩니다. 이동정비차는 배정하지 않습니다." : "기준일자가 없습니다."}</span>` + reloadBtn();
+  $("allocRound").innerHTML = roundSel("roundSelAlloc") + `<span class="hint">${r ? "편성이 확정된 지사에 어느 기관이 제설차·제설기를 몇 대 보낼지 정합니다. 기관(기계화부)은 이 대수 안에서 지원일 1의 장비별 지사를 고릅니다(기관별 장비). 지역본부 장비는 관리자가 장비별 지사를 정하고, 여기 대수를 넘기면 '배정 초과'로 표시됩니다. 이동정비차는 배정하지 않습니다." : "기준일자가 없습니다."}</span>`;
   const rows = r ? S.order.filter(b => isFixed(b.id) || AO.some(o => { const a = aval(o, b.id); return a.truck + a.blower > 0; })) : [];
   if (!rows.length) { $("allocTable").innerHTML = `<tbody><tr><td class="empty">${r ? "편성이 확정된 지사가 없습니다. 지사별 요청·편성에서 편성 대수를 넣고 [확정]하면 여기에 나옵니다." : "기준일자가 없습니다."}</td></tr></tbody>`; return; }
   const sum = (bid, f) => AO.reduce((n, o) => n + (aval(o, bid)[f] || 0), 0), osum = (o, f) => rows.reduce((n, b) => n + (aval(o, b.id)[f] || 0), 0);

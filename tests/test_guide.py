@@ -229,6 +229,23 @@ def t_phone(b, ctx, m):
     check(p.locator(".sg-flow.v").is_visible() and not p.locator(".sg-flow.h").is_visible(), "좁은 화면은 세로 그림")
     cb = p.locator(".sg-card").bounding_box(); check(cb["x"] >= 0 and cb["x"] + cb["width"] <= 375 and cb["y"] + cb["height"] <= 740, f"그림 카드가 화면 밖 {cb}")
 
+def t_phone_short(b, ctx, m):
+    """2026-11-02: 키 작은 휴대폰(높이 560) — 긴 설명은 카드를 밀어 내려 읽고, [다음]은 늘 화면 안·눌림"""
+    p = open_site(ctx, m, w=360, h=560); login(p, "admin-01"); wait_open(p, "snow")
+    for i in range(3):
+        nb = p.locator(".sg-next").bounding_box(); check(nb and nb["y"] >= 0 and nb["y"] + nb["height"] <= 560, f"{i}장: [다음]이 화면 안 {nb}")
+        p.click(".sg-next"); p.wait_for_timeout(150)
+    p.click("#sgStop"); wait_closed(p); p.click(".page-btn[data-page=equip]"); wait_open(p, "equip")
+    sc = p.evaluate("(() => { const x = document.querySelector('.sg-card .sg-in'); return [x.scrollHeight, x.clientHeight]; })()")
+    check(sc[0] > sc[1], f"그림 카드는 키 작은 화면에서 넘침 → 스크롤되어야: {sc}")
+    nb0 = p.locator(".sg-next").bounding_box(); check(nb0["y"] + nb0["height"] <= 560, f"스크롤 전 [다음]이 화면 안 {nb0}")
+    p.locator(".sg-card .sg-in").hover(); p.mouse.wheel(0, 400); p.wait_for_timeout(200)
+    top = p.evaluate("document.querySelector('.sg-card .sg-in').scrollTop"); check(top > 0, f"카드 내용이 밀려 내려감: {top}")
+    nb1 = p.locator(".sg-next").bounding_box(); check(nb1["y"] + nb1["height"] <= 560, f"스크롤 뒤에도 [다음]이 화면 안 {nb1}")
+    k0 = p.locator(".sg-card h2").inner_text(); p.click(".sg-next"); p.wait_for_timeout(200)
+    check(p.locator(".sg-card h2").inner_text() != k0, "[다음]이 눌림")
+    check(p.evaluate("document.querySelector('.sg-card .sg-in').scrollTop") == 0, "새 장은 맨 위부터")
+
 def t_help_and_who(b, ctx, m):
     """2026-11-02: [? 사용법]으로 다시 볼 때는 위쪽 탭 소개 없이 지금 탭 칸 설명만 · 칸마다 쓰는 계정 표지(관리자만 되는 것만 '관리자') · 필터 안내 없음"""
     p = open_site(ctx, m); login(p, "admin-01"); wait_open(p, "snow"); p.click("#sgStop"); wait_closed(p)
@@ -251,7 +268,7 @@ def t_help_and_who(b, ctx, m):
     p.click(".eq-btn[data-eqtab=move]"); p.wait_for_timeout(300); p.click("#sgHelp"); wait_open(p, "equip")
     t = titles(p); check("필터" not in t and "이동 현황" not in t and "날짜" in t, f"이동 현황: 필터 안내 없음, [사용법]은 탭 소개 없음: {t}")
 
-TESTS = [t_help_and_who, t_first_login_admin, t_stop_and_keys, t_role_tabs, t_tab_intro_role_only, t_element_steps, t_demo_steps, t_no_auto_in_automation, t_phone]
+TESTS = [t_help_and_who, t_first_login_admin, t_stop_and_keys, t_role_tabs, t_tab_intro_role_only, t_element_steps, t_demo_steps, t_no_auto_in_automation, t_phone, t_phone_short]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()

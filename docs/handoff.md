@@ -44,6 +44,13 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-02 · 커밋 (이 기록 커밋 하나) · 장비 지원 [새로고침]을 위쪽 메뉴 줄로, 휴대폰 안내 카드 스크롤 (Claude 채팅 작업)
+- 사용자: "새로고침 키를 상단 탭으로, 스크롤해도 보이게" · "휴대폰에서 안내 카드가 커서 [다음]이 안 눌릴 수 있음 → 밀어 내리면 설명도 같이".
+- [새로고침]: 탭마다 있던 버튼(요약·기관별 장비·신속대응팀·지사 줄·배정) 5곳을 없애고 메뉴 줄 오른쪽 하나로. 첫 화면 바깥 메뉴 줄 `#eqReload`(`boot.js` → iframe `SSEqReload`, 상태는 `SSEqReloadState`), 장비 화면 단독은 `#reloadTop`(탭 줄 안, sticky). '몇 시 불러옴' 도 옆에. 장비 화면 칸 구성이 바뀌어 `ui-version`·`UI_VERSION` = 2026110201.
+- 안내(`guide.css`): 폭 640 이하에서 카드 전체 스크롤 + [이전]·[다음] 줄 카드 아래쪽 고정, 높이는 `100dvh`. 안내 문구 '최신 자료는 메뉴 줄 오른쪽 [새로고침]'.
+- 시험: `t_reload`(스크롤 뒤에도 버튼 보임), 새 `t_phone_short`(360×560 에서 [다음] 늘 화면 안·카드 스크롤·눌림). 전체 시험 340/340 통과. 화면 사진으로 데스크톱·휴대폰 메뉴 줄 확인(가짜 서버). **실제 휴대폰·실제 사이트에서는 아직 못 봄.**
+— ✍ Claude 채팅 작성
+
 ### 2026-11-02 · 커밋 (이 기록 커밋 하나) · migration 49 실서버 적용 (Claude 채팅 작업)
 - `route_perm_dryrun.sql` v2 롤백 시험 **30/30 통과**(서버 변화 없음) → 사용자 승인으로 **migration 49 실제 적용**(13:00경). 조회로 확인: 권한 `equip.route`(sort 95, 아직 받은 계정 0 — 관리자는 역할로 자동), `equip.edit.all` 이름 바뀜, `vehicle_routes`·`round_allocations` 쓰기 규칙 6개·`save_fleet`·`save_allocations`·`vehicle_routes_guard`(SA005)·`route_alloc_cap` 모두 equip.route.
 - migration 파일 고침: permissions 의 `sort`(필수 칸, 95) 넣기, 머리말 정정.

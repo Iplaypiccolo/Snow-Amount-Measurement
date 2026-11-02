@@ -69,6 +69,12 @@
   .tn-right{margin-left:auto;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;}
   .tn-tabs{padding:0 12px;overflow-x:auto;scrollbar-width:thin;}
   .sn-group{display:flex;gap:2px;}
+  /* 장비 지원 새로고침(2026-11-02): 메뉴 줄 오른쪽 — 위쪽 메뉴는 늘 보이므로 스크롤해도 보임. 좁은 화면에서 메뉴가 옆으로 밀려도 오른쪽에 붙음 */
+  .eq-reload{margin-left:auto;position:sticky;right:0;display:flex;align-items:center;gap:8px;padding:0 6px 0 12px;background:var(--panel);white-space:nowrap;box-shadow:12px 0 0 var(--panel),-8px 0 8px -4px var(--panel);}
+  .eq-reload small{font-size:11.5px;color:var(--muted);}
+  .eq-reload button{font:inherit;font-size:12.5px;font-weight:600;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:5px 12px;cursor:pointer;}
+  .eq-reload button:hover{border-color:var(--accent);color:var(--accent);}
+  .eq-reload button:disabled{opacity:.6;cursor:default;}
   .shell[data-page="snow"] .sn-group[data-group="equip"],.shell[data-page="equip"] .sn-group[data-group="snow"]{display:none;}
   .tab-btn,.eq-btn{display:flex;align-items:center;gap:7px;white-space:nowrap;font-family:var(--sans);font-size:13.5px;font-weight:500;
     color:var(--muted);background:none;border:0;border-bottom:2px solid transparent;padding:9px 10px 8px;cursor:pointer;}
@@ -379,7 +385,7 @@
   <link rel="stylesheet" href="auth/gate.css?v=8afc6104">
   <link rel="stylesheet" href="login/login-v2.css?v=fd865e8d">
   <script src="login/intro-preload.js?v=6834916e"></script>
-  <link rel="stylesheet" href="guide/guide.css?v=da8e93b4">
+  <link rel="stylesheet" href="guide/guide.css?v=3989a551">
 </head>
 <body>
 <div class="shell" id="shell" data-page="snow">
@@ -414,6 +420,7 @@
       <button type="button" class="eq-btn" data-eqtab="alloc"><svg class="sn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4z M4 10h16 M10 5v14 M15 5v14"/></svg><span>기관별 배정</span></button>
       <button type="button" class="eq-btn" data-eqtab="gwteam" id="eqTeamBtn" data-perm hidden><svg class="sn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4v5c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V7z M9 12l2 2 4-4"/></svg><span>강원본부 지원장비</span></button>
       <button type="button" class="eq-btn" data-eqtab="log" id="eqLogBtn" data-perm hidden><svg class="sn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v5l3 2"/></svg><span>로그 기록</span></button>
+      <span class="eq-reload"><small id="eqReloadAt"></small><button type="button" id="eqReload" title="다른 아이디가 넣은 자료를 다시 읽음(화면을 새로 열지 않음)">새로고침</button></span>
     </nav>
   </div>
 </header>
@@ -421,7 +428,7 @@
 <noscript><div style="padding:40px;font-family:sans-serif;">이 화면은 JavaScript 가 켜져 있어야 로그인할 수 있습니다.</div></noscript>
 
 <div id="page-equip">
-  <iframe id="equipFrame" title="제설장비 지원 현황" data-src="equipment/index.html?v=a3619d2c"></iframe>
+  <iframe id="equipFrame" title="제설장비 지원 현황" data-src="equipment/index.html?v=765a8760"></iframe>
 </div>
 
 <div class="app" id="page-snow">
@@ -539,8 +546,8 @@
 <script src="auth/events.js?v=0c959479" defer></script>
 <script src="auth/gate.js?v=309218bc" defer></script>
 <script src="auth/snow.js?v=21f5a422" defer></script>
-<script src="guide/guide.js?v=38fa491a" defer></script>
-<script src="boot.js?v=0b27344d" defer></script>
+<script src="guide/guide.js?v=db4d9b5e" defer></script>
+<script src="boot.js?v=0456021e" defer></script>
 <script src="login/intro-loader.js?v=2c2f6b9d" defer></script>
 </body>
 </html>

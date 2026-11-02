@@ -213,7 +213,7 @@
       // 이동 현황
       { tab: 'move', title: '이동 현황', desc: '날짜별로 어느 기관 장비가 어느 지사로 가는지 확인' },
       E('move', '날짜', [both(['#prevDay', '#dateText', '#nextDay'])], '‹ › 하루씩 이동 · 날짜 클릭 → 달력'),
-      E('move', '요약 · 기준 시각', ['#summaryNote'], '그날 지원 대수 · 기준 시각', ['[새로고침] → 최신 자료']),
+      E('move', '요약 · 기준 시각', ['#summaryNote'], '그날 지원 대수 · 기준 시각', ['최신 자료는 메뉴 줄 오른쪽 [새로고침]']),
       E('move', '강원 신속대응팀', ['.team-tg'], '체크 해제 → 표 · 카드에서 빠짐'),
       E('move', '이동 표', ['#matrix'], '줄 = 피지원 지사 · 열 = 지원기관', ['칸 숫자 = 대수 (제설차 · 제설기)']),
       E('move', '숫자', ['#matrix button.mnum'], '칸 숫자 = 그 기관이 그 지사에 보낸 대수', ['클릭 → 아래 지사 카드로']),
@@ -392,7 +392,7 @@
     place(els ? rectOf(els) : null, card, ring);
     clearTimeout(st.rp); st.rp = setTimeout(onResize, 350);                           // 늦게 끝나는 스크롤·그리기 뒤 다시 맞춤
     var nb = card.querySelector('.sg-next'); if (nb) try { nb.focus({ preventScroll: true }); } catch (e) { nb.focus(); }
-    card.querySelector('.sg-body').scrollTop = 0;
+    card.querySelector('.sg-body').scrollTop = 0; card.querySelector('.sg-in').scrollTop = 0;   // 휴대폰은 카드 전체가 스크롤됨 → 새 장은 맨 위부터
   }
   // 카드 자리: 아래 → 위 → 오른쪽 → 왼쪽 중 들어가는 곳. 큰 칸(지도 등)이라 다 안 되면 화면 오른쪽 아래
   function place(r, card, ring) {

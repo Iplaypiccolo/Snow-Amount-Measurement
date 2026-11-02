@@ -174,11 +174,16 @@
 }
 @media (max-width: 640px){
   .sg-card:not(.center){left:8px !important;right:8px;top:auto !important;bottom:8px;width:auto;}
-  .sg-card:not(.center) .sg-in{max-height:58vh;}
+  .sg-card:not(.center) .sg-in{max-height:58vh;max-height:58dvh;}
   .sg-card.top:not(.center){top:58px !important;bottom:auto;}
   .sg-card.center{top:58px !important;transform:translateX(-50%);}
-  .sg-card.center .sg-in{max-height:calc(100vh - 70px);}
-  .sg-in{padding:14px 14px 12px;}
+  .sg-card.center .sg-in{max-height:calc(100vh - 70px);max-height:calc(100dvh - 70px);}
+  /* 휴대폰(2026-11-02): 설명이 길면 카드 전체를 손가락으로 밀어 내려 읽고, [이전]·[다음] 줄은 카드 아래쪽에 늘 붙어 있음.
+     100dvh = 주소창·도구 막대를 뺀 실제 보이는 높이(예전 100vh 는 주소창 밑까지 쳐서 [다음]이 가려질 수 있었음) */
+  .sg-in{padding:14px 14px 0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
+  .sg-body{overflow:visible;flex:none;}
+  .sg-foot{position:sticky;bottom:0;z-index:2;flex:none;margin:12px -14px 0;padding:10px 14px 12px;
+    background:linear-gradient(180deg,rgba(8,15,30,.9),rgba(8,15,30,.98) 35%);border-radius:0 0 20px 20px;}
   .sg-title h2{font-size:18px;}
   .sg-stop{top:10px;right:10px;padding:9px 12px;font-size:12.5px;}
   .sg-btns button{padding:9px 14px;}
