@@ -187,7 +187,7 @@ def t_element_steps(b, ctx, m):
     q.click(".page-btn[data-page=equip]"); wait_open(q, "equip"); q.click("#sgStop"); wait_closed(q)
     q.click(".eq-btn[data-eqtab=branch]"); wait_open(q, "equip")
     check("새 기준일자" in q.evaluate("SSGuide.active().titles"), "목록에는 있어도(아래에서 건너뜀)")
-    go_to(q, "보기 필터", "branch")
+    go_to(q, "24시 예보", "branch")
     q.keyboard.press("ArrowLeft"); wait_js(q, "SSGuide.active().title === '기준일자'", 6000)
     check("새 기준일자" not in q.evaluate("SSGuide.active().titles"), "건너뛴 단계는 목록에서도 빠짐")
     ctx2.close()
@@ -229,7 +229,29 @@ def t_phone(b, ctx, m):
     check(p.locator(".sg-flow.v").is_visible() and not p.locator(".sg-flow.h").is_visible(), "좁은 화면은 세로 그림")
     cb = p.locator(".sg-card").bounding_box(); check(cb["x"] >= 0 and cb["x"] + cb["width"] <= 375 and cb["y"] + cb["height"] <= 740, f"그림 카드가 화면 밖 {cb}")
 
-TESTS = [t_first_login_admin, t_stop_and_keys, t_role_tabs, t_tab_intro_role_only, t_element_steps, t_demo_steps, t_no_auto_in_automation, t_phone]
+def t_help_and_who(b, ctx, m):
+    """2026-11-02: [? 사용법]으로 다시 볼 때는 위쪽 탭 소개 없이 지금 탭 칸 설명만 · 칸마다 쓰는 계정 표지(관리자만 되는 것만 '관리자') · 필터 안내 없음"""
+    p = open_site(ctx, m); login(p, "admin-01"); wait_open(p, "snow"); p.click("#sgStop"); wait_closed(p)
+    p.click("#sgHelp"); wait_open(p, "snow"); t = titles(p)
+    check(t[0] == "제설 업무 시스템" and "발표 기준" in t and not any(x in t for x in ["기관별 24시간 예보", "연도별 신적설", "관측소 지도", "예보 격자 편입", "사용법 다시 보기"]),
+          f"[사용법] = 첫 장 + 지금 탭 칸만(탭 소개·다시 보기 장 없음): {t}")
+    p.click(".page-btn[data-page=equip]"); wait_open(p, "equip"); p.click("#sgStop"); wait_closed(p)
+    p.click(".eq-btn[data-eqtab=branch]"); wait_open(p, "equip")
+    check("보기 필터" not in guide(p)["titles"], f"필터 안내 없음: {guide(p)['titles']}")
+    who = lambda: [x.strip() for x in p.locator(".sg-card .sg-badge.who").all_inner_texts()]
+    go_to(p, "새 기준일자", "branch"); check(who() == ["관리자"], f"기준일자 만들기 = 관리자: {who()}")
+    go_to(p, "저장", "branch"); check(who() == ["지사", "지역본부"], f"지사 줄 [저장] = 지사 · 지역본부(관리자 뺌): {who()}")
+    go_to(p, "확정", "branch"); check(who() == ["관리자"], f"확정 = 관리자: {who()}")
+    p.click("#sgStop"); wait_closed(p)
+    p.click(".eq-btn[data-eqtab=fleet]"); wait_open(p, "equip")
+    check(not any(x == "필터" for x in guide(p)["titles"]), "기관별 장비 필터 안내 없음")
+    go_to(p, "지원 여부", "fleet"); check(who() == ["기계화부"], f"지원 여부 = 기계화부: {who()}")
+    go_to(p, "＋ 지사 추가", "fleet"); check(who() == ["관리자"], f"하루 여러 지사 = 관리자: {who()}")
+    p.click("#sgStop"); wait_closed(p)
+    p.click(".eq-btn[data-eqtab=move]"); p.wait_for_timeout(300); p.click("#sgHelp"); wait_open(p, "equip")
+    t = titles(p); check("필터" not in t and "이동 현황" not in t and "날짜" in t, f"이동 현황: 필터 안내 없음, [사용법]은 탭 소개 없음: {t}")
+
+TESTS = [t_help_and_who, t_first_login_admin, t_stop_and_keys, t_role_tabs, t_tab_intro_role_only, t_element_steps, t_demo_steps, t_no_auto_in_automation, t_phone]
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()

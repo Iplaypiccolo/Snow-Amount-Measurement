@@ -4,7 +4,8 @@
      장비 지원으로 처음 넘어가면 '지원 과정' 그림 → 탭 설명을 차례로 보여 줌. (계정별 권한 표는 2026-11-01 사용자 요청으로 뺌)
    - 오른쪽 아래 [다음](마지막은 [시작하기]) 또는 오른쪽 위 [설명 그만보기]로 닫음.
      한 번 닫으면 이 브라우저·이 아이디에서는 다시 저절로 나오지 않음(localStorage 'ss_guide:<페이지>:<아이디>', 사용자 결정 = 브라우저 기준).
-   - 오른쪽 위 [사용법] 버튼을 누르면 지금 페이지의 안내를 처음부터 다시 봄.
+   - 오른쪽 위 [사용법] 버튼을 누르면 지금 페이지의 첫 장 + 지금 탭의 칸 설명을 다시 봄(위쪽 탭 소개는 처음 한 번만, 2026-11-02).
+   - 칸 설명 제목 옆에 쓰는 계정 표지(W): 관리자만 되는 것만 '관리자', 나머지는 주로 쓰는 지사·기계화부·지역본부(2026-11-02). 필터 안내는 뺌.
    - 계정에 따라 보이는 탭만 설명. 탭 소개는 그 탭이 하는 일 한 줄만(2026-11-01 사용자 결정 — 예전 '내 계정이 할 일'·요점은 뺌).
    - 칸·버튼을 하나씩 빛 테두리로 짚으며 설명(게임 튜토리얼처럼, 2026-11-01 사용자 요청). 페이지 안내 = 위쪽 탭 소개 → 지금(첫) 탭의 칸 설명,
      다른 탭의 칸 설명은 그 탭에 처음 들어갈 때 따로(localStorage 'ss_guide:<페이지>.<탭>:<아이디>', "너무 많다" 2026-11-01).
@@ -99,6 +100,9 @@
   function inRow(first, others) { return function (d) { var a = q1(d, first); if (!a) return null; var tr = a.closest('tr') || d; return [a].concat((others || []).map(function (x) { return q1(tr, x); }).filter(Boolean)); }; }
   function both(sels) { return function (d) { var l = sels.map(function (x) { return q1(d, x); }).filter(Boolean); return l.length ? l : null; }; }
   function th(text) { return function (d) { var l = d.querySelectorAll('th'); for (var i = 0; i < l.length; i++) if (shown(l[i]) && l[i].textContent.replace(/\s+/g, ' ').trim().indexOf(text) === 0) return l[i]; return null; }; }
+  // 누가 쓰는 칸·버튼인지(2026-11-02 사용자 결정): 관리자만 할 수 있는 것만 '관리자', 나머지는 주로 쓰는 계정(지사 · 기계화부 · 지역본부)
+  var ADM = ['관리자'], BRH = ['지사', '지역본부'], MEC = ['기계화부'];
+  function W(who, more) { var o = { who: who }; for (var k in more || {}) o[k] = more[k]; return o; }
   function E(tab, title, at, desc, points, more) { var o = { tab: tab, title: title, at: at, desc: desc, points: points || [] }; for (var k in more || {}) o[k] = more[k]; return o; }
 
   // 시연(게임 튜토리얼처럼 — 2026-11-01 사용자: "격자가 지도에 안 보여 무슨 말인지 모르겠다"):
@@ -180,23 +184,23 @@
       E('map', '지도', ['#map'], '점 = 적설관측소 · 색 = 고속도로까지 거리', ['초록 0~3km · 주황 3~6km · 빨강 6~8km']),
       { tab: 'jurisdiction', title: '기관별 관할 고속도로', desc: '지사마다 맡은 고속도로 구간 확인 · 변경' },
       E('jurisdiction', '지사 검색', ['#jr-search'], '지사 이름으로 찾기'),
-      E('jurisdiction', '+ 신설 기관', ['#jr-add'], '새 지사 만들기 → 구간 넣기'),
-      E('jurisdiction', '변경 요청', ['#jr-requests'], jEdit ? '지사가 보낸 구간 변경 요청 → 승인 · 반려' : '내가 보낸 구간 변경 요청 · 처리 상태'),
+      E('jurisdiction', '+ 신설 기관', ['#jr-add'], '새 지사 만들기 → 구간 넣기', [], W(ADM)),
+      E('jurisdiction', '변경 요청', ['#jr-requests'], jEdit ? '지사가 보낸 구간 변경 요청 → 승인 · 반려' : '내가 보낸 구간 변경 요청 · 처리 상태', [], W(['지사'])),
       E('jurisdiction', '관할 목록', ['#jr-tree .jr-hqpick', '#jr-tree'], '본부별 지사 수 · 관할 길이(km)', ['미지정 고속도로 = 어느 지사에도 없는 구간']),
       E('jurisdiction', '지사 → 구간', [both(['#jr-tree .jr-br.on', '#jr-tree .jr-br.on + *'])], '지사 클릭 → 관할 구간(IC · JC 사이) 목록', ['지도에서 그 지사 강조'], { demo: jrBranch }),
-      E('jurisdiction', '구간 고르기', ['#jr-tree .jr-sec.sel'], '구간 체크 (또는 지도에서 구간 클릭)', [], { demo: jrSec, only: jEdit || jReq }),
-      E('jurisdiction', '선택 막대', ['#jr-selbar'], jEdit ? '이동할 지사 → [이동 대기에 추가] → [저장]' : '[구간 변경 요청] → 관리자에게 보냄', ['[선택 해제] = 취소'], { demo: jrSec, only: jEdit || jReq }),
+      E('jurisdiction', '구간 고르기', ['#jr-tree .jr-sec.sel'], '구간 체크 (또는 지도에서 구간 클릭)', [], W(['지사'], { demo: jrSec, only: jEdit || jReq })),
+      E('jurisdiction', '선택 막대', ['#jr-selbar'], jEdit ? '이동할 지사 → [이동 대기에 추가] → [저장]' : '[구간 변경 요청] → 관리자에게 보냄', ['[선택 해제] = 취소'], W(['지사'], { demo: jrSec, only: jEdit || jReq })),
       E('jurisdiction', '지도', ['#jmap'], jEdit ? '구간 클릭 → 선택 → 다른 지사로 옮기기' : jReq ? '구간 클릭 → 선택 → [구간 변경 요청]' : '색 = 관할 지사'),
-      E('jurisdiction', '저장', ['#jr-savebar'], '[미리보기] 바뀌는 관측소 · [모두 취소] · [저장]', [], { only: jEdit }),
+      E('jurisdiction', '저장', ['#jr-savebar'], '[미리보기] 바뀌는 관측소 · [모두 취소] · [저장]', [], W(ADM, { only: jEdit })),
       { tab: 'sources', title: '데이터 출처', desc: '자료 출처와 계산 방법 안내' },
       E('sources', '보유 시즌', ['#seasonsTable'], '시즌별 기간 · 자료 있는 날 수'),
       { tab: 'grid', only: g, badge: '관리자', title: '예보 격자 편입', desc: '기상청 5km 예보 격자를 지사에 연결 (24시간 예보의 기준)' },
       E('grid', '편입 현황', ['#gr-summary'], '편입 격자 수 · 지사별 칸 수', [], { only: g }),
       E('grid', '기관 검색', ['#gr-search'], '지사 이름으로 찾기', [], { only: g }),
       E('grid', '기관 목록', ['#gr-tree .jr-hqpick', '#gr-tree'], '본부 → 지사 · 칸 = 편입 격자 수', [], { only: g }),
-      E('grid', '영역 선택', ['#gr-box'], '지도에서 끌어서 여러 칸 한꺼번에 고르기', [], { only: g }),
-      E('grid', '지도', ['#gmap'], '격자 클릭 → 고르기 → 기관에 편입 · 제외', ['색: 기관 편입 · 여러 기관 공유 · 후보'], { only: g }),
-      E('grid', '저장', ['#gr-savebar'], '[미리보기] · [모두 취소] · [저장] = 전체 적용', [], { only: g }),
+      E('grid', '영역 선택', ['#gr-box'], '지도에서 끌어서 여러 칸 한꺼번에 고르기', [], W(ADM, { only: g })),
+      E('grid', '지도', ['#gmap'], '격자 클릭 → 고르기 → 기관에 편입 · 제외', ['색: 기관 편입 · 여러 기관 공유 · 후보'], W(ADM, { only: g })),
+      E('grid', '저장', ['#gr-savebar'], '[미리보기] · [모두 취소] · [저장] = 전체 적용', [], W(ADM, { only: g })),
       { target: '#sgHelp', kicker: 'HELP', title: '사용법 다시 보기', desc: '오른쪽 위 [? 사용법]', points: ['다른 탭: 처음 들어갈 때 칸 · 버튼 설명'], last: true }
     ];
     return steps.filter(function (x) { return x.only !== false; });
@@ -214,7 +218,6 @@
       E('move', '이동 표', ['#matrix'], '줄 = 피지원 지사 · 열 = 지원기관', ['칸 숫자 = 대수 (제설차 · 제설기)']),
       E('move', '숫자', ['#matrix button.mnum'], '칸 숫자 = 그 기관이 그 지사에 보낸 대수', ['클릭 → 아래 지사 카드로']),
       E('move', '숫자 클릭', ['#destList .hl-card'], '그 지사 카드로 이동 · 해당 장비 강조', [], { demo: function (d) { if (!d.querySelector('#destList .hl-card')) tap(q1(d, '#matrix button.mnum')); } }),
-      E('move', '필터', ['#filters'], '지원기관 · 장비 종류로 아래 카드 필터'),
       E('move', '지사 카드', ['#destList .dest-head'], '피지원 지사 · 도착 예상 시각 · 대설특보'),
       E('move', '장비 줄', ['#destList .vrow'], '도공번호 · 종류 · 도착 예상'),
       E('move', '장비 정보', ['#sheet'], '장비 클릭 → 들르는 지사 · 도착 예상 · 날짜별 경로 기록', ['[닫기] 또는 바깥 클릭 → 닫힘'],
@@ -222,63 +225,60 @@
       // 지사별 요청·편성
       { tab: 'branch', title: '지사별 요청·편성', desc: '지사가 필요한 장비를 요청하고 재난처가 지원 대수를 확정' },
       E('branch', '기준일자', ['#roundSelBranch'], '지원 회차 고르기 · 요청 · 편성은 기준일자마다 따로'),
-      E('branch', '새 기준일자', [both(['#newRoundDate', '#roundMake'])], '날짜 → [만들기]', ['장비 지원 여부는 이전 기준일자에서 이어받음']),
-      E('branch', '기준일자 삭제', ['#roundDel'], '잘못 만든 기준일자 지우기 (되돌릴 수 없음)'),
-      E('branch', '보기 필터', ['#branchCtl'], '요청 있는 · 확정된 · 지원 가능 · 저장 안 한 지사만'),
+      E('branch', '새 기준일자', [both(['#newRoundDate', '#roundMake'])], '날짜 → [만들기]', ['장비 지원 여부는 이전 기준일자에서 이어받음'], W(ADM)),
+      E('branch', '기준일자 삭제', ['#roundDel'], '잘못 만든 기준일자 지우기 (되돌릴 수 없음)', [], W(ADM)),
       E('branch', '24시 예보', ['#branchTable th.fch'], '지사별 예상 적설 · 강수 · 확률 · 최저기온', ['숫자 클릭 → 강설량 측정의 그 지사 예보']),
       E('branch', '대설특보', ['#branchTable th.wh'], '기상청 특보 자동 표시 (종류 · 발표 · 발효)'),
-      E('branch', '기상현황 직접입력', ['#branchTable input[aria-label$="기상현황 직접입력"]:not(:disabled)'], '체크 → 특보 종류를 직접 고름'),
+      E('branch', '기상현황 직접입력', ['#branchTable input[aria-label$="기상현황 직접입력"]:not(:disabled)'], '체크 → 특보 종류를 직접 고름', [], W(BRH)),
       E('branch', '지사 요청', [inRow('#branchTable input[aria-label$="요청 제설차"]:not(:disabled)', ['input[aria-label$="요청 제설기"]']),
         { s: inRow('#branchTable tr.mine.locked input[aria-label$="요청 제설차"]', ['input[aria-label$="요청 제설기"]']), desc: '우리 지사 필요 대수 · 확정되면 잠김 (재난처 [취소] 후 수정)' },
-        { s: th('지사 요청'), desc: '지사가 넣은 필요 대수 (보기)' }], '필요한 제설차 · 제설기 대수 입력'),
+        { s: th('지사 요청'), desc: '지사가 넣은 필요 대수 (보기)' }], '필요한 제설차 · 제설기 대수 입력', [], W(BRH)),
       E('branch', '도착 요청', [inRow('#branchTable input[aria-label$="도착 요청 날짜"]:not(:disabled)', ['select[aria-label$="도착 시"]', 'select[aria-label$="도착 분"]']),
         { s: inRow('#branchTable tr.mine.locked input[aria-label$="도착 요청 날짜"]', ['select[aria-label$="도착 시"]', 'select[aria-label$="도착 분"]']), desc: '우리 지사 도착 요청 시각 · 확정되면 잠김' },
-        { s: th('도착 요청'), desc: '지사가 원하는 도착 시각 (보기)' }], '날짜 먼저 → 시 · 분'),
+        { s: th('도착 요청'), desc: '지사가 원하는 도착 시각 (보기)' }], '날짜 먼저 → 시 · 분', [], W(BRH)),
       E('branch', '타지사 지원 가능', ['#branchTable input[aria-label$="타지사 지원 가능 제설차"]:not(:disabled)',
         { s: '#branchTable tr.mine.locked input[aria-label$="타지사 지원 가능 제설차"]', desc: '우리 지사가 다른 지사에 보낼 수 있는 제설차 · 확정되면 잠김' },
-        { s: th('타지사'), desc: '다른 지사에 보낼 수 있는 제설차 (보기)' }], '우리 지사가 다른 지사에 보낼 수 있는 제설차 대수'),
+        { s: th('타지사'), desc: '다른 지사에 보낼 수 있는 제설차 (보기)' }], '우리 지사가 다른 지사에 보낼 수 있는 제설차 대수', [], W(BRH)),
       E('branch', '저장', ['#branchTable tr[data-b] [data-rsave]', { s: '#branchTable th.svh', desc: '지사가 [저장]한 줄 = 저장 완료' }], '그 지사 줄 [저장] → 저장 완료',
-        ['[저장] 전에는 반영 안 됨', '0대도 저장 = 요청 없음 알림']),
-      E('branch', '일괄 저장', ['#branchTable [data-rsave-hq]'], '본부 줄 [일괄 저장] → 그 본부 지사를 한꺼번에 저장'),
+        ['[저장] 전에는 반영 안 됨', '0대도 저장 = 요청 없음 알림'], W(BRH)),
+      E('branch', '일괄 저장', ['#branchTable [data-rsave-hq]'], '본부 줄 [일괄 저장] → 그 본부 지사를 한꺼번에 저장', [], W(['지역본부'])),
       E('branch', '편성', [inRow('#branchTable input[aria-label$="편성 제설차"]:not(:disabled)', ['input[aria-label$="편성 제설기"]']),
-        { s: th('편성'), desc: '재난처가 정한 지원 대수 (보기)' }], '재난처: 실제 지원할 대수 입력'),
+        { s: th('편성'), desc: '재난처가 정한 지원 대수 (보기)' }], '재난처: 실제 지원할 대수 입력', [], W(ADM)),
       E('branch', '확정', [both(['#branchTable [data-confirm]', '#confirmAll']), { s: th('확정'), desc: '재난처 확정 여부 · 확정되면 줄 잠김' }],
-        '[확정] → 줄 잠김 · [취소]로 풀기', ['본부 줄 · 맨 위 [일괄 확정]']),
+        '[확정] → 줄 잠김 · [취소]로 풀기', ['본부 줄 · 맨 위 [일괄 확정]'], W(ADM)),
       // 기관별 장비
       { tab: 'fleet', title: '기관별 장비', desc: '기관 장비의 지원 여부와 날짜별 지원 지사 · 도착 시각 입력' },
       E('fleet', '기준일자', ['#roundSelFleet'], '지원 여부는 기준일자마다 따로'),
       E('fleet', '기관 요약', ['#orgGrid > *'], '기관별 지원 · 지원 불가 · 정비중 · 미정 대수'),
-      E('fleet', '필터', ['#fleetFilters'], '기관별 · 지원 장비만 보기'),
-      E('fleet', '장비 추가', [both(['#nvOrg', '#nvType', '#nvPlate', '#vehAdd'])], '기관 · 종류 · 도공번호 → [추가]'),
-      E('fleet', '지원일 칸 수', ['#colsSel'], '표에 보이는 날짜 칸 수'),
-      E('fleet', '지원일 1', ['#day1In'], '첫 날짜 · 나머지 칸은 하루씩 자동'),
+      E('fleet', '장비 추가', [both(['#nvOrg', '#nvType', '#nvPlate', '#vehAdd'])], '기관 · 종류 · 도공번호 → [추가]', ['지사: 지역본부 장비(타지사 지원 가능 확정 뒤)'], W(['기계화부', '지사'])),
+      E('fleet', '지원일 칸 수', ['#colsSel'], '표에 보이는 날짜 칸 수', [], W(ADM)),
+      E('fleet', '지원일 1', ['#day1In'], '첫 날짜 · 나머지 칸은 하루씩 자동', [], W(ADM)),
       E('fleet', '지원 여부', ['#eqTable select[data-vs]', { s: '#eqTable tbody td .status', desc: '기관이 정한 지원 여부 (보기)' }],
-        '드롭다운 → 지원 · 미정 · 지원 불가 · 정비중', ['지원 → 날짜 칸이 열림']),
-      E('fleet', '블로워', [inRow('#eqTable input[aria-label$="블로워 소"]:not(:disabled)', ['input[aria-label$="블로워 대"]'])], '장착한 블로워 체크 (소 · 대)'),
+        '드롭다운 → 지원 · 미정 · 지원 불가 · 정비중', ['지원 → 날짜 칸이 열림'], W(MEC)),
+      E('fleet', '블로워', [inRow('#eqTable input[aria-label$="블로워 소"]:not(:disabled)', ['input[aria-label$="블로워 대"]'])], '장착한 블로워 체크 (소 · 대)', [], W(MEC)),
       E('fleet', '지원 지사', ['#eqTable .slot select[data-rv]:not(:disabled)',
-        { s: '#eqTable .slot select[data-ra]:not(:disabled)', desc: '그날 갈 지사 고르기', points: ['교통처가 배정한 지사 중에서'] }], '그날 갈 지사 고르기'),
-      E('fleet', '도착 예상 시각', ['#eqTable .slot input.tm:not(:disabled)'], '그 지사 도착 시각 (예: 21:30)'),
-      E('fleet', '＋ 지사 추가', ['#eqTable .slot button[aria-label$="들르는 지사 추가"]:not(:disabled)'], '하루에 여러 지사를 들를 때'),
-      E('fleet', '이날부터 지원 불가', ['#eqTable select.offsel'], '고장 등 → 그날부터 지원 불가'),
-      E('fleet', '숨기기 · 삭제', [inRow('#eqTable [data-vhide]', ['[data-vdel]'])], '숨기기 = 목록에서만 뺌 · 삭제 = 지움'),
-      E('fleet', '확정', ['#save-fleet'], '바뀐 칸 → [확정]해야 저장', ['[되돌리기] = 마지막 확정 상태로']),
+        { s: '#eqTable .slot select[data-ra]:not(:disabled)', desc: '그날 갈 지사 고르기', points: ['교통처가 배정한 지사 중에서', '둘째 날 · 여러 지사 · 수정본은 관리자'] }], '그날 갈 지사 고르기', [], W(MEC)),
+      E('fleet', '도착 예상 시각', ['#eqTable .slot input.tm:not(:disabled)'], '그 지사 도착 시각 (예: 21:30)', ['지사: 우리 지사 지역본부 장비'], W(['기계화부', '지사'])),
+      E('fleet', '＋ 지사 추가', ['#eqTable .slot button[aria-label$="들르는 지사 추가"]:not(:disabled)'], '하루에 여러 지사를 들를 때', [], W(ADM)),
+      E('fleet', '이날부터 지원 불가', ['#eqTable select.offsel'], '고장 등 → 그날부터 지원 불가', [], W(MEC)),
+      E('fleet', '숨기기 · 삭제', [inRow('#eqTable [data-vhide]', ['[data-vdel]'])], '숨기기 = 목록에서만 뺌 · 삭제 = 지움', [], W(MEC)),
+      E('fleet', '확정', ['#save-fleet'], '바뀐 칸 → [확정]해야 저장', ['[되돌리기] = 마지막 확정 상태로'], W(['기계화부', '지사'])),
       // 기관별 배정
       { tab: 'alloc', title: '기관별 배정', desc: '교통처가 기관별로 지사에 보낼 장비 대수를 배정' },
       E('alloc', '기준일자', ['#roundSelAlloc'], '배정은 기준일자마다 따로'),
-      E('alloc', '배정 대수', ['#allocTable input.num:not(:disabled)', { s: '#allocTable tbody td', desc: '교통처가 정한 배정 대수 (보기)' }], '기관 → 지사 보낼 대수 입력'),
+      E('alloc', '배정 대수', ['#allocTable input.num:not(:disabled)', { s: '#allocTable tbody td', desc: '교통처가 정한 배정 대수 (보기)' }], '기관 → 지사 보낼 대수 입력', [], W(ADM)),
       E('alloc', '배정 / 편성', [th('배정 / 편성')], '지사별 배정 합 / 편성 대수', ['초록 일치 · 주황 부족 · 빨강 초과']),
       E('alloc', '배정 / 지원 가능', [th('배정 / 지원 가능')], '기관별 배정 합 / 지원 가능 대수'),
       E('alloc', '장비 지정', [th('장비 지정')], '기계화부가 장비까지 고른 대수'),
-      E('alloc', '확정', ['#save-alloc'], '[확정] → 기계화부에 배정 전달', ['[되돌리기] = 마지막 확정 상태로']),
+      E('alloc', '확정', ['#save-alloc'], '[확정] → 기계화부에 배정 전달', ['[되돌리기] = 마지막 확정 상태로'], W(ADM)),
       // 강원본부 지원장비
       { tab: 'gwteam', only: gwOk, badge: '강원본부', title: '강원본부 지원장비', desc: '강원 신속대응팀 제설차 4대를 요청 없이 지사에 직접 지원' },
-      E('gwteam', '지원 여부', ['#teamTable select[data-vs]'], '드롭다운 → 지원 · 미정 · 지원 불가 · 정비중', ['지원 → 날짜 칸이 열림'], { only: gwOk }),
-      E('gwteam', '지원일 1', ['#day1InTeam'], '첫 날짜 · 나머지 칸은 하루씩 자동', [], { only: gwOk }),
-      E('gwteam', '지원 지사', ['#teamTable .slot select:not(:disabled)'], '그날 갈 지사 · 옆 칸 = 도착 시각', [], { only: gwOk }),
-      E('gwteam', '확정', ['#save-gwteam'], '바뀐 칸 → [확정]해야 저장', [], { only: gwOk }),
+      E('gwteam', '지원 여부', ['#teamTable select[data-vs]'], '드롭다운 → 지원 · 미정 · 지원 불가 · 정비중', ['지원 → 날짜 칸이 열림'], W(['강원본부'], { only: gwOk })),
+      E('gwteam', '지원일 1', ['#day1InTeam'], '첫 날짜 · 나머지 칸은 하루씩 자동', [], W(['강원본부'], { only: gwOk })),
+      E('gwteam', '지원 지사', ['#teamTable .slot select:not(:disabled)'], '그날 갈 지사 · 옆 칸 = 도착 시각', [], W(['강원본부'], { only: gwOk })),
+      E('gwteam', '확정', ['#save-gwteam'], '바뀐 칸 → [확정]해야 저장', [], W(['강원본부'], { only: gwOk })),
       // 로그 기록
       { tab: 'log', only: lg, badge: '권한', title: '로그 기록', desc: '장비 지원 화면의 변경 이력 조회' },
-      E('log', '필터', ['#logFilters'], '구분(추가 · 수정 · 삭제) · 아이디 · 오늘만', [], { only: lg }),
       E('log', '기록 표', ['#logTable thead'], '일시 · 아이디 · 구분 · 표 · 대상 · 내용 · IP', [], { only: lg }),
       { target: '#sgHelp', kicker: 'HELP', title: '사용법 다시 보기', desc: '오른쪽 위 [? 사용법]', points: ['다른 탭: 처음 들어갈 때 칸 · 버튼 설명'], last: true }
     ];
@@ -327,6 +327,13 @@
     return R - L >= 2 && B - T >= 2 ? { left: L, top: T, right: R, bottom: B, width: R - L, height: B - T } : null;
   }
 
+  // 제목 옆 표지: 탭 표지(관리자 등) · 쓰는 계정(관리자 / 지사 · 기계화부 · 지역본부) · 예시
+  function badges(s) {
+    var h = (s.badge ? '<span class="sg-badge">' + esc(s.badge) + '</span>' : '') +
+      (s.who || []).map(function (w) { return '<span class="sg-badge who' + (w === '관리자' ? ' adm' : '') + '" title="이 칸 · 버튼을 쓰는 계정">' + esc(w) + '</span>'; }).join('') +
+      (s.demo ? '<span class="sg-badge demo" title="안내가 대신 눌러 보여 주는 예시 — 자료는 바뀌지 않음">예시</span>' : '');
+    return h ? '<span class="sg-badges">' + h + '</span>' : '';
+  }
   function body(s, item) {
     if (s.html) return s.html;
     var desc = item && item.desc || s.desc, pts = item && item.points || s.points;
@@ -374,7 +381,7 @@
     var pct = Math.round((st.i + 1) / n * 100);
     el.querySelector('.sg-in').innerHTML =
       '<div class="sg-head"><span class="sg-step"><i></i><b class="sg-k">' + esc(kick) + '</b> · ' + String(st.i + 1).padStart(2, '0') + ' / ' + String(n).padStart(2, '0') + '</span><span class="sg-pg">' + pg + ' 사용법</span></div>' +
-      '<div class="sg-title">' + (isTab && ico ? '<span class="sg-ico">' + ico + '</span>' : s.at ? '<span class="sg-pin" aria-hidden="true"></span>' : '') + '<h2 id="sgTitle">' + esc(s.title) + '</h2>' + (s.badge ? '<span class="sg-badge">' + esc(s.badge) + '</span>' : s.demo ? '<span class="sg-badge demo" title="안내가 대신 눌러 보여 주는 예시 — 자료는 바뀌지 않음">예시</span>' : '') + '</div>' +
+      '<div class="sg-title">' + (isTab && ico ? '<span class="sg-ico">' + ico + '</span>' : s.at ? '<span class="sg-pin" aria-hidden="true"></span>' : '') + '<h2 id="sgTitle">' + esc(s.title) + '</h2>' + badges(s) + '</div>' +
       '<div class="sg-body">' + body(s, item) + '</div>' +
       '<div class="sg-foot"><div class="sg-prog" aria-hidden="true"><span style="width:' + pct + '%"></span></div>' +
       '<div class="sg-btns">' + (st.i > 0 ? '<button type="button" class="sg-prev" data-sg="prev">이전</button>' : '') +
@@ -447,20 +454,22 @@
 
   // 안내 묶기(2026-11-01 사용자 결정 — "너무 많다"): 페이지 안내 = 첫 장 → 위쪽 탭 소개(탭을 바꾸지 않고 버튼만 짚음) → 지금 탭의 칸 설명 → 다시 보기.
   // 다른 탭의 칸 설명은 그 탭에 처음 들어갈 때 따로(탭 안내). 처음 로그인하면 지금 탭 = 첫 탭(24시간 예보 / 이동 현황)
-  function pageSteps(page, tab) {
+  // manual = [? 사용법]으로 다시 볼 때: 위쪽 탭 소개(처음 한 번이면 됨)와 마지막 '다시 보기' 장은 빼고 첫 장 → 지금 탭 칸 설명만(2026-11-02 사용자 결정)
+  function pageSteps(page, tab, manual) {
     var all = page === 'equip' ? equipSteps() : snowSteps();
+    if (manual) return all.filter(function (x) { return !x.at && !x.tab && !x.last; }).concat(all.filter(function (x) { return x.at && x.tab === tab; }));
     return all.filter(function (x) { return !x.at && !x.last; }).map(function (x) { return x.tab ? Object.assign({ ov: true }, x) : x; })
       .concat(all.filter(function (x) { return x.at && x.tab === tab; }), all.filter(function (x) { return x.last; }));
   }
   function tabSteps(page, tab) { return (page === 'equip' ? equipSteps() : snowSteps()).filter(function (x) { return x.at && x.tab === tab; }); }
   function activeTab(page) { var b = doc.querySelector(page === 'equip' ? '.eq-btn.active' : '.tab-btn.active'); return b ? (page === 'equip' ? b.dataset.eqtab : b.dataset.tab) : null; }
 
-  function start(page, onlyTab) {
+  function start(page, onlyTab, manual) {
     if (!me() || !doc.body.classList.contains('authed')) return;
     if (st) stop();
     page = page || curPage();
     var back = doc.querySelector(page === 'equip' ? '.eq-btn.active' : '.tab-btn.active'), tab = onlyTab || activeTab(page) || (page === 'equip' ? 'move' : 'forecast');
-    var steps = onlyTab ? tabSteps(page, onlyTab) : pageSteps(page, tab);
+    var steps = onlyTab ? tabSteps(page, onlyTab) : pageSteps(page, tab, manual);
     if (!steps.length) return;
     st = { page: page, tab: tab, mode: onlyTab ? 'tab' : 'page', steps: steps, i: 0, dir: 1, tok: 0, cur: null, el: build(), back: back, openedAt: Date.now(), fd: page === 'equip' ? fdoc() : null, undo: {}, leave: null, css: null };
     st.tick = setInterval(onResize, 400);                                            // 지도 이동·늦게 그려지는 목록을 따라 테두리 위치를 맞춤
@@ -489,7 +498,7 @@
     if (host && !$('sgHelp')) {
       var b = doc.createElement('button'); b.type = 'button'; b.id = 'sgHelp'; b.className = 'sg-help'; b.title = '이 페이지 사용법 다시 보기';
       b.innerHTML = '<span class="sg-help-q" aria-hidden="true">?</span>사용법';
-      b.onclick = function () { start(curPage()); };
+      b.onclick = function () { start(curPage(), null, true); };
       host.insertBefore(b, box);
     }
     doc.addEventListener('click', function (e) {

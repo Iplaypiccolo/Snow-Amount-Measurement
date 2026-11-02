@@ -183,3 +183,9 @@
   .sg-stop{top:10px;right:10px;padding:9px 12px;font-size:12.5px;}
   .sg-btns button{padding:9px 14px;}
 }
+
+/* 쓰는 계정 표지(2026-11-02): 관리자 = 노랑, 지사·기계화부·지역본부 = 하늘 */
+.sg-badges{margin-left:auto;flex:none;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px;max-width:60%;}
+.sg-badges .sg-badge{margin-left:0;}
+.sg-badge.who{color:#04121f;background:linear-gradient(90deg,#a5f3fc,#7dd3fc);}
+.sg-badge.who.adm{color:#1b1200;background:linear-gradient(90deg,#fde68a,var(--sg-am));}

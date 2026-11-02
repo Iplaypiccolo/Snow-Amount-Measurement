@@ -44,6 +44,11 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-02 · 커밋 (이 기록 커밋 하나) · 사용법 안내: [? 사용법]은 탭 소개 없이 · 쓰는 계정 표지 · 필터 안내 뺌 (Claude 채팅 작업)
+- `guide/guide.js`: `start(page, onlyTab, manual)` — [? 사용법](manual)은 첫 장 + 지금 탭 칸만. 칸 단계에 `who`(헬퍼 `W`, `ADM`·`BRH`·`MEC`) → 제목 옆 표지(`badges()`), 필터 단계 4개 삭제. `guide.css` 표지 색. 시험 `t_help_and_who` 추가 → `tests/test_guide.py` 9/9.
+- migration 49 는 여전히 **적용 전**(이번에도 execute_sql 승인 창에 답이 없어 롤백 시험이 돌지 않음).
+— ✍ Claude 채팅 작성
+
 ### 2026-11-02 · 커밋 (이 푸시의 커밋 둘) · 지원일 칸은 관리자만 — 새 권한 equip.route (Claude 채팅 작업)
 - 사용자: 지원장비 아이디 4개에 '모든 기관 장비…'(`equip.edit.all`)를 줬는데(필요) 지원일 칸까지 열림 → 지원일 칸만 관리자. 지원장비는 **예전 수준**(자기 기관 장비 첫날 한 곳·도착 시각·지원 불가)으로(사용자 선택). Claude Code 연결이 안 돼 채팅에서 작업, 최신 `a46b926` 기준으로 고침.
 - 화면(`equipment/js/app.js`): `canRoute()` = `equip.route`(지원일 칸 전부·지원일 1·칸 수·초기화·최초/수정본), 새 `canAllVeh()` = `equip.edit.all`(장비 추가 기관 목록·삭제·숨기기·숨김 취소), 새 `routeOwn(v)` = 예전 수준으로 지원일 칸을 고칠 장비(자기 기관 / 자기 지사 지역본부). `api.js` 샘플 모드·`tests/_sb_mock.py` 같은 규칙. 시험 `t_route_perm_admin_only` 추가 → `tests/test_equipment.py` 61/61.
