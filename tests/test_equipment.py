@@ -1151,7 +1151,21 @@ def t_gw_team(p):
     tab(p, "move"); p.uncheck("#showTeam"); p.reload(); p.wait_for_selector("#matrix tbody tr")
     check(not p.locator("#showTeam").is_checked() and p.locator("#matrix .tm").count() == 0, "끈 상태를 이 브라우저에 기억")
 
-TESTS = [t_gw_team, t_branch_bulk_save, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+def t_route_perm_admin_only(p):
+    """지원장비 아이디에 '모든 기관'(equip.edit.all)을 줘도 지원일 칸은 예전 수준(자기 기관 첫날 한 곳·도착 시각) — 지원일 칸 전부는 관리자(equip.route)만 (migration 49)"""
+    as_user(p, "eq-sg")
+    ev(p, "S.me = { ...S.me, perms: ['equip.edit.own', 'equip.edit.all'] }, Api.setActor(S.me), refresh()"); tab(p, "fleet")
+    check(p.locator("#eqTable select[data-rv]").count() == 0, "지사 목록 칸(관리자용) 없음")
+    check(p.locator("#day1In").count() == 0 and p.locator("#fleetReset").count() == 0 and p.locator("#modeRev").count() == 0 and p.locator("#colsSel").count() == 0, "지원일 1·초기화·최초/수정본·칸 수 없음")
+    check(p.locator("[data-vdel=V013]").count() == 1 and p.locator("[data-vhide=V013]").count() == 1, "모든 기관 장비의 삭제·숨기기는 그대로")
+    check(len(p.locator("#nvOrg option:not([disabled])").all_inner_texts()) >= 4, "모든 기관 장비 추가는 그대로")
+    check(p.locator("#eqTable [data-rt=V014], #eqTable [data-ra=V014]").count() == 0, "다른 기관(충북) 장비의 지원일 칸은 못 고침")
+    check(p.locator("#eqTable [data-rt=V002], #eqTable [data-ra=V002]").count() > 0, "자기 기관 장비는 예전처럼(첫날 한 곳 또는 도착 시각)")
+    ev(p, f"S.draft.set(rk('{day(p, 1)}', 'V014'), {{ stops: ['{bid(p, '양양')}', '{bid(p, '대관령')}'], revised: false, times: [null, null] }}), updateSavebars()"); confirm_fleet(p)
+    check("권한이 없습니다" in toast(p), "화면을 우회해 다른 기관 경로를 보내도 거절: " + toast(p))
+    as_user(p, "admin1"); tab(p, "fleet"); check(p.locator("#eqTable select[data-rv]").count() > 0 and p.locator("#day1In").count() == 1, "관리자는 지원일 칸 전부")
+
+TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_bulk_save, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,

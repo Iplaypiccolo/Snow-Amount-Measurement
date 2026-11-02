@@ -57,7 +57,7 @@ ADMIN_PW = "Admin#Pass-2026x!"
 # 서버 표 permissions 와 같은 목록(마이그레이션 15)
 PERMS = [("juris.request", "관할 구간 변경 요청", ["branch"]), ("juris.edit", "관할 변경 저장·요청 승인", []), ("grid.edit", "예보 격자 편입", []),
          ("req.edit.own", "자기 지사 요청 입력", ["branch"]), ("req.edit.hq", "자기 본부 지사 요청 입력", ["hq"]), ("req.confirm", "요청 확정·편성·기준일자", []),
-         ("equip.edit.own", "자기 기관 장비·경로 입력", ["equip"]), ("equip.edit.all", "모든 기관 장비·경로 입력", []), ("log.view", "접속·수정 기록 보기", [])]
+         ("equip.edit.own", "자기 기관 장비·경로 입력", ["equip"]), ("equip.edit.all", "모든 기관 장비 입력·장비 삭제·숨기기", []), ("equip.route", "지원일 칸(경로) 전부 입력", []), ("log.view", "접속·수정 기록 보기", [])]
 def default_perms(role): return [k for k, _, r in PERMS if role in r]
 TEMP_PW = "Tmp#Start-Ab12Cd34"
 
@@ -284,10 +284,12 @@ class Mock:
             if tbl in ("save_fleet", "save_requests") and "/rpc/" in path:
                 self.eq_calls.append((tbl, body))
                 if tbl == "save_fleet":
+                    # 지원일 칸(마이그레이션 49): 전부 = equip.route(관리자), 아니면 자기 기관 장비만('모든 기관' 권한이 있어도)
+                    route_ok = lambda vid: self.can(u, "equip.route") or ((self.can(u, "equip.edit.own") or self.can(u, "equip.edit.all")) and next((v for v in self.vehicles if v["id"] == vid), {}).get("org") == u["profile"].get("org"))
                     ok = lambda vid: self.can(u, "equip.edit.all") or (self.can(u, "equip.edit.own") and next((v for v in self.vehicles if v["id"] == vid), {}).get("org") == u["profile"].get("org"))
                     st, rid = body.get("p_status") or [], body.get("p_round")
                     if any("status" in v for v in body["p_vehicles"]) or ((body["p_routes"] or st) and not any(r["id"] == rid for r in self.rounds)): return send(400, {"code": "22023", "message": "bad input"})
-                    if any(not ok(v["id"]) for v in body["p_vehicles"]) or any(not ok(x["vehicle_id"]) for x in st) or (body["p_routes"] and not self.can(u, "equip.edit.all")): return send(403, {"code": "42501", "message": "routes need equip.edit.all"})
+                    if any(not ok(v["id"]) for v in body["p_vehicles"]) or any(not ok(x["vehicle_id"]) for x in st) or any(not route_ok(r["vehicle_id"]) for r in body["p_routes"]): return send(403, {"code": "42501", "message": "route not allowed"})
                     for x in st:
                         cur = next((y for y in self.rstatus if y["round_id"] == rid and y["vehicle_id"] == x["vehicle_id"]), None)
                         if not cur: cur = {"round_id": rid, "vehicle_id": x["vehicle_id"]}; self.rstatus.append(cur)

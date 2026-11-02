@@ -254,12 +254,14 @@ const Api = (() => {
       },
       saveFleet(vehicles, routes, round, status) {
         status = status || [];
-        // 경로는 관리자(equip.edit.all). 기계화부(지원장비)는 자기 기관 장비의 ① 정해진 경로의 도착 예상 시각 ② 지원일 1의 지사 한 곳(배정받은 지사·대수 안에서, 마이그레이션 43)
+        // 경로는 관리자(equip.route, 2026-11-02 — 'equip.edit.all' 만 받은 지원장비 아이디는 기계화부와 같음). 기계화부(지원장비)는 자기 기관 장비의 ① 정해진 경로의 도착 예상 시각 ② 지원일 1의 지사 한 곳(배정받은 지사·대수 안에서, 마이그레이션 43)
+        // 지원일 칸: 자기 기관 장비(지역본부 장비는 자기 지사 것)만 — 'equip.edit.all' 이 있어도(서버 vehicle_routes_guard 흉내)
+        const routeOk = vid => { const v = db.vehicles.find(x => x.id === vid); return !!v && (v.org === POOL ? poolOwn(v) : (can("equip.edit.own") || can("equip.edit.all")) && v.org === actor.org); };
         const allocOf = (org, bid) => db.allocations.find(a => a.round_id === +round && a.org === org && a.branch_id === bid);
         const ownRoutesErr = () => {      // 서버 트리거 흉내: 오류 번호 또는 null. 대수는 이번 저장을 모두 적용한 뒤에 셈(서로 바꾸기 허용)
           const rd0 = db.rounds.find(r => r.id === +round), sim = new Map(db.routes.map(x => [x.date + "|" + x.vehicle_id, x])), touched = [];
           for (const r of routes) {
-            if (!vehOk(r.vehicle_id)) return "42501";
+            if (!routeOk(r.vehicle_id)) return "42501";
             const k = r.date + "|" + r.vehicle_id, old = sim.get(k), v = db.vehicles.find(x => x.id === r.vehicle_id);
             if (old && JSON.stringify(old.stops) === JSON.stringify(r.stops)) continue;                 // 시각만
             if (v.org === POOL) return "42501";                                                          // 지역본부 장비의 피지원 지사는 관리자만
@@ -284,8 +286,8 @@ const Api = (() => {
         const vof = id => db.vehicles.find(x => x.id === id) || {};
         if (status.some(x => vof(x.vehicle_id).org === POOL && (x.status !== "O" || x.off_from))) return done(err("23514", "지역본부 장비의 지원 여부는 늘 '지원'입니다."));
         if (routes.some(r => { const h = vof(r.vehicle_id).home_branch; return h && r.stops.includes(h); })) return done(err("SA005"));
-        if (!can("equip.edit.all")) { const c = ownRoutesErr(); if (c) return done({ ok: false, message: ERR[c], code: c }); }
-        if (!can("equip.edit.all")) routes = routes.map(r => { const x = db.routes.find(y => y.date === r.date && y.vehicle_id === r.vehicle_id); return { ...r, revised: !!(x && x.revised) }; });
+        if (!can("equip.route")) { const c = ownRoutesErr(); if (c) return done({ ok: false, message: ERR[c], code: c }); }
+        if (!can("equip.route")) routes = routes.map(r => { const x = db.routes.find(y => y.date === r.date && y.vehicle_id === r.vehicle_id); return { ...r, revised: !!(x && x.revised) }; });
         if (!can("equip.edit.all") && vehicles.some(v => Object.keys(v).some(k => !["id", "plate", "blower_s", "blower_l", "rented"].includes(k)))) return done({ ok: false, message: ERR["42501"] });
         if (vehicles.some(p => { const v = vof(p.id), n = { ...v, ...p }; return v.org === POOL ? !poolNameOk(n) : !!n.rented; })) return done(err("23514"));
         if (vehicles.some(p => (p.blower_s || p.blower_l) && (db.vehicles.find(x => x.id === p.id) || {}).type !== "제설기")) return done({ ok: false, message: ERR["23514"] || "값이 규칙에 맞지 않습니다." });
