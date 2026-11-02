@@ -44,6 +44,12 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-02 · 커밋 (이 기록 커밋 하나) · 지사별 요청·편성 한 화면에 더 많이
+- 사용자: "보이는 수량이 적음(모바일·컴퓨터), 글자가 작아도 좋음, 내릴 수 있는 길이가 적음".
+- `equipment/js/app.js` `fitBranch`: 표 창을 화면 아래 끝까지(렌더·탭 전환·창 크기 변경 때). `equipment/css/style.css`: 이 탭의 줄·제목·글자·위쪽 줄 축소, 휴대폰은 위쪽 줄을 한 줄씩. 칸(id) 변경 없음.
+- 시험 `t_branch_compact`. 시험 자료가 13줄뿐이라 실제 59개 지사 화면은 계산값(docs/decisions.md).
+— ✍ Claude Code 작성
+
 ### 2026-11-02 · 커밋 (이 기록 커밋 하나) · 요청·편성 표 나눔·내 표 강조, 휴대폰 새로고침 위로
 - `equipment/js/app.js`: 줄마다 `blk-gap` 빈 칸 추가(저장 ║ 편성), `#branchTable` 에 `mine-left`/`mine-right`, 보기 줄에 `.my-blk` 안내. `equipment/css/style.css`: 진한 세로줄 삭제, 파란 강조(`--mine`), 제목 '지사' 가운데, 1500px 이하 칸 줄임·숫자 칸 화살표 없앰. 칸(id) 변경 없음 → UI_VERSION 그대로.
 - `index.html`·`boot.js`: 휴대폰(860px 이하)은 탭 줄 `.eq-reload` 를 숨기고 머리글 `#snReload` 표시(탭을 가리지 않게). `SSEqReload`·`SSEqReloadState` 를 함께 씀.

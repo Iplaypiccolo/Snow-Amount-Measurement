@@ -1017,7 +1017,12 @@ function stickHead(table) {
   let top = 0;
   [...table.tHead.rows].forEach(tr => { [...tr.cells].forEach(th => { if (th.rowSpan <= 1 || tr.rowIndex === 0) th.style.top = (th.rowSpan > 1 ? 0 : top) + "px"; }); top += tr.getBoundingClientRect().height; });
 }
-addEventListener("resize", () => { stickHead($("branchTable")); stickHead($("matrix")); stickHead($("allocTable")); });
+// 지사별 요청·편성: 표 창을 화면 아래 끝까지(2026-11-02 사용자 요청 "내릴 수 있는 길이가 적음") — 위쪽 버튼 줄 높이가 화면 폭에 따라 달라서 매번 잼
+function fitBranch() {
+  const w = $("branchTable").parentElement; if (!w || !w.offsetParent) return;
+  w.style.maxHeight = Math.max(240, Math.floor(innerHeight - w.getBoundingClientRect().top - scrollY - 8)) + "px";
+}
+addEventListener("resize", () => { stickHead($("branchTable")); stickHead($("matrix")); stickHead($("allocTable")); fitBranch(); });
 function renderBranch() {
   const m = S.me, r = curRound();
   banner("perm-branch", canAnyReq(),
@@ -1073,7 +1078,7 @@ function renderBranch() {
   });
   $("branchTable").innerHTML = h + "</tbody>";
   $("branchTable").classList.toggle("mine-right", myBlk === "right"); $("branchTable").classList.toggle("mine-left", myBlk === "left");
-  stickHead($("branchTable"));
+  stickHead($("branchTable")); fitBranch();
 }
 // [저장] 칸: 지사·본부 계정은 아직 저장하지 않았거나 고친 값이 있으면 [저장](0이어도 저장 가능 — "요청 안 함"도 알림), 저장했으면 '저장 완료'
 // 관리자(req.confirm)는 고친 줄만 [저장] — 편성 대수만 저장해 두고 확정은 나중에(2026-11-01, 아래 저장 막대를 없애며)
@@ -1558,7 +1563,7 @@ document.querySelectorAll(".tab").forEach(t => t.onclick = e => {
   document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", x === t));
   document.querySelectorAll(".panel").forEach(p => p.hidden = p.id !== "panel-" + t.dataset.tab);
   try { if (window.top !== window && window.top.SSEqTabChanged) window.top.SSEqTabChanged(t.dataset.tab); } catch (e) {}   // 첫 화면 왼쪽 메뉴도 같은 탭 표시
-  hideTip(); if (t.dataset.tab === "move") { fitFilters(); stickHead($("matrix")); } if (t.dataset.tab === "branch") stickHead($("branchTable")); if (t.dataset.tab === "alloc") stickHead($("allocTable"));
+  hideTip(); if (t.dataset.tab === "move") { fitFilters(); stickHead($("matrix")); } if (t.dataset.tab === "branch") { stickHead($("branchTable")); fitBranch(); } if (t.dataset.tab === "alloc") stickHead($("allocTable"));
 });
 const dateInput = $("dateInput"); dateInput.value = S.date;
 async function setDate(v) { if (!v) return; S.date = v; dateInput.value = v; await ensureRoutes(); renderMatrix(); renderDest(); }   // 이동 현황은 고른 날짜 기준

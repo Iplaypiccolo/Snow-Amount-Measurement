@@ -1089,6 +1089,22 @@ def t_branch_two_tables(p):
     as_user(p, "viewer"); tab(p, "branch")
     check(ev(p, "(() => { const c = document.querySelector('#branchTable').classList; return !c.contains('mine-left') && !c.contains('mine-right'); })()") and "내가 입력하는 표" not in p.locator("#branchCtl").inner_text(), "보기 전용: 강조 없음")
 
+def t_branch_compact(p):
+    """2026-11-02: 한 화면에 더 많은 지사 — 줄·제목을 줄이고 표 창을 화면 아래 끝까지(화면 크기가 바뀌어도 맞춤)"""
+    tab(p, "branch")
+    m = lambda: ev(p, """(() => { const t = document.querySelector('#branchTable'), w = t.parentElement, r = w.getBoundingClientRect();
+      return { row: t.querySelector('tbody tr[data-b]').getBoundingClientRect().height, head: t.tHead.getBoundingClientRect().height, bottom: r.bottom, h: innerHeight, wrap: r.height, table: t.getBoundingClientRect().height }; })()""")
+    a = m(); check(a["row"] <= 32 and a["head"] <= 72, f"줄·제목 높이: {a}")
+    check(a["table"] <= a["wrap"] or a["h"] - 16 <= a["bottom"] <= a["h"], f"표 창이 화면 아래 끝까지: {a}")
+    check(ev(p, "document.scrollingElement.scrollHeight <= innerHeight + 1"), "표 창 밖의 바깥 스크롤 없음(넓은 화면)")
+    p.set_viewport_size({"width": 1440, "height": 700}); p.wait_for_timeout(250); b = m()
+    check(b["table"] <= b["wrap"] or b["h"] - 16 <= b["bottom"] <= b["h"], f"창 높이가 바뀌어도 맞춤: {b}")
+    p.set_viewport_size({"width": 375, "height": 700}); p.wait_for_timeout(250); c = m()
+    check(c["row"] <= 32, f"휴대폰 줄 높이: {c}")
+    check(ev(p, "(() => { const b = document.querySelector('#panel-branch .round-bar').getBoundingClientRect(); return b.height <= 48; })()"), "휴대폰: 기준일자 줄은 한 줄(옆으로 밀어서 봄)")
+    check(ev(p, "document.documentElement.scrollWidth <= 376"), "휴대폰: 화면 자체는 옆으로 안 넘침")
+    p.set_viewport_size({"width": 1440, "height": 1000})
+
 def t_branch_saved(p):
     """(2026-10-15, 마이그레이션 46) 지사·본부는 요청·지원 가능이 0이어도 [저장] → '저장 완료'(타지사 지원 가능 다음 칸). 관리자 저장·확정은 남기지 않음.
     보기 버튼은 처음에 아무것도 안 눌림, [저장 안 한 지사만]은 맨 오른쪽"""
@@ -1291,7 +1307,7 @@ def t_route_perm_admin_only(p):
     check("권한이 없습니다" in toast(p), "화면을 우회해 다른 기관 경로를 보내도 거절: " + toast(p))
     as_user(p, "admin1"); tab(p, "fleet"); check(p.locator("#eqTable select[data-rv]").count() > 0 and p.locator("#day1In").count() == 1, "관리자는 지원일 칸 전부")
 
-TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
