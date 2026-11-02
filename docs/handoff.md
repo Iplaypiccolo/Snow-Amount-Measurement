@@ -44,6 +44,14 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-02 · 커밋 (이 기록 커밋 하나) · 아이디 짧게(migration 52) · 비밀번호 6자 이상 (Claude 채팅 작업)
+- **아이디 74개 변경(실서버 적용, 사용자 승인)**: 본부 `exa00`~`exi00`, 지사 `ex`+본부 글자+순서(예: 충주 `exd03`, 남원 `exf07`, 영암 `exg07`, 합천 `exi11`), 기계화부 `exm01`~`exm04`. 관리자 그대로. 되돌리기 시험 → 적용 → 조회 확인(76개 아이디·이메일·identities 일치). 옛→새 표 `docs/accounts.md`.
+- **비밀번호 규칙 = 6자 이상**(공백·72바이트 초과만 거절): `admin/policy.js`·`admin.js`·`account-admin/core.mjs`(Edge Function **v6 배포**), 임시 비밀번호 8자 소문자+숫자. 추천 아이디 13개(`PRESET`)도 새 아이디로.
+- **사용자가 할 일**: Supabase 대시보드 → Authentication → (Sign In / Providers → Email 또는 Policies) 의 *Minimum password length* = 6, *Password requirements* = 없음. 이걸 바꾸기 전에는 일괄 설정·임시 비밀번호 발급·내 정보 변경에서 Supabase 가 짧은 비밀번호를 거절함.
+- 시험 고침: `test_admin_ui`(23/23), `test_account_admin`, `test_admin_policy_parity`, `test_hierarchy_order`(새 표), `accounts_check.sql`(exd03). 가짜 서버 시험 속 계정 이름(exchungju 등)은 시험용이라 그대로.
+- 못 한 것: 실제 사이트에서 새 아이디로 로그인(사용자가 해 봐야 함). 브라우저에 '아이디 저장'된 옛 아이디·사용법 안내 본 기록(아이디별)은 새 아이디로 다시 시작됨.
+— ✍ Claude 채팅 작성
+
 ### 2026-11-02 · 커밋 (이 기록 커밋 하나) · 보기 버튼 여러 개 · 지사저장/본부저장/본사저장(migration 50) · 새 고속도로 3곳 대략 추가(migration 51) (Claude 채팅 작업)
 - 지사별 요청·편성 보기: [요청] [편성] [지원] [저장안함], 여러 개 켜면 **모두 만족**(`S.bviews`, `BVIEWS`).
 - 저장 표시: '저장 완료' → **지사저장·본부저장·본사저장**(마지막에 저장한 쪽, `round_requests.saved_lv`). 관리자 저장도 저장으로 침, 확정·취소만은 아님. 화면·샘플(`api.js`)·가짜 서버·시험 고침. 안내 문구도.

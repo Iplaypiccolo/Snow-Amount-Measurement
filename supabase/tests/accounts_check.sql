@@ -20,7 +20,7 @@ do $t$
 declare x uuid := gen_random_uuid(); br uuid; ad uuid; rep text; fails int; total int;
 begin
   insert into auth.users (id, aud, role, email) values (x, 'authenticated', 'authenticated', 'stranger@t.test');   -- 가입만 한 낯선 사람(프로필 없음)
-  select id into br from auth.users where email = 'exchungju@snow-support.invalid';
+  select id into br from auth.users where email = 'exd03@snow-support.invalid';   -- 충주지사(2026-11-02 아이디를 exd03 으로 바꿈)
   select id into ad from auth.users where email = 'admin-01@snow-support.invalid';
 
   perform pg_temp.chk('낯선 가입자: 본부 목록 0건','authenticated',x,'select 1 from public.hqs','ok:0');

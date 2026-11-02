@@ -3,7 +3,7 @@
   1) data/sections.json 의 본부·지사 목록과 순서가 data/hierarchy.json 과 같다 (지사 번호 B001… 이 곧 그 순서)
   2) supabase/seed/01_hqs_branches.sql (DB 에 넣은 본부·지사)이 같은 순서다
   3) 관리 콘솔의 정렬 규칙(본부 순서 → 지사 번호)을 DB 자료에 적용하면 hierarchy.json 의 순서가 그대로 나온다
-  4) docs/accounts.md 의 지사 표도 같은 순서다
+  4) docs/accounts.md 의 새 아이디 표(2026-11-02)가 본부 순서·번호 규칙을 따른다
 실행: python tests/test_hierarchy_order.py
 """
 import json, re, sys
@@ -37,10 +37,17 @@ def sort_rule():                      # admin.js 의 cmpHier 와 같은 규칙: 
     hq, brs = seed(); rows = sorted(brs, key=lambda r: (hq[r[1]][1], r[0]))
     eq([(hq[h][0], n) for _, h, n in rows], B_ORDER, "정렬 규칙 적용 결과")
 test("관리 콘솔의 정렬 규칙(본부 순서 → 지사 번호)을 적용하면 hierarchy.json 의 순서가 그대로 나온다", sort_rule)
-def accounts_md():
-    rows = re.findall(r"^\| (B\d+) \| ([^|]+) \| ([^|]+) \| `(ex[a-z]+)` \|", (R / "docs/accounts.md").read_text(encoding="utf-8"), re.M)
-    eq([(h.strip(), n.strip()) for _, h, n, _ in rows], B_ORDER, "계정 목록 문서 순서"); assert len(rows) == 59
-test("docs/accounts.md 의 지사 표 순서 = hierarchy.json (59개)", accounts_md)
+def accounts_md():                    # 2026-11-02: 아이디를 짧게(ex + 본부 글자 + 순서) 바꾼 뒤의 표
+    rows = re.findall(r"^\| ([^|]+) \| ([^|]+) \| `(ex[a-i]\d\d)` \| (ex[a-z]+) \|", (R / "docs/accounts.md").read_text(encoding="utf-8"), re.M)
+    assert len(rows) == 70, len(rows)                                      # 본부 9 + 지사 61(영암·합천 포함)
+    for i, h in enumerate(H_ORDER):
+        mine = [r for r in rows if r[0].strip() == h]
+        assert [r[2] for r in mine] == [f"ex{'abcdefghi'[i]}{k:02d}" for k in range(len(mine))], (h, [r[2] for r in mine])
+        assert mine[0][1].strip() == h + "본부", mine[0]
+    base = [r for r in rows if not r[2].endswith("00")]
+    names = [r[1].strip()[:-2] for r in base]                                # 'OO지사' → 'OO'
+    assert set(n for _, n in B_ORDER) <= set(names), "기본 지사가 모두 있음"
+test("docs/accounts.md 의 새 아이디 표: 본부 글자 a~i = 본부 순서, 번호는 00(본부)·01~ 차례대로, 기본 지사 59개 모두 포함", accounts_md)
 test("지사 59개, 본부 9개(민자 제외)", lambda: eq((len(B_ORDER), len(H_ORDER)), (59, 9), "개수"))
 
 ok = sum(1 for _, o, _ in res if o)

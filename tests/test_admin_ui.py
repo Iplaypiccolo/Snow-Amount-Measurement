@@ -82,7 +82,7 @@ def t_forced_change(b, m):
     p = new_page(b, m); login(p, "exchungju", TEMP_PW)
     p.wait_for_selector("#n"); check(p.locator(".tabs").count() == 0 and "비밀번호 변경" in p.locator("h2").first.inner_text(), "변경 전에는 다른 화면이 없어야 함(비밀번호 변경만)")
     p.fill("#c", TEMP_PW); p.fill("#n", "short"); p.click("#go"); check("규칙에 맞지 않습니다" in p.locator(".msg.err").inner_text(), "약한 비밀번호 거절")
-    p.fill("#n", "Snow#Chungju-9Z"); p.click("#go"); check("지사 이름" in p.locator(".msg.err").inner_text(), p.locator(".msg.err").inner_text())
+    p.fill("#n", "snow 26"); p.click("#go"); check("공백" in p.locator(".msg.err").inner_text(), p.locator(".msg.err").inner_text())
     p.fill("#n", GOOD(1)); p.fill("#n2", "Different#Pass-77x"); p.click("#go"); check("일치하지" in p.locator(".msg.err").inner_text(), "확인 불일치")
     p.fill("#n2", GOOD(1)); p.fill("#c", "wrong-current-pass"); p.click("#go"); p.wait_for_timeout(300); check("현재 비밀번호가 올바르지 않습니다" in p.locator(".msg.err").inner_text(), "현재 비밀번호 오류")
     p.fill("#c", TEMP_PW); p.click("#go"); p.wait_for_selector("text=비밀번호를 바꿨습니다")
@@ -95,9 +95,10 @@ def t_forced_change(b, m):
 def t_checklist_live(b, m):
     p = new_page(b, m); login(p, "exwonju", TEMP_PW); p.wait_for_selector("#n")
     check(p.locator("#chk li.pass").count() == 0, "처음엔 통과 항목이 없어야 함")
-    p.fill("#n", "Abcdefgh"); check(p.locator("#chk li.pass").count() == 2, p.locator("#chk li.pass").count())       # 소문자·대문자만 통과 (12자·숫자·기호는 아직)
-    p.fill("#n", "Abcdefgh1234"); check(p.locator("#chk li.pass").count() == 4, "12자·소문자·대문자·숫자")
-    p.fill("#n", "Snow#Ride-2026k"); check(p.locator("#chk li.pass").count() == 5, "5가지 모두 통과")
+    check(p.locator("#chk li").count() == 1 and "6자 이상" in p.locator("#chk li").inner_text(), "규칙은 '6자 이상' 하나(2026-11-02 간단하게)")
+    p.fill("#n", "12345"); check(p.locator("#chk li.pass").count() == 0, "5자는 아직")
+    p.fill("#n", "123456"); check(p.locator("#chk li.pass").count() == 1 and p.locator("#chk li").count() == 1, "6자면 숫자만이어도 통과")
+    p.fill("#n", "abc def"); check(p.locator("#chk li").count() == 2 and "공백" in p.locator("#chk").inner_text(), "공백은 따로 알려 줌")
 
 def t_sheet_rows_and_paste(b, m):
     p = admin_sheet(b, m)
@@ -116,17 +117,16 @@ def t_sheet_rows_and_paste(b, m):
 def t_sheet_validation_display(b, m):
     p = admin_sheet(b, m); users = [i.get_attribute("data-u") for i in p.locator("input.pw").all()]
     p.fill(f"input.pw[data-u='{users[0]}']", "short"); p.fill(f"input.pw[data-u='{users[1]}']", GOOD(1)); p.fill(f"input.pw[data-u='{users[2]}']", GOOD(1))
-    p.fill(f"input.pw[data-u='{users[3]}']", "Abcdefghij1!")
+    p.fill(f"input.pw[data-u='{users[3]}']", "abc def")
     row = lambda u: p.locator(f"tr[data-u='{u}']")
-    check("bad" in row(users[0]).get_attribute("class") and "12자 이상" in row(users[0]).inner_text(), "짧은 비밀번호 표시")
+    check("bad" in row(users[0]).get_attribute("class") and "6자 이상" in row(users[0]).inner_text(), "짧은 비밀번호 표시")
     check("같은 비밀번호" in row(users[1]).inner_text() and "같은 비밀번호" in row(users[2]).inner_text(), "중복 표시")
-    check("이어지는" in row(users[3]).inner_text(), "이어지는 글자 표시")
+    check("공백" in row(users[3]).inner_text(), "공백 표시")
     check(p.locator("#save").is_disabled() and "오류 4개" in p.locator("#sum").inner_text(), p.locator("#sum").inner_text())
     p.fill(f"input.pw[data-u='{users[0]}']", GOOD(0)); p.fill(f"input.pw[data-u='{users[2]}']", GOOD(2)); p.fill(f"input.pw[data-u='{users[3]}']", GOOD(3))
     check(p.locator("#save").is_enabled() and "입력 4개" in p.locator("#sum").inner_text() and "오류" not in p.locator("#sum").inner_text(), p.locator("#sum").inner_text())
     check("good" in row(users[0]).get_attribute("class"), "통과 표시")
-    p.fill(f"input.pw[data-u='{users[1]}']", f"Snow#{users[1]}-9Zq"); check("아이디 포함" in row(users[1]).inner_text(), "아이디 포함 거절")
-    p.fill(f"input.pw[data-u='{users[1]}']", f"Snow#{users[1][2:]}-9Zq"); check("지사 이름 포함" in row(users[1]).inner_text(), "지사 이름 포함 거절")
+    p.fill(f"input.pw[data-u='{users[1]}']", "123456"); check("good" in row(users[1]).get_attribute("class"), "6자면 숫자만이어도 통과(2026-11-02 간단하게)")
 
 def t_sheet_save_payload(b, m):
     dl = []; p = admin_sheet(b, m, dl); users = [i.get_attribute("data-u") for i in p.locator("input.pw").all()]
@@ -325,14 +325,14 @@ def t_new_accounts(b, m):
     check(p.locator("#preset tbody tr").count() == 13 and p.locator("#preset .tag.warn").count() == 13, "추천 13개, 모두 없음")
     check("admin" not in p.locator("#nrole option").evaluate_all("os => os.map(o => o.value)"), "관리자 역할 없음")
     p.select_option("#nrole", "viewer"); check(p.locator("#nposHint").inner_text() == "" and p.locator("#npos option").count() == 1, f"빈 묶음 위치 안내: {p.locator('#nposHint').inner_text()} {p.locator('#npos option').all_inner_texts()}")
-    m.add("exgangwon", "강원본부", "hq", None, "x", hq_id="H03")                      # 하나는 이미 있는 상황
+    m.add("exc00", "강원본부", "hq", None, "x", hq_id="H03")                      # 하나는 이미 있는 상황
     p.reload(); p.wait_for_selector(".tabs"); p.click('.tabs button[data-t=sheet]'); p.click('.subtabs button[data-s=new]'); p.wait_for_selector("#preset table")
     check("12개" in p.locator("#mkpreset").inner_text(), p.locator("#mkpreset").inner_text())
     n0 = len(m.fn_calls); p.click("#mkpreset"); p.wait_for_selector(".dialog td.temp")
     call = m.fn_calls[n0]; users = {u["username"]: u for u in call["users"]}
-    check(call["action"] == "create" and len(users) == 12 and "exgangwon" not in users, sorted(users))
-    check(users["exseoulgigyae"] == {"username": "exseoulgigyae", "display_name": "서울경기 지원장비", "role": "equip", "org": "서울경기", "sort": 10}, users["exseoulgigyae"])
-    check(users["exdaegugyeongbuk"]["hq_id"] == "H08" and users["exdaegugyeongbuk"]["role"] == "hq", users["exdaegugyeongbuk"])
+    check(call["action"] == "create" and len(users) == 12 and "exc00" not in users, sorted(users))
+    check(users["exm01"] == {"username": "exm01", "display_name": "서울경기 지원장비", "role": "equip", "org": "서울경기", "sort": 10}, users["exm01"])
+    check(users["exh00"]["hq_id"] == "H08" and users["exh00"]["role"] == "hq", users["exh00"])
     check(p.locator(".dialog td.temp").count() == 12 and any("12개 아이디" in d for d in dl), "임시 비밀번호 12개 표시")
     p.click("#cl"); p.wait_for_timeout(300); check(p.locator("#preset .tag.ok").count() == 13 and p.locator("#mkpreset").is_disabled(), "모두 만들어짐")
     # 하나 만들기
@@ -340,14 +340,14 @@ def t_new_accounts(b, m):
     p.select_option("#nrole", "equip"); check(p.locator(".npc:checked").evaluate_all("cs => cs.map(c => c.value)") == ["equip.edit.own"], "지원장비 기본 권한")
     p.select_option("#nrole", "equip"); check(p.locator("#nposHint").inner_text() == "" and p.locator("#npos option").count() >= 1, "위치 목록(설명 글 없음, 2026-10-05)")
     check(p.locator("#nwhere option").all_inner_texts() == ["서울경기", "충북", "전북", "대구경북"], p.locator("#nwhere option").all_inner_texts())
-    p.select_option("#nwhere", "전북"); p.fill("#nuser", "exjeonbuk2"); p.fill("#nname", "전북 지원장비2"); p.select_option("#npos", "exjeonbukgigyae")
+    p.select_option("#nwhere", "전북"); p.fill("#nuser", "exjeonbuk2"); p.fill("#nname", "전북 지원장비2"); p.select_option("#npos", "exm03")
     p.check(".npc[value='log.view']")
     n0 = len(m.fn_calls); p.click("#nmake"); p.wait_for_selector(".dialog td.temp"); p.click("#cl")
     u = m.fn_calls[n0]["users"][0]
     check(u["org"] == "전북" and u["perms"] == ["equip.edit.own", "log.view"] and u["role"] == "equip", u)
     p.wait_for_timeout(400)
     eq = sorted([x["profile"] for x in m.users.values() if x["profile"] and x["profile"]["role"] == "equip"], key=lambda q: (q["sort"] is None, q["sort"] or 0))
-    names = [q["username"] for q in eq]; check(names.index("exjeonbuk2") == names.index("exjeonbukgigyae") + 1, names)
+    names = [q["username"] for q in eq]; check(names.index("exjeonbuk2") == names.index("exm03") + 1, names)
     p.fill("#nuser", "Bad Id"); p.fill("#nname", "x"); p.click("#nmake"); check("영문 소문자" in p.locator("#m").inner_text(), "아이디 형식 검사")
 
 def t_tabs_by_permission(b, m):

@@ -11,9 +11,9 @@ const test = (n, f) => { try { f(); results.push([n, true]); } catch (e) { resul
 test('허용 기호 목록이 서버와 같다', () => { assert.equal(P.SYMBOLS, PW_SYMBOLS); assert.equal(P.SYMBOLS.length, 32); });
 
 test('손으로 고른 입력 60개에서 결과가 완전히 같다', () => {
-  const pws = ['Snow#Ride-2026k', 'Abcdefghij1!', 'short', '', 'SNOW#RIDE-2026K', 'snow#ride-2026k', 'SnowRide2026kk', 'Snow Ride#2026k', 'Snow#Rideeee-26k', 'Snow#Ride-1234k', 'Snow#Ride-dcba7',
+  const pws = ['123456', '12345', 'abcdef', 'ab cdef', 'Snow#Ride-2026k', 'Abcdefghij1!', 'short', '', 'SNOW#RIDE-2026K', 'snow#ride-2026k', 'SnowRide2026kk', 'Snow Ride#2026k', 'Snow#Rideeee-26k', 'Snow#Ride-1234k', 'Snow#Ride-dcba7',
     'Snow#exchungju9Z', 'Snow#Chungju-99Z', 'A'.repeat(40) + 'a1!' + 'B'.repeat(40), '한글비밀번호열두글자이상!Aa1', 'Pässwörd#2026-Zx', 'Tab\tBad#Pass-2026', 'Ok#Pass-w0rd-xyz9', 'Zq7!Zq7!Zq7!Zq7!', '😀Snow#Ride-2026k', 'Snow#Ride-2026k\n'];
-  const users = ['exchungju', 'exdongseoul', 'admin-01', 'equip-01', 'exgyeonggigwangju', ''];
+  const users = ['exd03', 'exa00', 'exm01', 'admin-01', 'exchungju', ''];
   let n = 0; for (const pw of pws) for (const u of users) { assert.deepEqual(P.problems(pw, u), passwordProblems(pw, u), JSON.stringify([pw, u])); n++; }
   assert.ok(n >= 120);
 });
@@ -28,14 +28,14 @@ test('무작위 입력 5,000개에서 결과가 완전히 같다', () => {
   }
 });
 
-test('무작위 생성기: 규칙을 항상 만족하고, 서로 다르고, 4종류 글자가 모두 들어 있다', () => {
+test('무작위 생성기(2026-11-02): 8자 소문자+숫자, 규칙을 항상 만족하고 서로 다르다', () => {
   const rb = (n) => { const a = new Uint8Array(n); for (let i = 0; i < n; i++) a[i] = Math.floor(Math.random() * 256); return a; }, seen = new Set();
   for (let i = 0; i < 1000; i++) {
-    const u = ['exchungju', 'exgurye', 'equip-01'][i % 3], pw = P.generate(u, rb);
-    assert.equal(pw.length, 16); assert.deepEqual(P.problems(pw, u), []); assert.deepEqual(passwordProblems(pw, u), []);
-    assert.ok(!/^[!#$%&*+\-=?@]/.test(pw), '첫 글자가 기호'); assert.ok(!/[0OIl1]/.test(pw)); seen.add(pw);
+    const u = ['exd03', 'exg07', 'exm01'][i % 3], pw = P.generate(u, rb);
+    assert.equal(pw.length, 8); assert.match(pw, /^[a-z2-9]{8}$/); assert.deepEqual(P.problems(pw, u), []); assert.deepEqual(passwordProblems(pw, u), []);
+    assert.ok(!/[0o1li]/.test(pw)); seen.add(pw);
   }
-  assert.equal(seen.size, 1000);
+  assert.ok(seen.size >= 999);
 });
 
 const ok = results.filter((r) => r[1]).length;

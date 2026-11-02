@@ -14,21 +14,21 @@
   var S = { session: null, me: null, tab: 'users', sub: 'pw', sheet: null, users: null, hq: {}, br: {}, perms: [], orgs: [], auditKind: '', vt: 0, pm: null };
   var ROLE = { admin: '관리자', branch: '피지원지사', equip: '지원장비', hq: '지역본부', viewer: '보기 전용' };
   var can = function (p) { return A.can(S.me, p); };
-  // 추천 산하기관 아이디(사용자 결정 2026-10-04): 지원장비 = 출발 기관별(지역 이름, 4글자면 앞 2글자 + gigyae), 지역본부 = 본부별 9개(지역 이름 전체)
+  // 추천 산하기관 아이디(2026-11-02 사용자 결정으로 짧게 바꿈, 마이그레이션 52): 기계화부(지원장비) = exm01~04, 지역본부 = ex + 본부 글자(a~i) + 00. 지사 = ex + 본부 글자 + 지사 순서 두 자리
   var PRESET = [
-    { username: 'exseoulgigyae', display_name: '서울경기 지원장비', role: 'equip', org: '서울경기', sort: 10 },
-    { username: 'exchungbukgigyae', display_name: '충북 지원장비', role: 'equip', org: '충북', sort: 20 },
-    { username: 'exjeonbukgigyae', display_name: '전북 지원장비', role: 'equip', org: '전북', sort: 30 },
-    { username: 'exdaegugigyae', display_name: '대구경북 지원장비', role: 'equip', org: '대구경북', sort: 40 },
-    { username: 'exsudogwon', display_name: '수도권본부', role: 'hq', hq_id: 'H01' },
-    { username: 'exseoulgyeonggi', display_name: '서울경기본부', role: 'hq', hq_id: 'H02' },
-    { username: 'exgangwon', display_name: '강원본부', role: 'hq', hq_id: 'H03' },
-    { username: 'exchungbuk', display_name: '충북본부', role: 'hq', hq_id: 'H04' },
-    { username: 'exdaejeonchungnam', display_name: '대전충남본부', role: 'hq', hq_id: 'H05' },
-    { username: 'exjeonbuk', display_name: '전북본부', role: 'hq', hq_id: 'H06' },
-    { username: 'exgwangjujeonnam', display_name: '광주전남본부', role: 'hq', hq_id: 'H07' },
-    { username: 'exdaegugyeongbuk', display_name: '대구경북본부', role: 'hq', hq_id: 'H08' },
-    { username: 'exbusangyeongnam', display_name: '부산경남본부', role: 'hq', hq_id: 'H09' }
+    { username: 'exm01', display_name: '서울경기 지원장비', role: 'equip', org: '서울경기', sort: 10 },
+    { username: 'exm02', display_name: '충북 지원장비', role: 'equip', org: '충북', sort: 20 },
+    { username: 'exm03', display_name: '전북 지원장비', role: 'equip', org: '전북', sort: 30 },
+    { username: 'exm04', display_name: '대구경북 지원장비', role: 'equip', org: '대구경북', sort: 40 },
+    { username: 'exa00', display_name: '수도권본부', role: 'hq', hq_id: 'H01' },
+    { username: 'exb00', display_name: '서울경기본부', role: 'hq', hq_id: 'H02' },
+    { username: 'exc00', display_name: '강원본부', role: 'hq', hq_id: 'H03' },
+    { username: 'exd00', display_name: '충북본부', role: 'hq', hq_id: 'H04' },
+    { username: 'exe00', display_name: '대전충남본부', role: 'hq', hq_id: 'H05' },
+    { username: 'exf00', display_name: '전북본부', role: 'hq', hq_id: 'H06' },
+    { username: 'exg00', display_name: '광주전남본부', role: 'hq', hq_id: 'H07' },
+    { username: 'exh00', display_name: '대구경북본부', role: 'hq', hq_id: 'H08' },
+    { username: 'exi00', display_name: '부산경남본부', role: 'hq', hq_id: 'H09' }
   ];
 
   function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -84,11 +84,11 @@
       '<ul class="checklist" id="chk"></ul>' +
       '<label>새 비밀번호 확인<input id="n2" type="password" autocomplete="new-password"></label>' +
       '<button class="primary" id="go" type="button">변경</button> ' + (forced ? '' : '<button id="bk" type="button">돌아가기</button>') + '</div>';
-    var rules = [['12자 이상', /^[\s\S]{12,}$/], ['소문자', /[a-z]/], ['대문자', /[A-Z]/], ['숫자', /[0-9]/], ['기호(!@#$% 등)', null]];
+    var rules = [['6자 이상', /^[\s\S]{6,}$/]];                                   // 2026-11-02: 6자 이상이면 아무 글자
     function check() {
       var pw = val('n'), prob = P.problems(pw, u);
-      $('chk').innerHTML = rules.map(function (r, i) { var pass = i === 4 ? prob.indexOf('기호 필요') < 0 && pw.length > 0 : r[1].test(pw); return '<li class="' + (pass ? 'pass' : '') + '">' + r[0] + '</li>'; }).join('') +
-        (prob.filter(function (x) { return !/12자|소문자|대문자|숫자|기호/.test(x); }).map(function (x) { return '<li style="color:#b3261e">' + esc(x) + '</li>'; }).join(''));
+      $('chk').innerHTML = rules.map(function (r) { return '<li class="' + (r[1].test(pw) ? 'pass' : '') + '">' + r[0] + '</li>'; }).join('') +
+        (prob.filter(function (x) { return !/6자/.test(x) && x !== '비밀번호를 입력하세요'; }).map(function (x) { return '<li style="color:#b3261e">' + esc(x) + '</li>'; }).join(''));
     }
     $('n').oninput = check; check();
     if (!forced) $('bk').onclick = viewHome;
@@ -409,7 +409,7 @@
     sub().innerHTML = '<div class="card"><h2>추천 산하기관 아이디</h2><div id="pm"></div><div class="tw" id="preset">불러오는 중…</div><p><button type="button" class="primary" id="mkpreset" disabled>없는 아이디 만들기</button></p></div>' +
       '<div class="card"><h2>새 아이디 하나 만들기</h2><div id="m"></div>' +
       '<div class="form2"><label>역할<select id="nrole"><option value="equip">지원장비(출발 기관)</option><option value="hq">지역본부</option><option value="viewer">보기 전용</option><option value="branch">피지원지사</option></select></label>' +
-      '<label>소속<select id="nwhere"></select></label><label>아이디<input id="nuser" autocapitalize="none" spellcheck="false" placeholder="영문 소문자·숫자 (예: exseoulgigyae)"></label><label>이름<input id="nname" placeholder="예: 서울경기 지원장비"></label>' +
+      '<label>소속<select id="nwhere"></select></label><label>아이디<input id="nuser" autocapitalize="none" spellcheck="false" placeholder="영문 소문자·숫자 (예: exd03)"></label><label>이름<input id="nname" placeholder="예: 서울경기 지원장비"></label>' +
       '<label>위치(목록 순서)<select id="npos"></select><span class="hint" id="nposHint"></span></label></div><div id="nperms" class="permpick"></div><p><button type="button" class="primary" id="nmake">만들기</button></p></div>';
     loadDirectory().then(function () {
       if (vt !== S.vt) return;

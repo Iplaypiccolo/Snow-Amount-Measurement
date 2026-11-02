@@ -2,7 +2,7 @@
 // account-admin — 계정 발급·초기화·비활성화 (관리자 전용)
 //  * 순수 로직만 들어 있고, DB·Auth 는 deps 로 주입받습니다 → Cloudflare/Supabase 없이 Node 로 시험 가능 (tests/test_account_admin.mjs)
 //  * 인증: ① 관리자 로그인 토큰(JWT) 또는 ② 일회용 시작 토큰(x-bootstrap-token, 15분 안에 한 번만) — ②는 최초 대량 발급용
-//  * 임시 비밀번호는 16자 무작위. 시작 토큰으로 호출하면 비밀번호를 응답에 싣지 않고 비공개 저장소(credentials)의 CSV 파일에만 넣습니다.
+//  * 임시 비밀번호는 8자 무작위(소문자+숫자, 2026-11-02). 시작 토큰으로 호출하면 비밀번호를 응답에 싣지 않고 비공개 저장소(credentials)의 CSV 파일에만 넣습니다.
 // ============================================================
 export const EMAIL_DOMAIN = 'snow-support.invalid';
 export const USERNAME_RE = /^[a-z0-9._-]{3,32}$/;
@@ -10,36 +10,17 @@ export const USERNAME_RE = /^[a-z0-9._-]{3,32}$/;
 //  branch 지사(소속 지사) / equip 지원장비(출발 기관) / hq 지역본부(본부) / viewer 보기 전용
 export const ROLES = ['branch', 'equip', 'hq', 'viewer'];
 const MAX_SORT = 100000;
-// 프로젝트의 비밀번호 규칙(소문자·대문자·숫자·기호를 각각 1개 이상)을 항상 만족하도록, 종류별로 하나씩 넣고 나머지를 채웁니다.
-// 헷갈리는 글자(0 O 1 l I)와 CSV·엑셀에서 문제가 되는 기호(쉼표 따옴표 역슬래시 괄호 등)는 뺍니다.
-const LOWER = 'abcdefghijkmnpqrstuvwxyz', UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ', DIGIT = '23456789', SYMBOL = '!#$%&*+-=?@';
-const ALL = LOWER + UPPER + DIGIT + SYMBOL;
 const MAX_USERS = 100, MAX_BODY = 65536, CONCURRENCY = 6;
 
-/* ---------- 비밀번호 규칙: 프로젝트(Supabase Auth) 설정과 같고, 약한 패턴을 더 막음. admin/admin.js 의 화면 검사와 똑같이 맞춰져 있음(tests 가 비교) ---------- */
+/* ---------- 비밀번호 규칙: admin/policy.js 의 화면 검사와 똑같이 맞춰져 있음(tests 가 비교). Supabase Auth 설정(대시보드)도 6자·문자 조건 없음으로 맞출 것 ---------- */
 export const PW_SYMBOLS = ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '-', '=', '[', ']', '{', '}', ';', "'", '\\', ':', '"', '|', '<', '>', '?', ',', '.', '/', '`', '~'].join('');   // Supabase Auth 가 "기호"로 인정하는 글자
-const hasRun = (pw) => {                           // abcd / 1234 / dcba / 4321 처럼 이어지는 글자 4개 이상
-  const c = [...pw.toLowerCase()].map((x) => x.codePointAt(0));
-  for (let i = 0; i + 3 < c.length; i++) {
-    const d = c[i + 1] - c[i];
-    if ((d === 1 || d === -1) && c[i + 2] - c[i + 1] === d && c[i + 3] - c[i + 2] === d) return true;
-  }
-  return false;
-};
 export function passwordProblems(pw, username) {
+  // 2026-11-02 사용자 결정: 간단하게 — 6자 이상이면 아무 글자. 공백·제어 문자(엑셀에서 붙여넣다 딸려 오는 빈칸 등)와 72바이트 초과만 막음
   if (typeof pw !== 'string' || !pw) return ['비밀번호를 입력하세요'];
-  const p = [], low = pw.toLowerCase(), u = String(username || '').toLowerCase(), core = u.replace(/^ex/, '');
-  if ([...pw].length < 12) p.push('12자 이상');
+  const p = [];
+  if ([...pw].length < 6) p.push('6자 이상');
   if (new TextEncoder().encode(pw).length > 72) p.push('72바이트 이하(영문 72자)');
-  if (!/[a-z]/.test(pw)) p.push('소문자 필요');
-  if (!/[A-Z]/.test(pw)) p.push('대문자 필요');
-  if (!/[0-9]/.test(pw)) p.push('숫자 필요');
-  if (![...pw].some((c) => PW_SYMBOLS.includes(c))) p.push('기호 필요');
   if (/[\s\u0000-\u001f]/.test(pw)) p.push('공백·제어 문자 불가');
-  if (u && low.includes(u)) p.push('아이디 포함 불가');
-  else if (core.length >= 4 && low.includes(core)) p.push('지사 이름 포함 불가');
-  if (/(.)\1{3,}/.test(pw)) p.push('같은 글자 4번 이상 반복 불가');
-  if (hasRun(pw)) p.push('이어지는 글자(abcd·1234) 4개 이상 불가');
   return p;
 }
 
@@ -49,13 +30,12 @@ function randInt(randomBytes, n) {                 // 0..n-1, 치우침 없는 �
   const limit = 256 - (256 % n);
   for (;;) for (const b of randomBytes(32)) if (b < limit) return b % n;
 }
-export function genPassword(randomBytes, len = 16) {
-  const pick = (set) => set[randInt(randomBytes, set.length)];
-  const chars = [pick(LOWER), pick(UPPER), pick(DIGIT), pick(SYMBOL)];
-  while (chars.length < len) chars.push(pick(ALL));
-  for (let i = chars.length - 1; i > 0; i--) { const j = randInt(randomBytes, i + 1); [chars[i], chars[j]] = [chars[j], chars[i]]; }   // 섞기
-  if (SYMBOL.includes(chars[0])) { const k = chars.findIndex((c) => !SYMBOL.includes(c)); [chars[0], chars[k]] = [chars[k], chars[0]]; }       // 엑셀이 수식으로 읽지 않도록 첫 글자는 기호가 아니게
-  return chars.join('');
+export function genPassword(randomBytes, len = 8) {      // 임시 비밀번호: 영문 소문자+숫자 8자(헷갈리는 0 o 1 l i 뺌, 2026-11-02 간단하게)
+  const set = 'abcdefghjkmnpqrstuvwxyz23456789';
+  for (;;) {
+    const pw = Array.from({ length: len }, () => set[randInt(randomBytes, set.length)]).join('');
+    if (/[a-z]/.test(pw) && /[0-9]/.test(pw)) return pw;               // 글자·숫자가 섞이게
+  }
 }
 
 export function toCsv(rows) {
