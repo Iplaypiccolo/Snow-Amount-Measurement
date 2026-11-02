@@ -44,6 +44,12 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 표 칸 폭 고정
+- 사용자: "지사별 요청·편성, 기관별 장비, 기관별 배정, 이동 현황 표가 글자 수에 따라 들쭉날쭉 — 합리적인 크기로 고정, 지원일 칸은 늘어나면 잘리지 않는 선에서 줄어도 됨".
+- `equipment/js/app.js` `fixCols(표, 폭 목록)`: colgroup + `table-layout: fixed`. null = 지원일 칸(남는 폭 나눔, 최소 `DAY_MIN` 176px). `equipment/css/style.css`: `.fixcols`, 칸 안 드롭다운이 칸 폭을 따라감. 칸(id) 변경 없음 → UI_VERSION 그대로.
+- 시험 `t_fixed_columns`(계정·입력값·날짜가 바뀌어도 같은 폭, 지원일 6·10칸, 넘침 없음).
+— ✍ Claude Code 작성
+
 ### 2026-11-02 · 커밋 (이 기록 커밋 하나) · 지역본부 장비의 피지원 지사는 관리자만 (migration 55)
 - 사용자: "지사는 지원일자별 선택을 못 하게, 기계화부만 선택하고 지사는 관리자가 정해 주게". 사용자 확인 뒤 실서버 적용, 되돌림 시험 15/15.
 - `supabase/migrations/20261102_55_pool_route_admin.sql`: `private.vehicle_routes_guard` 에 한 줄(시각만 고침은 그 앞에서 통과). 시험 `supabase/tests/pool_route_admin_test.sql`, `route_alldays_test.sql` 기대값 갱신.

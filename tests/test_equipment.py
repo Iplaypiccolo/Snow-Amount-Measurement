@@ -1102,6 +1102,39 @@ def t_branch_compact(p):
     check(ev(p, "document.documentElement.scrollWidth <= 376"), "휴대폰: 화면 자체는 옆으로 안 넘침")
     p.set_viewport_size({"width": 1440, "height": 1000})
 
+def t_fixed_columns(p):
+    """2026-11-03: 표 칸 폭은 글자 수·계정·입력값에 따라 변하지 않음. 지원일 칸만 칸 수가 늘면 줄어들고, 글자가 잘리지 않는 최소 폭 아래로는 안 줄어듦(옆으로 밀어서 봄)"""
+    cols = lambda tid: ev(p, f"[...document.querySelector('#{tid}').querySelectorAll('colgroup col')].map(c => Math.round(c.getBoundingClientRect().width * 2) / 2)")
+    widths = lambda tid: ev(p, f"""(() => {{ const r = [...document.querySelectorAll('#{tid} tr')].filter(x => x.cells.length).sort((a, b) => b.cells.length - a.cells.length)[0]; return [...r.cells].map(c => Math.round(c.getBoundingClientRect().width)); }})()""")
+    over = lambda tid: ev(p, f"[...document.querySelectorAll('#{tid} th, #{tid} td')].filter(c => c.scrollWidth > c.clientWidth + 1).map(c => c.textContent.trim().slice(0, 20) + ' ' + c.scrollWidth + '>' + c.clientWidth).slice(0, 5)")
+    base = {}
+    for tb, tid in (("move", "matrix"), ("branch", "branchTable"), ("alloc", "allocTable")):
+        tab(p, tb); base[tid] = widths(tid); check(ev(p, f"getComputedStyle(document.querySelector('#{tid}')).tableLayout") == "fixed", f"{tid}: 칸 폭 고정")
+    for u in ("hq-gw", "br1", "eq-sg", "viewer"):                     # 계정이 바뀌어도 같은 폭(예전: 지사 칸 72~121, 도착 요청 133~290)
+        as_user(p, u)
+        for tb, tid in (("move", "matrix"), ("branch", "branchTable"), ("alloc", "allocTable")):
+            tab(p, tb); check(widths(tid) == base[tid], f"{u} {tid}: {widths(tid)} / {base[tid]}"); check(not over(tid), f"{u} {tid} 넘침: {over(tid)}")
+        tab(p, "fleet"); check(not over("eqTable"), f"{u} 기관별 장비 넘침: {over('eqTable')}")
+    as_user(p, "admin1"); tab(p, "branch"); ch = bid(p, "춘천"); w0 = widths("branchTable")     # 입력해도 같은 폭(직접입력·큰 숫자·날짜)
+    p.check(f"input[data-rq={ch}][data-f=wx_manual]"); p.wait_for_timeout(200); i = f"[data-rq={ch}][data-f=req_truck]"; p.fill(i, "999"); p.press(i, "Tab"); p.wait_for_timeout(150)
+    p.fill(f"[data-arr={ch}][data-part=d]", day(p, 0)); p.dispatch_event(f"[data-arr={ch}][data-part=d]", "change"); p.wait_for_timeout(200)
+    check(widths("branchTable") == w0 and not over("branchTable"), f"입력해도 같은 폭: {w0} → {widths('branchTable')} {over('branchTable')}")
+    ev(p, "(S.rdraft.clear(), refresh())"); p.wait_for_timeout(150)
+    # 기관별 장비·강원본부 지원장비: 지원일 칸이 늘면 지원일 칸만 줄고, 최소 폭(DAY_MIN)에서 멈춤
+    for tb, tid, sel, fixed in (("fleet", "eqTable", "#colsSel", 4), ("gwteam", "teamTable", "#colsSelTeam", 2)):
+        tab(p, tb); w4 = widths(tid); p.select_option(sel, "6"); p.wait_for_timeout(300); w6 = widths(tid)
+        check(w6[:fixed] == w4[:fixed] and w6[fixed] < w4[fixed], f"{tid}: 지원일 6칸은 지원일 칸만 줄어듦 {w4} → {w6}")
+        p.select_option(sel, "10"); p.wait_for_timeout(300); w10 = widths(tid)
+        check(w10[:fixed] == w4[:fixed] and min(w10[fixed:fixed + 10]) >= ev(p, "DAY_MIN") - 1, f"{tid}: 지원일 10칸도 최소 폭 유지 {w10}")
+        check(not over(tid), f"{tid}: 지원일 10칸에서 넘침 {over(tid)}")
+        small = ev(p, f"Math.min(...[...document.querySelectorAll('#{tid} .slot select.ci')].filter(x => x.offsetParent).map(x => x.getBoundingClientRect().width), 999)")
+        check(small >= 76, f"{tid}: 드롭다운이 글자보다 좁아지지 않음 {small}")
+        check(ev(p, f"document.querySelector('#{tid}').parentElement.scrollWidth > document.querySelector('#{tid}').parentElement.clientWidth"), f"{tid}: 10칸은 옆으로 밀어서 봄")
+        p.select_option(sel, "4"); p.wait_for_timeout(300)
+    # 이동 현황: 칸 안 이동 글자가 길어도 칸은 그대로(줄바꿈)
+    tab(p, "move"); w0 = widths("matrix"); go_date(p, day(p, 2)); check(not over("matrix"), f"이동 글자 넘침: {over('matrix')}"); check(widths("matrix") == w0, f"날짜가 바뀌어도 같은 폭: {w0} {widths('matrix')}")
+    go_date(p, day(p, 0))
+
 def t_branch_saved(p):
     """(2026-10-15, 마이그레이션 46) 지사·본부는 요청·지원 가능이 0이어도 [저장] → '저장 완료'(타지사 지원 가능 다음 칸). 관리자 저장·확정은 남기지 않음.
     보기 버튼은 처음에 아무것도 안 눌림, [저장 안 한 지사만]은 맨 오른쪽"""
@@ -1304,7 +1337,7 @@ def t_route_perm_admin_only(p):
     check("권한이 없습니다" in toast(p), "화면을 우회해 다른 기관 경로를 보내도 거절: " + toast(p))
     as_user(p, "admin1"); tab(p, "fleet"); check(p.locator("#eqTable select[data-rv]").count() > 0 and p.locator("#day1In").count() == 1, "관리자는 지원일 칸 전부")
 
-TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,

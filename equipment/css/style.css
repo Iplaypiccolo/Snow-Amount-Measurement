@@ -787,16 +787,12 @@ table.eq.team { min-width: 720px; }
 #branchTable.mine-right tbody tr:last-child td.adm, #branchTable.mine-left tbody tr:last-child td:not(.adm):not(.blk-gap) { border-bottom: 2px solid var(--mine); }
 .my-blk { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; }
 .my-blk i { width: 12px; height: 12px; border-radius: 3px; background: color-mix(in srgb, var(--mine) 20%, var(--surface)); border: 2px solid var(--mine); }
-/* 표를 나누며 넓어진 만큼 줄임: 1366·1400 화면에서 확정 칸까지 한 화면에 */
-@media (max-width: 1500px) {
-  #branchTable .arr input.ci { width: 108px; } #branchTable .arr select.ci { width: 46px; }
-  #branchTable th.svh { width: 70px; min-width: 70px; }
-  #branchTable th.c-wt { min-width: 93px; } #branchTable .wef { max-width: 85px; } #branchTable .hm select { width: 36px; }
-  #branchTable th.c-sn { min-width: 50px; } #branchTable input.ci.num.wxn { width: 40px; }
-  #branchTable input.num { width: 44px; -moz-appearance: textfield; appearance: textfield; }   /* 좁아지면 칸 가운데를 눌러도 위아래 화살표에 닿아 값이 바뀌므로 화살표를 없앰 */
-  #branchTable input.num::-webkit-outer-spin-button, #branchTable input.num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-  #branchTable .arr select.ci { padding-left: 3px; padding-right: 0; }
-}
+/* 입력칸 크기(칸 폭 고정에 맞춤, 2026-11-03). 숫자 칸은 좁아서 가운데를 눌러도 위아래 화살표에 닿아 값이 바뀌므로 화살표를 없앰 */
+#branchTable .arr input.ci { width: 108px; } #branchTable .arr select.ci { width: 46px; padding-left: 3px; padding-right: 0; }
+#branchTable .wef { max-width: 80px; } #branchTable .hm select { width: 36px; }
+#branchTable input.ci.num.wxn { width: 40px; }
+#branchTable input.num { width: 44px; -moz-appearance: textfield; appearance: textfield; }
+#branchTable input.num::-webkit-outer-spin-button, #branchTable input.num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
 /* 지사별 요청·편성: 한 화면에 더 많은 지사(2026-11-02 사용자 요청 — 글자가 작아져도 좋음). 표 창 높이는 app.js fitBranch */
 main:has(#panel-branch:not([hidden])) { padding-top: 8px; padding-bottom: 0; }
@@ -829,3 +825,23 @@ main:has(#panel-branch:not([hidden])) { padding-top: 8px; padding-bottom: 0; }
   #branchCtl .tb-label, #branchCtl .my-blk { display: none; }   /* 파란 표는 색으로 알 수 있음 */
   #branchCtl .tb-right { order: -1; margin-left: 0; }           /* '저장하지 않은 지사 N곳'이 밀려나지 않게 맨 앞 */
 }
+
+/* 표 칸 폭 고정(2026-11-03 사용자 요청): 폭은 app.js fixCols. 긴 글자는 칸을 늘리지 않고 줄을 바꿈 */
+table.fixcols { table-layout: fixed; width: 100%; }
+table.fixcols th, table.fixcols td { overflow-wrap: anywhere; }
+#branchTable.fixcols thead th, #branchTable.fixcols td.l { white-space: normal; }
+#branchTable.fixcols td.l .tag { white-space: nowrap; }
+#allocTable.fixcols .tag { white-space: normal; }
+.matrix.fixcols th, .matrix.fixcols td { padding-left: 4px; padding-right: 4px; }
+.matrix.fixcols .mvn { white-space: normal; }
+/* 기관별 장비·강원본부 지원장비: 칸 안 드롭다운이 칸 폭을 따라감(지원일 칸이 많아지면 함께 줄어듦, 글자가 잘리지 않는 최소 폭까지) */
+.eq.fixcols th, .eq.fixcols td { padding-left: 6px; padding-right: 6px; }
+.eq.fixcols th { white-space: normal; }
+.eq.fixcols select[data-vs].ci { width: 100%; min-width: 0; }
+.eq.fixcols .slot { min-width: 0; }
+.eq.fixcols .slot-x { min-width: 0; }
+.eq.fixcols .slot select.ci { flex: 1 1 0; width: auto; min-width: 76px; }
+.eq.fixcols .slot input.ci.tm { flex: none; width: 52px; }
+.eq.fixcols .slot .slot-x .btn.sm { flex: none; padding-left: 6px; padding-right: 6px; }
+.eq.fixcols th.dayh input.ci { width: 100%; max-width: 130px; }
+.eq.fixcols td.vact .btn { padding-left: 6px; padding-right: 6px; }

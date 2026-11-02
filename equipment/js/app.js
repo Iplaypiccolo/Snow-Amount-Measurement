@@ -565,6 +565,7 @@ function renderMatrix() {
     `<tr>${cols.map(o => colTypes(o).map((t, k) => `<th scope="col" class="${k ? "c2" : "c1"}${o == null ? " tot" : ""}${o === TEAM ? " tm" : ""}">${t}</th>`).join("")).join("")}</tr></thead>` +
     `<tbody>${body || `<tr><td class="empty" colspan="${cols.reduce((n, o) => n + colTypes(o).length, 0) + 2}">${esc(fmtMD(S.date))}에 이동하는 장비가 없습니다.</td></tr>`}</tbody>` +
     `<tfoot><tr><th scope="row" colspan="2">합계</th>${cells(null, 'data-mall="1"')}</tr></tfoot>`;
+  fixCols($("matrix"), [84, 92, ...cols.flatMap(o => colTypes(o).map(() => o === TEAM ? 110 : 76))]);
   stickHead($("matrix"));
   const tr = moves.filter(m => m.v.type === "제설차").length, bl = moves.filter(m => m.v.type === "제설기").length;
   $("dateText").textContent = fmtMD(S.date); $("dateInput").value = S.date;      // 제목의 큰 날짜(누르면 달력)
@@ -700,6 +701,7 @@ function renderFleet() {
     (i === 0 && rt ? `<input class="ci" type="date" id="day1In" value="${esc(d)}"${r ? ` min="${esc(r.start_date)}"` : ""} aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동, 기준일자보다 앞은 안 됨)">` : esc(fmtMD(d))) + `</span></th>`).join("");
   const rows = fleetRows().map(v => fleetRowHtml(v, dates, choices, all)).join("");
   $("eqTable").innerHTML = `<thead><tr><th>도공번호</th><th>장비</th><th>블로워</th><th>지원 여부</th>${head}${actCol() ? `<th class="unh">${canAllVeh() ? unhideHead() : ""}</th>` : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${5 + dates.length}" class="empty">${S.fleetGo ? "지원 여부가 '지원'인 장비가 없습니다." : "장비가 없습니다."}${addRow && !S.fleetGo ? " 위의 [장비 추가]로 넣으세요." : ""}</td></tr>`}</tbody>`;
+  fixCols($("eqTable"), [146, 84, 92, 140, ...dates.map(() => null), ...(actCol() ? [112] : [])]);
   placeUnhide();
 }
 const myPoolN = () => canPoolAdd() ? poolVehs(S.me.branch_id).length : 0;            // 지사 계정: 이 기준일자에 등록한 자기 지사 장비 수
@@ -897,6 +899,7 @@ function renderTeam() {
   const head = dates.map((d, i) => `<th class="dayh">지원일 ${i + 1}<span class="sub">` +
     (i === 0 && ed ? `<input class="ci" type="date" id="day1InTeam" value="${esc(d)}"${r ? ` min="${esc(r.start_date)}"` : ""} aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동, 기준일자보다 앞은 안 됨)">` : esc(fmtMD(d))) + `</span></th>`).join("");
   $("teamTable").innerHTML = `<thead><tr><th>장비</th><th>지원 여부</th>${head}</tr></thead><tbody>${S.team.map(v => teamRowHtml(v, dates)).join("") || `<tr><td colspan="${2 + dates.length}" class="empty">장비가 없습니다.</td></tr>`}</tbody>`;
+  fixCols($("teamTable"), [130, 140, ...dates.map(() => null)]);
 }
 function teamRowHtml(v, dates) {
   const ed = canTeam(), r = curRound(), st = r ? stOf(r.id, v.id).status : "", [cls, label] = STATUS[st] || STATUS[""], id = esc(v.id);
@@ -1013,6 +1016,14 @@ function afterReq(id) {          // 지사 요청 칸을 고친 뒤: 그 줄 표
   afterAnyChange();
 }
 // 제목 줄이 두 줄인 표: 스크롤해도 두 줄이 겹치지 않게, 둘째 줄은 첫 줄 높이만큼 아래에 붙임(높이는 화면 폭에 따라 달라서 매번 잼)
+// 표 칸 폭 고정(2026-11-03 사용자 요청 — 글자 수에 따라 들쭉날쭉하지 않게). cols = 칸마다 폭(px), null = 지원일 칸(남는 폭을 똑같이 나눠 갖고 DAY_MIN 아래로는 안 줄어듦)
+// 화면이 합계보다 넓으면 같은 비율로 넓어지고, 좁으면 옆으로 밀어서 봄. 계정·자료와 상관없이 같은 폭
+const DAY_MIN = 176;
+function fixCols(table, cols) {
+  table.classList.add("fixcols");
+  table.style.minWidth = cols.reduce((n, w) => n + (w == null ? DAY_MIN : w), 0) + "px";
+  table.insertAdjacentHTML("afterbegin", `<colgroup>${cols.map(w => w == null ? "<col>" : `<col style="width:${w}px">`).join("")}</colgroup>`);
+}
 function stickHead(table) {
   if (!table || !table.tHead || !table.offsetParent) return;
   let top = 0;
@@ -1078,6 +1089,7 @@ function renderBranch() {
     });
   });
   $("branchTable").innerHTML = h + "</tbody>";
+  fixCols($("branchTable"), [98, 50, 50, 36, 50, 92, 88, 88, 54, 52, 52, 238, 56, 70, 10, 52, 52, 136]);
   $("branchTable").classList.toggle("mine-right", myBlk === "right"); $("branchTable").classList.toggle("mine-left", myBlk === "left");
   stickHead($("branchTable")); fitBranch();
 }
@@ -1203,7 +1215,7 @@ function renderAlloc() {
   banner("perm-alloc");
   $("allocRound").innerHTML = roundSel("roundSelAlloc") + `<span class="hint">${r ? "편성이 확정된 지사에 어느 기관이 제설차·제설기를 몇 대 보낼지 정합니다. 기관(기계화부)은 이 대수 안에서 지원일 1의 장비별 지사를 고릅니다(기관별 장비). 지역본부 장비는 관리자가 장비별 지사를 정하고, 여기 대수를 넘기면 '배정 초과'로 표시됩니다. 이동정비차는 배정하지 않습니다." : "기준일자가 없습니다."}</span>`;
   const rows = r ? S.order.filter(b => isFixed(b.id) || AO.some(o => { const a = aval(o, b.id); return a.truck + a.blower > 0; })) : [];
-  if (!rows.length) { $("allocTable").innerHTML = `<tbody><tr><td class="empty">${r ? "편성이 확정된 지사가 없습니다. 지사별 요청·편성에서 편성 대수를 넣고 [확정]하면 여기에 나옵니다." : "기준일자가 없습니다."}</td></tr></tbody>`; return; }
+  if (!rows.length) { $("allocTable").classList.remove("fixcols"); $("allocTable").style.minWidth = ""; $("allocTable").innerHTML = `<tbody><tr><td class="empty">${r ? "편성이 확정된 지사가 없습니다. 지사별 요청·편성에서 편성 대수를 넣고 [확정]하면 여기에 나옵니다." : "기준일자가 없습니다."}</td></tr></tbody>`; return; }
   const sum = (bid, f) => AO.reduce((n, o) => n + (aval(o, bid)[f] || 0), 0), osum = (o, f) => rows.reduce((n, b) => n + (aval(o, b.id)[f] || 0), 0);
   const availN = (o, t) => S.vehicles.filter(v => v.org === o && v.type === t && shownIn(v, r) && stOf(r.id, v.id).status === "O").length;
   const poolCap = offerBranches().reduce((n, b) => n + offerOf(b.id), 0);                    // 지역본부의 '지원 가능' = 확정된 타지사 지원 가능 대수 합계
@@ -1224,6 +1236,7 @@ function renderAlloc() {
     `<tr class="al-av"><th class="l">배정 / 지원 가능</th>${S.orgs.map(o => avc(o, "truck", "제설차") + avc(o, "blower", "제설기")).join("")}${avc(POOL, "truck", "제설차")}<td></td><td></td></tr>` +
     `<tr class="al-done"><th class="l" title="기계화부 장비는 기계화부가, 지역본부 장비는 관리자가 지원일 1의 지사를 정한 대수">장비 지정</th>${S.orgs.map(o => done(o, true)).join("")}${done(POOL, false)}<td></td><td></td></tr></tfoot>`;
   $("allocTable").innerHTML = head + `<tbody>${body}</tbody>` + foot;
+  fixCols($("allocTable"), [150, ...S.orgs.flatMap(() => [88, 88]), 104, 76, 76]);
   stickHead($("allocTable"));
 }
 async function saveAlloc() {
