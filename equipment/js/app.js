@@ -24,7 +24,7 @@
    ============================================================ */
 // 배포 직후 브라우저에 예전 index.html(최대 10분 저장)이 남아 있으면 새 app.js 와 화면 틀이 맞지 않아 탭이 비어 보임
 // (GitHub Pages 는 ?v= 꼬리표와 관계없이 최신 파일을 줌). 판번호가 다르면 주소를 바꿔 한 번만 새로 받는다.
-const UI_VERSION = "2026110201";
+const UI_VERSION = "2026110202";
 (() => {
   const m = document.querySelector('meta[name="ui-version"]');
   if ((m && m.content) === UI_VERSION) return;
@@ -569,7 +569,9 @@ function renderMatrix() {
   const tr = moves.filter(m => m.v.type === "제설차").length, bl = moves.filter(m => m.v.type === "제설기").length;
   $("dateText").textContent = fmtMD(S.date); $("dateInput").value = S.date;      // 제목의 큰 날짜(누르면 달력)
   $("summaryNote").innerHTML = `<b>제설차 ${tr}대</b> · <b>제설기 ${bl}대</b> · <span id="refTime">${esc(refTimeText())}</span>` +
-    `<label class="team-tg" title="끄면 강원 신속대응팀이 표의 열·합계와 아래 지사 카드에서 모두 빠집니다"><input type="checkbox" id="showTeam"${S.showTeam ? " checked" : ""}> ${TEAM}</label>`;
+    `<label class="team-tg" title="끄면 강원 신속대응팀이 표의 열·합계와 아래 지사 카드에서 모두 빠집니다"><input type="checkbox" id="showTeam"${S.showTeam ? " checked" : ""}> ${TEAM}</label>` +
+    // 1쪽 보고서(2026-11-02, report.js): 미리 보기 / 워드(.docx) 받기 — 이 날짜·이 표와 같은 자료
+    `<span class="rpt-btns"><button type="button" class="btn sm" id="rptView" title="이 날짜 자료를 '신속대응팀 제설장비 지원 현황' 1쪽 양식으로 봅니다">보고서 보기</button><button type="button" class="btn sm" id="rptDoc" title="같은 1쪽 보고서를 워드(.docx) 파일로 받습니다">Word 받기</button></span>`;
 }
 // 이동 현황 표의 숫자 → 아래 세부내역에서 그 줄(지사 카드·본부 묶음·해당 지원기관·장비 종류)로 스크롤하고 잠깐 색으로 표시
 let flashTimer;
@@ -1348,7 +1350,7 @@ async function setZone(code, include) {   // include: true 더함 / false 자동
   const z = await Api.zoneData(); if (z.ok) { S.zdata = z; renderZones(); renderWarnNow(); }
   await Promise.all([loadWarn(), loadAudit()]); paintWarn(); renderLog(); if (!$("panel-move").hidden) renderDest(); toast(`${bn(bid)} 지사 특보구역을 바꿨습니다`);
 }
-function closeSheet() { sheet.hidden = true; backdrop.hidden = true; hideTip(); if (lastFocus) lastFocus.focus(); lastFocus = null; }
+function closeSheet() { sheet.classList.remove("wide"); sheet.hidden = true; backdrop.hidden = true; hideTip(); if (lastFocus) lastFocus.focus(); lastFocus = null; }
 backdrop.onclick = closeSheet;
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !sheet.hidden) closeSheet(); });
 

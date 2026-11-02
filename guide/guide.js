@@ -215,6 +215,7 @@
       E('move', '날짜', [both(['#prevDay', '#dateText', '#nextDay'])], '‹ › 하루씩 이동 · 날짜 클릭 → 달력'),
       E('move', '요약 · 기준 시각', ['#summaryNote'], '그날 지원 대수 · 기준 시각', ['최신 자료는 메뉴 줄 오른쪽 [새로고침]']),
       E('move', '강원 신속대응팀', ['.team-tg'], '체크 해제 → 표 · 카드에서 빠짐'),
+      E('move', '1쪽 보고서', [both(['#rptView', '#rptDoc'])], '[보고서 보기] = 이 날짜를 1쪽 양식으로 · [Word 받기] = 워드 파일', ['도착일시 = 그 지사에 가장 먼저 도착하는 시각']),
       E('move', '이동 표', ['#matrix'], '줄 = 피지원 지사 · 열 = 지원기관', ['칸 숫자 = 대수 (제설차 · 제설기)']),
       E('move', '숫자', ['#matrix button.mnum'], '칸 숫자 = 그 기관이 그 지사에 보낸 대수', ['클릭 → 아래 지사 카드로']),
       E('move', '숫자 클릭', ['#destList .hl-card'], '그 지사 카드로 이동 · 해당 장비 강조', [], { demo: function (d) { if (!d.querySelector('#destList .hl-card')) tap(q1(d, '#matrix button.mnum')); } }),

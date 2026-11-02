@@ -1124,6 +1124,46 @@ def t_hq_bulk_marks_branch_saved(p):
     check("모두 본부저장" in hb().inner_text() and hb().locator("[data-rsave-hq]").count() == 0, "다 바꾸면 '모두 본부저장', 버튼 없음")
     as_user(p, "br1"); tab(p, "branch"); check(cell(dg).inner_text().strip() == "본부저장", "지사 화면에서도 본부저장으로 보임(본부가 확인함)")
 
+def t_report(p):
+    """2026-11-02: 이동 현황 → 1쪽 보고서(신속대응팀 제설장비 지원 현황). [보고서 보기] 미리 보기 · [Word 받기] .docx
+    숫자는 이동 현황 표와 같고, 도착일시 = 그 지사로 새로 오는 장비 중 가장 빠른 시각, 아래 네모 = 기계화부(기관별)·지역본부(본부별)"""
+    import zipfile, io, re, xml.dom.minidom as md
+    d0 = ev(p, "S.date")
+    check(p.locator("#rptView").is_visible() and p.locator("#rptDoc").is_visible(), "이동 현황에 [보고서 보기]·[Word 받기]")
+    M = ev(p, "SSReport.model(S.date)")
+    tr = ev(p, "movesOn(S.date).filter(m => m.v.type === '제설차').length"); bl = ev(p, "movesOn(S.date).filter(m => m.v.type === '제설기').length")
+    check(M["trucks"] == tr and M["blowers"] == bl and M["total"] == tr + bl, f"합계가 이동 현황과 같음: {M['trucks']}/{tr}, {M['blowers']}/{bl}")
+    check(sum(r["n"] for g in M["groups"] for r in g["rows"]) == M["total"] and M["branches"] == sum(len(g["rows"]) for g in M["groups"]), "지사별 대수의 합 = 총 대수")
+    # 도착일시: 같은 지사로 가는 두 장비 중 이른 시각(장비마다 다름)
+    row = next(r for g in M["groups"] for r in g["rows"] if r["n"] >= 2)
+    vids = ev(p, f"movesOn(S.date).filter(m => m.pos === '{row['id']}' && m.rec.stops[0] === '{row['id']}' && !isCont(m.v.id, S.date, '{row['id']}')).map(m => m.v.id)")
+    check(len(vids) >= 2, f"샘플에 같은 지사로 새로 오는 장비 2대 이상: {vids}")
+    if len(vids) >= 2:
+        ev(p, f"S.draft.set(rk(S.date, '{vids[0]}'), {{ ...recOf(S.date, '{vids[0]}'), times: ['09:40'] }}); S.draft.set(rk(S.date, '{vids[1]}'), {{ ...recOf(S.date, '{vids[1]}'), times: ['07:05'] }})")
+        r2 = next(r for g in ev(p, "SSReport.model(S.date)")["groups"] for r in g["rows"] if r["id"] == row["id"])
+        check(r2["eta"].endswith(" 07:05"), f"가장 빠른 도착 시각: {r2['eta']}")
+        ev(p, "S.draft.clear()")
+    check(M["notes"] and M["notes"][0].startswith("기계화부 ") and "(" in M["notes"][0], f"아래 네모 = 기계화부 N대(기관별): {M['notes']}")
+    # 지역본부 장비가 있으면 본부 단위로(서울경기 N대)
+    pool = ev(p, "SSReport.model(S.date).notes.find(n => n.startsWith('지역본부'))")
+    if pool: check(re.match(r"지역본부 \d+대\(.+ \d+대", pool), pool)
+    # 미리 보기
+    p.click("#rptView"); p.wait_for_selector("#rpPage")
+    pg = p.locator("#rpPage").inner_text()
+    check("신속대응팀 제설장비 지원 현황" in pg and f"총 {M['total']}대" in pg and f"{M['branches']}개 기관 지원" in pg and row["name"] in pg, pg[:200])
+    # 워드 받기(미리 보기 안의 버튼) → 압축 안 XML 이 올바르고 같은 내용
+    with p.expect_download() as dl: p.click("#rptDocIn")
+    f = dl.value; check(f.suggested_filename == f"신속대응팀_제설장비_지원현황_{d0}.docx", f.suggested_filename)
+    z = zipfile.ZipFile(io.BytesIO(open(f.path(), "rb").read()))
+    check(sorted(z.namelist()) == sorted(["[Content_Types].xml", "_rels/.rels", "docProps/core.xml", "word/document.xml"]), z.namelist())
+    for n in z.namelist(): md.parseString(z.read(n))                      # 모두 올바른 XML
+    doc = z.read("word/document.xml").decode("utf-8"); txt = "".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", doc))
+    check("신속대응팀 제설장비 지원 현황" in txt and f"총 {M['total']}대 (" in txt and row["name"] in txt and "기관별 지원 현황" in txt and M["notes"][0] in txt, txt[:300])
+    check("<w:pgSz w:w=\"11906\" w:h=\"16838\"/>" in doc, "A4 세로")
+    p.click("#sheetClose")
+    with p.expect_download() as dl2: p.click("#rptDoc")              # 이동 현황 위의 [Word 받기]도
+    check(dl2.value.suggested_filename.endswith(".docx"), "위쪽 [Word 받기]")
+
 def t_alloc_follow_assign(p):
     """(2026-10-15, 마이그레이션 46) 기관별 배정 합계는 편성보다 많을 수 없음. 편성을 줄여 다시 확정하면 — 한 기관만 배정받았으면 그 기관이 편성에 맞춰 줄고,
     여러 기관이면 그대로 두고 '편성보다 많음' 표시, 편성 0이면 배정을 지움. 확정만 취소한 동안에는 그대로"""
@@ -1206,7 +1246,7 @@ def t_route_perm_admin_only(p):
     check("권한이 없습니다" in toast(p), "화면을 우회해 다른 기관 경로를 보내도 거절: " + toast(p))
     as_user(p, "admin1"); tab(p, "fleet"); check(p.locator("#eqTable select[data-rv]").count() > 0 and p.locator("#day1In").count() == 1, "관리자는 지원일 칸 전부")
 
-TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,

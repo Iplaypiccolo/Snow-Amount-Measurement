@@ -743,3 +743,21 @@ table.eq.team { min-width: 720px; }
 /* 지사별 요청·편성: 저장하지 않은 지사 수(아래 저장 막대 대신, 2026-11-01) · 본부 줄 [일괄 저장] */
 .br-dirty { font-size: 13px; font-weight: 700; color: var(--stop); white-space: nowrap; }
 #branchTable tr.hq td.svc .btn { white-space: nowrap; padding-left: 6px; padding-right: 6px; }
+
+/* ===== 1쪽 보고서 미리 보기(report.js, 2026-11-02) — 한글 양식 「신속대응팀 제설장비 지원 현황」 모양. 사이트 밝기와 상관없이 흰 종이 ===== */
+.rpt-btns { display: inline-flex; gap: 6px; margin-left: 10px; vertical-align: middle; }
+.sheet.wide { width: min(820px, 100%); }
+.rp-page { background: #fff; color: #000; border: 1px solid #ccc; box-shadow: 0 2px 10px rgba(0,0,0,.12); padding: 26px 30px; margin-top: 10px; font-family: "Malgun Gothic", "Pretendard", sans-serif; font-size: 13px; }
+.rp-title { background: #d9d9d9; border-top: 3px double #000; border-bottom: 3px double #000; border-left: 1px solid #000; border-right: 1px solid #000; text-align: center; font-size: 24px; font-weight: 800; padding: 8px 0; letter-spacing: .02em; }
+.rp-date { text-align: right; margin: 8px 0 4px; font-size: 14px; }
+.rp-sum { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 15px; margin-bottom: 6px; }
+.rp-sum .red { color: #e00; } .rp-cnt { font-weight: 700; }
+.rp-t { width: 100%; border-collapse: collapse; border: 2px solid #000; }
+.rp-t th, .rp-t td { border: 1px solid #000; padding: 3px 6px; text-align: center; font-weight: 400; vertical-align: middle; }
+.rp-t thead th { background: #f2f2f2; font-weight: 700; } .rp-t .rp-tot th { background: #ff0; font-weight: 700; border-bottom: 2px solid #000; }
+.rp-t tbody tr.in > * { border-top: 1px dotted #000; } .rp-t tbody tr.first > * { border-top: 2px solid #000; }
+.rp-t .rp-hq, .rp-t .rp-br { letter-spacing: .3em; white-space: nowrap; }
+.rp-t td.c { text-align: center; white-space: nowrap; }
+.rp-src { display: flex; justify-content: space-between; gap: 8px; padding: 0 6px; }
+.rp-nt { margin: 12px 0 6px; font-size: 14px; }
+.rp-box { border: 1.5px dashed #000; padding: 8px 16px; font-size: 14px; line-height: 1.8; }
