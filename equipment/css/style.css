@@ -876,8 +876,8 @@ table.fixcols th, table.fixcols td { overflow-wrap: anywhere; }
 #branchTable thead tr.tot th { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; border-bottom: 2px solid var(--line); }
 #branchTable thead tr.tot th small { font-size: 11px; font-weight: 500; color: var(--ink-soft); }
 
-/* 기관별 장비·강원본부 지원장비·기관별 배치·장비 현황 표(2026-11-03): 글자 크기만 정하면 칸·입력칸이 함께 커지도록 em 으로. 컴퓨터 13~15px(칸 폭 계산은 app.js FP 와 같음), 휴대폰 12.5px */
-#eqTable, #teamTable, #allocTable, .fs-table { font-size: clamp(13px, .85vw, 15px); line-height: 1.25; }
+/* 기관별 장비·강원본부 지원장비·기관별 배치·장비 현황 표(2026-11-03): 글자 크기만 정하면 칸·입력칸이 함께 커지도록 em 으로. 글자 크기 --eq-fp 는 app.js FP, 휴대폰 12.5px */
+#eqTable, #teamTable, #allocTable, .fs-table { font-size: var(--eq-fp, 14px); line-height: 1.25; }
 #eqTable th, #eqTable td, #teamTable th, #teamTable td { padding: .28em .32em; }
 #allocTable th, #allocTable td { padding: .32em .3em; }
 #eqTable thead th, #teamTable thead th, #allocTable thead th { font-size: .96em; }
@@ -934,3 +934,49 @@ table.fixcols th, table.fixcols td { overflow-wrap: anywhere; }
 }
 .eq.fixcols .slot .offsel { width: 100%; max-width: 100%; margin-top: 0; box-sizing: border-box; }
 .eq.fixcols .slot .cont { font-size: .84em; padding: 0 .25em; white-space: nowrap; flex: none; }
+
+/* 표 크기 개선(2026-11-03 시안 비교 뒤 사용자 선택: 이동 현황 2안, 나머지 표 C안). 컴퓨터만, 휴대폰은 그대로 */
+@media (min-width: 861px) {
+  /* 이동 현황: 표는 숫자 칸 폭만큼, 표·카드를 같은 폭으로 가운데에. 카드 안도 함께 줄임 */
+  #panel-move { max-width: 1274px; margin-inline: auto; }
+  #panel-move .summary { padding: 14px 16px; }
+  .summary-head { margin-bottom: 8px; }
+  .summary-head h2 { font-size: 18px; }
+  .summary-head p { font-size: 13.5px; }
+  table.matrix { margin-inline: auto; }
+  .matrix th, .matrix td { padding: 6px 4px; }
+  .matrix thead th { padding: 7px 4px; word-break: keep-all; }
+  .matrix tbody td, .matrix tbody th, .matrix tfoot td, .matrix tfoot th { height: 44px; }
+  .matrix .mvn { white-space: normal; word-break: keep-all; }
+  .dest { margin-bottom: 12px; }
+  .dest-head { padding: 8px 12px; gap: 3px 10px; }
+  .dest-name { font-size: 16px; }
+  .dest-name span { font-size: 12px; }
+  .dest-time strong { font-size: 14px; }
+  .dest-time small { font-size: 11px; }
+  .dest-meta { gap: 5px; }
+  .dest-meta .tag { padding-top: 1px; padding-bottom: 1px; font-size: 12px; }
+  .vrow { grid-template-columns: minmax(112px, max-content) 48px 1fr; gap: 6px; padding: 5px 12px; }
+  .vrow .plate { padding: 0 6px; font-size: 13.5px; }
+  .vrow .vtype { font-size: 13px; }
+  .vrow .tag { padding-top: 0; padding-bottom: 0; font-size: 11.5px; }
+
+  /* 기관별 장비·기관별 배치·강원본부 지원장비: 줄을 높이고, 장비·블로워는 도공번호 아래로, 날짜는 지원일 아래로 */
+  #panel-fleet, #panel-alloc, #panel-gwteam { margin-inline: auto; }
+  #panel-fleet .table-wrap.tall { max-height: calc(100vh - 150px); }
+  #eqTable, #teamTable, #allocTable, .fs-table { line-height: 1.3; }
+  #eqTable thead th, #teamTable thead th, #allocTable thead th { padding-top: .5em; padding-bottom: .5em; }
+  #eqTable th.dayh, #teamTable th.dayh { white-space: normal; line-height: 1.35; }
+  #eqTable th.dayh .sub, #teamTable th.dayh .sub { display: block; margin: 2px 0 0; }
+  #eqTable th.dayh .sub:has(input), #teamTable th.dayh .sub:has(input) { margin: 2px 0 0; }
+  #eqTable tbody td, #teamTable tbody td { height: 3.9em; padding-top: .3em; padding-bottom: .3em; }
+  #allocTable tbody td, #allocTable tbody th { height: 3.4em; }
+  #allocTable tfoot td, #allocTable tfoot th { height: 2.8em; }
+  #eqTable input.ci:not([type=checkbox]), #eqTable select.ci, #teamTable input.ci:not([type=checkbox]), #teamTable select.ci, #allocTable input.ci, .eq.fixcols .slot input.ci.tm { height: 2.1em; min-height: 2.1em; }
+  #allocTable input.ci.num { width: 3.7em; }
+  .fs-table th, .fs-table td { padding: .42em .5em; }
+  .vid2 { display: flex; align-items: center; gap: .5em; margin-top: .2em; font-size: .9em; color: var(--ink-soft); white-space: nowrap; }
+  #eqTable td.vact .btn, #eqTable td.vact .btn + .btn { display: block; margin: .15em auto; }
+  #eqTable th.unh .btn { white-space: normal; }
+}
+@media (min-width: 1200px) { .hq-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 14px; } }

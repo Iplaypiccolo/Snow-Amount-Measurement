@@ -566,7 +566,7 @@ function renderMatrix() {
     `<tr>${cols.map(o => colTypes(o).map((t, k) => `<th scope="col" class="${k ? "c2" : "c1"}${o == null ? " tot" : ""}${o === TEAM ? " tm" : ""}">${t}</th>`).join("")).join("")}</tr></thead>` +
     `<tbody>${body || `<tr><td class="empty" colspan="${cols.reduce((n, o) => n + colTypes(o).length, 0) + 2}">${esc(fmtMD(S.date))}에 이동하는 장비가 없습니다.</td></tr>`}</tbody>` +
     `<tfoot><tr><th scope="row" colspan="2">합계</th>${cells(null, 'data-mall="1"')}</tr></tfoot>`;
-  fixCols($("matrix"), [84, 92, ...cols.flatMap(o => colTypes(o).map(() => o === TEAM ? 110 : 76))]);
+  fixCols($("matrix"), isPhoneW() ? [84, 92, ...cols.flatMap(o => colTypes(o).map(() => o === TEAM ? 110 : 76))] : [76, 92, ...cols.flatMap(o => colTypes(o).map(() => o === TEAM ? 104 : 80))], !isPhoneW());
   stickHead($("matrix"));
   const tr = moves.filter(m => m.v.type === "제설차").length, bl = moves.filter(m => m.v.type === "제설기").length;
   $("dateText").textContent = fmtMD(S.date); $("dateInput").value = S.date;      // 제목의 큰 날짜(누르면 달력)
@@ -639,7 +639,7 @@ function renderDest() {
           ${why ? `<span class="tag">사유: ${H(t, "reason", esc(why))}</span>` : ""}</div></div>
         ${list.length ? list.map(m => vehicleRow(m.v, m.stops, m.rec, b.id, m)).join("") : `<div class="empty-state" style="border:0">조건에 맞는 장비가 없습니다.</div>`}</article>`);
     });
-    if (cards.length) out.push(`<section class="hq-block" data-hqb="${esc(h.id)}"><h3 class="hq-head">${esc(h.name)}본부</h3><div class="hq-cards">` + cards.join("") + `</div></section>`);   // 본부 하나가 한 줄을 모두 쓰고, 그 안에서 지사 카드는 좌·우 2열
+    if (cards.length) out.push(`<section class="hq-block" data-hqb="${esc(h.id)}"><h3 class="hq-head">${esc(h.name)}본부</h3><div class="hq-cards">` + cards.join("") + `</div></section>`);   // 본부 하나가 한 줄을 모두 쓰고, 그 안에서 지사 카드는 넓은 화면 3열, 그보다 좁으면 2열·1열
   });
   $("destList").innerHTML = out.length ? out.join("") : `<div class="empty-state">${esc(fmtMD(S.date))}에 이동하는 장비가 없습니다.</div>`;
 }
@@ -701,14 +701,17 @@ function renderFleet() {
   const dates = windowDates(), head = dates.map((d, i) => `<th class="dayh">지원일 ${i + 1}<span class="sub">` +
     (i === 0 && rt ? `<input class="ci" type="date" id="day1In" value="${esc(d)}"${r ? ` min="${esc(r.start_date)}"` : ""} aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동, 기준일자보다 앞은 안 됨)">` : esc(fmtMD(d))) + `</span></th>`).join("");
   const rows = fleetRows().map(v => fleetRowHtml(v, dates, choices, all)).join("");
-  $("eqTable").innerHTML = `<thead><tr><th>도공번호</th><th>장비</th><th>블로워</th><th>지원 여부</th>${head}${actCol() ? `<th class="unh">${canAllVeh() ? unhideHead() : ""}</th>` : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${5 + dates.length}" class="empty">${S.fleetGo ? "지원 여부가 '지원'인 장비가 없습니다." : "장비가 없습니다."}${addRow && !S.fleetGo ? " 위의 [장비 추가]로 넣으세요." : ""}</td></tr>`}</tbody>`;
-  const eqFixed = [plateColW(), em(5.8), em(5.4), em(5.8)], eqAct = actCol() ? [canAllVeh() ? em(7) : em(4)] : [], eqDay = dayW(eqFixed.concat(eqAct).reduce((n, w) => n + w, 0));
-  fixCols($("eqTable"), [...eqFixed, ...dates.map(() => eqDay), ...eqAct], true);
+  $("eqTable").innerHTML = `<thead><tr>${isPhoneW() ? "<th>도공번호</th><th>장비</th><th>블로워</th>" : "<th>도공번호 · 장비 · 블로워</th>"}<th>지원 여부</th>${head}${actCol() ? `<th class="unh">${canAllVeh() ? unhideHead() : ""}</th>` : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${(isPhoneW() ? 5 : 3) + dates.length}" class="empty">${S.fleetGo ? "지원 여부가 '지원'인 장비가 없습니다." : "장비가 없습니다."}${addRow && !S.fleetGo ? " 위의 [장비 추가]로 넣으세요." : ""}</td></tr>`}</tbody>`;
+  const eqFixed = isPhoneW() ? [plateColW(), em(5.8), em(5.4), em(5.8)] : [plateColW(), em(5.8)], eqAct = actCol() ? [isPhoneW() && canAllVeh() ? em(7) : isPhoneW() ? em(4) : em(4.2)] : [], eqDay = dayW();
+  fixCols($("eqTable"), [...eqFixed, ...dates.map(() => eqDay), ...eqAct], true); fitPanel($("eqTable"));
   placeUnhide();
 }
+// 컴퓨터: 도공번호 칸 아래에 장비·블로워를 함께(칸이 둘 줄어 표가 좁아짐, 2026-11-03 C안). 휴대폰: 칸을 따로
+const idCells = (id, type, blower) => isPhoneW() ? `<td>${id}</td><td>${type}</td><td>${blower}</td>` : `<td>${id}<div class="vid2"><span>${type}</span>${blower}</div></td>`;
 // 도공번호 칸 폭: 보통 장비 = 기관 이름 + 숫자 4자리. 지역본부 장비는 지사 이름 + 임차 + 숫자라 더 길어서, 보이는 장비 중 가장 긴 이름에 맞춤(제설차 칸과 겹치지 않게, 2026-11-03)
 function plateColW() {
-  return fleetRows().reduce((w, v) => Math.max(w, !isPool(v) ? em(9.2) : canVeh(v) ? em(bn(v.home_branch).length * 1.04 + 9) : em(vname(v).length + 1.2)), em(9.2));
+  const base = em(isPhoneW() ? 9.2 : 10.8);
+  return fleetRows().reduce((w, v) => Math.max(w, !isPool(v) ? base : canVeh(v) ? em(bn(v.home_branch).length * 1.04 + 9) : em(vname(v).length + 1.2)), base);
 }
 const myPoolN = () => canPoolAdd() ? poolVehs(S.me.branch_id).length : 0;            // 지사 계정: 이 기준일자에 등록한 자기 지사 장비 수
 const actCol = () => canAllVeh() || myPoolN() > 0;       // 맨 끝 칸(숨기기·삭제): 관리자, 그리고 자기 지사 지역본부 장비가 있는 지사 계정
@@ -725,7 +728,7 @@ function poolRowHtml(v, dates, choices) {
   const nameCell = ed ? `<span class="pnum pool"><span class="pfx">${esc(bn(bid))}</span><label class="rent"><input type="checkbox" data-vr="${id}" data-fk="vr:${id}"${vval(v, "rented") ? " checked" : ""} aria-label="${nm} 임차"> 임차</label>` +
       `<input class="ci" inputmode="numeric" maxlength="4" data-vp="${id}" data-fk="vp:${id}" value="${esc(poolNum(v))}" placeholder="${vval(v, "rented") ? "1" : "252"}" aria-label="${nm} 번호 숫자"><span class="sfx">호</span></span>`
     : `<span class="plate">${nm}</span>`;
-  return `<tr class="pool${S.vdraft.has(v.id) ? " changed" : ""}" data-vrow="${id}" data-home="${esc(bid)}"><td>${nameCell}</td><td>${esc(v.type)}</td><td>${blowerCell(v, false)}</td>` +
+  return `<tr class="pool${S.vdraft.has(v.id) ? " changed" : ""}" data-vrow="${id}" data-home="${esc(bid)}">${idCells(nameCell, esc(v.type), blowerCell(v, false))}` +
     `<td><span class="status go">지원</span>${offerOk(bid) ? "" : ` <span class="tag warn pool-wait" title="이 지사의 타지사 지원 가능 대수가 확정되지 않았습니다(확정이 취소됨)">확정 전</span>`}</td>` +
     dates.map(d => `<td data-cell="${esc(rk(d, v.id))}">${slotCell(v, d, canRoute(), choices)}</td>`).join("") +
     (actCol() ? `<td class="vact">${ed ? `<button type="button" class="btn sm danger" data-vdel="${id}">삭제</button>` : ""}</td>` : "") + `</tr>`;
@@ -740,7 +743,7 @@ function fleetRowHtml(v, dates, choices, all) {
     const plateCell = ed ? `<span class="pnum"${hvA(tv, "plate")}><span class="pfx">${esc(v.org)}</span><input class="ci" inputmode="numeric" maxlength="4" data-vp="${esc(v.id)}" data-fk="vp:${esc(v.id)}" value="${esc(plateNum(v))}" placeholder="901" aria-label="도공번호 숫자"><span class="sfx">호</span></span>${old ? `<div class="muted sm">예전 번호 ${esc(old)}</div>` : ""}`
       : H(tv, "plate", `<span class="plate">${esc(vname(v))}</span>`);
     const changed = S.vdraft.has(v.id) || S.sdraft.has(v.id) ? " changed" : "";
-    return `<tr class="${changed}" data-vrow="${esc(v.id)}"><td>${plateCell}</td><td>${esc(v.type)}</td><td>${blowerCell(v, ed)}</td><td>${statusCell}</td>${dates.map(d => `<td data-cell="${esc(rk(d, v.id))}">${slotCell(v, d, canRoute(), choices)}</td>`).join("")}` +
+    return `<tr class="${changed}" data-vrow="${esc(v.id)}">${idCells(plateCell, esc(v.type), blowerCell(v, ed))}<td>${statusCell}</td>${dates.map(d => `<td data-cell="${esc(rk(d, v.id))}">${slotCell(v, d, canRoute(), choices)}</td>`).join("")}` +
       (canAllVeh() ? `<td class="vact"><button type="button" class="btn sm" data-vhide="${esc(v.id)}">숨기기</button><button type="button" class="btn sm danger" data-vdel="${esc(v.id)}">삭제</button></td>` : actCol() ? `<td class="vact"></td>` : "") + `</tr>`;
 }
 function placeUnhide() {        // 숨김 취소 목록: 표가 가로로 스크롤되는 상자 안이라 잘리지 않게 화면 기준으로 버튼 아래에 띄움
@@ -913,8 +916,8 @@ function renderTeam() {
   const head = dates.map((d, i) => `<th class="dayh">지원일 ${i + 1}<span class="sub">` +
     (i === 0 && ed ? `<input class="ci" type="date" id="day1InTeam" value="${esc(d)}"${r ? ` min="${esc(r.start_date)}"` : ""} aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동, 기준일자보다 앞은 안 됨)">` : esc(fmtMD(d))) + `</span></th>`).join("");
   $("teamTable").innerHTML = `<thead><tr><th>장비</th><th>지원 여부</th>${head}</tr></thead><tbody>${S.team.map(v => teamRowHtml(v, dates)).join("") || `<tr><td colspan="${2 + dates.length}" class="empty">장비가 없습니다.</td></tr>`}</tbody>`;
-  const tFixed = [em(11.5), em(5.8)], tDay = dayW(tFixed[0] + tFixed[1]);
-  fixCols($("teamTable"), [...tFixed, ...dates.map(() => tDay)], true);
+  const tFixed = [em(11.5), em(5.8)], tDay = dayW();
+  fixCols($("teamTable"), [...tFixed, ...dates.map(() => tDay)], true); fitPanel($("teamTable"));
 }
 function teamRowHtml(v, dates) {
   const ed = canTeam(), r = curRound(), st = r ? stOf(r.id, v.id).status : "", [cls, label] = STATUS[st] || STATUS[""], id = esc(v.id);
@@ -1049,15 +1052,18 @@ function fixCols(table, cols, fit) {
   table.insertAdjacentHTML("afterbegin", `<colgroup>${cols.map(w => `<col style="width:${w}px">`).join("")}</colgroup>`);
 }
 // 기관별 장비·강원본부 지원장비·기관별 배치의 칸 크기(2026-11-03 사용자 요청: 컴퓨터에서 보기 좋게, 글자가 잘리지 않게). 칸 폭은 글자 크기(em)로 정해 글자와 함께 커짐
-// 글자 크기는 CSS 의 clamp 와 같은 계산: 컴퓨터 13~15px(화면 폭에 따라), 휴대폰 12.5px
+// 글자 크기: 컴퓨터 13~16px = 지원일 6칸(약 92em)이 스크롤 막대를 빼고 화면에 들어오는 크기, 휴대폰 12.5px. CSS 는 --eq-fp 를 씀
 const isPhoneW = () => innerWidth <= 860;
-const FP = () => isPhoneW() ? 12.5 : Math.min(15, Math.max(13, innerWidth * .0085));
+const FP = () => isPhoneW() ? 12.5 : Math.max(13, Math.min(16, Math.floor((Math.min(innerWidth, 1680) - 57) / 92 * 10) / 10));
+const syncFP = () => document.documentElement.style.setProperty("--eq-fp", FP() + "px");
+syncFP();
 const em = n => Math.round(n * FP());
-const pageW = () => Math.min(document.documentElement.clientWidth, 1680) - 40;      // 화면에서 표가 쓸 수 있는 폭(main 의 최대 폭·좌우 여백)
-// 지원일 칸: 칸 수와 상관없이 같은 폭 = 지원일 6칸이 화면 폭을 꽉 채우는 폭(글자가 잘리지 않는 최소 폭 아래로는 안 줄어듦). 그래서 2칸이면 표가 줄고 7칸부터 오른쪽으로 늘어남. 휴대폰은 176px
-const dayW = fixed => isPhoneW() ? 176 : Math.max(em(11.2), Math.floor((pageW() - fixed) / 6));
+// 지원일 칸: 칸 수와 상관없이 같은 폭(지사 드롭다운 + 시각 + ＋ 버튼이 잘리지 않는 폭). 그래서 2칸이면 표가 줄고 7칸부터 오른쪽으로 늘어남. 휴대폰은 176px
+const dayW = () => isPhoneW() ? 176 : em(11.7);
+// 컴퓨터: 기준일자·현황 표·버튼 줄·저장 줄을 표와 같은 폭으로 맞춰 가운데에 둠(2026-11-03 C안). 표가 아주 좁아도 위쪽 줄이 들어가도록 860px 아래로는 안 줄임
+function fitPanel(table) { table.closest(".panel").style.maxWidth = isPhoneW() ? "" : Math.max(parseFloat(table.style.width) + 2, 860) + "px"; }
 let lastPageKey = innerWidth;
-addEventListener("resize", () => { if (innerWidth !== lastPageKey && S.me) { lastPageKey = innerWidth; clearTimeout(S.resizeT); S.resizeT = setTimeout(() => { renderFleet(); renderTeam(); renderAlloc(); }, 150); } });   // 창 폭이 바뀌면 칸 폭을 다시 계산
+addEventListener("resize", () => { if (innerWidth !== lastPageKey && S.me) { lastPageKey = innerWidth; clearTimeout(S.resizeT); S.resizeT = setTimeout(() => { syncFP(); renderMatrix(); renderFleet(); renderTeam(); renderAlloc(); }, 150); } });   // 창 폭이 바뀌면 칸 폭을 다시 계산
 function stickHead(table) {
   if (!table || !table.tHead || !table.offsetParent) return;
   let top = 0;
@@ -1069,6 +1075,8 @@ function fitBranch() {
   w.style.maxHeight = Math.max(240, Math.floor(innerHeight - w.getBoundingClientRect().top - scrollY - 8)) + "px";
 }
 addEventListener("resize", () => { stickHead($("branchTable")); stickHead($("matrix")); stickHead($("allocTable")); fitBranch(); });
+// 글꼴이 늦게 오면 머리글 높이가 달라져 둘째 줄이 첫 줄 숫자를 가림(휴대폰 이동 현황) → 글꼴이 온 뒤 다시 잼
+if (document.fonts) document.fonts.ready.then(() => { stickHead($("branchTable")); stickHead($("matrix")); stickHead($("allocTable")); });
 const reqsBadHtml = () => `<tbody><tr><td class="empty">요청·편성 자료를 불러오지 못했습니다. <button type="button" class="btn sm" data-reload>다시 읽기</button></td></tr></tbody>`;
 function renderBranch() {
   const m = S.me, r = curRound();
@@ -1284,8 +1292,8 @@ function renderAlloc() {
     `<tr class="al-av"><th class="l">배정 / 지원 가능</th>${S.orgs.map(o => avc(o, "truck", "제설차") + avc(o, "blower", "제설기")).join("")}${avc(POOL, "truck", "제설차")}<td></td><td></td></tr>` +
     `<tr class="al-done"><th class="l" title="기계화부 장비는 기계화부가, 지역본부 장비는 관리자가 지원일 1의 지사를 정한 대수">장비 지정</th>${S.orgs.map(o => done(o, true)).join("")}${done(POOL, false)}<td></td><td></td></tr></tfoot>`;
   $("allocTable").innerHTML = head + `<tbody>${body}</tbody>` + foot;
-  const alCols = [7.7, ...S.orgs.flatMap(() => [4.3, 4.3]), 5, 5, 5].map(em), alSum = alCols.reduce((n, w) => n + w, 0), alK = isPhoneW() ? 1 : Math.max(1, Math.min(1.35, pageW() / alSum));   // 컴퓨터: 화면에 맞춰 조금 넓힘
-  fixCols($("allocTable"), alCols.map(w => Math.round(w * alK)), true);
+  const alCols = (isPhoneW() ? [7.7, ...S.orgs.flatMap(() => [4.3, 4.3]), 5, 5, 5] : [8.6, ...S.orgs.flatMap(() => [4.9, 4.9]), 4.9, 5.6, 5.6]).map(em);
+  fixCols($("allocTable"), alCols, true); fitPanel($("allocTable"));
   stickHead($("allocTable"));
 }
 async function saveAlloc() {

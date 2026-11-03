@@ -245,7 +245,7 @@ def t_log_tab(p):
 
 def t_plate_edit(p):
     tab(p, "fleet"); i = "[data-vp=V004]"
-    check(p.locator("#eqTable thead th").first.inner_text() == "도공번호", "제목은 도공번호")
+    check(p.locator("#eqTable thead th").first.inner_text().startswith("도공번호"), "제목은 도공번호")
     check(p.locator(i).input_value() == "904" and p.locator("tr[data-vrow=V004] .pfx").inner_text() == "서울경기", "본부(기관) 이름은 자동, 숫자만 입력")
     p.fill(i, "abc"); p.press(i, "Tab"); p.wait_for_timeout(200); check("숫자만" in toast(p) and p.locator(i).input_value() == "904", "숫자만 받음")
     p.fill(i, "901"); p.press(i, "Tab"); p.wait_for_timeout(200); check("이미 있습니다" in toast(p), "중복 검사(서울경기901)")
@@ -262,13 +262,13 @@ def t_vehicle_add_delete(p):
     p.click(f"[data-vdel={vid}]"); p.wait_for_timeout(250); check(p.locator(f"[data-vp={vid}]").count() == 0, "장비 삭제")
 
 def t_dest_layout_and_jump(p):
-    """이동 현황 세부내역: 장비 줄에서 지원기관·수정본·지원 칸 삭제, 본부 하나가 한 줄(안에서 지사 카드 좌·우 2열), 표의 숫자를 누르면 그 줄로 이동"""
+    """이동 현황 세부내역: 장비 줄에서 지원기관·수정본·지원 칸 삭제, 본부 하나가 한 줄(안에서 지사 카드 좌우로), 표의 숫자를 누르면 그 줄로 이동"""
     go_date(p, day(p, 0))
     blocks = p.locator("#destList .hq-block"); check(blocks.count() == 2, f"본부 묶음 2개: {blocks.count()}")
-    b0, b1 = blocks.nth(0).bounding_box(), blocks.nth(1).bounding_box(); mw = ev(p, "document.querySelector('main').clientWidth")
+    b0, b1 = blocks.nth(0).bounding_box(), blocks.nth(1).bounding_box(); mw = ev(p, "document.querySelector('#panel-move').clientWidth")
     check(b0["width"] > mw * 0.9 and b1["width"] > mw * 0.9 and b1["y"] >= b0["y"] + b0["height"] - 2, f"본부 하나가 한 줄을 모두 쓰고 위아래로: {b0} {b1}")
     cs = blocks.nth(0).locator(".hq-cards .dest"); check(cs.count() >= 2, "본부 안에 지사 카드 2개 이상(샘플)")
-    c0, c1 = cs.nth(0).bounding_box(), cs.nth(1).bounding_box(); check(c1["x"] > c0["x"] + c0["width"] * 0.9 and abs(c1["y"] - c0["y"]) < 40, f"본부 안의 지사 카드는 좌·우 2열: {c0} {c1}")
+    c0, c1 = cs.nth(0).bounding_box(), cs.nth(1).bounding_box(); check(c1["x"] > c0["x"] + c0["width"] * 0.9 and abs(c1["y"] - c0["y"]) < 40, f"본부 안의 지사 카드는 좌우로: {c0} {c1}")
     row = p.locator("#destList .vrow").first; txt = row.inner_text()
     check("출발" not in txt and "수정본" not in txt and "최초" not in txt and row.locator(".status, .vfrom").count() == 0, f"장비 줄에 지원기관·수정본·지원 없음: {txt!r}")
     check(blocks.nth(0).locator(".dest").first.bounding_box()["width"] < ev(p, "document.querySelector('main').clientWidth") * 0.55, "카드 폭 절반 가량")
@@ -939,7 +939,7 @@ def t_pool_vehicles(p):
     check(v1 and v2 and v3 and ev(p, f"vehById('{v2}').plate") == "인천임차1" and ev(p, f"stOf(S.round, '{v1}').status") == "O", "저장 값·지원 여부 자동")
     vr = lambda v: p.locator(f"#eqTable tr[data-vrow='{v}']")
     check(ev(p, "[...document.querySelectorAll('#eqTable tr.pool')].map(r => r.dataset.vrow)") == [v3, v1, v2], "지역본부 장비는 맨 아래, 일반(숫자 순) → 임차")
-    check("지원" == vr(v1).locator("td:nth-child(4)").inner_text().strip() and vr(v1).locator("[data-vs], [data-vhide], select.offsel").count() == 0 and vr(v1).locator("[data-vdel]").count() == 1, "지원 여부는 늘 지원, 숨기기 없음, 삭제 있음")
+    check("지원" == vr(v1).locator("td:nth-child(2)").inner_text().strip() and vr(v1).locator("[data-vs], [data-vhide], select.offsel").count() == 0 and vr(v1).locator("[data-vdel]").count() == 1, "지원 여부는 늘 지원, 숨기기 없음, 삭제 있음")
     check(vr("V001").locator(".sfx").inner_text() == "호", "기계화부 장비도 끝에 '호'")
     check(card("지역본부").locator("[data-preg]").inner_text() == "3대" and "인천 3/3" in card("지역본부").locator(f"[data-pbr='{ic}']").inner_text() and "수원 0/2" in card("지역본부").inner_text(), card("지역본부").inner_text())
     # 기관 버튼: 여러 개, '모든 기관'은 혼자
@@ -1121,7 +1121,7 @@ def t_fixed_columns(p):
     # 기관별 장비·강원본부 지원장비(2026-11-03): 지원일 칸은 늘 같은 폭, 칸 수만큼 표가 줄고 늘어남. 드롭다운은 글자보다 좁아지지 않음
     wrap = lambda tid: f"document.querySelector('#{tid}').parentElement"
     p.set_viewport_size({"width": 1366, "height": 800}); p.wait_for_timeout(150)
-    for tb, tid, sel, fixed in (("fleet", "eqTable", "#colsSel", 4), ("gwteam", "teamTable", "#colsSelTeam", 2)):
+    for tb, tid, sel, fixed in (("fleet", "eqTable", "#colsSel", 2), ("gwteam", "teamTable", "#colsSelTeam", 2)):
         tab(p, tb); tw = lambda: ev(p, f"Math.round(document.querySelector('#{tid}').getBoundingClientRect().width)")
         p.select_option(sel, "6"); p.wait_for_timeout(250); w6 = widths(tid); t6 = tw()
         check(not ev(p, f"{wrap(tid)}.scrollWidth > {wrap(tid)}.clientWidth + 1"), f"{tid}: 지원일 6칸은 1366 화면에 스크롤 없이: {t6}")
@@ -1228,7 +1228,7 @@ def t_fleet_sum(p):
     p.set_viewport_size({"width": 1400, "height": 900})
 
 def t_tables_sizes(p):
-    """2026-11-03: 기관별 장비·기관별 배치·강원본부 지원장비 표. 컴퓨터 = 글자 13~15px, 잘리는 글자 없음, 지원일 6칸이 화면을 채움. 휴대폰 = 작은 글자(줄 34px 이하). 번호 칸은 숫자 4개, 지역본부 장비 이름이 제설차 칸과 겹치지 않음"""
+    """2026-11-03 C안: 기관별 장비·기관별 배치·강원본부 지원장비 표. 컴퓨터 = 글자 14~16px, 잘리는 글자 없음, 지원일 6칸이 스크롤 없이 들어옴, 위쪽 줄과 표가 같은 폭. 휴대폰 = 작은 글자(줄 34px 이하), 칸 구성 그대로. 번호 칸은 숫자 4개, 지역본부 장비 이름이 옆 칸과 겹치지 않음"""
     fs = lambda sel: ev(p, f"parseFloat(getComputedStyle(document.querySelector('{sel}')).fontSize)")
     rowh = lambda tid: ev(p, f"[...document.querySelectorAll('#{tid} tbody tr')].map(r => r.getBoundingClientRect().height).sort((a, b) => a - b)[Math.floor(document.querySelectorAll('#{tid} tbody tr').length / 2)]")      # 보통 줄(경유지가 여럿인 줄은 더 높음)
     over = lambda tid: ev(p, f"[...document.querySelectorAll('#{tid} th, #{tid} td')].filter(c => c.offsetParent && c.scrollWidth > c.clientWidth + 1).map(c => c.textContent.trim().slice(0, 18) + ' ' + c.scrollWidth + '>' + c.clientWidth).slice(0, 5)")
@@ -1236,22 +1236,26 @@ def t_tables_sizes(p):
     def sel_ok(tid):
         ws = ev(p, f"Math.min(...[...document.querySelectorAll('#{tid} .slot select.ci')].filter(x => x.offsetParent).map(x => x.getBoundingClientRect().width), 999)")
         check(ws >= fs("#" + tid) * 4.9, f"{tid}: 드롭다운 폭 {ws}")
-    for w, want in ((1366, 13), (1920, 15)):
+    for w, want in ((1366, 14.2), (1920, 16)):
         p.set_viewport_size({"width": w, "height": 900}); p.wait_for_timeout(350)
         tab(p, "fleet"); p.select_option("#colsSel", "6"); p.wait_for_timeout(300)
         check(abs(fs("#eqTable") - want) < .5, f"{w}: 글자 {fs('#eqTable')}")
         wr = "document.querySelector('#eqTable').parentElement"
         check(not ev(p, f"{wr}.scrollWidth > {wr}.clientWidth + 1"), f"{w}: 지원일 6칸은 스크롤 없이 {ev(p, f'{wr}.scrollWidth')} {ev(p, f'{wr}.clientWidth')}")
         check(not over("eqTable"), f"{w}: 기관별 장비 넘침 {over('eqTable')}"); check(not clip("eqTable"), f"{w}: 입력칸 글자 잘림 {clip('eqTable')}"); sel_ok("eqTable")
-        tw = ev(p, "document.querySelector('#eqTable').getBoundingClientRect().width"); page = ev(p, "Math.min(document.documentElement.clientWidth, 1680) - 40")
-        check(tw >= page - 8, f"{w}: 6칸이 화면을 채움 {tw} / {page}")
-        check(rowh("eqTable") >= want * 2, f"{w}: 줄 높이 {rowh('eqTable')}")
+        tw = ev(p, "document.querySelector('#eqTable').getBoundingClientRect().width"); pw = ev(p, "document.querySelector('#panel-fleet').getBoundingClientRect().width")
+        check(abs(pw - tw) <= 3 and tw <= (1460 if w == 1920 else w - 40), f"{w}: 위쪽 줄과 표가 같은 폭 {tw} / {pw}")
+        check(rowh("eqTable") >= 55, f"{w}: 줄 높이 {rowh('eqTable')}")
+        sc = ev(p, """[...document.querySelectorAll('#eqTable select[data-vs]')].filter(s => s.offsetParent).map(s => { s.value = 'X'; const c = document.createElement('canvas').getContext('2d'), cs = getComputedStyle(s); c.font = cs.fontSize + ' ' + cs.fontFamily; return s.clientWidth - c.measureText('지원 불가').width; })""")
+        ev(p, "refresh()"); p.wait_for_timeout(100)
+        check(sc and min(sc) >= 16, f"{w}: 지원 여부 '지원 불가'가 칸에 들어감 {sc[:1]}")
         dt = ev(p, """(() => { const i = document.querySelector('#day1In'), th = i.closest('th'); const c = document.createElement('canvas').getContext('2d'), cs = getComputedStyle(i); c.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily; const q = i.getBoundingClientRect(), t = th.getBoundingClientRect(); return [q.right - (t.right - parseFloat(getComputedStyle(th).paddingRight)), q.width - (c.measureText(i.value).width + parseFloat(cs.fontSize) * .85 + 10 * parseFloat(cs.letterSpacing || 0))]; })()""")
         check(dt[0] <= 1 and dt[1] >= 0, f"{w}: 지원일 1 날짜가 칸 안에 다 보임 {dt}")
         p.select_option("#colsSel", "4"); p.wait_for_timeout(250)
         tab(p, "gwteam"); check(not over("teamTable") and not clip("teamTable"), f"{w}: 강원본부 넘침 {over('teamTable')} {clip('teamTable')}"); check(abs(fs("#teamTable") - want) < .5, "강원본부 글자")
         tab(p, "alloc"); check(not over("allocTable"), f"{w}: 기관별 배치 넘침 {over('allocTable')}"); check(abs(fs("#allocTable") - want) < .5, "기관별 배치 글자")
         check(ev(p, "document.querySelector('#allocTable').getBoundingClientRect().width") >= 860, f"{w}: 기관별 배치가 너무 작지 않음")
+        check(rowh("allocTable") >= 45, f"{w}: 기관별 배치 줄 높이 {rowh('allocTable')}")
         check(not ev(p, "(() => { const w = document.querySelector('#allocTable').parentElement; return w.scrollWidth > w.clientWidth + 1; })()"), f"{w}: 기관별 배치 스크롤 없음")
     p.set_viewport_size({"width": 1400, "height": 900}); p.wait_for_timeout(350); tab(p, "fleet")
     inp = ev(p, "(() => { const i = document.querySelector('#eqTable input[data-vp]'); i.value = '8888'; return [i.scrollWidth, i.clientWidth, i.maxLength]; })()")
@@ -1263,7 +1267,7 @@ def t_tables_sizes(p):
     p.select_option("#nvOrg", "B:" + ic); p.wait_for_timeout(100); p.check("#nvRent"); p.fill("#nvPlate", "12"); p.click("#vehAdd"); p.wait_for_timeout(300); check("임차 12호" in toast(p), toast(p))
     ev(p, f"(S.brById['{ic}'].name = '남양주휴게소', refresh())"); p.wait_for_timeout(100)      # 이름이 긴 지사
     gap = lambda: ev(p, """(() => { const tr = document.querySelector('#eqTable tr.pool'), a = tr.querySelector('td'), last = [...a.querySelectorAll('input, label, span')].map(e => e.getBoundingClientRect().right), t = tr.cells[1].getBoundingClientRect().left; return t - Math.max(...last); })()""")
-    check(gap() >= 0, f"이름·임차·번호가 제설차 칸 앞에서 끝남: {gap()}")
+    check(gap() >= 0, f"이름·임차·번호가 옆 칸 앞에서 끝남: {gap()}")
     as_user(p, "viewer"); tab(p, "fleet"); p.wait_for_timeout(100)
     check(gap() >= 0 and p.locator("#eqTable tr.pool .plate").count() == 1, f"보기 전용 계정: 이름 글자도 겹치지 않음 {gap()}")
     as_user(p, "admin1")
@@ -1275,10 +1279,34 @@ def t_tables_sizes(p):
     p.set_viewport_size({"width": 375, "height": 800}); p.wait_for_timeout(350); tab(p, "fleet")
     check(fs("#eqTable") == 12.5 and rowh("eqTable") <= 34, f"휴대폰: 글자 {fs('#eqTable')}, 줄 {rowh('eqTable')}")
     check(ev(p, "document.querySelector('#eqTable colgroup col:nth-child(5)').style.width") == "176px", "휴대폰 지원일 칸 폭은 그대로")
+    check(ev(p, "[...document.querySelectorAll('#eqTable thead th')].slice(0, 4).map(t => t.textContent)") == ["도공번호", "장비", "블로워", "지원 여부"] and p.locator("#eqTable .vid2").count() == 0, "휴대폰 칸 구성은 그대로")
+    check(ev(p, "document.querySelector('#panel-fleet').style.maxWidth") == "", "휴대폰은 폭을 맞추지 않음")
     check(ev(p, "document.scrollingElement.scrollWidth") <= 376, "휴대폰: 화면이 옆으로 밀리지 않음")
     check(ev(p, "document.querySelector('#fleetFilters').getBoundingClientRect().height") <= 110, "휴대폰: 버튼 줄이 한 줄씩")
     tab(p, "alloc"); check(fs("#allocTable") == 12.5, "휴대폰 기관별 배치 글자")
     p.set_viewport_size({"width": 1400, "height": 900}); p.wait_for_timeout(300)
+
+def t_move_compact(p):
+    """2026-11-03 2안: 이동 현황 표는 숫자 칸 80px, 표와 카드가 같은 폭으로 가운데에, 넓은 화면은 카드 3열. 휴대폰은 그대로"""
+    cols = lambda: ev(p, "getComputedStyle(document.querySelector('.hq-cards')).gridTemplateColumns.split(' ').length")
+    for w in (1366, 1920):
+        p.set_viewport_size({"width": w, "height": 900}); p.wait_for_timeout(350); tab(p, "move")
+        r = ev(p, """(() => { const t = document.querySelector('#matrix').getBoundingClientRect(), m = document.querySelector('#panel-move').getBoundingClientRect(), c = document.querySelector('#matrix td.c1').getBoundingClientRect(); return [t.width, m.width, m.left, innerWidth - m.right, c.width]; })()""")
+        check(r[0] <= 1240 and r[1] <= 1274 and abs(r[2] - r[3]) <= 20 and r[4] == 80, f"{w}: 표 {r}")
+        check(not ev(p, "(() => { const w = document.querySelector('.matrix-wrap'); return w.scrollWidth > w.clientWidth + 1; })()"), f"{w}: 표가 옆으로 안 밀림")
+        check(cols() == 3, f"{w}: 카드 3열 {cols()}")
+        check(ev(p, "(() => { const d = document.querySelector('.dest'), v = d.querySelector('.vrow'); return d.getBoundingClientRect().width <= 420 && v.getBoundingClientRect().height <= 38 && !([...d.querySelectorAll('.vrow')].some(x => x.scrollWidth > x.clientWidth + 1)); })()"), f"{w}: 카드가 작고 안 넘침")
+    p.set_viewport_size({"width": 1920, "height": 900}); p.wait_for_timeout(350)
+    ev(p, "setDate(addDays(todayISO(), 2))"); p.wait_for_timeout(300)       # 이동 안내가 있는 날: 칸 밖으로 안 넘침
+    check(not ev(p, "[...document.querySelectorAll('#matrix td')].some(c => c.scrollWidth > c.clientWidth + 1)"), "이동 안내가 칸 안에 들어감")
+    check(not ev(p, "[...document.querySelectorAll('#destList .vrow')].some(x => x.scrollWidth > x.clientWidth + 1)"), "카드의 이동 표시가 안 넘침")
+    ev(p, "setDate(todayISO())"); p.wait_for_timeout(200)
+    p.set_viewport_size({"width": 375, "height": 800}); p.wait_for_timeout(350)
+    check(cols() == 1 and ev(p, "document.querySelector('#panel-move').getBoundingClientRect().width") <= 376, "휴대폰: 카드 1열")
+    check(ev(p, "document.querySelector('#matrix td.c1').getBoundingClientRect().width") == 76, "휴대폰 숫자 칸 폭은 그대로")
+    gap = ev(p, "document.querySelector('#matrix tbody tr').getBoundingClientRect().top - document.querySelector('#matrix thead tr:nth-child(2) th').getBoundingClientRect().bottom")
+    check(gap >= -1, f"휴대폰: 머리글 둘째 줄이 첫 줄을 가리지 않음 {gap}")
+    p.set_viewport_size({"width": 1440, "height": 1000}); p.wait_for_timeout(300)
 
 def t_round_ten_days(p):
     """2026-11-03: 기준일자 기간 10일 — 지원일 10칸까지 잠기지 않음, 명칭 '기관별 배치'"""
@@ -1534,7 +1562,7 @@ def t_route_perm_admin_only(p):
     check("권한이 없습니다" in toast(p), "화면을 우회해 다른 기관 경로를 보내도 거절: " + toast(p))
     as_user(p, "admin1"); tab(p, "fleet"); check(p.locator("#eqTable select[data-rv]").count() > 0 and p.locator("#day1In").count() == 1, "관리자는 지원일 칸 전부")
 
-TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_reqs_read_fail, t_confirm_stale, t_fleet_sum, t_tables_sizes, t_round_ten_days, t_alloc_fixed_only, t_branch_totals, t_removed_hints, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_reqs_read_fail, t_confirm_stale, t_fleet_sum, t_tables_sizes, t_move_compact, t_round_ten_days, t_alloc_fixed_only, t_branch_totals, t_removed_hints, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
