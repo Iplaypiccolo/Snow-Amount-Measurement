@@ -44,6 +44,10 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 보기·기관 토글 한 번에 하나만
+- 서버 변경 없음. `equipment/js/app.js`: `[data-bv]`·`[data-fo]`·`#onlyGo` 클릭, `orgChip`([모든 기관] 없앰). 시험 고침.
+— ✍ Claude Code 작성
+
 ### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 입력 표 맨 왼쪽 칸 고정·불투명
 - 서버 변경 없음. `equipment/css/style.css` 맨 끝 묶음. 시험 `t_first_col_fixed_opaque`.
 — ✍ Claude Code 작성

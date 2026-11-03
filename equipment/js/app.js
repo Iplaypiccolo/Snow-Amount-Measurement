@@ -75,7 +75,7 @@ const S = {
   rstat: new Map(), stLoaded: new Set(), sdraft: new Map(), unhideOpen: false,   // rstat: "기준일자|장비" → 지원 여부 {status, off_from, updated_at} / sdraft: 고른 기준일자의 아직 확정 안 한 지원 여부(장비 → 값)
   draft: new Map(), vdraft: new Map(), rdraft: new Map(), revisedMode: false,   // revisedMode: 표 위 [최초 지원]/[수정본] — 고르는 지사 목록과 저장 구분          // 아직 확정·저장하지 않은 변경(경로 / 장비 / 지사 요청)
   date: todayISO(), day1: todayISO(), cols: 4, round: null,
-  org: "전체", type: "전체", fleetOrgs: new Set(), bviews: new Set(), closedHq: new Set(), extraStop: new Set(),   // fleetOrgs: 기관별 장비에서 고른 기관들(비어 있으면 모든 기관) / bview: 지사별 요청·편성 보기 = all(기본, 아무 버튼도 안 눌림) / req(요청 있는 지사만) / fixed(편성 확정된 지사만) / offer(지원 가능 지사만) / unsaved(저장 안 한 지사만)
+  org: "전체", type: "전체", fleetOrgs: new Set(), bviews: new Set(), closedHq: new Set(), extraStop: new Set(),   // fleetOrgs: 기관별 장비에서 고른 기관(한 곳, 비어 있으면 모든 기관) / bview: 지사별 요청·편성 보기 = all(기본, 아무 버튼도 안 눌림) / req(요청 있는 지사만) / fixed(편성 확정된 지사만) / offer(지원 가능 지사만) / unsaved(저장 안 한 지사만)
   fleetGo: false,                                                                  // 기관별 장비 [지원 장비만]: 고른 기준일자에서 지원 여부가 '지원'인 장비만 보기
   team: [], showTeam: true,                                                        // 강원 신속대응팀 4대(장비 모양) / 이동 현황에 보일지(체크박스, 이 브라우저에 기억)
   nvSel: "", nvRent: false,                                                         // 장비 추가 줄에서 고른 기관(또는 "B:지사번호")·임차 체크
@@ -188,7 +188,7 @@ const isSaved = bid => !!rbase(bid, "saved_at");
 const SAVE_LV = { branch: "지사저장", hq: "본부저장", admin: "본사저장" };
 const myLv = () => can("req.confirm") ? "admin" : can("req.edit.hq") ? "hq" : "branch";
 const savedLabel = bid => SAVE_LV[rbase(bid, "saved_lv")] || "저장 완료";
-// 지사별 요청·편성 보기 버튼(2026-11-02: 짧은 이름, 여러 개 = 모두 만족). [키, id, 이름, 설명]
+// 지사별 요청·편성 보기 버튼(짧은 이름, 2026-11-03: 한 번에 하나만). [키, id, 이름, 설명]
 const BVIEWS = [["req", "onlyActive", "요청", "요청 있는 지사만"], ["fixed", "onlyFixed", "편성", "편성 확정된 지사만"],
   ["offer", "onlyOffer", "지원", "타지사 지원 가능 대수가 있는 지사만"], ["unsaved", "onlyUnsaved", "저장안함", "아직 저장하지 않은 지사만"]];
 const canMarkSave = b => canEdit(b) && !can("req.confirm");                         // 확정한 줄은 [취소]하기 전까지 아무도 못 고침(서버도 막음, 마이그레이션 35)
@@ -675,8 +675,7 @@ function renderFleet() {
   // 기관 버튼: 여러 개를 함께 고를 수 있음('모든 기관'은 혼자). 이 기준일자에 장비가 0대인 기관은 누를 수 없음
   const cntOrg = o => S.vehicles.filter(v => v.org === o && shownIn(v, r)).length;
   [...S.fleetOrgs].forEach(o => { if (!cntOrg(o)) S.fleetOrgs.delete(o); });
-  const orgChip = o => { const on = o === "전체" ? !S.fleetOrgs.size : S.fleetOrgs.has(o), none = o !== "전체" && !cntOrg(o);
-    return `<button type="button" class="chip" data-fo="${esc(o)}" aria-pressed="${on}"${none ? ' disabled title="이 기준일자에 장비가 없습니다"' : ""}>${o === "전체" ? "모든 기관" : esc(o)}</button>`; };
+  const orgChip = o => `<button type="button" class="chip" data-fo="${esc(o)}" aria-pressed="${S.fleetOrgs.has(o)}"${cntOrg(o) ? "" : ' disabled title="이 기준일자에 장비가 없습니다"'}>${esc(o)}</button>`;
   // 장비 추가: 관리자 = 기관 4곳 ─ 경계선 ─ 지원 가능이 확정된 지사 / 기계화부 = 자기 기관 / 지사 = 자기 지사(지원 가능 확정 뒤)
   const orgOpts = all ? S.orgs : can("equip.edit.own") ? S.orgs.filter(o => o === S.me.org) : [];
   const myB = canPoolAdd() ? S.me.branch_id : null, brOpts = !r ? [] : all ? offerBranches() : myB && offerOk(myB) && S.brById[myB] ? [S.brById[myB]] : [];
@@ -692,7 +691,7 @@ function renderFleet() {
       `<span class="pnum"><span class="pfx" id="nvPfx">${esc(pb ? bn(pb) + (S.nvRent ? " 임차" : "") : S.nvSel)}</span><input class="ci" id="nvPlate" inputmode="numeric" maxlength="4" placeholder="${pb ? (S.nvRent ? "1" : "252") : "901"}" aria-label="${pb ? "새 장비 번호(숫자만)" : "새 장비 도공번호(숫자만)"}"><span class="sfx">호</span></span><button type="button" class="btn" id="vehAdd">${pb ? "등록" : "추가"}</button>`
     : myB ? `<span class="tb-label">장비 추가</span><span class="hint" id="poolWait">지사별 요청·편성에서 '타지사 지원 가능' 대수를 넣고 관리자가 확정하면 ${esc(bn(myB))} 지사의 장비를 등록할 수 있습니다.</span>` : "";
   $("fleetFilters").innerHTML =
-    `<div class="tb-row"><span class="tb-label">기관</span><span class="fgroup">${["전체", ...SOURCE_ORGS()].map(orgChip).join("")}</span>` +
+    `<div class="tb-row"><span class="tb-label">기관</span><span class="fgroup">${SOURCE_ORGS().map(orgChip).join("")}</span>` +
     `<span class="tb-sep" aria-hidden="true"></span><button type="button" class="chip" id="onlyGo" aria-pressed="${S.fleetGo}" title="지원 여부가 '지원'인 장비만 보기(다시 누르면 모든 장비)">지원 장비만</button>` +
     `<span class="tb-right">` + (rt ? `<label class="ctl">지원일 칸 <select class="ci" id="colsSel">${Array.from({ length: 9 }, (_, k) => k + 2).map(n => `<option value="${n}" ${n === S.cols ? "selected" : ""}>${n}개</option>`).join("")}</select></label>` : "") +      // 지원일 칸 수 고르기는 관리자만(다른 계정은 기본 4칸)
     (rt ? `<button type="button" class="btn" id="fleetReset">초기화</button>` : "") + `</span></div>` +
@@ -1117,7 +1116,7 @@ function renderBranch() {
   const has = b => hasReq(b.id) || S.rdraft.has(b.id);                  // 요청 있음(입력 중 포함)
   const mine = b => (m.branch_id === b.id) || (can("req.edit.hq") && !can("req.confirm") && b.hq_id === m.hq_id);
   const test = { req: has, fixed: b => isFixed(b.id), offer: b => hasOffer(b.id), unsaved: b => !isSaved(b.id) };
-  const view = b => [...S.bviews].every(k => test[k](b));             // 여러 개 누르면 모두 만족하는 지사만(2026-11-02 사용자 결정)
+  const view = b => [...S.bviews].every(k => test[k](b));             // 보기는 한 번에 하나만 켜짐(아래 [data-bv])
   S.hqs.forEach(hq => {
     if (hq.is_private) return;                                   // 민자는 지사별 요청·편성에 나오지 않음
     const rows = S.order.filter(b => b.hq_id === hq.id), shown = rows.filter(b => !S.bviews.size || mine(b) || view(b));
@@ -1637,13 +1636,11 @@ document.addEventListener("click", e => {
   if ((x = c("[data-fb]"))) return openForecast(x.dataset.fb);
   if ((x = c("[data-wtab]"))) { S.wtab = x.dataset.wtab; return renderWarnNow(); }
   if (c("#zaddBtn")) { const v = ($("zadd") || {}).value; return v ? setZone(v, true) : toast("더할 구역을 고르세요", true); }
-  { const bv = c("[data-bv]"); if (bv) { const k = bv.dataset.bv; S.bviews.has(k) ? S.bviews.delete(k) : S.bviews.add(k); return renderBranch(); } }   // 보기: 여러 개 켜기, 다시 누르면 끔(다 끄면 모든 지사)
+  { const bv = c("[data-bv]"); if (bv) { const k = bv.dataset.bv, was = S.bviews.has(k); S.bviews.clear(); if (!was) S.bviews.add(k); return renderBranch(); } }   // 보기: 한 번에 하나만, 다시 누르면 끔(끄면 모든 지사, 2026-11-03 사용자 요청)
   if ((x = c("[data-rsave]"))) { const b = S.brById[x.dataset.rsave]; return b && canRowSave(b) ? saveBranchRows([b.id], null, `${b.name} 지사를 저장했습니다`) : null; }
-  if (c("#onlyGo")) { S.fleetGo = !S.fleetGo; return renderFleet(); }
-  if ((x = c("[data-fo]"))) {               // 기관 버튼: 여러 개 고르기. '모든 기관'을 누르거나 고른 것을 모두 풀면 모든 기관
-    const o = x.dataset.fo; if (o === "전체") S.fleetOrgs.clear(); else if (S.fleetOrgs.has(o)) S.fleetOrgs.delete(o); else S.fleetOrgs.add(o);
-    return renderFleet();
-  }
+  // 기관 버튼·[지원 장비만]: 한 번에 하나만, 다시 누르면 끔(끄면 모든 장비, 2026-11-03 사용자 요청)
+  if (c("#onlyGo")) { S.fleetGo = !S.fleetGo; S.fleetOrgs.clear(); return renderFleet(); }
+  if ((x = c("[data-fo]"))) { const o = x.dataset.fo, was = S.fleetOrgs.has(o); S.fleetOrgs.clear(); S.fleetGo = false; if (!was) S.fleetOrgs.add(o); return renderFleet(); }
   if ((x = c("[data-org]"))) { S.org = x.dataset.org; renderFilters(); return renderDest(); }
   if ((x = c("[data-type]")) && x.classList.contains("chip")) { S.type = x.dataset.type; renderFilters(); return renderDest(); }
   if ((x = c("[data-lk]"))) { S.logKind = x.dataset.lk; return renderLog(); }

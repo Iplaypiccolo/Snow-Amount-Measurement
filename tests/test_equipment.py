@@ -689,11 +689,8 @@ def t_views_and_choices_after_confirm_all(p):
     p.click("#onlyActive"); p.wait_for_timeout(150)
     want = ev(p, "S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private && hasReq(b.id)).map(b => b.id)")
     check(set(shown()) == set(want) and 0 < len(want) < total, f"일괄 확정 뒤에도 '요청 있는 지사만'이 걸러짐: {len(shown())}/{total}")
-    p.click("#onlyFixed"); p.wait_for_timeout(150)                      # 여러 개 = 모두 만족(2026-11-02): 요청 + 편성
-    both = ev(p, "S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private && hasReq(b.id) && isFixed(b.id)).map(b => b.id)")
-    check(set(shown()) == set(both) and p.locator("#onlyFixed").get_attribute("aria-pressed") == "true" and p.locator("#onlyActive").get_attribute("aria-pressed") == "true",
-          f"[요청]+[편성] = 둘 다 만족: {len(shown())} / {len(both)}")
-    p.click("#onlyActive"); p.wait_for_timeout(150)                     # [요청]을 끄면 편성만
+    p.click("#onlyFixed"); p.wait_for_timeout(150)                      # 한 번에 하나만(2026-11-03): [편성]을 누르면 [요청]은 꺼짐
+    check(p.locator("#branchCtl .chip[aria-pressed=true]").count() == 1, "보기 버튼은 하나만 눌림")
     fixed = ev(p, "S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private && isFixed(b.id)).map(b => b.id)")
     check(set(shown()) == set(fixed) and 0 < len(fixed) < total and p.locator("#onlyFixed").get_attribute("aria-pressed") == "true" and p.locator("#onlyActive").get_attribute("aria-pressed") == "false",
           f"'편성' = 확정 + 편성 1대 이상: {[bn for bn in fixed]}")
@@ -924,7 +921,7 @@ def t_pool_vehicles(p):
     tab(p, "fleet")
     p.click("#fleetMore summary"); p.wait_for_timeout(100); pc = p.locator("#orgGrid [data-orgcard='지역본부']"); card = lambda o: p.locator(f"#orgGrid [data-orgcard='{o}']")
     check(pc.locator("[data-pcap]").inner_text() == "5대" and pc.locator("[data-preg]").inner_text() == "0대", pc.inner_text())
-    check(p.locator("[data-fo]").count() == 6 and p.locator("[data-fo='지역본부']").is_disabled() and not p.locator("[data-fo='전북']").is_disabled(), "장비 0대인 지역본부 버튼은 비활성")
+    check(p.locator("[data-fo]").count() == 5 and p.locator("[data-fo='전체']").count() == 0 and p.locator("[data-fo='지역본부']").is_disabled() and not p.locator("[data-fo='전북']").is_disabled(), "장비 0대인 지역본부 버튼은 비활성")
     opts = ev(p, "[...document.querySelectorAll('#nvOrg option')].map(o => [o.value, o.textContent, o.disabled])")
     check([o[0] for o in opts if not o[2]] == ["서울경기", "충북", "전북", "대구경북", "B:" + ic, "B:" + sw] and opts[4][2] and "─" in opts[4][1], f"기관 4곳 ─ 경계선 ─ 확정된 지사: {opts}")
     p.select_option("#nvOrg", "B:" + ic); p.wait_for_timeout(150)
@@ -942,12 +939,11 @@ def t_pool_vehicles(p):
     check("지원" == vr(v1).locator("td:nth-child(2)").inner_text().strip() and vr(v1).locator("[data-vs], [data-vhide], select.offsel").count() == 0 and vr(v1).locator("[data-vdel]").count() == 1, "지원 여부는 늘 지원, 숨기기 없음, 삭제 있음")
     check(vr("V001").locator(".sfx").inner_text() == "호", "기계화부 장비도 끝에 '호'")
     check(card("지역본부").locator("[data-preg]").inner_text() == "3대" and "인천 3/3" in card("지역본부").locator(f"[data-pbr='{ic}']").inner_text() and "수원 0/2" in card("지역본부").inner_text(), card("지역본부").inner_text())
-    # 기관 버튼: 여러 개, '모든 기관'은 혼자
+    # 기관 버튼: 한 번에 하나만, '모든 기관' 버튼은 없음(끄면 모든 장비)
     nrows = lambda: p.locator("#eqTable tbody tr[data-vrow]").count(); total = nrows()
-    p.click("[data-fo='지역본부']"); p.wait_for_timeout(150); check(nrows() == 3 and p.locator("[data-fo='전체']").get_attribute("aria-pressed") == "false", "지역본부만")
-    p.click("[data-fo='서울경기']"); p.wait_for_timeout(150); check(nrows() == 3 + 12 and p.locator("[data-fo='지역본부']").get_attribute("aria-pressed") == "true" and p.locator("[data-fo='서울경기']").get_attribute("aria-pressed") == "true", f"두 기관 함께: {nrows()}")
-    p.click("[data-fo='서울경기']"); p.click("[data-fo='지역본부']"); p.wait_for_timeout(150); check(nrows() == total and p.locator("[data-fo='전체']").get_attribute("aria-pressed") == "true", "모두 풀면 모든 기관")
-    p.click("[data-fo='충북']"); p.click("[data-fo='전체']"); p.wait_for_timeout(150); check(nrows() == total and p.locator("[data-fo='충북']").get_attribute("aria-pressed") == "false", "'모든 기관'을 누르면 고른 것이 풀림")
+    p.click("[data-fo='지역본부']"); p.wait_for_timeout(150); check(nrows() == 3 and p.locator("#fleetFilters .chip[aria-pressed=true]").count() == 1, "지역본부만")
+    p.click("[data-fo='서울경기']"); p.wait_for_timeout(150); check(nrows() == 12 and p.locator("[data-fo='지역본부']").get_attribute("aria-pressed") == "false" and p.locator("[data-fo='서울경기']").get_attribute("aria-pressed") == "true", f"다른 기관을 누르면 그 기관만: {nrows()}")
+    p.click("[data-fo='서울경기']"); p.wait_for_timeout(150); check(nrows() == total and p.locator("#fleetFilters .chip[aria-pressed=true]").count() == 0, "다시 누르면 모든 장비")
     # ── 경로는 관리자: 자기 지사는 목록에 없음, 지원 불가(이날부터) 없음
     p.check("#modeRev"); p.wait_for_timeout(150); o = ev(p, f"[...document.querySelectorAll(\"select[data-fk='r:{d0}:{v1}:0'] option\")].map(o => o.value)")
     check(ic not in o and sw in o and dg in o, "자기(출발) 지사는 고를 수 없음")
@@ -1014,9 +1010,10 @@ def t_fleet_only_go(p):
     check(p.locator("#onlyGo").inner_text() == "지원 장비만" and p.locator("#onlyGo").get_attribute("aria-pressed") == "false" and 0 < len(go) < total, "기관 버튼 줄에 [지원 장비만]")
     p.click("#onlyGo"); p.wait_for_timeout(150)
     check(sorted(rows()) == sorted(go) and p.locator("#onlyGo").get_attribute("aria-pressed") == "true" and p.locator("#eqTable select[data-vs]").evaluate_all("xs => xs.every(x => x.value === 'O')"), f"지원인 장비만: {len(rows())} / {total}")
-    p.click("[data-fo='충북']"); p.wait_for_timeout(150); check(rows() == [v for v in go if ev(p, f"vehById('{v}').org") == "충북"] and len(rows()) > 0, "기관 버튼과 함께")
-    p.click("[data-fo='전북']"); p.click("[data-fo='충북']"); p.wait_for_timeout(150); check(rows() == [] and "지원 여부가 '지원'인 장비가 없습니다" in p.locator("#eqTable").inner_text(), "지원 장비가 없는 기관")
-    p.click("[data-fo='전체']"); p.wait_for_timeout(150)
+    p.click("[data-fo='충북']"); p.wait_for_timeout(150); check(p.locator("#onlyGo").get_attribute("aria-pressed") == "false" and len(rows()) == ev(p, "S.vehicles.filter(v => v.org === '충북' && shownIn(v, curRound())).length") and len(rows()) > 0, "기관을 누르면 [지원 장비만]은 꺼지고 그 기관 전체")
+    p.click("#onlyGo"); p.wait_for_timeout(150); check(sorted(rows()) == sorted(go) and p.locator("[data-fo='충북']").get_attribute("aria-pressed") == "false", "[지원 장비만]을 누르면 기관 버튼은 꺼짐")
+    ev(p, "(S.fleetOrgs = new Set(['전북']), renderFleet())"); p.wait_for_timeout(100); check(rows() == [] and "지원 여부가 '지원'인 장비가 없습니다" in p.locator("#eqTable").inner_text(), "지원 장비가 없을 때 안내")
+    ev(p, "(S.fleetOrgs = new Set(), renderFleet())"); p.wait_for_timeout(100)
     p.select_option("[data-vs=V014]", "X"); p.wait_for_timeout(150); check("V014" in rows(), "고치는 중인 줄은 바로 사라지지 않음")
     confirm_fleet(p); check("확정했습니다" in toast(p) and "V014" not in rows() and len(rows()) == len(go) - 1, "확정하면 목록에서 빠짐: " + toast(p))
     p.click("#onlyGo"); p.wait_for_timeout(150); check(len(rows()) == total and p.locator("#onlyGo").get_attribute("aria-pressed") == "false", "다시 누르면 모든 장비")
