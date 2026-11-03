@@ -44,6 +44,13 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 초단기예보 전환 보기, 24시간 예보 휴대폰 화면 맞춤(마이그레이션 57·collect-forecast v4 — 서버 적용 완료)
+- 사용자 확인(SQL 미리 보여 줌) 뒤 적용: 표 `forecast_vsrt_runs`·`forecast_vsrt_hours`, 함수 `forecast_vsrt_plan·begin·put·fail·overview·grid`, `private.fc_vsrt_cells`, `private.kick_vsrt`, 예약 `collect-vsrt`. 단기예보 계산·표·권한 규칙은 그대로. 시험 `supabase/tests/forecast_vsrt_test.sql`(되돌림 시험 34개 통과).
+- `supabase/functions/collect-forecast`: 본문 `{"vsrt":true}` 수집, `{"vsrt":true,"probe":"T1H"}` 시험 호출. 키는 기존 비밀값 `KMA_AUTH_KEY`.
+- `forecast/ui.js`: `[단기예보 | 초단기예보]`(`#fc-mode`), 기본 단기, 요청·편성에서 오면 단기로. `forecast/style.css`: 전환 버튼, 760px 이하 폭 맞춤. `guide/guide.js`·`index.html` 안내 추가. 시험 `t_mode_switch`·`t_mode_no_data`·`t_phone_fit`.
+- 사용자에게 권한 것: 인증키가 대화에 남아 연동 확인 뒤 API허브에서 재발급하고 함수 비밀값도 바꾸기. 200명 부하 시험·Pro 검토는 운영 전 과제로 남음.
+— ✍ Claude Code 작성
+
 ### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 못 본 값 확정 막기, 첫 저장 충돌 해결(마이그레이션 56 — 서버 적용 완료)
 - 사용자 확인(SQL 미리 보여 줌) 뒤 `save_requests` 교체. 표·권한 규칙·트리거는 그대로. `supabase/migrations/20261103_56_save_requests_expect.sql`, 시험 `supabase/tests/save_requests_expect_test.sql`(되돌림 시험 26개 통과. 적용 전 예전 함수는 같은 충돌 흉내에서 23505 확인).
 - `equipment/js/app.js saveBranchRows`: 확정 때 `expect_at` 전송, SA007 이면 다시 읽고 안내(고치던 값 유지), 저장 뒤 `versions` 를 `S.reqs[].updated_at` 에 반영. `equipment/js/api.js`: `updated_at` 읽기, SA007 문구, 샘플 모드 흉내. `tests/_sb_mock.py` 같은 흉내. 시험 `t_confirm_stale`.

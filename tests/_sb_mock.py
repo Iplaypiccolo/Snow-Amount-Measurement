@@ -113,7 +113,7 @@ class Mock:
                 if p > o["max_pcp_24h"]: o["max_pcp_24h"] = p; o["detail"].update(pcp_nx=nx, pcp_ny=ny)
                 if t < o["min_tmp"]: o.update(min_tmp=t, min_tmp_at=ta)
                 if pop > o["max_pop_24h"]: o["max_pop_24h"] = pop
-        self.branch_forecast = list(_best.values()); self.fc_calls = []; self.fc_series_calls = []
+        self.branch_forecast = list(_best.values()); self.fc_calls = []; self.fc_series_calls = []; self.vsrt_calls = []; self.vsrt_on = True
         self.branches = [{"id": b, "name": d.replace("지사", ""), "hq_id": h} for _, d, b, h in names]
         self.hqs = [{"id": "H01", "name": "수도권", "sort": 1}, {"id": "H02", "name": "서울경기", "sort": 2}, {"id": "H03", "name": "강원", "sort": 3}, {"id": "H04", "name": "충북", "sort": 4}, {"id": "H07", "name": "광주전남", "sort": 7}]
         self.users["stranger"] = {"id": "id-stranger", "username": "stranger", "password": "Stranger#Pass-123", "profile": None}
@@ -144,6 +144,7 @@ class Mock:
         self.n += 1; at, rt = f"at-{self.n}", f"rt-{self.n}"; self.tokens[at] = u["id"]; self.tokens[rt] = u["id"]
         return {"access_token": at, "refresh_token": rt, "expires_in": 3600, "token_type": "bearer", "user": {"id": u["id"]}}
     def active_admin(self, u): p = u and u["profile"]; return bool(p and p["role"] == "admin" and not p["must_change"] and not p["disabled"])
+    def fc_vend(self): return (datetime.datetime.fromisoformat(self.fc_start.replace("Z", "+00:00")) + datetime.timedelta(hours=6)).isoformat()      # 초단기예보: 앞으로 6시간
     def usable(self, u): p = u and u["profile"]; return bool(p and not p["must_change"] and not p["disabled"])
     def events_api(self, tbl, req, u, q, body, send):
         """변경 이력 표와 같은 권한 규칙: 읽기=활성 로그인 사용자(임시 비밀번호·비활성 제외), 쓰기=관리자만(종류 검사, 한 줄이라도 틀리면 전부 취소), 지우기·고치기 없음"""
@@ -279,6 +280,18 @@ class Mock:
                 (self.fc_series_calls if ser else self.fc_calls).append(sorted(ids))
                 return send(200, {"tmfc": self.fc_issued, "start_at": self.fc_start, "end_at": self.fc_end,
                                   "cells": [[nx, ny, [b for b in bs if b in ids], s, p, t, ta, sr if ser else None, pop] for nx, ny, bs, s, p, t, ta, sr, pop in self.fc_cells if ids & set(bs)]})
+            if tbl == "forecast_vsrt_overview" and "/rpc/" in path:      # 초단기예보(마이그레이션 57): 적설 없음
+                if not self.usable(u): return send(401, {"message": "login"})
+                self.vsrt_calls.append("overview")
+                if not self.vsrt_on: return send(200, {"tmfc": None, "start_at": None, "end_at": None, "rows": []})
+                return send(200, {"tmfc": self.fc_issued, "start_at": self.fc_start, "end_at": self.fc_vend(), "rows": [{"branch_id": x["branch_id"], "issued_at": self.fc_issued, "max_snow_24h": None, "max_pcp_24h": 7.5, "max_pop_24h": 80, "min_tmp": -4, "min_tmp_at": self.fc_start} for x in self.branch_forecast]})
+            if tbl == "forecast_vsrt_grid" and "/rpc/" in path:
+                if not self.usable(u): return send(401, {"message": "login"})
+                ids = set((body or {}).get("p_branches") or []); ser = bool((body or {}).get("p_series")); self.vsrt_calls.append("series" if ser else "grid")
+                if not self.vsrt_on: return send(200, {"tmfc": None, "start_at": None, "end_at": None, "cells": [[nx, ny, [b for b in bs if b in ids], None, None, None, None, None, None] for nx, ny, bs, s, p, t, ta, sr, pop in self.fc_cells if ids & set(bs)]})
+                sr6 = {"p": [1.5, 1.5, 1.5, 1, 1, 0.5], "t": [-4, -3, -2, -1, 0, 1], "r": [80, 70, 60, 50, 40, 30]}
+                return send(200, {"tmfc": self.fc_issued, "start_at": self.fc_start, "end_at": self.fc_vend(),
+                                  "cells": [[nx, ny, [b for b in bs if b in ids], None, 7.5, -4, self.fc_start, sr6 if ser else None, 80] for nx, ny, bs, s, p, t, ta, sr, pop in self.fc_cells if ids & set(bs)]})
             if tbl == "warning_status" and "/rpc/" in path:
                 self.eq_calls.append((tbl, body)); return send(200, self.warn_status) if self.usable(u) else send(401, {"message": "login"})
             if tbl in ("save_fleet", "save_requests") and "/rpc/" in path:

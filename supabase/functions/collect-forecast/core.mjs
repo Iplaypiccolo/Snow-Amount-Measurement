@@ -9,9 +9,13 @@
 //  * 기상청 키는 함수 비밀값 KMA_AUTH_KEY 에만. 키가 들어간 주소는 오류·기록에 남기지 않는다.
 //  * 받을 종류·순서는 서버(forecast_plan)가 정함: 적설·강수·기온 먼저, 강수확률은 그다음(마이그레이션 42). 이 함수는 목록대로 받기만 함
 //  * 시험 호출 {"probe":"POP"}: 그 종류를 한 시각만 받아 요약(개수·최소·최대)만 돌려줌. 저장하지 않음 — 새 종류를 넣기 전에 기상청이 주는지 확인하는 용도
+//  * 초단기예보(마이그레이션 57): 본문 {"vsrt":true} → 10분 간격 발표분의 T1H·RN1·POP 6시각(18번)을 받아 forecast_vsrt_put. 단기예보 값은 건드리지 않음(화면에서 전환해 봄).
+//    아직 안 나온 발표분은 200 + '# dfs_file_read error' → 한 칸 앞 발표분을 받음(실패로 기록 안 함). 시험 호출 {"vsrt":true,"probe":"T1H"}: 저장 없이 요약만
 //  * 순수 로직은 Node 로 시험: tests/test_collect_forecast.mjs
 // ============================================================
 export const GRID_URL = 'https://apihub.kma.go.kr/api/typ01/cgi-bin/url/nph-dfs_shrt_grd';
+export const VSRT_URL = 'https://apihub.kma.go.kr/api/typ01/cgi-bin/url/nph-dfs_vsrt_grd';
+export const VSRT_VARS = ['T1H', 'RN1', 'POP'];
 export const NX = 149, NY = 253;
 const BUDGET_MS = 120000, GAP_MS = 500, RETRY_MS = 2000, TRIES = 4;   // 무료 플랜 함수 한 번 최대 150초
 
@@ -20,6 +24,9 @@ const json = (status, body) => new Response(JSON.stringify(body), { status, head
 
 // ISO 시각 → 'YYYYMMDDHH'(한국 시각)
 export const kstHour = (iso) => new Date(Date.parse(iso) + 9 * 3600e3).toISOString().replace(/[-T:]/g, '').slice(0, 10);
+
+// ISO 시각 → 'YYYYMMDDHHmm'(한국 시각) — 초단기예보 발표 시각은 분까지
+export const kstMinute = (iso) => new Date(Date.parse(iso) + 9 * 3600e3).toISOString().replace(/[-T:]/g, '').slice(0, 12);
 
 // 격자 글(쉼표·빈칸으로 나뉜 37,697개 값, 첫 줄 = 남쪽 ny=1) → 고른 격자 [[nx, ny]…] 순서의 값. 형식이 다르면 null
 export function pickCells(text, cells) {
@@ -56,6 +63,52 @@ async function allowed(req, deps) {
   return !!(p && p.role === 'admin' && !p.disabled);
 }
 
+// 초단기예보 시험 호출: 20분 전 발표분의 다음 정시 한 시각만 받아 요약(저장 안 함)
+async function probeVsrt(body, deps, key) {
+  const v = String(body.probe).toUpperCase();
+  if (!VSRT_VARS.includes(v)) return json(400, { ok: false, error: 'bad_probe' });
+  const tm = Math.floor(Date.now() / 600000) * 600000 - 1200000, tmfc = new Date(tm).toISOString(), tmef = new Date(Math.floor(tm / 3600000) * 3600000 + 3600000).toISOString();
+  const r = await deps.fetchText(`${VSRT_URL}?tmfc=${kstMinute(tmfc)}&tmef=${kstHour(tmef)}&vars=${v}&authKey=${encodeURIComponent(key)}`);
+  const stats = r.status === 200 ? gridStats(r.text) : null;
+  const head = stats && stats.ok ? undefined : String(r.text || '').slice(0, 160).split(key).join('***');
+  return json(200, { ok: r.status === 200 && !!(stats && stats.ok), probe: v, status: r.status, tmfc: kstMinute(tmfc), tmef: kstHour(tmef), stats, head });
+}
+
+// 초단기예보 받기: 새 발표분부터 시도, 아직 안 나왔으면 한 칸 앞 발표분
+async function collectVsrt(deps, key) {
+  const { data: plan, error } = await deps.store.vsrtPlan();
+  if (error || !plan) return json(500, { ok: false, error: 'db' });
+  const t0 = deps.now(); let used = null, put = 0, lastErr = null, done = false;
+  for (const tmfc of plan.candidates) {
+    const { data: run, error: e1 } = await deps.store.vsrtBegin(tmfc);
+    if (e1 || !run) return json(500, { ok: false, error: 'db' });
+    if (!run.cells || !run.cells.length) return json(200, { ok: false, error: 'no_cells' });
+    let notReady = false;
+    for (const [v, tmef] of run.missing) {
+      if (deps.now() - t0 > BUDGET_MS) { lastErr = '시간이 모자라 다음 예약 때 이어서'; break; }
+      const url = `${VSRT_URL}?tmfc=${kstMinute(tmfc)}&tmef=${kstHour(tmef)}&vars=${v}&authKey=${encodeURIComponent(key)}`;
+      let vals = null, status = 0;
+      for (let i = 0; i < TRIES && !vals && !notReady; i++) {
+        if (i) await deps.sleep(RETRY_MS);
+        const r = await deps.fetchText(url); status = r.status;
+        if (r.status === 200 && String(r.text).includes('dfs_file_read')) { notReady = true; break; }
+        vals = r.status === 200 ? pickCells(r.text, run.cells) : null;
+        if (r.status === 200 && !vals) { status = 'format'; break; }
+      }
+      if (notReady) break;
+      if (!vals) { lastErr = status === 'format' ? '기상청 격자 형식이 다름(키·주소 확인)' : `기상청 응답 ${status || '연결 실패'} (초단기 ${v} ${kstHour(tmef)})`; break; }
+      const { data: res, error: e2 } = await deps.store.vsrtPut(tmfc, v, tmef, vals);
+      if (e2) { lastErr = 'DB 저장 실패'; break; }
+      put++; done = !!(res && res.done);
+      if (done) break;
+    }
+    if (notReady && !put) continue;                     // 이 발표분은 아직 안 나옴 → 한 칸 앞
+    used = tmfc; break;
+  }
+  if (lastErr && !done) await deps.store.vsrtFail(lastErr);
+  return json(200, { ok: !lastErr || done, done, tmfc: used && kstMinute(used), hours: put, waiting: !used, error: done ? undefined : lastErr || undefined });
+}
+
 export async function handle(req, deps) {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return json(405, { ok: false, error: 'method' });
@@ -64,6 +117,7 @@ export async function handle(req, deps) {
   if (!key) { await deps.store.fail('KMA_AUTH_KEY 비밀값이 없음'); return json(200, { ok: false, error: 'no_key' }); }
 
   let body = {}; try { body = (await req.json()) || {}; } catch (e) { body = {}; }
+  if (body.vsrt) return body.probe ? probeVsrt(body, deps, key) : collectVsrt(deps, key);
   if (body.probe) {                                   // 시험 호출: 한 시각만 받아 요약만(저장 안 함)
     const v = String(body.probe).toUpperCase();
     if (!PROBE_VARS.includes(v)) return json(400, { ok: false, error: 'bad_probe' });

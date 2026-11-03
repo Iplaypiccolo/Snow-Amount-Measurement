@@ -31,6 +31,16 @@ def run(name, fn, b):
             try: T.OPENED.pop().close()
             except Exception: pass
 
+def open_phone(browser, mock=None):
+    """휴대폰 화면(375×812)으로 열기"""
+    p = browser.new_page(bypass_csp=True, viewport={"width": 375, "height": 812}, has_touch=True, is_mobile=True)
+    T.OPENED.append(p)
+    p.on("pageerror", lambda e: errors.append(str(e))); p.on("dialog", lambda d: d.accept()); p.route("**/*", T.route)
+    m = mock or SBM.Mock(); SBM.install(p, m, "admin-01")
+    p.goto(T.URL); p.wait_for_function("window.ForecastUI && ForecastUI._state().inited", timeout=60000)
+    p.evaluate("document.querySelector('.tab-btn[data-tab=forecast]').click()"); p.wait_for_timeout(900)
+    return p, m
+
 def layers(p): return J(p, f"{S}.cells.getLayers().length")
 def labels(p): return p.locator("#fmap .fc-label").count()
 def bid(p, name): return J(p, f"(() => {{ const s = {S}.state; return s.order.find(id => s.branches[id].name === '{name}') }})()")
@@ -237,6 +247,68 @@ def t_top_menu(b):
     check(p.locator(".tab-btn[data-tab=forecast]").is_visible() and box and box["width"] <= 390 and p.evaluate("document.documentElement.scrollWidth <= 392"), "휴대폰 폭: 메뉴 줄은 옆으로 밀어 보기, 화면은 가로로 넘치지 않음")
 
 TESTS = [t_pin_chart, t_first_tab_and_order, t_levels, t_open_from_equipment, t_branch_user_can_view, t_legend_show, t_auto_pick, t_top_menu]
+
+def t_mode_switch(b):
+    """2026-11-03: 기본은 단기예보, [초단기예보]를 누르면 초단기 값(적설 없음, 앞으로 6시간), [단기예보]로 돌아오면 원래 값. 누르기 전에는 초단기를 서버에서 받지 않음"""
+    p, m = open_page(b)
+    p.click(".tab-btn[data-tab=forecast]"); p.wait_for_timeout(900)
+    pressed = lambda: p.locator("#fc-mode [aria-pressed=true]").inner_text()
+    check(pressed() == "단기예보" and "24시간 합" in p.locator("#fc-meta").inner_text() and not m.vsrt_calls, "기본 = 단기예보, 초단기는 안 받음")
+    p.click("#fc-tree [data-fchq='강원']"); p.wait_for_timeout(600)
+    br = J(p, f"{S}.state.order.find(id => {S}.state.branches[id].hq === '강원')")
+    p.click(f"#fc-tree [data-fcbr='{br}']"); p.wait_for_timeout(800)
+    shrt = J(p, f"{S}.bf['{br}'].max_pcp_24h"); rows0 = p.locator(".fc-detail tbody tr").count()
+    check("적설(cm)" in p.locator(".fc-detail thead").inner_text() and p.locator(".fc-pin .fc-tt th.s").count() > 0, "단기: 적설 칸·줄 있음")
+    p.click("#fc-mode [data-fcmode=vsrt]"); p.wait_for_timeout(800)
+    meta = p.locator("#fc-meta").inner_text()
+    check(pressed() == "초단기예보" and "앞으로 6시간" in meta and "적설은 초단기예보에 없음" in meta, "초단기 안내: " + meta)
+    check(set(m.vsrt_calls) == {"overview", "grid", "series"}, f"초단기 자료를 받음: {m.vsrt_calls}")
+    row = p.locator(f"#fc-tree [data-fcbr='{br}']").inner_text()
+    check("7.5" in row and "80" in row and "-4" in row, "지사 줄 = 초단기 값: " + row)
+    check("적설" not in p.locator(".fc-detail thead").inner_text() and p.locator(".fc-detail tbody tr").count() == rows0 and p.locator(".fc-detail tbody tr").first.locator("td").count() == 5, "격자 표: 적설 칸 없음")
+    check(p.locator("#fc-pin").is_visible() and p.locator(".fc-pin .fc-tt").count() == 1 and p.locator(".fc-pin .fc-tt th.s").count() == 0 and p.locator(".fc-pin .fc-tt thead th").count() == 7, "추이 표: 6시각 한 표, 적설 줄 없음")
+    check("6시간 합" in p.locator(".fc-pin .fc-tt-sum").inner_text() and "적설" not in p.locator(".fc-pin .fc-tt-sum").inner_text(), "합계 줄: " + p.locator(".fc-pin .fc-tt-sum").inner_text())
+    leg = p.locator("#fc-legend")
+    check(leg.locator(".fc-show").inner_text().split() == ["강수", "확률", "기온"] and leg.locator(".fc-ramp-t").inner_text() == "강수량", "범례: 강수 기준")
+    n = len(m.fc_calls) + len(m.fc_series_calls)
+    p.click("#fc-mode [data-fcmode=shrt]"); p.wait_for_timeout(500)
+    check(pressed() == "단기예보" and J(p, f"{S}.bf['{br}'].max_pcp_24h") == shrt and "24시간 합" in p.locator("#fc-meta").inner_text() and "적설(cm)" in p.locator(".fc-detail thead").inner_text(), "단기로 돌아오면 원래 값")
+    check(len(m.fc_calls) + len(m.fc_series_calls) == n and p.locator("#fc-legend .fc-ramp-t").inner_text() == "적설량", "단기는 다시 받지 않음")
+    # 요청·편성에서 지사로 오면 늘 단기
+    p.click("#fc-mode [data-fcmode=vsrt]"); p.wait_for_timeout(500)
+    J(p, f"ForecastUI.openBranch('{br}')"); check(pressed() == "단기예보", "요청·편성에서 오면 단기예보로")
+
+def t_mode_no_data(b):
+    """초단기예보를 아직 못 받았으면 '없음' 안내, 값은 '-'"""
+    m = SBM.Mock(); m.vsrt_on = False; p, m = open_page(b, m)
+    p.click(".tab-btn[data-tab=forecast]"); p.wait_for_timeout(800)
+    p.click("#fc-mode [data-fcmode=vsrt]"); p.wait_for_timeout(500)
+    check("초단기예보 없음" in p.locator("#fc-meta").inner_text(), p.locator("#fc-meta").inner_text())
+    p.click("#fc-tree [data-fchq='강원']"); p.wait_for_timeout(500); check(layers(p) > 0, "격자는 보임")
+
+def t_phone_fit(b):
+    """2026-11-03: 휴대폰에서 목록·격자 표·추이 표가 화면 폭을 넘지 않음(예전: 목록 440px, 추이 표 418px)"""
+    p, m = open_phone(b)
+    box = lambda s: J(p, f"(() => {{ const r = document.querySelector('{s}').getBoundingClientRect(); return [r.left, r.right, r.width, r.height]; }})()")
+    def fits(tag):
+        w = J(p, "innerWidth"); check(w == 375 and J(p, "document.scrollingElement.scrollWidth") <= 375, f"{tag}: 화면이 옆으로 밀리지 않음 {w}, {J(p, 'document.scrollingElement.scrollWidth')}")
+        over = J(p, """[...document.querySelectorAll('#view-forecast .jr-side *, #fc-pin *')].filter(e => { const r = e.getBoundingClientRect(); return r.width && r.right > innerWidth + 0.5; }).map(e => e.tagName + '.' + e.className + ':' + Math.round(e.getBoundingClientRect().right)).slice(0, 5)""")
+        check(not over, f"{tag}: 넘치는 칸 {over}")
+        clip = J(p, """[...document.querySelectorAll('.fc-tt td, .fc-tt th, .fc-detail td, .fc-detail th, .fc-row .fc-v')].filter(c => c.offsetParent && c.scrollWidth > c.clientWidth + 1).map(c => c.textContent.trim() + ' ' + c.scrollWidth + '>' + c.clientWidth).slice(0, 5)""")
+        check(not clip, f"{tag}: 글자가 잘림 {clip}")
+    check(box("#view-forecast .jr-side")[2] == 375 and box("#view-forecast .jr-mapbox")[2] == 375, f"목록·지도 폭 같음: {box('#view-forecast .jr-side')} {box('#view-forecast .jr-mapbox')}")
+    fits("전체")
+    p.locator("#fc-tree [data-fchq='강원']").click(); p.wait_for_timeout(600)
+    p.locator("#fc-tree [data-fcbr]").first.click(); p.wait_for_timeout(1000)
+    fits("지사")
+    pin = box("#fc-pin"); check(p.locator("#fc-pin").is_visible() and pin[0] >= 0 and pin[1] <= 375 and pin[3] <= box("#view-forecast .jr-mapbox")[3], f"추이 표가 지도 안에: {pin}")
+    p.locator(".fc-detail tbody tr").nth(1).click(); p.wait_for_timeout(400); fits("격자 누름")
+    check(p.locator("#fc-pin").is_visible(), "격자를 누르면 표가 뜸")
+    p.locator(".fc-pin-x").click(); p.wait_for_timeout(200); check(not p.locator("#fc-pin").is_visible(), "닫기 버튼으로 닫힘")
+    p.locator("#fc-mode [data-fcmode=vsrt]").click(); p.wait_for_timeout(800); fits("초단기")
+    mode = box("#fc-mode"); check(mode[1] <= 375, f"전환 버튼이 화면 안에: {mode}")
+
+TESTS += [t_mode_switch, t_mode_no_data, t_phone_fit]
 
 if __name__ == "__main__":
     only = sys.argv[1:]

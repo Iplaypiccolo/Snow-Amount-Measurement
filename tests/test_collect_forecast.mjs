@@ -1,7 +1,7 @@
 /* 예상 적설 받기 함수(supabase/functions/collect-forecast/core.mjs) 자동 테스트 — 격자 글에서 지사 격자 고르기, 가짜 DB 로 받기 흐름·다시 받기·시간 제한
    실행: node tests/test_collect_forecast.mjs   (저장소 맨 위 폴더에서) */
 import assert from 'node:assert/strict';
-import { pickCells, kstHour, handle, NX, NY, GRID_URL, gridStats } from '../supabase/functions/collect-forecast/core.mjs';
+import { pickCells, kstHour, kstMinute, handle, NX, NY, GRID_URL, VSRT_URL, gridStats } from '../supabase/functions/collect-forecast/core.mjs';
 
 const results = [];
 async function test(name, fn) { try { await fn(); results.push([name, true]); } catch (e) { results.push([name, false, String(e.message).split('\n')[0]]); } }
@@ -39,6 +39,57 @@ function world(o = {}) {
   return w;
 }
 const call = async (w, h = { token: 'tok' }, body = '{}') => { const r = await handle(new Request('https://x/f', { method: 'POST', headers: h.token ? { 'x-collector-token': h.token } : {}, body }), w.deps); return { status: r.status, j: await r.json() }; };
+
+// 초단기예보: 후보 3개, 격자 2칸, 18개 받기
+function vworld(o = {}) {
+  const cand = ['2026-11-03T00:20:00+00:00', '2026-11-03T00:10:00+00:00', '2026-11-03T00:00:00+00:00'];
+  const hrs = Array.from({ length: 6 }, (_, i) => new Date(Date.UTC(2026, 10, 3, 1 + i)).toISOString());
+  const w = world(); w.begun = []; w.vputs = []; w.vfails = []; w.vplan = { candidates: cand }; w.vdone = 18;
+  Object.assign(w.deps.store, {
+    async vsrtPlan() { return { data: w.vplan, error: null }; },
+    async vsrtBegin(t) { w.begun.push(t); return { data: { tmfc: t, cells: [[60, 127], [92, 131]], missing: hrs.flatMap((h) => ['T1H', 'RN1', 'POP'].map((v) => [v, h])) }, error: null }; },
+    async vsrtPut(t, v, h, vals) { w.vputs.push([t, v, h, vals]); return { data: { ok: true, done: w.vputs.length === w.vdone }, error: null }; },
+    async vsrtFail(n) { w.vfails.push(n); },
+  });
+  Object.assign(w, o);
+  return w;
+}
+const NOT_READY = { status: 200, text: '# dfs_file_read error (-1) \n' };
+await test('초단기: 분까지 적은 발표 시각, 발표 다음 정시부터 6시각 × 3종류 = 18번, 지사 격자만', async () => {
+  assert.equal(kstMinute('2026-11-03T00:20:00+00:00'), '202611030920');
+  const w = vworld(); const r = await call(w, { token: 'tok' }, '{"vsrt":true}');
+  assert.equal(w.fetched.length, 18); assert.equal(w.vputs.length, 18); assert.equal(r.j.done, true); assert.equal(r.j.tmfc, '202611030920');
+  assert.ok(w.fetched[0].startsWith(VSRT_URL + '?tmfc=202611030920&tmef=2026110310&vars=T1H&authKey=')); assert.ok(w.fetched[17].includes('&tmef=2026110315&vars=POP&'));
+  assert.deepEqual(w.vputs[0][3], [127060, 131092]); assert.equal(w.puts.length, 0); assert.ok(!JSON.stringify(r.j).includes(w.key));
+});
+await test('초단기: 아직 안 나온 발표분은 실패가 아니라 한 칸 앞 발표분을 받음', async () => {
+  const w = vworld(); w.resp = (u) => (u.includes('tmfc=202611030920') ? NOT_READY : { status: 200, text: G });
+  const r = await call(w, { token: 'tok' }, '{"vsrt":true}');
+  assert.deepEqual(w.begun, ['2026-11-03T00:20:00+00:00', '2026-11-03T00:10:00+00:00']); assert.equal(w.fetched.length, 19); assert.equal(r.j.tmfc, '202611030910');
+  assert.equal(w.vfails.length, 0); assert.equal(r.j.ok, true);
+});
+await test('초단기: 후보가 모두 안 나왔으면 조용히 끝(다음 예약 때)', async () => {
+  const w = vworld(); w.resp = () => NOT_READY; const r = await call(w, { token: 'tok' }, '{"vsrt":true}');
+  assert.equal(w.fetched.length, 3); assert.equal(w.vputs.length, 0); assert.equal(w.vfails.length, 0); assert.equal(r.j.ok, true); assert.equal(r.j.waiting, true);
+});
+await test('초단기: 받을 발표분이 없으면 기상청을 부르지 않음', async () => {
+  const w = vworld(); w.vplan = { candidates: [] }; const r = await call(w, { token: 'tok' }, '{"vsrt":true}');
+  assert.equal(w.fetched.length, 0); assert.equal(r.j.ok, true);
+});
+await test('초단기: 504 는 다시 시도, 끝내 안 되면 초단기 실패로만 기록', async () => {
+  const w = vworld(); w.resp = () => ({ status: 504, text: '' }); const r = await call(w, { token: 'tok' }, '{"vsrt":true}');
+  assert.equal(w.fetched.length, 4); assert.ok(w.vfails[0].includes('504')); assert.equal(w.fails.length, 0); assert.equal(r.j.ok, false);
+});
+await test('초단기: 권한 없으면 401, 인증키 오류 안내문은 형식 오류(키 노출 없음)', async () => {
+  const w = vworld(); assert.equal((await call(w, {}, '{"vsrt":true}')).status, 401); assert.equal(w.fetched.length, 0);
+  w.resp = () => ({ status: 200, text: '인증키 오류' }); await call(w, { token: 'tok' }, '{"vsrt":true}');
+  assert.equal(w.fetched.length, 1); assert.ok(w.vfails[0].includes('형식')); assert.ok(!w.vfails[0].includes(w.key));
+});
+await test('초단기 시험 호출: 저장 없이 요약만, 다른 종류는 거절', async () => {
+  const w = vworld(); const r = await call(w, { token: 'tok' }, '{"vsrt":true,"probe":"T1H"}');
+  assert.equal(r.j.probe, 'T1H'); assert.equal(w.fetched.length, 1); assert.ok(w.fetched[0].startsWith(VSRT_URL)); assert.equal(w.vputs.length, 0); assert.equal(w.begun.length, 0);
+  assert.equal((await call(w, { token: 'tok' }, '{"vsrt":true,"probe":"SNO"}')).status, 400);
+});
 
 await test('권한: 토큰 없으면 401(기상청에 묻지 않음)', async () => {
   const w = world(); assert.equal((await call(w, {})).status, 401); assert.equal((await call(w, { token: 'x' })).status, 401); assert.equal(w.fetched.length, 0);
