@@ -44,6 +44,12 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 초단기 전환을 같은 24시간 표로, 격자 창 옮기기·크기 조절(마이그레이션 58 — 서버 적용 완료)
+- 사용자 확인(SQL 미리 보여 줌) 뒤 적용: `private.fc_vsrt_cells(p_branches, p_series)`, `forecast_vsrt_overview`, `forecast_vsrt_grid` 교체. 표·권한 규칙·예약·단기 값은 그대로. 시험 `supabase/tests/forecast_vsrt_test.sql`(되돌림 시험 14개 통과).
+- `forecast/ui.js`: 전환해도 24시간 표 그대로, 앞 시각의 강수·확률·기온만 바뀜(노란 칸, `series.vn`), 왼쪽 목록도 그 값. 격자 창 끌어 옮기기·모서리 크기 조절·글자 비율·기억(`applyPinGeo`·`pinDrag`, `ss_fc_pin`, 컴퓨터 화면만). 시험 `t_mode_switch`·`t_mode_no_data`·`t_pin_move_resize`·`t_phone_fit`.
+- 자동 갱신은 넣지 않음(사용자에게 권장안 안내, 말이 없으면 안 넣기로 함). 인증키 재발급은 사용자 몫으로 남음.
+— ✍ Claude Code 작성
+
 ### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 초단기예보 전환 보기, 24시간 예보 휴대폰 화면 맞춤(마이그레이션 57·collect-forecast v4 — 서버 적용 완료)
 - 사용자 확인(SQL 미리 보여 줌) 뒤 적용: 표 `forecast_vsrt_runs`·`forecast_vsrt_hours`, 함수 `forecast_vsrt_plan·begin·put·fail·overview·grid`, `private.fc_vsrt_cells`, `private.kick_vsrt`, 예약 `collect-vsrt`. 단기예보 계산·표·권한 규칙은 그대로. 시험 `supabase/tests/forecast_vsrt_test.sql`(되돌림 시험 34개 통과).
 - `supabase/functions/collect-forecast`: 본문 `{"vsrt":true}` 수집, `{"vsrt":true,"probe":"T1H"}` 시험 호출. 키는 기존 비밀값 `KMA_AUTH_KEY`.

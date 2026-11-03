@@ -249,42 +249,90 @@ def t_top_menu(b):
 TESTS = [t_pin_chart, t_first_tab_and_order, t_levels, t_open_from_equipment, t_branch_user_can_view, t_legend_show, t_auto_pick, t_top_menu]
 
 def t_mode_switch(b):
-    """2026-11-03: 기본은 단기예보, [초단기예보]를 누르면 초단기 값(적설 없음, 앞으로 6시간), [단기예보]로 돌아오면 원래 값. 누르기 전에는 초단기를 서버에서 받지 않음"""
+    """2026-11-03(58): 기본은 단기예보. [초단기예보]를 눌러도 같은 24시간 표 — 앞 6시간의 강수·확률·기온만 바뀌고 합계·왼쪽 목록도 그 값, 적설은 그대로. [단기예보]로 돌아오면 원래 값"""
     p, m = open_page(b)
     p.click(".tab-btn[data-tab=forecast]"); p.wait_for_timeout(900)
     pressed = lambda: p.locator("#fc-mode [aria-pressed=true]").inner_text()
-    check(pressed() == "단기예보" and "24시간 합" in p.locator("#fc-meta").inner_text() and not m.vsrt_calls, "기본 = 단기예보, 초단기는 안 받음")
+    check(pressed() == "단기예보" and "24시간 합" in p.locator("#fc-meta").inner_text() and "초단기" not in p.locator("#fc-meta").inner_text() and not m.vsrt_calls, "기본 = 단기예보, 초단기는 안 받음")
     p.click("#fc-tree [data-fchq='강원']"); p.wait_for_timeout(600)
     br = J(p, f"{S}.state.order.find(id => {S}.state.branches[id].hq === '강원')")
     p.click(f"#fc-tree [data-fcbr='{br}']"); p.wait_for_timeout(800)
-    shrt = J(p, f"{S}.bf['{br}'].max_pcp_24h"); rows0 = p.locator(".fc-detail tbody tr").count()
-    check("적설(cm)" in p.locator(".fc-detail thead").inner_text() and p.locator(".fc-pin .fc-tt th.s").count() > 0, "단기: 적설 칸·줄 있음")
+    f0 = J(p, f"{S}.bf['{br}']"); rows0 = p.locator(".fc-detail tbody tr").count(); col = lambda: p.locator(".fc-pin .fc-tt thead").first.locator("th").count()
+    check(col() == 13 and p.locator(".fc-pin .fc-tt").count() == 2 and p.locator(".fc-pin .fc-tt td.vs").count() == 0, "단기: 12시간 표 2개, 색칠한 칸 없음")
     p.click("#fc-mode [data-fcmode=vsrt]"); p.wait_for_timeout(800)
     meta = p.locator("#fc-meta").inner_text()
-    check(pressed() == "초단기예보" and "앞으로 6시간" in meta and "적설은 초단기예보에 없음" in meta, "초단기 안내: " + meta)
+    check(pressed() == "초단기예보" and "24시간 합" in meta and "앞 6시간" in meta and "적설은 단기예보" in meta, "안내: " + meta)
     check(set(m.vsrt_calls) == {"overview", "grid", "series"}, f"초단기 자료를 받음: {m.vsrt_calls}")
-    row = p.locator(f"#fc-tree [data-fcbr='{br}']").inner_text()
-    check("7.5" in row and "80" in row and "-4" in row, "지사 줄 = 초단기 값: " + row)
-    check("적설" not in p.locator(".fc-detail thead").inner_text() and p.locator(".fc-detail tbody tr").count() == rows0 and p.locator(".fc-detail tbody tr").first.locator("td").count() == 5, "격자 표: 적설 칸 없음")
-    check(p.locator("#fc-pin").is_visible() and p.locator(".fc-pin .fc-tt").count() == 1 and p.locator(".fc-pin .fc-tt th.s").count() == 0 and p.locator(".fc-pin .fc-tt thead th").count() == 7, "추이 표: 6시각 한 표, 적설 줄 없음")
-    check("6시간 합" in p.locator(".fc-pin .fc-tt-sum").inner_text() and "적설" not in p.locator(".fc-pin .fc-tt-sum").inner_text(), "합계 줄: " + p.locator(".fc-pin .fc-tt-sum").inner_text())
+    f1 = J(p, f"{S}.bf['{br}']")
+    check(f1["max_pcp_24h"] == f0["max_pcp_24h"] + 5 and f1["min_tmp"] == f0["min_tmp"] - 1 and f1["max_pop_24h"] == 95 and f1["max_snow_24h"] == f0["max_snow_24h"], f"왼쪽 값: 강수·기온·확률만 바뀌고 적설 그대로 {f0} {f1}")
+    row = p.locator(f"#fc-tree [data-fcbr='{br}']").inner_text(); check(f"{f1['max_pcp_24h']:.1f}" in row and "95" in row, "지사 줄: " + row)
+    check("적설(cm)" in p.locator(".fc-detail thead").inner_text() and p.locator(".fc-detail tbody tr").count() == rows0 and p.locator(".fc-detail tbody tr").first.locator("td").count() == 6, "격자 표: 칸 그대로")
+    check(p.locator("#fc-pin").is_visible() and p.locator(".fc-pin .fc-tt").count() == 2 and col() == 13 and p.locator(".fc-pin .fc-tt th.s").count() == 2, "추이 표: 같은 24시간 표, 적설 줄 그대로")
+    t1 = p.locator(".fc-pin .fc-tt").first
+    check(t1.locator("thead th.vs").count() == 6 and t1.locator("td.vs").count() == 18 and p.locator(".fc-pin .fc-tt").last.locator(".vs").count() == 0, "앞 6시각의 강수·확률·기온만 색칠(뒤 표는 없음)")
+    check(t1.locator("tbody tr").nth(0).locator("td.vs").count() == 0, "적설 줄은 색칠 안 함")
+    check("24시간 합" in p.locator(".fc-pin .fc-tt-sum").inner_text() and "적설" in p.locator(".fc-pin .fc-tt-sum").inner_text() and "색칠한 칸" in p.locator(".fc-pin").inner_text(), "합계·안내")
     leg = p.locator("#fc-legend")
-    check(leg.locator(".fc-show").inner_text().split() == ["강수", "확률", "기온"] and leg.locator(".fc-ramp-t").inner_text() == "강수량", "범례: 강수 기준")
+    check(leg.locator(".fc-show").inner_text().split() == ["적설", "강수", "확률", "기온"] and leg.locator(".fc-ramp-t").inner_text() == "적설량", "범례·칸 색은 그대로 적설 기준")
     n = len(m.fc_calls) + len(m.fc_series_calls)
     p.click("#fc-mode [data-fcmode=shrt]"); p.wait_for_timeout(500)
-    check(pressed() == "단기예보" and J(p, f"{S}.bf['{br}'].max_pcp_24h") == shrt and "24시간 합" in p.locator("#fc-meta").inner_text() and "적설(cm)" in p.locator(".fc-detail thead").inner_text(), "단기로 돌아오면 원래 값")
-    check(len(m.fc_calls) + len(m.fc_series_calls) == n and p.locator("#fc-legend .fc-ramp-t").inner_text() == "적설량", "단기는 다시 받지 않음")
+    check(pressed() == "단기예보" and J(p, f"{S}.bf['{br}'].max_pcp_24h") == f0["max_pcp_24h"] and "초단기" not in p.locator("#fc-meta").inner_text() and p.locator(".fc-pin .fc-tt td.vs").count() == 0, "단기로 돌아오면 원래 값")
+    check(len(m.fc_calls) + len(m.fc_series_calls) == n, "단기는 다시 받지 않음")
     # 요청·편성에서 지사로 오면 늘 단기
     p.click("#fc-mode [data-fcmode=vsrt]"); p.wait_for_timeout(500)
     J(p, f"ForecastUI.openBranch('{br}')"); check(pressed() == "단기예보", "요청·편성에서 오면 단기예보로")
 
 def t_mode_no_data(b):
-    """초단기예보를 아직 못 받았으면 '없음' 안내, 값은 '-'"""
+    """초단기예보를 못 받았으면 안내만 뜨고 값은 단기예보와 같음"""
     m = SBM.Mock(); m.vsrt_on = False; p, m = open_page(b, m)
     p.click(".tab-btn[data-tab=forecast]"); p.wait_for_timeout(800)
+    br = J(p, f"{S}.state.order.find(id => {S}.state.branches[id].hq === '강원')"); f0 = J(p, f"{S}.bf['{br}'].max_pcp_24h")
     p.click("#fc-mode [data-fcmode=vsrt]"); p.wait_for_timeout(500)
-    check("초단기예보 없음" in p.locator("#fc-meta").inner_text(), p.locator("#fc-meta").inner_text())
+    check("초단기예보 없음" in p.locator("#fc-meta").inner_text() and J(p, f"{S}.bf['{br}'].max_pcp_24h") == f0, p.locator("#fc-meta").inner_text())
     p.click("#fc-tree [data-fchq='강원']"); p.wait_for_timeout(500); check(layers(p) > 0, "격자는 보임")
+
+def t_pin_move_resize(b):
+    """2026-11-03: 격자 창을 끌어 옮기고 모서리로 크기를 바꿈(글자도 같은 비율). 다른 격자를 눌러도 그대로, 다시 열어도 기억. 지도 밖으로 나가지 않음"""
+    p, m = open_page(b)
+    p.click(".tab-btn[data-tab=forecast]"); p.wait_for_timeout(800)
+    p.click("#fc-tree [data-fchq='강원']"); p.wait_for_timeout(600)
+    p.locator("#fc-tree [data-fcbr]").first.click(); p.wait_for_timeout(900)
+    box = lambda: p.locator("#fc-pin").bounding_box()
+    tdw = lambda: p.locator(".fc-pin .fc-tt td").first.bounding_box()
+    b0 = box(); w0 = tdw()
+    check(abs(b0["width"] - 418) <= 2, f"처음 크기는 그대로: {b0}")
+    # 옮기기
+    h = p.locator(".fc-pin-head").bounding_box(); p.mouse.move(h["x"] + 60, h["y"] + 8); p.mouse.down(); p.mouse.move(h["x"] - 200, h["y"] + 120, steps=4); p.mouse.up(); p.wait_for_timeout(100)
+    b1 = box(); check(abs(b1["x"] - (b0["x"] - 260)) <= 2 and abs(b1["y"] - (b0["y"] + 112)) <= 2 and abs(b1["width"] - b0["width"]) <= 1, f"제목을 끌면 옮겨짐: {b0} → {b1}")
+    # 오른쪽 아래 모서리로 키우기: 왼쪽 위 그대로, 표·글자도 커짐
+    g = p.locator(".fc-pin-grip.r").bounding_box(); p.mouse.move(g["x"] + 8, g["y"] + 8); p.mouse.down(); p.mouse.move(g["x"] + 108, g["y"] + 8, steps=4); p.mouse.up(); p.wait_for_timeout(100)
+    b2 = box(); z = J(p, "+document.querySelector('.fc-pin-in').style.zoom")
+    check(abs(b2["x"] - b1["x"]) <= 2 and abs(b2["width"] - (b1["width"] + 100)) <= 3 and z > 1.2 and b2["height"] > b1["height"] * 1.15, f"모서리로 커짐: {b1} → {b2}, 배율 {z}")
+    check(tdw()["width"] > w0["width"] * 1.15, "표 칸·글자도 같은 비율로 커짐")
+    fs = J(p, "(() => { const c = document.querySelector('.fc-pin .fc-tt td'); const r = document.createRange(); r.selectNodeContents(c); return r.getBoundingClientRect().height; })()")
+    # 다른 격자를 눌러도 그대로
+    p.locator(".fc-detail tbody tr").nth(1).click(); p.wait_for_timeout(300)
+    b3 = box(); check(abs(b3["x"] - b2["x"]) <= 1 and abs(b3["y"] - b2["y"]) <= 1 and abs(b3["width"] - b2["width"]) <= 1, f"다른 격자: 위치·크기 그대로 {b2} {b3}")
+    # 닫았다 열어도, 왼쪽 모서리로 줄이면 오른쪽 끝 그대로
+    p.locator(".fc-pin-x").click(); p.wait_for_timeout(100); p.locator(".fc-detail tbody tr").nth(2).click(); p.wait_for_timeout(200)
+    b4 = box(); check(abs(b4["x"] - b2["x"]) <= 1 and abs(b4["width"] - b2["width"]) <= 1, "닫았다 열어도 그대로")
+    g = p.locator(".fc-pin-grip.l").bounding_box(); right = b4["x"] + b4["width"]
+    p.mouse.move(g["x"] + 8, g["y"] + 8); p.mouse.down(); p.mouse.move(g["x"] + 58, g["y"] + 8, steps=4); p.mouse.up(); p.wait_for_timeout(100)
+    b5 = box(); check(abs(b5["x"] + b5["width"] - right) <= 2 and b5["width"] < b4["width"] - 30, f"왼쪽 모서리: 오른쪽 끝 고정 {b4} {b5}")
+    # 지도 밖으로 못 나감, 지도보다 안 커짐
+    mb = p.locator("#view-forecast .jr-mapbox").bounding_box()
+    h = p.locator(".fc-pin-head").bounding_box(); p.mouse.move(h["x"] + 60, h["y"] + 8); p.mouse.down(); p.mouse.move(mb["x"] + mb["width"] + 500, mb["y"] + mb["height"] + 500, steps=4); p.mouse.up(); p.wait_for_timeout(100)
+    b6 = box(); check(b6["x"] + b6["width"] <= mb["x"] + mb["width"] + 1 and b6["y"] + b6["height"] <= mb["y"] + mb["height"] + 1, f"지도 안에 머묾: {b6} {mb}")
+    g = p.locator(".fc-pin-grip.l").bounding_box(); p.mouse.move(g["x"] + 8, g["y"] + 8); p.mouse.down(); p.mouse.move(mb["x"] - 3000, g["y"] + 8, steps=4); p.mouse.up(); p.wait_for_timeout(100)
+    b7 = box(); check(b7["x"] >= mb["x"] - 1 and b7["width"] <= mb["width"] + 1 and b7["height"] <= mb["height"] + 1, f"지도보다 안 커짐: {b7} {mb}")
+    # 아주 작게도 안 됨
+    saved = J(p, "JSON.parse(localStorage.getItem('ss_fc_pin'))"); check(saved["scale"] >= 0.8 and saved["x"] is not None, f"이 브라우저에 기억: {saved}")
+    g = p.locator(".fc-pin-grip.r").bounding_box(); p.mouse.move(g["x"] + 8, g["y"] + 8); p.mouse.down(); p.mouse.move(g["x"] - 3000, g["y"], steps=4); p.mouse.up(); p.wait_for_timeout(100)
+    z = J(p, "+document.querySelector('.fc-pin-in').style.zoom"); check(z >= 0.8 - 0.001, f"너무 작아지지 않음: {z}")
+    # 새로 열어도 기억
+    b8 = box(); p.reload(); p.wait_for_function("window.ForecastUI && ForecastUI._state().inited", timeout=60000)
+    p.click(".tab-btn[data-tab=forecast]"); p.wait_for_timeout(800); p.click("#fc-tree [data-fchq='강원']"); p.wait_for_timeout(600); p.locator("#fc-tree [data-fcbr]").first.click(); p.wait_for_timeout(900)
+    b9 = box(); check(abs(b9["x"] - b8["x"]) <= 2 and abs(b9["width"] - b8["width"]) <= 2, f"새로 열어도 기억: {b8} {b9}")
 
 def t_phone_fit(b):
     """2026-11-03: 휴대폰에서 목록·격자 표·추이 표가 화면 폭을 넘지 않음(예전: 목록 440px, 추이 표 418px)"""
@@ -307,8 +355,14 @@ def t_phone_fit(b):
     p.locator(".fc-pin-x").click(); p.wait_for_timeout(200); check(not p.locator("#fc-pin").is_visible(), "닫기 버튼으로 닫힘")
     p.locator("#fc-mode [data-fcmode=vsrt]").click(); p.wait_for_timeout(800); fits("초단기")
     mode = box("#fc-mode"); check(mode[1] <= 375, f"전환 버튼이 화면 안에: {mode}")
+    # 모바일에는 옮기기·크기 조절 없음(컴퓨터에서 기억한 값이 있어도)
+    p.evaluate("localStorage.setItem('ss_fc_pin', JSON.stringify({scale: 1.6, x: 500, y: 300}))"); p.reload(); p.wait_for_function("window.ForecastUI && ForecastUI._state().inited", timeout=60000)
+    p.evaluate("document.querySelector('.tab-btn[data-tab=forecast]').click()"); p.wait_for_timeout(800)
+    p.locator("#fc-tree [data-fchq='강원']").click(); p.wait_for_timeout(600); p.locator("#fc-tree [data-fcbr]").first.click(); p.wait_for_timeout(900)
+    pin = box("#fc-pin"); check(not p.locator(".fc-pin-grip.r").is_visible() and J(p, "document.querySelector('.fc-pin-in').style.zoom") == "" and pin[0] == 8 and pin[1] == 367, f"모바일: 크기 조절 없음, 화면 폭에 맞음 {pin}")
+    fits("모바일 기억값 무시")
 
-TESTS += [t_mode_switch, t_mode_no_data, t_phone_fit]
+TESTS += [t_mode_switch, t_mode_no_data, t_pin_move_resize, t_phone_fit]
 
 if __name__ == "__main__":
     only = sys.argv[1:]

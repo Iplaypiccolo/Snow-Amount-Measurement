@@ -78,6 +78,17 @@
 .fc-mode button[aria-pressed=true]{background:var(--accent);color:#fff;}
 .fc-mode button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
 .fc-note{color:var(--muted);font-size:12px;}
+/* 초단기 값으로 바뀐 칸 */
+.fc-tt th.vs,.fc-tt td.vs{background:#fff3c4;}
+.fc-vs-key{display:inline-block;width:10px;height:10px;margin-right:4px;background:#fff3c4;border:1px solid #d6c27a;vertical-align:-1px;}
+/* 고정 창: 제목을 끌어 이동, 아래 모서리로 크기 조절(컴퓨터 화면만, 폭·글자 배율은 ui.js) */
+.fc-pin-head{cursor:move;user-select:none;touch-action:none;}
+.fc-pin-x{cursor:pointer;}
+.fc-pin-in{width:396px;}
+.fc-pin-grip{position:absolute;bottom:0;width:16px;height:16px;touch-action:none;}
+.fc-pin-grip.r{right:0;cursor:nwse-resize;background:linear-gradient(135deg,transparent 55%,#7a8a97 55%,#7a8a97 63%,transparent 63%,transparent 75%,#7a8a97 75%,#7a8a97 83%,transparent 83%);border-bottom-right-radius:8px;}
+.fc-pin-grip.l{left:0;cursor:nesw-resize;background:linear-gradient(225deg,transparent 55%,#7a8a97 55%,#7a8a97 63%,transparent 63%,transparent 75%,#7a8a97 75%,#7a8a97 83%,transparent 83%);border-bottom-left-radius:8px;}
+body.fc-pin-moving{user-select:none;}
 
 /* 휴대폰(2026-11-03): 옆 목록·추이 표를 화면 폭에 맞춤(예전: 목록 440px, 표 418px 로 지도·탭보다 넓어 화면이 밀림) */
 @media (max-width:760px){
@@ -90,6 +101,9 @@
   .fc-detail th,.fc-detail td{padding:3px 2px;white-space:normal;}
   .fc-detail td{white-space:nowrap;}
   .fc-detail th{font-size:10.5px;}
+  .fc-pin-in{width:auto;}
+  .fc-pin-grip,.fc-pin-how{display:none;}
+  .fc-pin-head{cursor:default;touch-action:auto;user-select:auto;}
   .fc-pin{top:8px;left:8px;right:8px;padding:6px 8px;max-height:calc(100% - 16px);overflow:auto;box-sizing:border-box;z-index:1100;}
   .fc-trend-box.big{width:100%;}
   .fc-tt{font-size:10px;}

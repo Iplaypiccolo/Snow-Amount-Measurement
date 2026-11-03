@@ -1,5 +1,5 @@
 -- ============================================================
--- 초단기예보 받기·전환 보기(마이그레이션 57) 시험 — SQL Editor 에 통째로 붙여넣고 실행(57 적용 뒤)
+-- 초단기예보 받기·전환 보기(마이그레이션 57·58) 시험 — SQL Editor 에 통째로 붙여넣고 실행(58 적용 뒤)
 -- 마지막에 일부러 오류를 내서 시험 자료를 전부 되돌립니다(지금 예보도 원래대로). "전체 N, 실패 0" 이어야 합니다.
 -- ============================================================
 create temp table if not exists _t (n serial, name text, got text, want text, ok boolean);
@@ -85,36 +85,40 @@ begin
   -- 초단기 보기: 지사
   perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated')::text, true);
   set local role authenticated; o := public.forecast_vsrt_overview(); fg := public.forecast_vsrt_grid(array['B001']); fs := public.forecast_vsrt_grid(array['B001'], true); reset role;
-  perform pg_temp.yes('초단기 지사: 발표 시각·6시간 구간', (o ->> 'tmfc')::timestamptz = t0 and (o ->> 'start_at')::timestamptz = h0 and (o ->> 'end_at')::timestamptz = h0 + interval '6 hours', o::text);
-  perform pg_temp.yes('초단기 지사: 강수 3×6=18, 최저 -8(시작 시각), 확률 90, 적설 없음', exists (select 1 from jsonb_array_elements(o -> 'rows') x where x ->> 'branch_id' = 'B001' and (x ->> 'max_pcp_24h')::numeric = 18 and (x ->> 'min_tmp')::numeric = -8
-    and (x ->> 'min_tmp_at')::timestamptz = h0 and (x ->> 'max_pop_24h')::int = 90 and x -> 'max_snow_24h' = 'null'::jsonb and (x ->> 'issued_at')::timestamptz = t0), o::text);
+  perform pg_temp.yes('초단기 지사: 단기 발표 시각·24시간 구간, 초단기 시각·6시각', (o ->> 'tmfc')::timestamptz = (p ->> 'tmfc')::timestamptz and (o ->> 'vsrt_at')::timestamptz = t0 and (o ->> 'vn')::int = 6 and (o ->> 'start_at')::timestamptz = h0 and (o ->> 'end_at')::timestamptz = h0 + interval '24 hours', o::text);
+  perform pg_temp.yes('초단기 지사: 강수 3×6 + 단기 1×18 = 36, 최저 -8(시작 시각), 확률 90, 적설은 단기 그대로 12', exists (select 1 from jsonb_array_elements(o -> 'rows') x where x ->> 'branch_id' = 'B001' and (x ->> 'max_pcp_24h')::numeric = 36 and (x ->> 'min_tmp')::numeric = -8
+    and (x ->> 'min_tmp_at')::timestamptz = h0 and (x ->> 'max_pop_24h')::int = 90 and (x ->> 'max_snow_24h')::numeric = 12 and (x ->> 'issued_at')::timestamptz = (p ->> 'tmfc')::timestamptz), o::text);
   -- 초단기 보기: 격자
-  perform pg_temp.yes('초단기 격자: forecast_grid 와 같은 자리, 적설 자리 null, 추이는 기본으로 안 보냄', exists (select 1 from jsonb_array_elements(fg -> 'cells') c where (c ->> 0)::int = cx and (c ->> 1)::int = cy and c -> 3 = 'null'::jsonb
-    and (c ->> 4)::numeric = 18 and (c ->> 5)::numeric = -8 and (c ->> 6)::timestamptz = h0 and c -> 7 = 'null'::jsonb and (c ->> 8)::int = 90), left(fg::text, 300));
+  perform pg_temp.yes('초단기 격자: forecast_grid 와 같은 자리, 추이는 기본으로 안 보냄', exists (select 1 from jsonb_array_elements(fg -> 'cells') c where (c ->> 0)::int = cx and (c ->> 1)::int = cy and (c ->> 3)::numeric = 12
+    and (c ->> 4)::numeric = 36 and (c ->> 5)::numeric = -8 and (c ->> 6)::timestamptz = h0 and c -> 7 = 'null'::jsonb and (c ->> 8)::int = 90), left(fg::text, 300));
   perform pg_temp.yes('초단기 격자: 지사 격자 전부', jsonb_array_length(fg -> 'cells') = (select count(*) from private.grid_effective() where branch_id = 'B001'));
-  perform pg_temp.yes('초단기 추이: 6시각, 적설 없음', exists (select 1 from jsonb_array_elements(fs -> 'cells') c where (c ->> 0)::int = cx and (c ->> 1)::int = cy and jsonb_array_length(c -> 7 -> 'p') = 6 and jsonb_array_length(c -> 7 -> 't') = 6
-    and (c -> 7 -> 'p' ->> 0)::numeric = 3 and (c -> 7 -> 't' ->> 0)::numeric = -8 and (c -> 7 -> 'r' ->> 2)::int = 90 and not (c -> 7 ? 's')));
-  -- 바다 칸: 빈 값(-99 가 값으로 나오지 않음)
-  select e.value into q from jsonb_array_elements(public.forecast_vsrt_grid((select array_agg(distinct g.branch_id) from private.grid_effective() g where g.nx = sx and g.ny = sy))->'cells') e where (e.value ->> 0)::int = sx and (e.value ->> 1)::int = sy;
-  perform pg_temp.yes('바다(-99) 칸은 강수·기온·확률이 빈 값', q -> 4 = 'null'::jsonb and q -> 5 = 'null'::jsonb and q -> 8 = 'null'::jsonb, q::text);
+  perform pg_temp.yes('초단기 추이: 24시각 그대로, 앞 6시각만 초단기, 적설은 모두 단기', exists (select 1 from jsonb_array_elements(fs -> 'cells') c where (c ->> 0)::int = cx and (c ->> 1)::int = cy and jsonb_array_length(c -> 7 -> 'p') = 24 and jsonb_array_length(c -> 7 -> 't') = 24 and jsonb_array_length(c -> 7 -> 's') = 24
+    and (c -> 7 -> 'p' ->> 0)::numeric = 3 and (c -> 7 -> 'p' ->> 5)::numeric = 3 and (c -> 7 -> 'p' ->> 6)::numeric = 1 and (c -> 7 -> 't' ->> 0)::numeric = -8 and (c -> 7 -> 't' ->> 5)::numeric = 5 and (c -> 7 -> 't' ->> 6)::numeric = 10
+    and (c -> 7 -> 'r' ->> 2)::int = 90 and (c -> 7 -> 'r' ->> 6)::int = 20 and (c -> 7 -> 's' ->> 0)::numeric = 0.5 and (c -> 7 ->> 'vn')::int = 6));
+  -- 바다 칸: 단기 값 그대로(-99 가 값으로 나오지 않음)
+  select e.value into q from jsonb_array_elements(public.forecast_vsrt_grid(array[(select min(g.branch_id) from private.grid_effective() g where g.nx = sx and g.ny = sy)], true)->'cells') e where (e.value ->> 0)::int = sx and (e.value ->> 1)::int = sy;
+  perform pg_temp.yes('바다(-99) 칸은 단기 값 그대로', (q -> 7 -> 'p' ->> 0)::numeric = 1 and (q -> 7 -> 't' ->> 0)::numeric = 10 and (q -> 7 -> 'r' ->> 0)::int = 20, left(q::text, 300));
+  -- 단기 표는 보기로 바뀌지 않음
+  perform pg_temp.yes('단기: 초단기 보기 뒤에도 그대로', (select max_pcp_24h = 24 and min_tmp = 10 from public.branch_forecast where branch_id = 'B001'));
   perform pg_temp.chk('초단기 추이는 지사 하나만','authenticated',a,'select public.forecast_vsrt_grid(array[''B001'',''B002''], true)','err:22023');
   perform pg_temp.chk('비로그인: 초단기 지사 거절','anon',null,'select public.forecast_vsrt_overview()','err:42501');
   perform pg_temp.chk('비로그인: 초단기 격자 거절','anon',null,'select public.forecast_vsrt_grid(array[''B001''])','err:42501');
   perform pg_temp.chk('로그인 사용자: 계산 함수 직접 호출 거절','authenticated',a,'select * from private.fc_vsrt_cells()','err:42501');
+  perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated')::text, true);
 
   -- 다 받은 뒤
   set local role service_role; q := public.forecast_vsrt_plan(); reset role;
   perform pg_temp.yes('다 받으면 계획 없음, 예약 호출도 함수를 부르지 않음', jsonb_array_length(q -> 'candidates') = 0 and private.kick_vsrt() is null, q::text);
   perform pg_temp.chk('끝난 뒤 넣기는 조용히 무시','service_role',null,format(putq, t0, 'T1H', h0, '{1}'::real[]),'ok:1');
 
-  -- 3시간 넘게 못 받으면 '자료 없음'
+  -- 3시간 넘게 못 받으면 단기예보 값
   delete from public.forecast_vsrt_runs;
   insert into public.forecast_vsrt_runs (tmfc, cells, done_at) values (now() - interval '4 hours', p -> 'cells', now());
   insert into public.forecast_vsrt_hours (tmfc, var, tmef, vals) values (now() - interval '4 hours', 'T1H', h0, array_fill(-50::real, array[nc]));
   perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated')::text, true);
   set local role authenticated; o := public.forecast_vsrt_overview(); fg := public.forecast_vsrt_grid(array['B001']); reset role;
-  perform pg_temp.yes('3시간 넘은 초단기는 자료 없음', o -> 'tmfc' = 'null'::jsonb and jsonb_array_length(o -> 'rows') = 0 and fg -> 'tmfc' = 'null'::jsonb
-    and not exists (select 1 from jsonb_array_elements(fg -> 'cells') c where c -> 5 <> 'null'::jsonb), o::text);
+  perform pg_temp.yes('3시간 넘은 초단기는 안 씀: 단기예보와 같은 값, 초단기 시각 없음', o -> 'vsrt_at' = 'null'::jsonb and (o ->> 'vn')::int = 0
+    and exists (select 1 from jsonb_array_elements(o -> 'rows') x where x ->> 'branch_id' = 'B001' and (x ->> 'max_pcp_24h')::numeric = 24 and (x ->> 'min_tmp')::numeric = 10 and (x ->> 'max_snow_24h')::numeric = 12), o::text);
 
   -- 실패 기록
   set local role service_role; perform public.forecast_vsrt_fail('시험 실패'); reset role;

@@ -144,7 +144,6 @@ class Mock:
         self.n += 1; at, rt = f"at-{self.n}", f"rt-{self.n}"; self.tokens[at] = u["id"]; self.tokens[rt] = u["id"]
         return {"access_token": at, "refresh_token": rt, "expires_in": 3600, "token_type": "bearer", "user": {"id": u["id"]}}
     def active_admin(self, u): p = u and u["profile"]; return bool(p and p["role"] == "admin" and not p["must_change"] and not p["disabled"])
-    def fc_vend(self): return (datetime.datetime.fromisoformat(self.fc_start.replace("Z", "+00:00")) + datetime.timedelta(hours=6)).isoformat()      # 초단기예보: 앞으로 6시간
     def usable(self, u): p = u and u["profile"]; return bool(p and not p["must_change"] and not p["disabled"])
     def events_api(self, tbl, req, u, q, body, send):
         """변경 이력 표와 같은 권한 규칙: 읽기=활성 로그인 사용자(임시 비밀번호·비활성 제외), 쓰기=관리자만(종류 검사, 한 줄이라도 틀리면 전부 취소), 지우기·고치기 없음"""
@@ -280,18 +279,18 @@ class Mock:
                 (self.fc_series_calls if ser else self.fc_calls).append(sorted(ids))
                 return send(200, {"tmfc": self.fc_issued, "start_at": self.fc_start, "end_at": self.fc_end,
                                   "cells": [[nx, ny, [b for b in bs if b in ids], s, p, t, ta, sr if ser else None, pop] for nx, ny, bs, s, p, t, ta, sr, pop in self.fc_cells if ids & set(bs)]})
-            if tbl == "forecast_vsrt_overview" and "/rpc/" in path:      # 초단기예보(마이그레이션 57): 적설 없음
+            if tbl == "forecast_vsrt_overview" and "/rpc/" in path:      # 초단기예보(마이그레이션 58): 같은 24시간 표에서 앞 6시간의 강수·확률·기온만 바뀜, 적설은 그대로
                 if not self.usable(u): return send(401, {"message": "login"})
                 self.vsrt_calls.append("overview")
-                if not self.vsrt_on: return send(200, {"tmfc": None, "start_at": None, "end_at": None, "rows": []})
-                return send(200, {"tmfc": self.fc_issued, "start_at": self.fc_start, "end_at": self.fc_vend(), "rows": [{"branch_id": x["branch_id"], "issued_at": self.fc_issued, "max_snow_24h": None, "max_pcp_24h": 7.5, "max_pop_24h": 80, "min_tmp": -4, "min_tmp_at": self.fc_start} for x in self.branch_forecast]})
+                on = self.vsrt_on
+                return send(200, {"tmfc": self.fc_issued, "vsrt_at": self.fc_issued if on else None, "vn": 6 if on else 0, "start_at": self.fc_start, "end_at": self.fc_end,
+                                  "rows": [dict(x, max_pcp_24h=x["max_pcp_24h"] + 5, max_pop_24h=95, min_tmp=x["min_tmp"] - 1) if on else x for x in self.branch_forecast]})
             if tbl == "forecast_vsrt_grid" and "/rpc/" in path:
                 if not self.usable(u): return send(401, {"message": "login"})
-                ids = set((body or {}).get("p_branches") or []); ser = bool((body or {}).get("p_series")); self.vsrt_calls.append("series" if ser else "grid")
-                if not self.vsrt_on: return send(200, {"tmfc": None, "start_at": None, "end_at": None, "cells": [[nx, ny, [b for b in bs if b in ids], None, None, None, None, None, None] for nx, ny, bs, s, p, t, ta, sr, pop in self.fc_cells if ids & set(bs)]})
-                sr6 = {"p": [1.5, 1.5, 1.5, 1, 1, 0.5], "t": [-4, -3, -2, -1, 0, 1], "r": [80, 70, 60, 50, 40, 30]}
-                return send(200, {"tmfc": self.fc_issued, "start_at": self.fc_start, "end_at": self.fc_vend(),
-                                  "cells": [[nx, ny, [b for b in bs if b in ids], None, 7.5, -4, self.fc_start, sr6 if ser else None, 80] for nx, ny, bs, s, p, t, ta, sr, pop in self.fc_cells if ids & set(bs)]})
+                ids = set((body or {}).get("p_branches") or []); ser = bool((body or {}).get("p_series")); self.vsrt_calls.append("series" if ser else "grid"); on = self.vsrt_on
+                blend = lambda sr: dict(sr, p=[9.5] * 6 + sr["p"][6:], t=[-9] * 6 + sr["t"][6:], r=[95] * 6 + (sr.get("r") or [20] * 24)[6:], vn=6) if on else dict(sr, vn=0)
+                return send(200, {"tmfc": self.fc_issued, "vsrt_at": self.fc_issued if on else None, "start_at": self.fc_start, "end_at": self.fc_end,
+                                  "cells": [[nx, ny, [b for b in bs if b in ids], s, p + 5 if on and p is not None else p, t - 1 if on and t is not None else t, ta, blend(sr) if ser and sr else None, 95 if on else pop] for nx, ny, bs, s, p, t, ta, sr, pop in self.fc_cells if ids & set(bs)]})
             if tbl == "warning_status" and "/rpc/" in path:
                 self.eq_calls.append((tbl, body)); return send(200, self.warn_status) if self.usable(u) else send(401, {"message": "login"})
             if tbl in ("save_fleet", "save_requests") and "/rpc/" in path:
