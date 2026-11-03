@@ -18,11 +18,11 @@ const Api = (() => {
     "23514": "값의 형식이 올바르지 않습니다.", "23503": "없는 지사·장비·기준일자입니다.", "22023": "저장할 내용이 없습니다.", "54000": "한 번에 너무 많이 저장하려고 합니다.",
     "55000": "확정한 지사는 확정을 취소한 뒤에 고칠 수 있습니다.",
     // 기계화부(지원장비 계정)가 지원일 1의 지사를 고를 때(마이그레이션 43)
-    "SA001": "관리자가 이 기관에 배정하지 않은 지사입니다. 기관별 배정을 확인해 주세요.", "SA002": "배정받은 대수보다 많은 장비를 같은 지사로 보낼 수 없습니다.",
+    "SA001": "관리자가 이 기관에 배정하지 않은 지사입니다. 기관별 배치을 확인해 주세요.", "SA002": "배정받은 대수보다 많은 장비를 같은 지사로 보낼 수 없습니다.",
     "SA003": "지원일마다 피지원 지사 한 곳만 고를 수 있습니다(하루 여러 곳·수정본·관리자가 정한 경로는 관리자가 고칩니다).",
     // 지역본부 장비(마이그레이션 44)
     "SA004": "이 지사의 '타지사 지원 가능' 대수가 확정된 뒤에 장비를 등록할 수 있습니다.", "SA005": "지역본부 장비는 자기(출발) 지사로 보낼 수 없습니다.",
-    "SA006": "기관별 배정 합계는 그 지사의 편성 대수(제설차·제설기 각각)보다 많을 수 없습니다.",
+    "SA006": "기관별 배치 합계는 그 지사의 편성 대수(제설차·제설기 각각)보다 많을 수 없습니다.",
     "SA007": "값이 방금 바뀌어 이번 확정은 취소했습니다. 새 값을 확인한 뒤 필요하면 다시 눌러 주세요." };
   const TEAM_ERR = { "42501": "강원본부 지원장비는 관리자와 강원본부 계정만 고칠 수 있습니다.", "23514": "다른 기준일자가 맡은 날짜이거나, 그날 지원 가능이 아닌 장비의 경로입니다. 새로고침(F5) 후 다시 확인해 주세요.", "22023": "저장할 내용이 없거나 기준일자가 없습니다." };
   const isTeamId = id => /^GW\d+$/.test(String(id || ""));
@@ -85,8 +85,8 @@ const Api = (() => {
       return SSAuth.rest(`round_requests?select=round_id,branch_id,req_truck,req_blower,assigned_truck,assigned_blower,offer_truck,saved_at,saved_lv,updated_at,arrive_at,reason,confirmed,warn_level,warn_zones,warn_base,warn_at,warn_note,fc_snow,fc_pcp,fc_pop,fc_tmin,fc_tmin_at,fc_tmfc,fc_at,wx_manual,wx_snow,wx_pcp,wx_tmin,wx_tmin_at,wx_level,wx_fc,wx_ef&round_id=eq.${+round}`)
         .then(r => r.ok ? { ok: true, rows: r.json } : fail(r, "요청을 불러오지 못했습니다.")).catch(NET);
     },
-    allocations(round) {     // 기관별 배정(기준일자, 기관, 지사) → 제설차·제설기 대수
-      return SSAuth.rest(`round_allocations?select=round_id,org,branch_id,truck,blower&round_id=eq.${+round}`).then(r => r.ok ? { ok: true, rows: r.json } : fail(r, "기관별 배정을 불러오지 못했습니다.")).catch(NET);
+    allocations(round) {     // 기관별 배치(기준일자, 기관, 지사) → 제설차·제설기 대수
+      return SSAuth.rest(`round_allocations?select=round_id,org,branch_id,truck,blower&round_id=eq.${+round}`).then(r => r.ok ? { ok: true, rows: r.json } : fail(r, "기관별 배치을 불러오지 못했습니다.")).catch(NET);
     },
     saveAllocations(round, rows) {
       return SSAuth.authed("/rest/v1/rpc/save_allocations", { method: "POST", body: { p_round: round, p_rows: rows } }).then(r => r.ok ? { ok: true, result: r.json } : fail(r, null, ALLOC_ERR)).catch(NET);
@@ -166,7 +166,7 @@ const Api = (() => {
     const done = x => Promise.resolve(x);
     // 서버 규칙 흉내(마이그레이션 38): 날짜를 맡은 기준일자 = 그 날짜를 기간 안에 둔 기준일자 중 시작일이 가장 늦은 것
     const addD = (iso, n) => { const [y, m, d] = iso.split("-").map(Number); const t = new Date(y, m - 1, d + n); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; };
-    const gov = d => db.rounds.filter(r => r.start_date <= d && d <= addD(r.start_date, (r.days || 4) - 1)).sort((a, b) => b.start_date.localeCompare(a.start_date))[0] || null;
+    const gov = d => db.rounds.filter(r => r.start_date <= d && d <= addD(r.start_date, (r.days || 10) - 1)).sort((a, b) => b.start_date.localeCompare(a.start_date))[0] || null;
     const stRow = (rid, vid) => db.status.find(x => x.round_id === rid && x.vehicle_id === vid);
     const avail = (vid, d) => { const r = gov(d), x = r && stRow(r.id, vid); return !!x && x.status === "O" && (!x.off_from || d < x.off_from); };
     // 샘플 대설 특보: 서버 warning_status 와 같은 모양(지사 구역 중 가장 높은 단계)
@@ -267,7 +267,7 @@ const Api = (() => {
             const k = r.date + "|" + r.vehicle_id, old = sim.get(k), v = db.vehicles.find(x => x.id === r.vehicle_id);
             if (old && JSON.stringify(old.stops) === JSON.stringify(r.stops)) continue;                 // 시각만
             if (v.org === POOL) return "42501";                                                        // 지역본부 장비의 지사는 관리자만(마이그레이션 55), 지사는 위의 시각만
-            const inRound = rd0 && r.date >= rd0.start_date && r.date < addDaysISO(rd0.start_date, rd0.days || 4);     // 2026-11-02: 기준일자의 모든 지원일
+            const inRound = rd0 && r.date >= rd0.start_date && r.date < addDaysISO(rd0.start_date, rd0.days || 10);     // 2026-11-02: 기준일자의 모든 지원일
             if (!inRound || (old && (old.revised || old.stops.length !== 1)) || r.stops.length > 1) return "SA003";
             if (!r.stops.length) { sim.delete(k); continue; }
             const a = allocOf(v.org, r.stops[0]);
@@ -349,7 +349,7 @@ const Api = (() => {
         if (!can("req.confirm")) return done({ ok: false, message: ERR["42501"] });
         if (db.rounds.some(r => r.start_date >= date)) return done({ ok: false, message: ROUND_ERR["23514"] });
         const prev = db.rounds.slice().sort((a, b) => b.start_date.localeCompare(a.start_date))[0];
-        const r = { id: Math.max(0, ...db.rounds.map(x => x.id)) + 1, name: date + " 기준", start_date: date, days: 4 }; db.rounds.push(r); log("추가", "support_rounds", "support_rounds:" + r.id, null, r);
+        const r = { id: Math.max(0, ...db.rounds.map(x => x.id)) + 1, name: date + " 기준", start_date: date, days: 10 }; db.rounds.push(r); log("추가", "support_rounds", "support_rounds:" + r.id, null, r);
         db.vehicles.filter(v => v.active !== false && !v.round_id && (!v.hidden_after || date <= v.hidden_after)).forEach(v => {      // 지역본부 장비(round_id 있음)는 이어받지 않음     // 전체 장비 지원 여부 이어받기(정비중·지원 불가 포함)
           const p = prev && stRow(prev.id, v.id), st = p ? p.status : prev ? "" : (v.status || "");
           const gone = p && p.status === "O" && p.off_from && p.off_from <= date;
@@ -363,11 +363,11 @@ const Api = (() => {
         if (!can("req.confirm")) return done({ ok: false, message: ERR["42501"] });
         const r = db.rounds.find(x => x.id === +id); if (!r) return done({ ok: false, message: ERR["23503"] });
         if (db.rounds.some(x => x.start_date > r.start_date) || db.routes.some(x => { const v = db.vehicles.find(y => y.id === x.vehicle_id) || {};      // 다른 기준일자에 딸린 지역본부 장비의 경로는 세지 않음(마이그레이션 45)
-          return x.date >= r.start_date && x.date <= addD(r.start_date, (r.days || 4) - 1) && !(v.round_id && v.round_id !== r.id); })) return done({ ok: false, message: ROUND_ERR["23514"] });
+          return x.date >= r.start_date && x.date <= addD(r.start_date, (r.days || 10) - 1) && !(v.round_id && v.round_id !== r.id); })) return done({ ok: false, message: ROUND_ERR["23514"] });
         db.requests.filter(x => x.round_id === +id).forEach(x => log("삭제", "round_requests", `round_requests:${id},${x.branch_id}`, clone(x), null));
         db.requests = db.requests.filter(x => x.round_id !== +id); db.status = db.status.filter(x => x.round_id !== +id); db.rounds = db.rounds.filter(x => x.id !== +id);
         db.vehicles = db.vehicles.filter(x => x.round_id !== +id); db.allocations = db.allocations.filter(x => x.round_id !== +id);      // 그 기준일자에 딸린 지역본부 장비·배정도 함께
-        const rEnd = addD(r.start_date, (r.days || 4) - 1);                                                                                // 강원 신속대응팀: 그 기간 경로·지원 여부도 함께(마이그레이션 48)
+        const rEnd = addD(r.start_date, (r.days || 10) - 1);                                                                                // 강원 신속대응팀: 그 기간 경로·지원 여부도 함께(마이그레이션 48)
         db.teamRoutes.filter(x => x.date >= r.start_date && x.date <= rEnd).forEach(x => log("삭제", "gw_team_routes", `gw_team_routes:${x.date},${x.team_id}`, clone(x), null));
         db.teamRoutes = db.teamRoutes.filter(x => !(x.date >= r.start_date && x.date <= rEnd)); db.teamStatus = db.teamStatus.filter(x => x.round_id !== +id);
         log("삭제", "support_rounds", "support_rounds:" + id, r, null);

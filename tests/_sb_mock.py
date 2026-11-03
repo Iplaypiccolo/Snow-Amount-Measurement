@@ -82,7 +82,7 @@ class Mock:
         self.vehicles = [{"id": "V001", "org": "서울경기", "type": "제설차", "plate": "서울경기901", "status": "O", "sort": 10, "active": True},
                          {"id": "V002", "org": "충북", "type": "제설기", "plate": "충북901", "status": "O", "sort": 20, "active": True}]
         self.routes = [{"date": self.today, "vehicle_id": "V002", "stops": ["B019"]}]
-        self.rounds = [{"id": 1, "name": self.today + " 기준", "start_date": self.today, "days": 4}]
+        self.rounds = [{"id": 1, "name": self.today + " 기준", "start_date": self.today, "days": 10}]
         # 기준일자별 지원 여부(마이그레이션 38)
         self.rstatus = [{"round_id": 1, "vehicle_id": v["id"], "status": v["status"], "off_from": None, "updated_at": "2026-10-08T00:00:00Z"} for v in self.vehicles]
         self.round_reqs = [{"round_id": 1, "branch_id": "B019", "req_truck": 2, "req_blower": 0, "assigned_truck": 1, "assigned_blower": 0,
@@ -330,7 +330,7 @@ class Mock:
                 if not self.can(u, "req.confirm"): return send(403, {"code": "42501", "message": "no"})
                 if any(r["start_date"] >= d for r in self.rounds): return send(400, {"code": "23514", "message": "round must start after the latest one"})
                 prev = max(self.rounds, key=lambda r: r["start_date"]) if self.rounds else None
-                nr = {"id": max([r["id"] for r in self.rounds] + [0]) + 1, "name": d + " 기준", "start_date": d, "days": 4}; self.rounds.append(nr)
+                nr = {"id": max([r["id"] for r in self.rounds] + [0]) + 1, "name": d + " 기준", "start_date": d, "days": 10}; self.rounds.append(nr)
                 for v in self.vehicles:
                     if v.get("hidden_after") and d > v["hidden_after"]: continue
                     p = next((x for x in self.rstatus if prev and x["round_id"] == prev["id"] and x["vehicle_id"] == v["id"]), None)

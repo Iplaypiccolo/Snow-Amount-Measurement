@@ -44,7 +44,7 @@
     A1: { who: '지사', title: '지원 요청', sub: ['요청 대수 · 도착 요청 시각'], tab: '지사별 요청·편성', c: 'cy', roles: ['branch', 'hq', 'gw'] },
     A2: { who: '재난처', title: '승인', sub: ['편성 대수 확정'], tab: '지사별 요청·편성', c: 'vi', roles: ['admin'] },
     B1: { who: '기계화부 · 지사', title: '지원 가능 대수 확인', sub: ['기계화부: 장비 지원 여부', '지사: 타지사 지원 가능 대수'], tab: '기관별 장비 · 요청·편성', c: 'te', roles: ['equip', 'branch', 'hq', 'gw'] },
-    M: { who: '교통처', title: '배정', sub: ['어느 기관이', '어느 지사에 몇 대'], tab: '기관별 배정', c: 'bl', roles: ['admin'], merge: true },
+    M: { who: '교통처', title: '배정', sub: ['어느 기관이', '어느 지사에 몇 대'], tab: '기관별 배치', c: 'bl', roles: ['admin'], merge: true },
     N: { who: '기계화부', title: '장비 지정 · 도착 시간', sub: ['보낼 장비 ·', '도착 예상 시각'], tab: '기관별 장비', c: 'te', roles: ['equip'] },
     E: { who: '모든 계정', title: '이동 현황', sub: ['어디로 몇 대가', '언제 도착하는지'], tab: '이동 현황', c: 'em' },
     G: { who: '강원본부', title: '강원 신속대응팀 직접 지원', sub: ['요청·승인·배정과 상관없이 보냄', '제설차 4대 (원주·양양·대관령·강릉)'], tab: '강원본부 지원장비', c: 'am', roles: ['gw'], dashed: true }
@@ -266,11 +266,11 @@
       E('fleet', '이날부터 지원 불가', ['#eqTable select.offsel'], '고장 등 → 그날부터 지원 불가', [], W(MEC)),
       E('fleet', '숨기기 · 삭제', [inRow('#eqTable [data-vhide]', ['[data-vdel]'])], '숨기기 = 목록에서만 뺌 · 삭제 = 지움', [], W(MEC)),
       E('fleet', '확정', ['#save-fleet'], '바뀐 칸 → [확정]해야 저장', ['[되돌리기] = 마지막 확정 상태로'], W(['기계화부', '지사'])),
-      // 기관별 배정
-      { tab: 'alloc', title: '기관별 배정', desc: '교통처가 기관별로 지사에 보낼 장비 대수를 배정' },
+      // 기관별 배치
+      { tab: 'alloc', title: '기관별 배치', desc: '교통처가 기관별로 지사에 보낼 장비 대수를 배정' },
       E('alloc', '배정 대수', ['#allocTable input.num:not(:disabled)', { s: '#allocTable tbody td', desc: '교통처가 정한 배정 대수 (보기)' }], '기관 → 지사 보낼 대수 입력', [], W(ADM)),
       E('alloc', '배정 / 편성', [th('배정 / 편성')], '지사별 배정 합 / 편성 대수', ['초록 일치 · 주황 부족 · 빨강 초과']),
-      E('alloc', '배정 / 지원 가능', [th('배정 / 지원 가능')], '기관별 배정 합 / 지원 가능 대수'),
+      E('alloc', '배정 / 지원 가능', [th('배정 / 지원 가능')], '기관별 배치 합 / 지원 가능 대수'),
       E('alloc', '장비 지정', [th('장비 지정')], '기계화부가 장비까지 고른 대수'),
       E('alloc', '확정', ['#save-alloc'], '[확정] → 기계화부에 배정 전달', ['[되돌리기] = 마지막 확정 상태로'], W(ADM)),
       // 강원본부 지원장비
@@ -304,7 +304,7 @@
   function tabBtn(page, name) { return doc.querySelector(page === 'equip' ? '.eq-btn[data-eqtab="' + name + '"]' : '.tab-btn[data-tab="' + name + '"]'); }
   function fdoc() { var f = $('equipFrame'); try { return f && f.getAttribute('src') && f.contentDocument && f.contentDocument.readyState !== 'loading' ? f.contentDocument : null; } catch (e) { return null; } }
   var TABNAME = { forecast: '기관별 24시간 예보', snowtable: '연도별 신적설', map: '관측소 지도', jurisdiction: '기관별 관할 고속도로', sources: '데이터 출처', grid: '예보 격자 편입',
-    move: '이동 현황', branch: '지사별 요청·편성', fleet: '기관별 장비', alloc: '기관별 배정', gwteam: '강원본부 지원장비', log: '로그 기록' };
+    move: '이동 현황', branch: '지사별 요청·편성', fleet: '기관별 장비', alloc: '기관별 배치', gwteam: '강원본부 지원장비', log: '로그 기록' };
 
   // 단계의 칸 찾기 → { els, item }
   function resolve(s) {

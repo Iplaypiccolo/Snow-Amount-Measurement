@@ -44,6 +44,10 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 기관별 배치로 명칭 변경, 컴퓨터용 표 크기 다시 키움
+- 서버 변경 없음(기준일자 10일은 마이그레이션 59 로 사용자 확인 뒤 따로). `equipment/js/app.js`: `FP`·`em`·`dayW`·`pageW`, 칸 폭을 em 으로. `equipment/css/style.css`: 글자 clamp, 휴대폰만 작게. 시험 `t_tables_sizes`·`t_round_ten_days`.
+— ✍ Claude Code 작성
+
 ### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 장비 표 크기 줄임, 지원일 칸 고정 폭, 전체 칸 맨 앞
 - 서버 변경 없음. `equipment/js/app.js`: `fixCols(표, 폭, fit)`, `DAY_W`, `plateColW`, 번호 입력 4자리. `equipment/css/style.css`: 표 작게. 시험 `t_tables_compact`, `t_fixed_columns`·`t_fleet_sum` 고침.
 — ✍ Claude Code 작성

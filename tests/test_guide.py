@@ -103,7 +103,7 @@ def t_first_login_admin(b, ctx, m):
     t = titles(p)
     check(t[1] == "이동 현황" and not any("계정별" in x for x in t), f"그림 다음은 바로 탭 설명: {t}")
     check(t.index("로그 기록") < t.index("날짜") and "지원 여부" not in t and "지사 요청" not in t, f"탭 소개 다음 이동 현황 칸 설명만: {t}")
-    for x in ["이동 현황", "지사별 요청·편성", "기관별 장비", "기관별 배정", "강원본부 지원장비", "로그 기록"]: check(x in t, f"관리자 장비 안내에 '{x}' 없음: {t}")
+    for x in ["이동 현황", "지사별 요청·편성", "기관별 장비", "기관별 배치", "강원본부 지원장비", "로그 기록"]: check(x in t, f"관리자 장비 안내에 '{x}' 없음: {t}")
     wait_closed(p); check(p.locator(".eq-btn.active").get_attribute("data-eqtab") == "move", "장비 지원도 보던 탭(이동 현황)으로")
     # 다시 들어와도 저절로 안 열림 / [사용법]으로 다시 봄
     p.reload(); p.wait_for_selector("body.authed", timeout=20000); wait_js(p, "!!document.getElementById('sgHelp')"); p.wait_for_timeout(1500)

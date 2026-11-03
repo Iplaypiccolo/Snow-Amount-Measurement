@@ -71,7 +71,7 @@ const S = {
   me: null, real: null, uid: "admin1", preview: false,
   hqs: [], branches: [], order: [], brById: {}, hqById: {}, vehicles: [], rounds: [], orgs: [], holdings: null,
   routes: new Map(), rmeta: new Map(), loaded: null, reqs: {}, audit: [],
-  alloc: new Map(), adraft: new Map(),                                              // 기관별 배정(고른 기준일자): "기관|지사" → { truck, blower } / adraft = 아직 확정 안 한 변경
+  alloc: new Map(), adraft: new Map(),                                              // 기관별 배치(고른 기준일자): "기관|지사" → { truck, blower } / adraft = 아직 확정 안 한 변경
   rstat: new Map(), stLoaded: new Set(), sdraft: new Map(), unhideOpen: false,   // rstat: "기준일자|장비" → 지원 여부 {status, off_from, updated_at} / sdraft: 고른 기준일자의 아직 확정 안 한 지원 여부(장비 → 값)
   draft: new Map(), vdraft: new Map(), rdraft: new Map(), revisedMode: false,   // revisedMode: 표 위 [최초 지원]/[수정본] — 고르는 지사 목록과 저장 구분          // 아직 확정·저장하지 않은 변경(경로 / 장비 / 지사 요청)
   date: todayISO(), day1: todayISO(), cols: 4, round: null,
@@ -130,7 +130,7 @@ const vval = (v, f) => { const d = S.vdraft.get(v.id); return d && f in d ? d[f]
    규칙: 어떤 날짜의 지원 여부는, 그 날짜를 기간 안에 둔 기준일자 중 시작일이 가장 늦은 것(govRound)이 정한다.
    - 경로는 (날짜, 장비) 한 줄을 모든 기준일자가 함께 씀. 지원 가능이 아닌 날의 경로는 지우지 않고 숨김(effRec) — 다시 지원 가능으로 하면 되살아남
    - 지원 불가 시작일(off_from): 그 날짜부터 지원 불가(지원 여부가 '지원'일 때만). 기준일자의 지원 불가 = 시작일부터 불가 */
-const roundEnd = r => addDays(r.start_date, (r.days || 4) - 1);
+const roundEnd = r => addDays(r.start_date, (r.days || 10) - 1);
 const govRound = d => S.rounds.find(r => r.start_date <= d && d <= roundEnd(r)) || null;      // S.rounds 는 시작일이 늦은 순
 const ST0 = { status: "", off_from: null };
 const stOf = (rid, vid) => { const b = S.rstat.get(rid + "|" + vid) || ST0, d = rid === S.round ? S.sdraft.get(vid) : null; return d ? { ...b, ...d } : b; };
@@ -141,11 +141,11 @@ const isCont = (vid, d, stop) => { if (!stop) return false; const p = effRec(add
 // 숨긴 장비(hidden_after): 그 날짜보다 늦게 시작하는 기준일자부터 기관별 장비 목록에서 안 보임(이전 기준일자·이동 현황 기록은 그대로)
 // 지역본부 장비는 등록한 기준일자에서만 보임(다른 기준일자에서는 목록·카드·대수에 안 나옴)
 const shownIn = (v, r) => isPool(v) ? !!r && v.round_id === r.id : (!v.hidden_after || (!!r && r.start_date <= v.hidden_after));
-/* ---------- 기관별 배정(마이그레이션 43): 관리자가 "기관 → 지사 몇 대", 기계화부는 그 안에서 지원일 1의 장비별 지사를 고름 ---------- */
+/* ---------- 기관별 배치(마이그레이션 43): 관리자가 "기관 → 지사 몇 대", 기계화부는 그 안에서 지원일 1의 장비별 지사를 고름 ---------- */
 const ak = (org, bid) => org + "|" + bid, A0 = { truck: 0, blower: 0 }, AF = { "제설차": "truck", "제설기": "blower" };
 const aval = (org, bid) => S.adraft.get(ak(org, bid)) || S.alloc.get(ak(org, bid)) || A0;      // 배정 탭에 보이는 값(고치는 중 포함)
 const allocDirty = () => S.adraft.size > 0;
-// 기관별 배정 합계(그 지사, 모든 기관 — 고치는 중 포함)와 편성 대수(저장된 것). 배정 합계는 편성을 넘을 수 없음(마이그레이션 46)
+// 기관별 배치 합계(그 지사, 모든 기관 — 고치는 중 포함)와 편성 대수(저장된 것). 배정 합계는 편성을 넘을 수 없음(마이그레이션 46)
 const asg = (bid, f) => +rbase(bid, f === "truck" ? "assigned_truck" : "assigned_blower") || 0;
 const allocSum = (bid, f, except) => [...S.orgs, POOL].reduce((n, o) => n + (o === except ? 0 : aval(o, bid)[f] || 0), 0);
 const orgHasAlloc = org => [...S.alloc.keys()].some(k => k.startsWith(org + "|"));               // 이 기준일자에 그 기관 배정이 하나라도 있는지(저장된 것)
@@ -373,7 +373,7 @@ async function loadReqs() {        // 못 읽으면 S.reqsBad: 값이 0대·미�
   if (!r.ok) { S.reqsBad = true; return toast(r.message, true); }
   r.rows.forEach(x => { S.reqs[x.branch_id] = { ...x, arrive_at: localInput(x.arrive_at), reason: x.reason || null }; });
 }
-/* ---------- [새로고침]: 다른 아이디가 넣은 자료를 화면을 새로 열지 않고 다시 읽음(이동 현황·기관별 장비·지사별 요청·편성·기관별 배정 공통) ---------- */
+/* ---------- [새로고침]: 다른 아이디가 넣은 자료를 화면을 새로 열지 않고 다시 읽음(이동 현황·기관별 장비·지사별 요청·편성·기관별 배치 공통) ---------- */
 let reloading = false;
 // 새로고침 버튼은 위쪽 탭 줄 오른쪽 하나(2026-11-02 — 스크롤해도 늘 보이게). 첫 화면 안에서는 바깥 메뉴 줄의 버튼이 SSEqReload 를 부름
 function paintReload() {
@@ -449,7 +449,7 @@ function toast(msg, isErr) {
   const el = $("toast"); el.textContent = msg; el.className = "toast" + (isErr ? " err" : ""); el.hidden = false;
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 3500);
 }
-const TAB_LABEL = { gw_team_routes: "신속대응팀 경로", gw_team_status: "신속대응팀 지원 여부", vehicles: "장비", vehicle_routes: "경로", round_vehicle_status: "지원 여부", round_requests: "지사 요청", round_allocations: "기관별 배정", support_rounds: "기준일자", branch_zone_overrides: "특보구역" };
+const TAB_LABEL = { gw_team_routes: "신속대응팀 경로", gw_team_status: "신속대응팀 지원 여부", vehicles: "장비", vehicle_routes: "경로", round_vehicle_status: "지원 여부", round_requests: "지사 요청", round_allocations: "기관별 배치", support_rounds: "기준일자", branch_zone_overrides: "특보구역" };
 const FIELD = { offer_truck: "타지사 지원 가능", rented: "임차", home_branch: "출발 지사", truck: "배정 제설차", blower: "배정 제설기", fc_snow: "확정 예상 적설", fc_pcp: "확정 예상 강수", fc_pop: "확정 강수확률", wx_manual: "기상현황 직접입력", wx_snow: "직접 적설", wx_pcp: "직접 강수", wx_tmin: "직접 최저기온", wx_tmin_at: "직접 최저기온 시각", fc_tmin: "확정 최저기온", wx_level: "직접 대설특보", wx_fc: "직접 특보 발표", wx_ef: "직접 특보 발효", plate: "도공번호", status: "지원 여부", stops: "경로", revised: "구분", times: "도착 예상", snow_cm: "예상 적설", warning: "특보", req_truck: "요청 제설차", req_blower: "요청 제설기",
   blower_s: "블로워 소", blower_l: "블로워 대", off_from: "지원 불가 시작일", hidden_after: "숨김", days: "기간(일)", assigned_truck: "편성 제설차", assigned_blower: "편성 제설기", arrive_at: "도착 요청", reason: "사유", confirmed: "확정", start_date: "기준일자", type: "장비", org: "기관", warn_level: "확정 특보", include: "특보구역" };
 const HIDE = new Set(["fc_tmfc", "fc_at", "zone_code", "warn_zones", "warn_base", "warn_at", "warn_note", "updated_by", "updated_at", "confirmed_by", "confirmed_at", "created_by", "created_at", "round_id", "branch_id", "vehicle_id", "team_id", "date", "id", "sort", "active", "name", "end_date"]);
@@ -657,7 +657,7 @@ const isGo = v => { const r = curRound(); return !!r && stOf(r.id, v.id).status 
 const fleetRows = () => S.vehicles.filter(v => (!S.fleetOrgs.size || S.fleetOrgs.has(v.org)) && shownIn(v, curRound()) && (!S.fleetGo || isGo(v) || S.sdraft.has(v.id)));
 const nextRoundMin = () => S.rounds.length ? addDays(S.rounds[0].start_date, 1) : "2000-01-01";       // 새 기준일자는 마지막 기준일자보다 뒤
 const hiddenNow = () => S.vehicles.filter(v => v.hidden_after && !shownIn(v, curRound()));          // 지금 고른 기준일자에서 숨겨진 장비(숨김 취소 목록)
-// 지원일 칸(경로)의 지사 선택 전부·지원일 1 날짜·지원일 칸 수·초기화·최초 지원/수정본, 기관별 배정 대수 = 관리자(권한 equip.route)만 (2026-11-02 사용자 요청)
+// 지원일 칸(경로)의 지사 선택 전부·지원일 1 날짜·지원일 칸 수·초기화·최초 지원/수정본, 기관별 배치 대수 = 관리자(권한 equip.route)만 (2026-11-02 사용자 요청)
 const canRoute = () => can("equip.route");
 // 모든 기관 장비 추가·삭제·숨기기 = equip.edit.all(관리자 + 이 권한을 받은 지원장비 아이디). 지원일 칸은 이 권한으로 열리지 않음
 const canAllVeh = () => can("equip.edit.all");
@@ -702,12 +702,13 @@ function renderFleet() {
     (i === 0 && rt ? `<input class="ci" type="date" id="day1In" value="${esc(d)}"${r ? ` min="${esc(r.start_date)}"` : ""} aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동, 기준일자보다 앞은 안 됨)">` : esc(fmtMD(d))) + `</span></th>`).join("");
   const rows = fleetRows().map(v => fleetRowHtml(v, dates, choices, all)).join("");
   $("eqTable").innerHTML = `<thead><tr><th>도공번호</th><th>장비</th><th>블로워</th><th>지원 여부</th>${head}${actCol() ? `<th class="unh">${canAllVeh() ? unhideHead() : ""}</th>` : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${5 + dates.length}" class="empty">${S.fleetGo ? "지원 여부가 '지원'인 장비가 없습니다." : "장비가 없습니다."}${addRow && !S.fleetGo ? " 위의 [장비 추가]로 넣으세요." : ""}</td></tr>`}</tbody>`;
-  fixCols($("eqTable"), [plateColW(), 60, 68, 76, ...dates.map(() => null), ...(actCol() ? [canAllVeh() ? 92 : 50] : [])], true);
+  const eqFixed = [plateColW(), em(5.8), em(5.4), em(5.8)], eqAct = actCol() ? [canAllVeh() ? em(7) : em(4)] : [], eqDay = dayW(eqFixed.concat(eqAct).reduce((n, w) => n + w, 0));
+  fixCols($("eqTable"), [...eqFixed, ...dates.map(() => eqDay), ...eqAct], true);
   placeUnhide();
 }
 // 도공번호 칸 폭: 보통 장비 = 기관 이름 + 숫자 4자리. 지역본부 장비는 지사 이름 + 임차 + 숫자라 더 길어서, 보이는 장비 중 가장 긴 이름에 맞춤(제설차 칸과 겹치지 않게, 2026-11-03)
 function plateColW() {
-  return fleetRows().reduce((w, v) => Math.max(w, !isPool(v) ? 118 : canVeh(v) ? bn(v.home_branch).length * 13 + 112 : vname(v).length * 12.5 + 14), 118);
+  return fleetRows().reduce((w, v) => Math.max(w, !isPool(v) ? em(9.2) : canVeh(v) ? em(bn(v.home_branch).length * 1.04 + 9) : em(vname(v).length + 1.2)), em(9.2));
 }
 const myPoolN = () => canPoolAdd() ? poolVehs(S.me.branch_id).length : 0;            // 지사 계정: 이 기준일자에 등록한 자기 지사 장비 수
 const actCol = () => canAllVeh() || myPoolN() > 0;       // 맨 끝 칸(숨기기·삭제): 관리자, 그리고 자기 지사 지역본부 장비가 있는 지사 계정
@@ -912,7 +913,8 @@ function renderTeam() {
   const head = dates.map((d, i) => `<th class="dayh">지원일 ${i + 1}<span class="sub">` +
     (i === 0 && ed ? `<input class="ci" type="date" id="day1InTeam" value="${esc(d)}"${r ? ` min="${esc(r.start_date)}"` : ""} aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동, 기준일자보다 앞은 안 됨)">` : esc(fmtMD(d))) + `</span></th>`).join("");
   $("teamTable").innerHTML = `<thead><tr><th>장비</th><th>지원 여부</th>${head}</tr></thead><tbody>${S.team.map(v => teamRowHtml(v, dates)).join("") || `<tr><td colspan="${2 + dates.length}" class="empty">장비가 없습니다.</td></tr>`}</tbody>`;
-  fixCols($("teamTable"), [150, 76, ...dates.map(() => null)], true);
+  const tFixed = [em(11.5), em(5.8)], tDay = dayW(tFixed[0] + tFixed[1]);
+  fixCols($("teamTable"), [...tFixed, ...dates.map(() => tDay)], true);
 }
 function teamRowHtml(v, dates) {
   const ed = canTeam(), r = curRound(), st = r ? stOf(r.id, v.id).status : "", [cls, label] = STATUS[st] || STATUS[""], id = esc(v.id);
@@ -1038,18 +1040,24 @@ function afterReq(id) {          // 지사 요청 칸을 고친 뒤: 그 줄 표
   patchTotals(); afterAnyChange();
 }
 // 제목 줄이 두 줄인 표: 스크롤해도 두 줄이 겹치지 않게, 둘째 줄은 첫 줄 높이만큼 아래에 붙임(높이는 화면 폭에 따라 달라서 매번 잼)
-// 표 칸 폭 고정(2026-11-03 사용자 요청 — 글자 수에 따라 들쭉날쭉하지 않게). cols = 칸마다 폭(px), null = 지원일 칸
-// fit = true: 표 폭 = 칸 폭 합계(남는 자리를 채우지 않음). 지원일 칸은 늘 같은 폭이라 칸 수만큼 표가 줄고 늘어남 — 6칸이 1366px 화면에 스크롤 없이 들어가는 폭(휴대폰은 예전 폭)
-// fit 이 아니면 화면이 합계보다 넓을 때 같은 비율로 넓어지고, 좁으면 옆으로 밀어서 봄
-const DAY_W = () => innerWidth <= 860 ? 176 : 150;
-let lastDayW = DAY_W();
-addEventListener("resize", () => { const w = DAY_W(); if (w !== lastDayW && S.me) { renderFleet(); renderTeam(); } lastDayW = w; });      // 창 폭이 휴대폰 기준을 넘나들 때만 다시 그림
+// 표 칸 폭 고정(2026-11-03 사용자 요청 — 글자 수에 따라 들쭉날쭉하지 않게). cols = 칸마다 폭(px)
+// fit = true: 표 폭 = 칸 폭 합계. fit 이 아니면 화면이 합계보다 넓을 때 같은 비율로 넓어지고, 좁으면 옆으로 밀어서 봄
 function fixCols(table, cols, fit) {
-  const sum = cols.reduce((n, w) => n + (w == null ? DAY_W() : w), 0);
+  const sum = cols.reduce((n, w) => n + w, 0);
   table.classList.add("fixcols");
   table.style.minWidth = sum + "px"; table.style.width = fit ? sum + "px" : "";
-  table.insertAdjacentHTML("afterbegin", `<colgroup>${cols.map(w => `<col style="width:${w == null ? DAY_W() : w}px">`).join("")}</colgroup>`);
+  table.insertAdjacentHTML("afterbegin", `<colgroup>${cols.map(w => `<col style="width:${w}px">`).join("")}</colgroup>`);
 }
+// 기관별 장비·강원본부 지원장비·기관별 배치의 칸 크기(2026-11-03 사용자 요청: 컴퓨터에서 보기 좋게, 글자가 잘리지 않게). 칸 폭은 글자 크기(em)로 정해 글자와 함께 커짐
+// 글자 크기는 CSS 의 clamp 와 같은 계산: 컴퓨터 13~15px(화면 폭에 따라), 휴대폰 12.5px
+const isPhoneW = () => innerWidth <= 860;
+const FP = () => isPhoneW() ? 12.5 : Math.min(15, Math.max(13, innerWidth * .0085));
+const em = n => Math.round(n * FP());
+const pageW = () => Math.min(document.documentElement.clientWidth, 1680) - 40;      // 화면에서 표가 쓸 수 있는 폭(main 의 최대 폭·좌우 여백)
+// 지원일 칸: 칸 수와 상관없이 같은 폭 = 지원일 6칸이 화면 폭을 꽉 채우는 폭(글자가 잘리지 않는 최소 폭 아래로는 안 줄어듦). 그래서 2칸이면 표가 줄고 7칸부터 오른쪽으로 늘어남. 휴대폰은 176px
+const dayW = fixed => isPhoneW() ? 176 : Math.max(em(11.2), Math.floor((pageW() - fixed) / 6));
+let lastPageKey = innerWidth;
+addEventListener("resize", () => { if (innerWidth !== lastPageKey && S.me) { lastPageKey = innerWidth; clearTimeout(S.resizeT); S.resizeT = setTimeout(() => { renderFleet(); renderTeam(); renderAlloc(); }, 150); } });   // 창 폭이 바뀌면 칸 폭을 다시 계산
 function stickHead(table) {
   if (!table || !table.tHead || !table.offsetParent) return;
   let top = 0;
@@ -1247,7 +1255,7 @@ async function switchRound(id, force) {
 }
 
 /* ============================================================
-   [6-2] 기관별 배정 — 관리자: 편성이 확정된 지사에 기관별 제설차·제설기 대수. 기준일자 전체에 한 번(지원일 1 기준)
+   [6-2] 기관별 배치 — 관리자: 편성이 확정된 지사에 기관별 제설차·제설기 대수. 기준일자 전체에 한 번(지원일 1 기준)
    ============================================================ */
 function renderAlloc() {
   const r = curRound(), ed = canRoute() && !!r, AO = [...S.orgs, POOL];        // 배정 대수는 관리자(equip.route)만 — 2026-11-02        // 칸: 기계화부 4곳(제설차·제설기) + 지역본부(제설차만)
@@ -1276,7 +1284,8 @@ function renderAlloc() {
     `<tr class="al-av"><th class="l">배정 / 지원 가능</th>${S.orgs.map(o => avc(o, "truck", "제설차") + avc(o, "blower", "제설기")).join("")}${avc(POOL, "truck", "제설차")}<td></td><td></td></tr>` +
     `<tr class="al-done"><th class="l" title="기계화부 장비는 기계화부가, 지역본부 장비는 관리자가 지원일 1의 지사를 정한 대수">장비 지정</th>${S.orgs.map(o => done(o, true)).join("")}${done(POOL, false)}<td></td><td></td></tr></tfoot>`;
   $("allocTable").innerHTML = head + `<tbody>${body}</tbody>` + foot;
-  fixCols($("allocTable"), [96, ...S.orgs.flatMap(() => [54, 54]), 62, 62, 62], true);
+  const alCols = [7.7, ...S.orgs.flatMap(() => [4.3, 4.3]), 5, 5, 5].map(em), alSum = alCols.reduce((n, w) => n + w, 0), alK = isPhoneW() ? 1 : Math.max(1, Math.min(1.35, pageW() / alSum));   // 컴퓨터: 화면에 맞춰 조금 넓힘
+  fixCols($("allocTable"), alCols.map(w => Math.round(w * alK)), true);
   stickHead($("allocTable"));
 }
 async function saveAlloc() {
@@ -1288,7 +1297,7 @@ async function saveAlloc() {
   busy("alloc", false);
   if (!r.ok) return toast(r.message, true);
   rows.forEach(x => { const k = ak(x.org, x.branch_id); if (x.truck + x.blower > 0) S.alloc.set(k, { truck: x.truck, blower: x.blower }); else S.alloc.delete(k); });
-  S.adraft.clear(); await loadAudit(); refresh(); toast(`기관별 배정을 확정했습니다 (${rows.length}칸)`);
+  S.adraft.clear(); await loadAudit(); refresh(); toast(`기관별 배치을 확정했습니다 (${rows.length}칸)`);
 }
 
 /* ============================================================
@@ -1503,7 +1512,7 @@ document.addEventListener("change", async e => {
     setRoute(d, vid, val ? { stops: [val], times: [rec.stops[0] === val ? rec.times[0] || null : null], revised: false } : EMPTY);
     keepFocus(() => renderFleet()); return afterAnyChange();
   }
-  if (t.dataset.al) {                       // 기관별 배정(관리자): 칸 하나 = (기관, 지사)의 제설차 또는 제설기 대수
+  if (t.dataset.al) {                       // 기관별 배치(관리자): 칸 하나 = (기관, 지사)의 제설차 또는 제설기 대수
     const [org, bid] = t.dataset.al.split("|"), f = t.dataset.f, b = S.brById[bid]; if (!b || !canRoute() || !isFixed(bid) || !["truck", "blower"].includes(f)) return refresh();
     let want = t.value === "" ? 0 : Math.max(0, Math.min(99, Math.floor(+t.value) || 0));
     const old = aval(org, bid)[f] || 0, room = asg(bid, f) - allocSum(bid, f, org);          // 편성 - 다른 기관 배정 = 이 칸에 넣을 수 있는 최대
