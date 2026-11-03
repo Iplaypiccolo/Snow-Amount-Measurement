@@ -44,6 +44,12 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 기준일자 위쪽 메뉴로, 기관별 장비 요약 표, 배정은 확정 지사만, 요청·편성 전체 줄
+- 서버 변경 없음. `index.html`·`boot.js`: 기준일자(`#eqRoundWide`·`#eqRoundRow`, `SSEqRound`). `equipment/js/app.js`: `syncRoundTop`·`SSEqRoundAct`, `renderOrgGrid`(표), `totalRow`, 기관별 배정 줄 조건. `guide/guide.js`: 기준일자·전체 합계·장비 현황 안내 고침.
+- 칸(id) 변경 없음(`#orgGrid` 의 class 만 바뀜) → UI_VERSION 그대로.
+- 시험: `t_fleet_sum`·`t_alloc_fixed_only`·`t_branch_totals`(test_equipment), `t_eq_round_bar`·`t_eq_round_no_edit`(test_forecast_ui). 기관 카드를 보던 시험은 표·접힌 지정 현황으로 고침.
+— ✍ Claude Code 작성
+
 ### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 초단기 전환을 같은 24시간 표로, 격자 창 옮기기·크기 조절(마이그레이션 58 — 서버 적용 완료)
 - 사용자 확인(SQL 미리 보여 줌) 뒤 적용: `private.fc_vsrt_cells(p_branches, p_series)`, `forecast_vsrt_overview`, `forecast_vsrt_grid` 교체. 표·권한 규칙·예약·단기 값은 그대로. 시험 `supabase/tests/forecast_vsrt_test.sql`(되돌림 시험 14개 통과).
 - `forecast/ui.js`: 전환해도 24시간 표 그대로, 앞 시각의 강수·확률·기온만 바뀜(노란 칸, `series.vn`), 왼쪽 목록도 그 값. 격자 창 끌어 옮기기·모서리 크기 조절·글자 비율·기억(`applyPinGeo`·`pinDrag`, `ss_fc_pin`, 컴퓨터 화면만). 시험 `t_mode_switch`·`t_mode_no_data`·`t_pin_move_resize`·`t_phone_fit`.

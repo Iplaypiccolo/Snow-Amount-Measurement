@@ -749,23 +749,24 @@ function unhideHead() {
   return `<button type="button" class="btn sm" id="unhideBtn" aria-expanded="${S.unhideOpen}">숨김 취소(${l.length})</button>` +
     (S.unhideOpen ? `<div class="unhide-pop" role="dialog" aria-label="숨긴 장비">${l.map(v => `<div class="uh-row"><span class="plate">${esc(vname(v))}</span><span class="muted">${esc(v.type)}</span><button type="button" class="btn sm" data-unhide="${esc(v.id)}">숨김 취소</button></div>`).join("")}</div>` : "");
 }
-function renderOrgGrid() {      // 카드 5개(기계화부 4곳 + 지역본부) 같은 폭. 지원할 장비가 0대인 카드는 흐리게
-  const r = curRound(), sv = v => r ? stOf(r.id, v.id).status : "";            // 고른 기준일자의 지원 여부
-  const cards = S.orgs.map(org => {
-    const l = S.vehicles.filter(v => v.org === org && shownIn(v, r)), c = s => l.filter(v => sv(v) === s).length, w = x => l.length ? x / l.length * 100 : 0;
-    return `<div class="org${c("O") ? "" : " off"}" data-orgcard="${esc(org)}"><h3>${esc(org)}</h3>
-      <div class="bar" aria-hidden="true"><i class="b-go" style="width:${w(c("O"))}%"></i><i class="b-stop" style="width:${w(c("X") + c("M"))}%"></i></div>
-      <dl><dt>지원</dt><dd>${c("O")}대</dd><dt>지원 불가</dt><dd>${c("X")}대</dd><dt>정비중</dt><dd>${c("M")}대</dd><dt>미정</dt><dd>${c("")}대</dd>
-      ${TYPES.map(t => { const tl = l.filter(v => v.type === t); return `<dt>${t}</dt><dd>${tl.filter(v => sv(v) === "O").length} / ${tl.length}</dd>`; }).join("")}</dl>${orgAllocHtml(org)}</div>`;
-  });
-  // 지역본부: 확정된 '타지사 지원 가능' 대수 합계와 등록한 장비 수, 지사별 줄(등록 / 가능)
+// 장비 현황 표(2026-11-03 사용자 요청, 기관 카드 대신): 행 = 제설차·제설기·계, 열 = 지원·지원 불가·정비중·미정·계(이동정비차 뺌). 위 기관 버튼을 고르면 그 기관만
+// 지원 가능 대수(status O)는 지사별 요청·편성의 맨 위 줄에도 씀
+const fleetCount = (t, st, orgs) => { const r = curRound(); return !r ? 0 : S.vehicles.filter(v => shownIn(v, r) && (!t || v.type === t) && MOVE_TYPES.includes(v.type) && (!orgs || !orgs.size || orgs.has(v.org)) && (st === null || stOf(r.id, v.id).status === st)).length; };
+function renderOrgGrid() {
+  const cols = [["O", "지원", "go"], ["X", "지원 불가", "stop"], ["M", "정비중", "fix"], ["", "미정", "wait"]], sel = S.fleetOrgs;
+  const row = (t, lab, tag) => `<tr data-fsrow="${esc(lab)}"><${tag} class="l">${esc(lab)}</${tag === "td" ? "td" : "th"}>${cols.map(([st]) => `<td data-fs="${st || "none"}">${fleetCount(t, st, sel)}</td>`).join("")}<td class="sum" data-fs="sum">${fleetCount(t, null, sel)}</td></tr>`;
+  const AO = sel.size ? [...sel] : [...S.orgs, POOL];
+  const assign = (t, f) => { const l = S.order.filter(b => isFixed(b.id)).map(b => [b, AO.reduce((n, o) => n + (aval(o, b.id)[f] || 0), 0)]).filter(x => x[1] > 0);
+    return { n: l.reduce((a, x) => a + x[1], 0), html: l.length ? `<div class="fs-list">${l.map(([b, n]) => `<div data-fsb="${esc(b.id)}">${esc(b.name)} ${n}</div>`).join("")}</div>` : '<span class="muted">-</span>' }; };
+  const at = assign("제설차", "truck"), ab = assign("제설기", "blower");
   const pv = poolVehs(), cap = offerBranches().reduce((n, b) => n + offerOf(b.id), 0), brs = S.order.filter(b => offerOk(b.id) || pv.some(v => v.home_branch === b.id));
-  cards.push(`<div class="org pool${cap || pv.length ? "" : " off"}" data-orgcard="${POOL}"><h3>${POOL}</h3>
-    <div class="bar" aria-hidden="true"><i class="b-go" style="width:${cap ? Math.min(100, pv.length / cap * 100) : pv.length ? 100 : 0}%"></i></div>
-    <dl><dt>지원 가능(확정)</dt><dd data-pcap>${cap}대</dd><dt>등록</dt><dd data-preg>${pv.length}대</dd><dt>임차</dt><dd>${pv.filter(v => vval(v, "rented")).length}대</dd><dt>지원 지사</dt><dd>${offerBranches().length}곳</dd></dl>` +
-    (brs.length ? `<div class="al-org pool-brs">${brs.map(b => { const n = pv.filter(v => v.home_branch === b.id).length, ok = offerOk(b.id), c = ok ? offerOf(b.id) : 0;
-      return `<span class="al-chip${!ok ? " over" : n >= c ? " full" : ""}" data-pbr="${esc(b.id)}">${esc(b.name)} ${n}/${ok ? c : "확정 전"}</span>`; }).join("")}</div>` : "") + orgAllocHtml(POOL) + `</div>`);
-  $("orgGrid").innerHTML = cards.join("");
+  const more = [...S.orgs, POOL].map(orgAllocHtml).join("") + (cap || pv.length ? `<div class="al-org pool-brs" data-orgcard="${POOL}"><div class="al-head"><b>${POOL}</b> · 지원 가능(확정) <b data-pcap>${cap}대</b> · 등록 <b data-preg>${pv.length}대</b> · 임차 ${pv.filter(v => vval(v, "rented")).length}대</div>` +
+    brs.map(b => { const n = pv.filter(v => v.home_branch === b.id).length, ok = offerOk(b.id), c = ok ? offerOf(b.id) : 0; return `<span class="al-chip${!ok ? " over" : n >= c ? " full" : ""}" data-pbr="${esc(b.id)}">${esc(b.name)} ${n}/${ok ? c : "확정 전"}</span>`; }).join("") + `</div>` : "");
+  $("orgGrid").innerHTML = `<table class="fs-table" id="fleetSum"><thead><tr><th class="l">장비</th>${cols.map(c => `<th><span class="status ${c[2]}">${c[1]}</span></th>`).join("")}<th>계</th></tr></thead>` +
+    `<tbody>${row("제설차", "제설차", "th")}${row("제설기", "제설기", "th")}</tbody><tfoot>${row(null, "계", "th")}</tfoot></table>` +
+    `<table class="fs-table fs-assign" id="fleetAssign"><thead><tr><th>제설차 배정 <b data-fsa="제설차">${at.n}</b>대</th><th>제설기 배정 <b data-fsa="제설기">${ab.n}</b>대</th></tr></thead><tbody><tr><td data-fsl="제설차">${at.html}</td><td data-fsl="제설기">${ab.html}</td></tr></tbody></table>` +
+    (more ? `<details class="fs-more" id="fleetMore"${S.fleetMore ? " open" : ""}><summary>기관별 지정 현황</summary>${more}</details>` : "");
+  const d = $("fleetMore"); if (d) d.ontoggle = () => { S.fleetMore = d.open; };
 }
 // 기관 카드 아래: 관리자가 배정한 지사별 대수와 기계화부가 지정한 대수(지원일 1). 배정이 없는 기관은 아무것도 안 보임
 function orgAllocHtml(org) {
@@ -996,6 +997,15 @@ function arriveCell(b, ed, t) {          // ed = 입력칸을 보일지(고칠 �
     `<select class="ci" data-arr="${b.id}" data-part="h" data-fk="ah:${b.id}" ${d && !lk ? "" : "disabled"} aria-label="${esc(b.name)} 도착 시">${HOURS.map(x => `<option ${x === (hh || "00") ? "selected" : ""}>${x}</option>`).join("")}</select>시 ` +
     `<select class="ci" data-arr="${b.id}" data-part="m" data-fk="am:${b.id}" ${d && !lk ? "" : "disabled"} aria-label="${esc(b.name)} 도착 분">${mins.map(x => `<option ${x === (mm || "00") ? "selected" : ""}>${x}</option>`).join("")}</select>분</span>`;
 }
+// 표 맨 위 전체 줄(2026-11-03 사용자 요청): 지사 요청·타지사 지원 가능·편성의 전국 합계. 편성은 '편성 / 기관별 장비의 지원 가능 대수'
+function totalSums() { const rows = S.order.filter(b => !(S.hqById[b.hq_id] || {}).is_private), sum = f => rows.reduce((a, b) => a + (+rval(b.id, f) || 0), 0); return { req_truck: sum("req_truck"), req_blower: sum("req_blower"), offer_truck: sum("offer_truck"), assigned_truck: sum("assigned_truck"), assigned_blower: sum("assigned_blower") }; }
+function totalCell(k, t) { const v = totalSums()[k]; if (!t) return String(v); const av = fleetCount(t, "O"); return `<span class="${v > av ? "al-over" : ""}" title="편성 ${v}대 / 기관별 장비의 지원 가능 ${av}대">${v}<small>/${av}</small></span>`; }
+const TOTAL_TYPE = { assigned_truck: "제설차", assigned_blower: "제설기" };
+function totalRow() {
+  const c = (k, cls = "") => `<th class="${cls}" data-t="${k}">${totalCell(k, TOTAL_TYPE[k])}</th>`;
+  return `<tr class="tot" data-tot><th class="l">전체</th><th colspan="8"></th>${c("req_truck")}${c("req_blower")}<th></th>${c("offer_truck")}<th></th><th class="blk-gap" aria-hidden="true"></th>${c("assigned_truck", "adm adm0")}${c("assigned_blower", "adm")}<th class="adm"></th></tr>`;
+}
+function patchTotals() { document.querySelectorAll("#branchTable [data-tot] [data-t]").forEach(x => { x.innerHTML = totalCell(x.dataset.t, TOTAL_TYPE[x.dataset.t]); }); }
 const HQ_SUM_KEYS = ["req_truck", "req_blower", "offer_truck", "assigned_truck", "assigned_blower", "confirmed"];
 function hqSums(hid) {
   const rows = S.order.filter(b => b.hq_id === hid), sum = f => rows.reduce((a, b) => a + (+rval(b.id, f) || 0), 0);
@@ -1014,7 +1024,7 @@ function afterReq(id) {          // 지사 요청 칸을 고친 뒤: 그 줄 표
   const hr = b && document.querySelector(`#branchTable tr.hq[data-hq="${b.hq_id}"]`);
   if (hr) { const sm = hqSums(b.hq_id); HQ_SUM_KEYS.forEach(k => { const c = hr.querySelector(`[data-s="${k}"]`); if (c) c.textContent = sm[k]; });
     const sh = hr.querySelector("[data-svhq]"); if (sh) setCell(sh, bulkSaveCell(b.hq_id)); }
-  afterAnyChange();
+  patchTotals(); afterAnyChange();
 }
 // 제목 줄이 두 줄인 표: 스크롤해도 두 줄이 겹치지 않게, 둘째 줄은 첫 줄 높이만큼 아래에 붙임(높이는 화면 폭에 따라 달라서 매번 잼)
 // 표 칸 폭 고정(2026-11-03 사용자 요청 — 글자 수에 따라 들쭉날쭉하지 않게). cols = 칸마다 폭(px), null = 지원일 칸(남는 폭을 똑같이 나눠 갖고 DAY_MIN 아래로는 안 줄어듦)
@@ -1057,7 +1067,7 @@ function renderBranch() {
   // 칸 순서: 지사 | 기상(24시 예보[적설·강수·확률·기온]·대설특보·직접입력) | 지사 요청 | 도착 요청 | 타지사 지원 가능 | 저장 ║ 편성 | 확정
   // ║ = 빈 칸(blk-gap)으로 표 둘처럼 나눔: 왼쪽 = 지사·본부가 넣는 표, 오른쪽(adm) = 관리자가 넣는 표. 내 계정의 표는 파란색(mine-left / mine-right)
   let h = `<thead><tr><th class="l" rowspan="2">지사</th><th colspan="4" class="fch">24시 예보 <small class="fcbase" id="fcBaseHead" data-bt="fc" tabindex="0">${esc(fcBase())}</small></th><th colspan="3" class="wh">대설특보 발표 <small class="fcbase" id="wBaseHead" data-bt="warn" tabindex="0">${esc(warnBase())}</small></th><th class="wxh" rowspan="2">기상현황<br>직접입력</th><th colspan="2">지사 요청</th><th class="l" rowspan="2">도착 요청</th><th class="ofh" rowspan="2">타지사<br>지원 가능<small class="thsub">제설차</small></th><th class="svh" rowspan="2">저장</th><th class="blk-gap" rowspan="2" aria-hidden="true"></th><th colspan="2" class="adm adm0">편성</th><th class="adm">확정</th></tr>
-    <tr><th class="fch c-sn">적설<small class="thsub">cm</small></th><th class="fch c-sn">강수<small class="thsub">mm</small></th><th class="fch">확률<small class="thsub">%</small></th><th class="fch tmh c-sn" title="24시간 중 가장 낮은 기온">기온<small class="thsub">최저 ℃</small></th><th class="wh c-wk">종류</th><th class="wh c-wt">발표</th><th class="wh c-wt c-we">발효</th><th>제설차</th><th>제설기</th><th class="adm adm0">제설차</th><th class="adm">제설기</th><th class="cf adm">${conf ? bulkCell(null) : ""}</th></tr></thead><tbody>`;
+    <tr><th class="fch c-sn">적설<small class="thsub">cm</small></th><th class="fch c-sn">강수<small class="thsub">mm</small></th><th class="fch">확률<small class="thsub">%</small></th><th class="fch tmh c-sn" title="24시간 중 가장 낮은 기온">기온<small class="thsub">최저 ℃</small></th><th class="wh c-wk">종류</th><th class="wh c-wt">발표</th><th class="wh c-wt c-we">발효</th><th>제설차</th><th>제설기</th><th class="adm adm0">제설차</th><th class="adm">제설기</th><th class="cf adm">${conf ? bulkCell(null) : ""}</th></tr>${totalRow()}</thead><tbody>`;
   const has = b => hasReq(b.id) || S.rdraft.has(b.id);                  // 요청 있음(입력 중 포함)
   const mine = b => (m.branch_id === b.id) || (can("req.edit.hq") && !can("req.confirm") && b.hq_id === m.hq_id);
   const test = { req: has, fixed: b => isFixed(b.id), offer: b => hasOffer(b.id), unsaved: b => !isSaved(b.id) };
@@ -1188,8 +1198,8 @@ function confirmBranch(id, on) {
   if (!confirm(on ? `${b.name} 지사의 편성을 확정할까요? 바로 저장되고, 기관별 장비에서 이 지사를 고를 수 있습니다.\n확정하면 [취소]하기 전까지 이 줄은 고칠 수 없습니다.${ofOn}${more}` : `${b.name} 지사의 확정을 취소할까요? 기관별 장비 선택지에서 빠집니다(이미 넣은 경로는 그대로).${ofOff}${more}`)) return;
   saveBranchRows([id], { confirmed: on }, on ? `${b.name} 지사를 확정했습니다` : `${b.name} 지사 확정을 취소했습니다`);
 }
-async function makeRound() {
-  const d = $("newRoundDate").value;
+async function makeRound(date) {
+  const d = date || $("newRoundDate").value;
   if (!d) return toast("기준일자 날짜를 고르세요", true);
   if (S.preview) return toast("미리보기에서는 만들 수 없습니다.", true);
   if (S.rounds.some(r => r.start_date >= d)) return toast("새 기준일자는 마지막 기준일자보다 뒤 날짜여야 합니다", true);
@@ -1229,7 +1239,7 @@ function renderAlloc() {
   banner("perm-alloc");
   $("allocRound").innerHTML = roundSel("roundSelAlloc") + (r ? "" : `<span class="hint">기준일자가 없습니다.</span>`);
   if (S.reqsBad) { $("allocTable").classList.remove("fixcols"); $("allocTable").style.minWidth = ""; $("allocTable").innerHTML = reqsBadHtml(); return; }
-  const rows = r ? S.order.filter(b => isFixed(b.id) || AO.some(o => { const a = aval(o, b.id); return a.truck + a.blower > 0; })) : [];
+  const rows = r ? S.order.filter(b => isFixed(b.id)) : [];      // 편성이 확정된 지사만(2026-11-03 사용자 요청, 확정을 취소하면 안 보이고 다시 확정하면 배정이 그대로 돌아옴)
   if (!rows.length) { $("allocTable").classList.remove("fixcols"); $("allocTable").style.minWidth = ""; $("allocTable").innerHTML = `<tbody><tr><td class="empty">${r ? "편성이 확정된 지사가 없습니다. 지사별 요청·편성에서 편성 대수를 넣고 [확정]하면 여기에 나옵니다." : "기준일자가 없습니다."}</td></tr></tbody>`; return; }
   const sum = (bid, f) => AO.reduce((n, o) => n + (aval(o, bid)[f] || 0), 0), osum = (o, f) => rows.reduce((n, b) => n + (aval(o, b.id)[f] || 0), 0);
   const availN = (o, t) => S.vehicles.filter(v => v.org === o && v.type === t && shownIn(v, r) && stOf(r.id, v.id).status === "O").length;
@@ -1241,7 +1251,7 @@ function renderAlloc() {
   const head = `<thead><tr><th class="l" rowspan="2">피지원 지사</th>${S.orgs.map(o => `<th colspan="2">${esc(o)}</th>`).join("")}<th class="al-pool">${POOL}</th><th colspan="2">배정 / 편성</th></tr>` +
     `<tr>${S.orgs.map(() => "<th>제설차</th><th>제설기</th>").join("")}<th class="al-pool">제설차</th><th>제설차</th><th>제설기</th></tr></thead>`;
   const over = b => ["truck", "blower"].some(f => allocSum(b.id, f) > asg(b.id, f));       // 편성보다 많이 배정됨(여러 기관에 나뉜 채 편성을 줄인 경우 — 자동으로 안 줄임)
-  const body = rows.map(b => `<tr class="${AO.some(o => S.adraft.has(ak(o, b.id))) ? "changed" : ""}" data-ab="${b.id}"><td class="l">${esc(b.name)}${isFixed(b.id) ? (over(b) ? ' <span class="tag warn al-overasg">편성보다 많음 — 줄여 주세요</span>' : "") : ' <span class="tag warn">확정 취소됨</span>'}</td>` +
+  const body = rows.map(b => `<tr class="${AO.some(o => S.adraft.has(ak(o, b.id))) ? "changed" : ""}" data-ab="${b.id}"><td class="l">${esc(b.name)}${over(b) ? ' <span class="tag warn al-overasg">편성보다 많음 — 줄여 주세요</span>' : ""}</td>` +
     S.orgs.map(o => `<td>${cell(o, b, "truck", "제설차")}</td><td>${cell(o, b, "blower", "제설기")}</td>`).join("") + `<td class="al-pool">${cell(POOL, b, "truck", "제설차")}</td>` +
     `<td data-asum="truck">${cmp(sum(b.id, "truck"), +rbase(b.id, "assigned_truck") || 0)}</td><td data-asum="blower">${cmp(sum(b.id, "blower"), +rbase(b.id, "assigned_blower") || 0)}</td></tr>`).join("");
   const tot = f => rows.reduce((n, b) => n + sum(b.id, f), 0), want = f => rows.reduce((n, b) => n + (isFixed(b.id) ? +rbase(b.id, f) || 0 : 0), 0);
@@ -1421,11 +1431,20 @@ function updateSavebars() {
   bb.querySelector("[data-revert]").disabled = !bd; bb.querySelector("[data-save]").disabled = !bd || S.preview;
 }
 addEventListener("beforeunload", e => { if (anyDirty()) { e.preventDefault(); e.returnValue = ""; } });
+// 기준일자는 첫 화면 위쪽 메뉴에 늘 보임(2026-11-03 사용자 요청, boot.js SSEqRound). 첫 화면 안에서는 탭마다 있던 기준일자 줄을 숨김(.embedded .round-bar), 이 화면만 따로 열면 그 줄이 위에 붙음
+function syncRoundTop() {
+  document.documentElement.style.setProperty("--topbar-h", (document.querySelector(".topbar") || {}).offsetHeight + "px");
+  let t = null; try { t = window.top !== window && window.top.SSEqRound; } catch (e) {} if (!t) return;
+  const min = nextRoundMin();
+  t({ rounds: S.rounds.map(x => ({ id: x.id, label: `${fmtMD(x.start_date)} ${x.start_date.slice(0, 4)}` })), round: S.round, canEdit: can("req.confirm"), min, def: min > todayISO() ? min : todayISO() });
+}
+window.SSEqRoundAct = (act, v) => act === "select" ? switchRound(v) : act === "del" ? deleteRound() : makeRound(v);
 function refresh() {
   hideTip();
   renderMatrix(); renderFilters(); renderDest(); renderFleet(); renderBranch(); renderAlloc(); renderTeam(); renderLog(); updateSavebars();
   $("logTabBtn").hidden = !can("log.view"); $("teamTabBtn").hidden = !canTeam();
   try { if (window.top !== window && window.top.SSEqTeamTab) window.top.SSEqTeamTab(canTeam()); } catch (e) {}       // 첫 화면 위쪽 메뉴의 '강원본부 지원장비'도 같이
+  syncRoundTop();
   if ((!can("log.view") && !$("panel-log").hidden) || (!canTeam() && !$("panel-gwteam").hidden)) document.querySelector('[data-tab="move"]').click();
 }
 function refreshKeepFocus() {   // 값을 고친 뒤 화면을 다시 그리되, 커서 위치는 유지

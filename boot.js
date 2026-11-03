@@ -147,6 +147,30 @@
   var rlBtns = [rlBtn, document.getElementById('snReload')].filter(Boolean);          // 넓은 화면 = 탭 줄, 휴대폰 = 머리글(탭을 가리지 않게, 2026-11-02)
   rlBtns.forEach(function(b){ b.addEventListener('click', function(){ var w = null; try { w = frame.contentWindow; } catch(e){} if (w && w.SSEqReload) w.SSEqReload(); }); });
   window.SSEqReloadState = function(busy, at){ rlBtns.forEach(function(b){ b.disabled = !!busy; b.textContent = busy ? '불러오는 중…' : '새로고침'; }); if (rlAt) rlAt.textContent = at || ''; };
+  // 기준일자(2026-11-03 사용자 요청): 탭을 바꿔도 늘 보이게 위쪽 메뉴에. 목록·권한은 안쪽 화면이 알려 주고(SSEqRound), 고르기·삭제·만들기는 안쪽 화면이 함(SSEqRoundAct)
+  var rdBoxes = [document.getElementById('eqRoundWide'), document.getElementById('eqRoundRow')].filter(Boolean), rdKey = '', rdS = null, rdOpen = false;
+  function rdEsc(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); }
+  function rdPaint(){
+    if (!rdS) return;
+    var key = JSON.stringify([rdS, rdOpen]); if (key === rdKey) return; rdKey = key;      // 안쪽 화면은 자주 다시 그리므로 바뀔 때만(날짜를 넣는 중에 지워지지 않게)
+    var opts = rdS.rounds.length ? rdS.rounds.map(function(r){ return '<option value="' + rdEsc(r.id) + '"' + (r.id === rdS.round ? ' selected' : '') + '>' + rdEsc(r.label) + '</option>'; }).join('') : '<option value="">(없음)</option>';
+    var html = '<label class="eq-round-lab">기준일자 <select class="eq-round-sel" data-rd="sel" aria-label="기준일자">' + opts + '</select></label>' + (rdS.canEdit
+      ? '<button type="button" class="eq-round-more" data-rd="more" aria-expanded="' + rdOpen + '" aria-label="기준일자 삭제·만들기 ' + (rdOpen ? '닫기' : '열기') + '">' + (rdOpen ? '−' : '+') + '</button>' +
+        '<span class="eq-round-tools">' + (rdS.round ? '<button type="button" data-rd="del">삭제</button>' : '') +
+        '<label>새 기준일자 <input type="date" data-rd="date" value="' + rdEsc(rdS.def) + '" min="' + rdEsc(rdS.min) + '"></label><button type="button" data-rd="make">만들기</button></span>' : '');
+    rdBoxes.forEach(function(b){ b.innerHTML = html; b.hidden = false; b.classList.toggle('open', rdOpen && !!rdS.canEdit); });
+  }
+  function rdAct(act, v){ var w = null; try { w = frame.contentWindow; } catch(e){} if (w && w.SSEqRoundAct) w.SSEqRoundAct(act, v); }
+  window.SSEqRound = function(st){ rdS = st; if (!st.canEdit) rdOpen = false; rdPaint(); };
+  rdBoxes.forEach(function(b){
+    b.addEventListener('change', function(e){ if (e.target.dataset.rd === 'sel') rdAct('select', e.target.value); });
+    b.addEventListener('click', function(e){
+      var t = e.target.closest ? e.target.closest('button[data-rd]') : null; if (!t) return;
+      if (t.dataset.rd === 'more') { rdOpen = !rdOpen; rdPaint(); return; }
+      if (t.dataset.rd === 'del') { rdAct('del'); return; }
+      var d = b.querySelector('[data-rd="date"]'); rdAct('make', d ? d.value : '');
+    });
+  });
   // '강원본부 지원장비' 메뉴: 관리자·강원본부 계정만(안쪽 장비 화면이 권한을 확인해 알려 줌, 2026-10-30)
   window.SSEqTeamTab = function(on){ var b = document.getElementById('eqTeamBtn'); if (b) b.hidden = !on; if (!on && eqTab === 'gwteam') { eqTab = 'move'; paintEq(); } };
   theme.querySelectorAll('[data-eqtheme]').forEach(function(b){ b.addEventListener('click', function(){

@@ -70,7 +70,36 @@
   .tn-tabs{padding:0 12px;overflow-x:auto;scrollbar-width:thin;}
   .sn-group{display:flex;gap:2px;}
   /* 장비 지원 새로고침(2026-11-02): 메뉴 줄 오른쪽 — 위쪽 메뉴는 늘 보이므로 스크롤해도 보임. 좁은 화면에서 메뉴가 옆으로 밀려도 오른쪽에 붙음 */
-  .eq-reload{margin-left:auto;position:sticky;right:0;display:flex;align-items:center;gap:8px;padding:0 6px 0 12px;background:var(--panel);white-space:nowrap;box-shadow:12px 0 0 var(--panel),-8px 0 8px -4px var(--panel);}
+  .eq-right{margin-left:auto;position:sticky;right:0;display:flex;align-items:center;gap:12px;padding:0 6px 0 12px;background:var(--panel);white-space:nowrap;box-shadow:12px 0 0 var(--panel),-8px 0 8px -4px var(--panel);}
+  .eq-reload{display:flex;align-items:center;gap:8px;}
+  /* 기준일자(2026-11-03 사용자 요청): 늘 보이게 위쪽 메뉴에. 넓은 화면 = 탭 줄 오른쪽(1500px 이상은 삭제·만들기도 그 자리), 그보다 좁으면 [+]로 줄을 펼침.
+     1240px 미만 = 사용법 아래 줄(탭을 가리지 않음, 탭은 아래로 밀림) */
+  .eq-round{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;}
+  .eq-round[hidden],.shell[data-page="snow"] .eq-round{display:none;}
+  .eq-round-lab{display:inline-flex;align-items:center;gap:6px;font-weight:700;color:var(--ink);white-space:nowrap;}
+  .eq-round-sel{font:inherit;font-size:13px;font-weight:700;color:#3a2f00;background:#fff3b0;border:1.5px solid #e0b400;border-radius:8px;padding:4px 6px;cursor:pointer;}
+  .eq-round-more{font:inherit;font-size:15px;font-weight:700;line-height:1;width:28px;height:28px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;cursor:pointer;}
+  .eq-round-tools{display:none;align-items:center;gap:6px;flex-wrap:wrap;}
+  .eq-round.open .eq-round-tools{display:inline-flex;}
+  .eq-round-tools label{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;color:var(--muted);}
+  .eq-round-tools input{font:inherit;font-size:12.5px;border:1px solid var(--line);border-radius:7px;padding:3px 4px;background:var(--panel);color:var(--ink);}
+  .eq-round-tools button{font:inherit;font-size:12.5px;font-weight:600;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:4px 10px;cursor:pointer;white-space:nowrap;}
+  .eq-round-tools button[data-rd="del"]{color:#b0392b;border-color:#e3b5ae;}
+  #eqRoundRow{padding:2px 12px 6px;}
+  #eqRoundWide{display:none;flex-wrap:nowrap;}
+  @media (min-width:1240px){
+    #eqRoundWide{display:flex;}
+    #eqRoundRow{display:none;justify-content:flex-end;}
+    #eqRoundRow.open{display:flex;}
+    #eqRoundRow .eq-round-lab,#eqRoundRow .eq-round-more{display:none;}
+    .shell[data-page="snow"] #eqRoundWide,.shell[data-page="snow"] #eqRoundRow{display:none;}
+    #eqRoundWide[hidden]{display:none;}
+  }
+  @media (min-width:1500px){
+    #eqRoundRow,#eqRoundRow.open{display:none;}
+    #eqRoundWide .eq-round-more{display:none;}
+    #eqRoundWide .eq-round-tools{display:inline-flex;flex-wrap:nowrap;}
+  }
   .eq-reload small{font-size:11.5px;color:var(--muted);}
   .eq-reload button{font:inherit;font-size:12.5px;font-weight:600;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:5px 12px;cursor:pointer;}
   .eq-reload button:hover{border-color:var(--accent);color:var(--accent);}
@@ -409,6 +438,7 @@
       <div class="ss-user" id="ssUser" hidden></div>
     </div>
   </div>
+  <div class="eq-round" id="eqRoundRow" hidden></div>
   <div class="tn-tabs">
     <nav class="sn-group" data-group="snow" aria-label="강설량 측정 메뉴">
       <button type="button" class="tab-btn active" data-tab="forecast"><svg class="sn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15a4 4 0 1 1 .9-7.9A5 5 0 0 1 17.5 9 3.5 3.5 0 0 1 17 16H7z M8 19h.01 M12 20h.01 M16 19h.01"/></svg><span>기관별 24시간 예보</span></button>
@@ -425,7 +455,7 @@
       <button type="button" class="eq-btn" data-eqtab="alloc"><svg class="sn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4z M4 10h16 M10 5v14 M15 5v14"/></svg><span>기관별 배정</span></button>
       <button type="button" class="eq-btn" data-eqtab="gwteam" id="eqTeamBtn" data-perm hidden><svg class="sn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4v5c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V7z M9 12l2 2 4-4"/></svg><span>강원본부 지원장비</span></button>
       <button type="button" class="eq-btn" data-eqtab="log" id="eqLogBtn" data-perm hidden><svg class="sn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v5l3 2"/></svg><span>로그 기록</span></button>
-      <span class="eq-reload"><small id="eqReloadAt"></small><button type="button" id="eqReload" title="다른 아이디가 넣은 자료를 다시 읽음(화면을 새로 열지 않음)">새로고침</button></span>
+      <span class="eq-right"><span class="eq-round" id="eqRoundWide" hidden></span><span class="eq-reload"><small id="eqReloadAt"></small><button type="button" id="eqReload" title="다른 아이디가 넣은 자료를 다시 읽음(화면을 새로 열지 않음)">새로고침</button></span></span>
     </nav>
   </div>
 </header>
@@ -433,7 +463,7 @@
 <noscript><div style="padding:40px;font-family:sans-serif;">이 화면은 JavaScript 가 켜져 있어야 로그인할 수 있습니다.</div></noscript>
 
 <div id="page-equip">
-  <iframe id="equipFrame" title="제설장비 지원 현황" data-src="equipment/index.html?v=9d3605e9"></iframe>
+  <iframe id="equipFrame" title="제설장비 지원 현황" data-src="equipment/index.html?v=17356396"></iframe>
 </div>
 
 <div class="app" id="page-snow">
@@ -552,8 +582,8 @@
 <script src="auth/events.js?v=0c959479" defer></script>
 <script src="auth/gate.js?v=309218bc" defer></script>
 <script src="auth/snow.js?v=21f5a422" defer></script>
-<script src="guide/guide.js?v=6d31db33" defer></script>
-<script src="boot.js?v=266e34ac" defer></script>
+<script src="guide/guide.js?v=7417088d" defer></script>
+<script src="boot.js?v=4e19f652" defer></script>
 <script src="login/intro-loader.js?v=2c2f6b9d" defer></script>
 </body>
 </html>

@@ -845,3 +845,27 @@ table.fixcols th, table.fixcols td { overflow-wrap: anywhere; }
 .eq.fixcols .slot .slot-x .btn.sm { flex: none; padding-left: 6px; padding-right: 6px; }
 .eq.fixcols th.dayh input.ci { width: 100%; max-width: 130px; }
 .eq.fixcols td.vact .btn { padding-left: 6px; padding-right: 6px; }
+
+/* 기준일자(2026-11-03): 첫 화면 안에서는 위쪽 메뉴로 옮김, 이 화면만 따로 열면 눈에 띄게 + 위에 붙음 */
+.embedded .round-bar { display: none; }
+.round-bar { position: sticky; top: var(--topbar-h, 0px); z-index: 15; border-color: #e0b400; }
+.round-bar select[data-round] { background-color: #fff3b0; border-color: #e0b400; color: #3a2f00; font-weight: 700; }
+
+/* 기관별 장비: 장비 현황 표(기관 카드 대신, 2026-11-03) */
+.fleet-sum { margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
+.fs-table { width: 100%; max-width: 640px; border-collapse: collapse; background: var(--surface); font-size: 14px; }
+.fs-table th, .fs-table td { border: 1px solid var(--line); padding: 5px 10px; text-align: center; font-variant-numeric: tabular-nums; }
+.fs-table thead th { background: var(--bg); font-weight: 600; font-size: 13px; }
+.fs-table .l { text-align: left; font-weight: 700; white-space: nowrap; }
+.fs-table .sum, .fs-table tfoot th, .fs-table tfoot td { font-weight: 700; }
+.fs-table tfoot th, .fs-table tfoot td { background: var(--bg); }
+.fs-assign td { text-align: left; vertical-align: top; width: 50%; }
+.fs-list { columns: auto 84px; column-gap: 12px; line-height: 1.55; }
+.fs-list > div { break-inside: avoid; white-space: nowrap; }
+.fs-more { max-width: 640px; font-size: 13px; }
+.fs-more summary { cursor: pointer; color: var(--ink-soft); padding: 2px 0; }
+
+/* 지사별 요청·편성: 맨 위 전체 줄 */
+#branchTable thead tr.tot th { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; border-bottom: 2px solid var(--line); }
+#branchTable thead tr.tot th small { font-size: 11px; font-weight: 500; color: var(--ink-soft); }
+

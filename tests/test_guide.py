@@ -182,14 +182,14 @@ def t_element_steps(b, ctx, m):
     check("지원 · 미정 · 지원 불가 · 정비중" in p.locator(".sg-card").inner_text(), "지원 여부 고르는 곳 설명")
     check(p.locator(".eq-btn.active").get_attribute("data-eqtab") == "fleet", "그 탭 화면")
     p.keyboard.press("ArrowLeft"); p.wait_for_timeout(700); check(guide(p)["tab"] == "fleet" and guide(p)["el"], "← 이전 칸")
-    # 지사 계정: 화면에 없는 [새 기준일자]·[삭제]는 건너뜀
+    # 지사 계정: 화면에 없는 [삭제]·[만들기]는 건너뜀
     ctx2 = b.new_context(); q = open_site(ctx2, m); login(q, "exchungju"); wait_open(q, "snow"); q.evaluate("SSGuide.stop()"); wait_closed(q)
     q.click(".page-btn[data-page=equip]"); wait_open(q, "equip"); q.click("#sgStop"); wait_closed(q)
     q.click(".eq-btn[data-eqtab=branch]"); wait_open(q, "equip")
-    check("새 기준일자" in q.evaluate("SSGuide.active().titles"), "목록에는 있어도(아래에서 건너뜀)")
-    go_to(q, "24시 예보", "branch")
+    check("기준일자 삭제 · 만들기" in q.evaluate("SSGuide.active().titles"), "목록에는 있어도(아래에서 건너뜀)")
+    go_to(q, "전체 합계", "branch")
     q.keyboard.press("ArrowLeft"); wait_js(q, "SSGuide.active().title === '기준일자'", 6000)
-    check("새 기준일자" not in q.evaluate("SSGuide.active().titles"), "건너뛴 단계는 목록에서도 빠짐")
+    check("기준일자 삭제 · 만들기" not in q.evaluate("SSGuide.active().titles"), "건너뛴 단계는 목록에서도 빠짐")
     ctx2.close()
 
 def t_demo_steps(b, ctx, m):
@@ -269,7 +269,7 @@ def t_help_and_who(b, ctx, m):
     p.click(".eq-btn[data-eqtab=branch]"); wait_open(p, "equip")
     check("보기 필터" not in guide(p)["titles"], f"필터 안내 없음: {guide(p)['titles']}")
     who = lambda: [x.strip() for x in p.locator(".sg-card .sg-badge.who").all_inner_texts()]
-    go_to(p, "새 기준일자", "branch"); check(who() == ["관리자"], f"기준일자 만들기 = 관리자: {who()}")
+    go_to(p, "기준일자 삭제 · 만들기", "branch"); check(who() == ["관리자"], f"기준일자 만들기 = 관리자: {who()}")
     go_to(p, "저장", "branch"); check(who() == ["지사", "지역본부"], f"지사 줄 [저장] = 지사 · 지역본부(관리자 뺌): {who()}")
     go_to(p, "확정", "branch"); check(who() == ["관리자"], f"확정 = 관리자: {who()}")
     p.click("#sgStop"); wait_closed(p)

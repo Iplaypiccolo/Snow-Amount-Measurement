@@ -98,6 +98,7 @@
   }
   function q1(d, sel) { var l = d.querySelectorAll(sel); for (var i = 0; i < l.length; i++) if (shown(l[i])) return l[i]; return null; }
   function inRow(first, others) { return function (d) { var a = q1(d, first); if (!a) return null; var tr = a.closest('tr') || d; return [a].concat((others || []).map(function (x) { return q1(tr, x); }).filter(Boolean)); }; }
+  function hostQ(sel) { return function () { var e = q1(doc, sel); return e ? [e] : null; }; }      // 첫 화면 쪽 칸(위쪽 메뉴의 기준일자)
   function both(sels) { return function (d) { var l = sels.map(function (x) { return q1(d, x); }).filter(Boolean); return l.length ? l : null; }; }
   function th(text) { return function (d) { var l = d.querySelectorAll('th'); for (var i = 0; i < l.length; i++) if (shown(l[i]) && l[i].textContent.replace(/\s+/g, ' ').trim().indexOf(text) === 0) return l[i]; return null; }; }
   // 누가 쓰는 칸·버튼인지(2026-11-02 사용자 결정): 관리자만 할 수 있는 것만 '관리자', 나머지는 주로 쓰는 계정(지사 · 기계화부 · 지역본부)
@@ -226,9 +227,9 @@
         { demo: function (d) { var sh = d.getElementById('sheet'); if (sh && sh.hidden) tap(q1(d, '#destList .vrow')); return function () { var bd = d.getElementById('backdrop'); if (bd && !bd.hidden) bd.click(); }; } }),
       // 지사별 요청·편성
       { tab: 'branch', title: '지사별 요청·편성', desc: '지사가 필요한 장비를 요청하고 재난처가 지원 대수를 확정' },
-      E('branch', '기준일자', ['#roundSelBranch'], '지원 회차 고르기 · 요청 · 편성은 기준일자마다 따로'),
-      E('branch', '새 기준일자', [both(['#newRoundDate', '#roundMake'])], '날짜 → [만들기]', ['장비 지원 여부는 이전 기준일자에서 이어받음'], W(ADM)),
-      E('branch', '기준일자 삭제', ['#roundDel'], '잘못 만든 기준일자 지우기 (되돌릴 수 없음)', [], W(ADM)),
+      E('branch', '기준일자', [hostQ('.eq-round .eq-round-sel')], '지원 회차 고르기 · 어느 탭에서나 위쪽에 늘 보임', ['요청 · 편성 · 장비 지원 여부 · 배정은 기준일자마다 따로']),
+      E('branch', '기준일자 삭제 · 만들기', [hostQ('.eq-round .eq-round-tools button, .eq-round .eq-round-more')], '삭제 · 새 기준일자 [만들기] (좁은 화면은 [+]를 눌러 엶)', ['장비 지원 여부는 이전 기준일자에서 이어받음', '삭제는 되돌릴 수 없음'], W(ADM)),
+      E('branch', '전체 합계', ['#branchTable tr.tot'], '맨 위 줄 = 지사 요청 · 타지사 지원 가능 · 편성의 전체 대수', ['편성은 편성 대수 / 기관별 장비의 지원 가능 대수']),
       E('branch', '24시 예보', ['#branchTable th.fch'], '지사별 예상 적설 · 강수 · 확률 · 최저기온', ['숫자 클릭 → 강설량 측정의 그 지사 예보']),
       E('branch', '대설특보', ['#branchTable th.wh'], '기상청 특보 자동 표시 (종류 · 발표 · 발효)'),
       E('branch', '기상현황 직접입력', ['#branchTable input[aria-label$="기상현황 직접입력"]:not(:disabled)'], '체크 → 특보 종류를 직접 고름', [], W(BRH)),
@@ -250,8 +251,8 @@
         '[확정] → 줄 잠김 · [취소]로 풀기', ['본부 줄 · 맨 위 [일괄 확정]'], W(ADM)),
       // 기관별 장비
       { tab: 'fleet', title: '기관별 장비', desc: '기관 장비의 지원 여부와 날짜별 지원 지사 · 도착 시각 입력' },
-      E('fleet', '기준일자', ['#roundSelFleet'], '지원 여부는 기준일자마다 따로'),
-      E('fleet', '기관 요약', ['#orgGrid > *'], '기관별 지원 · 지원 불가 · 정비중 · 미정 대수'),
+      E('fleet', '장비 현황', ['#fleetSum'], '제설차 · 제설기의 지원 · 지원 불가 · 정비중 · 미정 대수와 계', ['기관 버튼을 고르면 그 기관 대수']),
+      E('fleet', '배정 현황', ['#fleetAssign'], '장비별로 어느 지사에 몇 대 배정됐는지'),
       E('fleet', '장비 추가', [both(['#nvOrg', '#nvType', '#nvPlate', '#vehAdd'])], '기관 · 종류 · 도공번호 → [추가]', ['지사: 지역본부 장비(타지사 지원 가능 확정 뒤)'], W(['기계화부', '지사'])),
       E('fleet', '지원일 칸 수', ['#colsSel'], '표에 보이는 날짜 칸 수', [], W(ADM)),
       E('fleet', '지원일 1', ['#day1In'], '첫 날짜 · 나머지 칸은 하루씩 자동', [], W(ADM)),
@@ -267,7 +268,6 @@
       E('fleet', '확정', ['#save-fleet'], '바뀐 칸 → [확정]해야 저장', ['[되돌리기] = 마지막 확정 상태로'], W(['기계화부', '지사'])),
       // 기관별 배정
       { tab: 'alloc', title: '기관별 배정', desc: '교통처가 기관별로 지사에 보낼 장비 대수를 배정' },
-      E('alloc', '기준일자', ['#roundSelAlloc'], '배정은 기준일자마다 따로'),
       E('alloc', '배정 대수', ['#allocTable input.num:not(:disabled)', { s: '#allocTable tbody td', desc: '교통처가 정한 배정 대수 (보기)' }], '기관 → 지사 보낼 대수 입력', [], W(ADM)),
       E('alloc', '배정 / 편성', [th('배정 / 편성')], '지사별 배정 합 / 편성 대수', ['초록 일치 · 주황 부족 · 빨강 초과']),
       E('alloc', '배정 / 지원 가능', [th('배정 / 지원 가능')], '기관별 배정 합 / 지원 가능 대수'),

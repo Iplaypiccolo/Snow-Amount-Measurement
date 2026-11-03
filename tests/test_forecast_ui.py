@@ -362,7 +362,59 @@ def t_phone_fit(b):
     pin = box("#fc-pin"); check(not p.locator(".fc-pin-grip.r").is_visible() and J(p, "document.querySelector('.fc-pin-in').style.zoom") == "" and pin[0] == 8 and pin[1] == 367, f"모바일: 크기 조절 없음, 화면 폭에 맞음 {pin}")
     fits("모바일 기억값 무시")
 
-TESTS += [t_mode_switch, t_mode_no_data, t_pin_move_resize, t_phone_fit]
+def t_eq_round_bar(b):
+    """2026-11-03: 기준일자는 위쪽 메뉴에 늘 보임(노란 칸). 넓은 화면 = 탭 줄 오른쪽, 좁으면 [+]로 삭제·만들기, 휴대폰 = 사용법 아래. 탭을 가리지 않음"""
+    p, m = open_page(b)
+    p.click(".page-btn[data-page=equip]"); p.wait_for_timeout(2000); fr = p.frame("equipFrame") or p.frames[1]
+    frame = next(f for f in p.frames if "equipment/index.html" in f.url)
+    wide, row = p.locator("#eqRoundWide"), p.locator("#eqRoundRow")
+    def no_cover():
+        tabs = J(p, """[...document.querySelectorAll('.eq-btn')].filter(e => e.offsetParent).map(e => e.getBoundingClientRect()).map(r => [r.left, r.right, r.top, r.bottom])""")
+        boxes = J(p, """[...document.querySelectorAll('.eq-round, .eq-reload')].filter(e => e.offsetParent).map(e => e.getBoundingClientRect()).map(r => [r.left, r.right, r.top, r.bottom])""")
+        hit = [(t, x) for t in tabs for x in boxes if t[0] < x[1] - 1 and x[0] < t[1] - 1 and t[2] < x[3] - 1 and x[2] < t[3] - 1]
+        check(not hit, f"탭을 가리지 않음: {hit[:2]}")
+    # 넓은 화면(1600): 탭 줄에 전부
+    p.set_viewport_size({"width": 1600, "height": 900}); p.wait_for_timeout(200)
+    check(wide.locator(".eq-round-sel").is_visible() and not row.is_visible() and wide.locator("[data-rd=make]").is_visible() and wide.locator("[data-rd=del]").is_visible() and not wide.locator("[data-rd=more]").is_visible(), "1600: 탭 줄에 기준일자·삭제·만들기")
+    no_cover()
+    check(J(p, "getComputedStyle(document.querySelector('#eqRoundWide .eq-round-sel')).backgroundColor") == "rgb(255, 243, 176)", "기준일자 칸 하이라이트")
+    check(not frame.locator("#branchRound").is_visible(), "안쪽 탭의 기준일자 줄은 숨김")
+    for t in ("branch", "fleet", "alloc", "move"):
+        p.click(f".eq-btn[data-eqtab={t}]"); p.wait_for_timeout(200); check(wide.locator(".eq-round-sel").is_visible(), f"{t} 탭에서도 보임")
+    # 안쪽 화면과 같은 기준일자
+    rid = frame.evaluate("S.round"); check(wide.locator(".eq-round-sel").input_value() == str(rid), "안쪽 화면과 같은 기준일자")
+    # 만들기·고르기·삭제
+    d = frame.evaluate("addDays(nextRoundMin(), 3)"); wide.locator("[data-rd=date]").fill(d); wide.locator("[data-rd=make]").click(); p.wait_for_timeout(600)
+    r2 = frame.evaluate("S.round"); check(r2 != rid and frame.evaluate("curRound().start_date") == d and wide.locator(".eq-round-sel").input_value() == str(r2), f"만들기: {d}")
+    wide.locator(".eq-round-sel").select_option(str(rid)); p.wait_for_timeout(500); check(frame.evaluate("S.round") == rid, "고르면 안쪽 화면도 바뀜")
+    wide.locator(".eq-round-sel").select_option(str(r2)); p.wait_for_timeout(500); wide.locator("[data-rd=del]").click(); p.wait_for_timeout(600)
+    check("지우지 못했습니다" in frame.locator("#toast").inner_text(), "삭제 버튼 → 안쪽 화면의 기준일자 삭제까지 이어짐(이 가짜 서버는 삭제를 막음, 실제 삭제 규칙은 test_equipment): " + frame.locator("#toast").inner_text())
+    # 중간(1366): 탭 줄에 기준일자와 [+], 삭제·만들기는 눌러야
+    p.set_viewport_size({"width": 1366, "height": 800}); p.wait_for_timeout(200); no_cover()
+    check(wide.locator(".eq-round-sel").is_visible() and wide.locator("[data-rd=more]").is_visible() and not wide.locator("[data-rd=make]").is_visible() and not row.is_visible(), "1366: 기준일자와 [+]만")
+    top0 = p.locator("#equipFrame").bounding_box()["y"]; wide.locator("[data-rd=more]").click(); p.wait_for_timeout(150); no_cover()
+    check(row.is_visible() and row.locator("[data-rd=make]").is_visible() and row.locator("[data-rd=del]").is_visible() and not row.locator(".eq-round-sel").is_visible(), "[+]: 삭제·만들기 줄이 펼쳐짐")
+    check(p.locator("#equipFrame").bounding_box()["y"] > top0, "표를 가리지 않고 아래로 밂")
+    wide.locator("[data-rd=more]").click(); p.wait_for_timeout(100); check(not row.is_visible(), "다시 누르면 닫힘")
+    # 휴대폰: 사용법 아래에 드롭다운과 [+]
+    p.set_viewport_size({"width": 390, "height": 844}); p.wait_for_timeout(250); no_cover()
+    check(row.locator(".eq-round-sel").is_visible() and row.locator("[data-rd=more]").is_visible() and not row.locator("[data-rd=make]").is_visible() and not wide.is_visible(), "휴대폰: 드롭다운과 [+]만")
+    rb = row.bounding_box(); ub = p.locator("#ssUser").bounding_box(); tb = p.locator(".tn-tabs").bounding_box()
+    check(rb["y"] >= ub["y"] + ub["height"] - 1 and rb["y"] + rb["height"] <= tb["y"] + 1 and rb["x"] + rb["width"] <= 391, f"사용법 아래, 탭 위: {ub} {rb} {tb}")
+    tabs_y = tb["y"]; row.locator("[data-rd=more]").click(); p.wait_for_timeout(150); no_cover()
+    check(row.locator("[data-rd=make]").is_visible() and p.locator(".tn-tabs").bounding_box()["y"] > tabs_y and J(p, "document.scrollingElement.scrollWidth") <= 390, "[+]: 탭을 아래로 밀며 펼침(가리지 않음)")
+    check(p.locator(".eq-btn[data-eqtab=branch]").is_visible(), "탭 그대로")
+    row.locator("[data-rd=more]").click(); p.wait_for_timeout(100)
+    # 강설량 측정에서는 안 보임
+    p.click(".page-btn[data-page=snow]"); p.wait_for_timeout(200); check(not row.is_visible() and not wide.is_visible(), "강설량 측정에서는 안 보임")
+
+def t_eq_round_no_edit(b):
+    """권한 없는 계정: 드롭다운만, [+] 없음"""
+    p, m = open_page(b, user="exchungju")
+    p.click(".page-btn[data-page=equip]"); p.wait_for_timeout(2000)
+    w = p.locator("#eqRoundWide"); check(w.locator(".eq-round-sel").is_visible() and w.locator("[data-rd=more]").count() == 0 and w.locator("[data-rd=make]").count() == 0, "드롭다운만")
+
+TESTS += [t_mode_switch, t_mode_no_data, t_pin_move_resize, t_phone_fit, t_eq_round_bar, t_eq_round_no_edit]
 
 if __name__ == "__main__":
     only = sys.argv[1:]
