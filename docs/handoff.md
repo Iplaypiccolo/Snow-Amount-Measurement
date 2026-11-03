@@ -44,6 +44,11 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 기준일자 기간 10일 (마이그레이션 59, 서버 적용 완료)
+- 서버: `support_rounds.days` 기본값 10, 기존 2개 10일로, `create_round` 기본값 10(본문 그대로). 사용자 확인 뒤 적용. 시험 `supabase/tests/round_ten_days_test.sql` 통과(되돌림). 권한 그대로(anon 실행 불가, authenticated 가능).
+- `equipment/js/sample-data.js`: 샘플 기준일자도 10일.
+— ✍ Claude Code 작성
+
 ### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 기관별 배치로 명칭 변경, 컴퓨터용 표 크기 다시 키움
 - 서버 변경 없음(기준일자 10일은 마이그레이션 59 로 사용자 확인 뒤 따로). `equipment/js/app.js`: `FP`·`em`·`dayW`·`pageW`, 칸 폭을 em 으로. `equipment/css/style.css`: 글자 clamp, 휴대폰만 작게. 시험 `t_tables_sizes`·`t_round_ten_days`.
 — ✍ Claude Code 작성
