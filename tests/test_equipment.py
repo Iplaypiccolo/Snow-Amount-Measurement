@@ -1389,6 +1389,30 @@ def t_branch_names_sticky(p):
         ev(p, "document.querySelector('#branchTable').parentElement.scrollLeft = 0")
     as_user(p, "admin1"); p.set_viewport_size({"width": 1440, "height": 1000}); p.wait_for_timeout(300)
 
+def t_first_col_fixed_opaque(p):
+    """2026-11-03: 기관별 장비·기관별 배치·강원본부 지원장비(+장비 현황 표)를 옆으로 밀어도 맨 왼쪽 칸이 고정되고, 칸도 조상도 투명하지 않아 밀린 글자가 비치지 않음. 지원이 아닌 줄의 흐림은 글자에만"""
+    p.set_viewport_size({"width": 375, "height": 800}); p.wait_for_timeout(300)
+    Q = """(tid) => { const t = document.querySelector(tid), w = t.parentElement; w.scrollLeft = 300; const wl = w.getBoundingClientRect().left;
+      const cells = [...t.querySelectorAll('thead tr:first-child > :first-child, tbody tr > :first-child, tfoot tr > :first-child')].filter(c => c.offsetParent && !c.classList.contains('empty') && !c.closest('tr').querySelector('.empty'));
+      const see = c => { for (let e = c; e && e !== t; e = e.parentElement) if (parseFloat(getComputedStyle(e).opacity) < 1) return true; return false; };
+      const bad = cells.filter(c => { const b = getComputedStyle(c).backgroundColor; return Math.abs(c.getBoundingClientRect().left - wl) > 1.5 || b.includes('/') || b.startsWith('rgba') || b === 'transparent' || see(c); }).map(c => c.textContent.trim().slice(0, 12) + ' | ' + getComputedStyle(c).backgroundColor + ' | ' + getComputedStyle(c).opacity + ' | ' + Math.round(c.getBoundingClientRect().left - wl));
+      const dim = [...t.querySelectorAll('tbody tr')].filter(r => { const s = r.querySelector('select[data-vs]'); return s && s.value !== 'O'; }).map(r => { const k = r.cells[0].firstElementChild; return k ? parseFloat(getComputedStyle(k).opacity) : 1; });
+      const wr = w.getBoundingClientRect(), sb = [...document.querySelectorAll('.savebar')].filter(x => x.offsetParent).map(x => x.getBoundingClientRect().top), low = Math.min(innerHeight, wr.bottom, ...sb), top = Math.max(0, wr.top + (t.tHead ? t.tHead.getBoundingClientRect().height : 0));
+      const on = cells.filter(c => { if (c.closest('thead')) return false; const r = c.getBoundingClientRect(); if (r.bottom > low || r.top < top) return false; const h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !(h && (h === c || c.contains(h))); }).map(c => c.textContent.trim().slice(0, 12));
+      const res = { scrolled: w.scrollLeft, n: cells.length, bad, dim, on }; w.scrollLeft = 0; return res; }"""
+    for u in ("admin1", "hq-gw", "br1", "eq-sg", "viewer"):
+        as_user(p, u)
+        for tb, tid in (("fleet", "#eqTable"), ("fleet", "#fleetSum"), ("alloc", "#allocTable"), ("gwteam", "#teamTable")):
+            if not p.locator(f"[data-tab={tb}]").is_visible(): continue
+            tab(p, tb); p.wait_for_timeout(120)
+            if not p.locator(tid).count() or not p.locator(tid).is_visible(): continue
+            r = p.evaluate(Q, tid)
+            check(r["n"] >= 2 and r["scrolled"] > 20, f"{u} {tid}: 옆으로 밀림 {r['scrolled']} / {r['n']}칸")
+            check(not r["bad"], f"{u} {tid}: 첫 칸이 왼쪽에 붙고 불투명 {r['bad'][:4]}")
+            check(not r["on"], f"{u} {tid}: 첫 칸이 다른 칸 위에 {r['on'][:4]}")
+            check(all(x < 1 for x in r["dim"]), f"{u} {tid}: 지원이 아닌 줄의 글자는 여전히 흐림 {r['dim'][:4]}")
+    as_user(p, "admin1"); p.set_viewport_size({"width": 1440, "height": 1000}); p.wait_for_timeout(300)
+
 def t_move_compact(p):
     """2026-11-03 2안: 이동 현황 표는 숫자 칸 80px, 표와 카드가 같은 폭으로 가운데에, 넓은 화면은 카드 3열. 휴대폰은 그대로"""
     cols = lambda: ev(p, "getComputedStyle(document.querySelector('.hq-cards')).gridTemplateColumns.split(' ').length")
@@ -1699,7 +1723,7 @@ def t_route_perm_admin_only(p):
     check("권한이 없습니다" in toast(p), "화면을 우회해 다른 기관 경로를 보내도 거절: " + toast(p))
     as_user(p, "admin1"); tab(p, "fleet"); check(p.locator("#eqTable select[data-rv]").count() > 0 and p.locator("#day1In").count() == 1, "관리자는 지원일 칸 전부")
 
-TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_reqs_read_fail, t_confirm_stale, t_fleet_sum, t_tables_sizes, t_fleet_sum_fixed, t_no_hscroll_real_bars, t_table_look, t_branch_names_sticky, t_move_compact, t_round_ten_days, t_alloc_fixed_only, t_branch_totals, t_removed_hints, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_report_snow_warning, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_reqs_read_fail, t_confirm_stale, t_fleet_sum, t_tables_sizes, t_fleet_sum_fixed, t_no_hscroll_real_bars, t_table_look, t_branch_names_sticky, t_first_col_fixed_opaque, t_move_compact, t_round_ten_days, t_alloc_fixed_only, t_branch_totals, t_removed_hints, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_report_snow_warning, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,

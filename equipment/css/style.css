@@ -1053,3 +1053,18 @@ table.fixcols th, table.fixcols td { overflow-wrap: anywhere; }
 #branchTable tbody tr.hq td:first-child { background-color: var(--grp-bg); }
 #branchTable tbody tr.locked td:first-child { background-color: color-mix(in srgb, var(--plow) 12%, var(--surface)); }
 #branchTable.mine-left tbody tr:not(.hq):not(.locked) td:first-child:not(.adm):not(.blk-gap) { background-color: color-mix(in srgb, var(--mine) 6%, var(--surface)); }
+
+/* 기관별 장비·기관별 배치·강원본부 지원장비: 옆으로 밀어도 맨 왼쪽 칸 고정, 밑의 칸이 비치지 않게 불투명(2026-11-03 사용자 요청). left: -1px 는 지사별 요청·편성과 같은 이유(겹친 테두리 틈) */
+:is(#eqTable, #teamTable, #allocTable) thead tr:first-child th:first-child { position: sticky; left: -1px; z-index: 6; box-shadow: inset -2px 0 0 var(--th-line); }
+:is(#eqTable, #teamTable, #allocTable) tbody td:first-child, #allocTable tfoot th:first-child { position: sticky; left: -1px; z-index: 2; box-shadow: inset -2px 0 0 var(--frame); }
+:is(#eqTable, #teamTable, #allocTable) tbody td:first-child { background-color: var(--surface); }
+#allocTable tbody td.empty:first-child { position: static; box-shadow: none; }
+#allocTable tfoot th:first-child { background-color: var(--grp-bg); }
+:is(#eqTable, #teamTable) tbody tr.changed td:first-child, #allocTable tbody tr.changed td:first-child { box-shadow: inset 4px 0 0 var(--plow), inset -2px 0 0 var(--frame); }
+#eqTable tbody tr.pool td:first-child { box-shadow: inset 4px 0 0 var(--ice, var(--line)), inset -2px 0 0 var(--frame); }
+#eqTable tbody tr.pool.changed td:first-child { box-shadow: inset 4px 0 0 var(--plow), inset -2px 0 0 var(--frame); }
+/* 지원이 아닌 장비 줄: 흐리게 하는 효과는 칸이 아니라 글자에만(칸째 흐리게 하면 밀린 칸의 글자가 비침) */
+:is(#eqTable, #teamTable) tbody tr:has(select[data-vs]):not(:has(select[data-vs] option[value="O"]:checked)) td:first-child { background-color: color-mix(in srgb, var(--ink-soft) 5%, var(--surface)); }
+:is(#eqTable, #teamTable) tbody tr:has(select[data-vs]):not(:has(select[data-vs] option[value="O"]:checked)) td:first-child:not(:has(select[data-vs])) { opacity: 1; }
+:is(#eqTable, #teamTable) tbody tr:has(select[data-vs]):not(:has(select[data-vs] option[value="O"]:checked)) td:first-child:not(:has(select[data-vs])) > * { opacity: .55; }
+.fs-table .l { left: -1px; }

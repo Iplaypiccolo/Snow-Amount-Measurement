@@ -44,6 +44,10 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 입력 표 맨 왼쪽 칸 고정·불투명
+- 서버 변경 없음. `equipment/css/style.css` 맨 끝 묶음. 시험 `t_first_col_fixed_opaque`.
+— ✍ Claude Code 작성
+
 ### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 보고서에 강설량·특보 추가
 - 서버 변경 없음. `equipment/js/report.js`: `wxText`·`wxOf`, 표 칸 8개(`COLW`), 미리 보기·워드 지사당 두 줄. `equipment/css/style.css`: `.rp-l`·`.rp-on`. 시험 `t_report_snow_warning`.
 — ✍ Claude Code 작성
