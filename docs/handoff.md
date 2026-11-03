@@ -44,6 +44,10 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 기관별 장비 가로 스크롤 없앰, 위쪽 표 가운데 고정
+- 서버 변경 없음. `equipment/js/app.js`: `SBW`·`tableRoom`·`dayFit`·`dayCols`·`plateEm`, `fitPanel` 에 막대 폭. `equipment/css/style.css`: `.stack`, 가운데 정렬, `#panel-move` 1292px. 시험 `t_no_hscroll_real_bars`(스크롤 막대를 켠 브라우저), `t_fixed_columns`·`t_fleet_sum_fixed` 고침. 강원본부 지원장비 표도 같은 방식.
+— ✍ Claude Code 작성
+
 ### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 장비 현황 표 크기 고정
 - 서버 변경 없음. `equipment/js/app.js renderFleet`: `#orgGrid` 폭을 지원일 4칸 표 폭으로 고정, `fitPanel(table, min)`. 시험 `t_fleet_sum_fixed`.
 — ✍ Claude Code 작성

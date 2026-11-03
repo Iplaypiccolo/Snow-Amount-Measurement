@@ -1130,8 +1130,8 @@ def t_fixed_columns(p):
         check(w2[:fixed] == w6[:fixed] and w2[fixed] == w6[fixed] and t2 < t6 - 250, f"{tid}: 2칸이면 칸 폭 그대로, 표가 줄어듦 {t6} → {t2}")
         check(not over(tid), f"{tid}: 2칸 넘침 {over(tid)}")
         p.select_option(sel, "10"); p.wait_for_timeout(250); w10 = widths(tid); t10 = tw()
-        check(w10[:fixed] == w6[:fixed] and w10[fixed] == w6[fixed] and t10 > t6 + 500, f"{tid}: 10칸이면 칸 폭 그대로, 표가 오른쪽으로 커짐 {t6} → {t10}")
-        check(ev(p, f"{wrap(tid)}.scrollWidth > {wrap(tid)}.clientWidth"), f"{tid}: 10칸은 옆으로 밀어서 봄")
+        check(len(w10) >= 12, f"{tid}: 10칸 {w10}")
+        check(not ev(p, f"{wrap(tid)}.scrollWidth > {wrap(tid)}.clientWidth + 1"), f"{tid}: 10칸도 옆으로 밀지 않고 다 보임 {t10}")
         small = ev(p, f"Math.min(...[...document.querySelectorAll('#{tid} .slot select.ci')].filter(x => x.offsetParent).map(x => x.getBoundingClientRect().width), 999)")
         check(small >= 66, f"{tid}: 드롭다운이 글자보다 좁아지지 않음 {small}")
         p.select_option(sel, "4"); p.wait_for_timeout(250)
@@ -1294,13 +1294,42 @@ def t_fleet_sum_fixed(p):
         for n in ("2", "4", "6", "8", "10"):
             p.select_option("#colsSel", n); p.wait_for_timeout(200); got.append((box(".fs-table"), box("#eqTable")[0]))
         check(len({tuple(x[0]) for x in got}) == 1, f"{w}: 위쪽 표 크기 그대로 {[x[0] for x in got]}")
-        lw = [x[1] for x in got]; check(lw == sorted(lw) and lw[0] < lw[-1], f"{w}: 아래 표만 커짐 {lw}")
-        check(ev(p, "Math.abs(document.querySelector('.fs-table').getBoundingClientRect().left - document.querySelector('#eqTable').parentElement.getBoundingClientRect().left) <= 2"), f"{w}: 위아래 표의 왼쪽이 맞음")
+        lw = [x[1] for x in got]; check(lw[0] < lw[1] < lw[2] <= lw[-1] + 40, f"{w}: 아래 표만 달라짐 {lw}")
         p.select_option("#colsSel", "4"); p.wait_for_timeout(200)
         check(abs(box(".fs-wrap")[0] - box("#eqTable")[0]) <= 3, f"{w}: 4칸이면 위아래 폭이 같음 {box('.fs-wrap')} {box('#eqTable')}")
     p.set_viewport_size({"width": 375, "height": 800}); p.wait_for_timeout(350); tab(p, "fleet")
     check(ev(p, "document.querySelector('#orgGrid').style.maxWidth") == "", "휴대폰은 폭을 정하지 않음")
     p.set_viewport_size({"width": 1440, "height": 1000}); p.wait_for_timeout(300)
+
+def t_no_hscroll_real_bars(p):
+    """2026-11-03: 실제 브라우저처럼 스크롤 막대를 켠 상태(시험 기본은 숨김이라 표 안 세로 막대 탓 가로 스크롤을 못 잡았음). 지원일 2~10칸 모두 가로 스크롤 없음, 넘치거나 잘리는 글자 없음, 위쪽 표는 같은 크기로 화면 가운데"""
+    b2 = p.context.browser.browser_type.launch(ignore_default_args=["--hide-scrollbars"])
+    try:
+        for w in (1280, 1366, 1536, 1920, 2560):
+            q = b2.new_page(viewport={"width": w, "height": 900}); q.goto(URL); q.wait_for_selector("#matrix tbody tr"); tab(q, "fleet")
+            check(q.evaluate("SBW") >= 10, f"스크롤 막대가 켜져 있어야 함: {q.evaluate('SBW')}")
+            sizes = set()
+            for tb, tid, sel in (("fleet", "eqTable", "#colsSel"), ("gwteam", "teamTable", "#colsSelTeam")):
+                tab(q, tb)
+                for n in ("2", "3", "4", "5", "6", "7", "8", "9", "10"):
+                    q.select_option(sel, n); q.wait_for_timeout(120)
+                    r = q.evaluate(f"""(() => {{ const t = document.querySelector('#{tid}'), w = t.parentElement, cw = document.documentElement.clientWidth, sel = [...t.querySelectorAll('.slot select.ci')].filter(s => s.offsetParent), c = document.createElement('canvas').getContext('2d'); let tight = 999; sel.forEach(s => {{ const cs = getComputedStyle(s); c.font = cs.fontSize + ' ' + cs.fontFamily; tight = Math.min(tight, s.clientWidth - c.measureText('지사 선택').width); }});
+                      const ti = t.querySelector('th.dayh input'), tq = ti && ti.getBoundingClientRect(), tth = ti && ti.closest('th').getBoundingClientRect();
+                      return {{ font: parseFloat(getComputedStyle(t).fontSize), tw: t.getBoundingClientRect().width, h: w.scrollWidth - w.clientWidth, page: document.documentElement.scrollWidth - cw, over: [...t.querySelectorAll('td,th')].filter(c => c.offsetParent && c.scrollWidth > c.clientWidth + 1).length, tight, off: Math.abs(w.getBoundingClientRect().left + w.getBoundingClientRect().width / 2 - cw / 2), dateIn: !ti || tq.right <= tth.right, dateW: ti ? ti.clientWidth : 999, dfont: ti ? parseFloat(getComputedStyle(ti).fontSize) : 0 }}; }})()""")
+                    tag = f"{w} {tid} {n}칸 {r}"
+                    check(r["h"] <= 1 and r["page"] <= 0, "가로 스크롤 없음: " + tag)
+                    check(r["over"] == 0 and r["dateIn"], "넘치는 글자 없음: " + tag)
+                    check(r["font"] >= 12 and r["off"] <= 2, "글자 12px 이상, 표는 가운데: " + tag)
+                    check(r["tight"] >= 16, "지사 선택 글자가 드롭다운에 들어감: " + tag)
+                    check(not r["dfont"] or r["dateW"] >= r["dfont"] * 6.4, "지원일 1 날짜가 칸에 들어감: " + tag)
+                    if tid == "eqTable":
+                        tab(q, "fleet"); sizes.add(q.evaluate("(() => { const r = document.querySelector('.fs-wrap').getBoundingClientRect(), cw = document.documentElement.clientWidth; return [Math.round(r.width), Math.round(r.height), Math.round(Math.abs(r.left + r.width / 2 - cw / 2)) <= 1]; })()").__str__())
+            check(len(sizes) == 1 and "True" in next(iter(sizes)), f"{w}: 위쪽 표는 같은 크기로 화면 가운데 {sizes}")
+            tab(q, "alloc"); check(q.evaluate("(() => { const w = document.querySelector('#allocTable').parentElement; return w.scrollWidth - w.clientWidth; })()") <= 1, f"{w}: 기관별 배치 가로 스크롤 없음")
+            tab(q, "move"); check(q.evaluate("(() => { const w = document.querySelector('.matrix-wrap'); w.style.maxHeight = '120px'; const h = w.scrollWidth - w.clientWidth; w.style.maxHeight = ''; return h; })()") <= 1, f"{w}: 이동 현황 표는 세로 막대가 생겨도 가로 스크롤 없음")
+            q.close()
+    finally:
+        b2.close()
 
 def t_move_compact(p):
     """2026-11-03 2안: 이동 현황 표는 숫자 칸 80px, 표와 카드가 같은 폭으로 가운데에, 넓은 화면은 카드 3열. 휴대폰은 그대로"""
@@ -1308,10 +1337,10 @@ def t_move_compact(p):
     for w in (1366, 1920):
         p.set_viewport_size({"width": w, "height": 900}); p.wait_for_timeout(350); tab(p, "move")
         r = ev(p, """(() => { const t = document.querySelector('#matrix').getBoundingClientRect(), m = document.querySelector('#panel-move').getBoundingClientRect(), c = document.querySelector('#matrix td.c1').getBoundingClientRect(); return [t.width, m.width, m.left, innerWidth - m.right, c.width]; })()""")
-        check(r[0] <= 1240 and r[1] <= 1274 and abs(r[2] - r[3]) <= 20 and r[4] == 80, f"{w}: 표 {r}")
+        check(r[0] <= 1240 and r[1] <= 1292 and abs(r[2] - r[3]) <= 20 and r[4] == 80, f"{w}: 표 {r}")
         check(not ev(p, "(() => { const w = document.querySelector('.matrix-wrap'); return w.scrollWidth > w.clientWidth + 1; })()"), f"{w}: 표가 옆으로 안 밀림")
         check(cols() == 3, f"{w}: 카드 3열 {cols()}")
-        check(ev(p, "(() => { const d = document.querySelector('.dest'), v = d.querySelector('.vrow'); return d.getBoundingClientRect().width <= 420 && v.getBoundingClientRect().height <= 38 && !([...d.querySelectorAll('.vrow')].some(x => x.scrollWidth > x.clientWidth + 1)); })()"), f"{w}: 카드가 작고 안 넘침")
+        check(ev(p, "(() => { const d = document.querySelector('.dest'), v = d.querySelector('.vrow'); return d.getBoundingClientRect().width <= 425 && v.getBoundingClientRect().height <= 38 && !([...d.querySelectorAll('.vrow')].some(x => x.scrollWidth > x.clientWidth + 1)); })()"), f"{w}: 카드가 작고 안 넘침")
     p.set_viewport_size({"width": 1920, "height": 900}); p.wait_for_timeout(350)
     ev(p, "setDate(addDays(todayISO(), 2))"); p.wait_for_timeout(300)       # 이동 안내가 있는 날: 칸 밖으로 안 넘침
     check(not ev(p, "[...document.querySelectorAll('#matrix td')].some(c => c.scrollWidth > c.clientWidth + 1)"), "이동 안내가 칸 안에 들어감")
@@ -1578,7 +1607,7 @@ def t_route_perm_admin_only(p):
     check("권한이 없습니다" in toast(p), "화면을 우회해 다른 기관 경로를 보내도 거절: " + toast(p))
     as_user(p, "admin1"); tab(p, "fleet"); check(p.locator("#eqTable select[data-rv]").count() > 0 and p.locator("#day1In").count() == 1, "관리자는 지원일 칸 전부")
 
-TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_reqs_read_fail, t_confirm_stale, t_fleet_sum, t_tables_sizes, t_fleet_sum_fixed, t_move_compact, t_round_ten_days, t_alloc_fixed_only, t_branch_totals, t_removed_hints, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_reqs_read_fail, t_confirm_stale, t_fleet_sum, t_tables_sizes, t_fleet_sum_fixed, t_no_hscroll_real_bars, t_move_compact, t_round_ten_days, t_alloc_fixed_only, t_branch_totals, t_removed_hints, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,

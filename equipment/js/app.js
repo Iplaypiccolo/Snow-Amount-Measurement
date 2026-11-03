@@ -566,7 +566,8 @@ function renderMatrix() {
     `<tr>${cols.map(o => colTypes(o).map((t, k) => `<th scope="col" class="${k ? "c2" : "c1"}${o == null ? " tot" : ""}${o === TEAM ? " tm" : ""}">${t}</th>`).join("")).join("")}</tr></thead>` +
     `<tbody>${body || `<tr><td class="empty" colspan="${cols.reduce((n, o) => n + colTypes(o).length, 0) + 2}">${esc(fmtMD(S.date))}에 이동하는 장비가 없습니다.</td></tr>`}</tbody>` +
     `<tfoot><tr><th scope="row" colspan="2">합계</th>${cells(null, 'data-mall="1"')}</tr></tfoot>`;
-  fixCols($("matrix"), isPhoneW() ? [84, 92, ...cols.flatMap(o => colTypes(o).map(() => o === TEAM ? 110 : 76))] : [76, 92, ...cols.flatMap(o => colTypes(o).map(() => o === TEAM ? 104 : 80))], !isPhoneW());
+  const numN = cols.flatMap(o => o === TEAM ? [] : colTypes(o)).length, numW = Math.max(60, Math.min(80, Math.floor((tableRoom() - 28 - 168 - 104) / numN)));      // 컴퓨터: 숫자 칸 80px, 화면이 좁으면 가로 스크롤이 안 생기게 60px 까지 줄임
+  fixCols($("matrix"), isPhoneW() ? [84, 92, ...cols.flatMap(o => colTypes(o).map(() => o === TEAM ? 110 : 76))] : [76, 92, ...cols.flatMap(o => colTypes(o).map(() => o === TEAM ? 104 : numW))], !isPhoneW());
   stickHead($("matrix"));
   const tr = moves.filter(m => m.v.type === "제설차").length, bl = moves.filter(m => m.v.type === "제설기").length;
   $("dateText").textContent = fmtMD(S.date); $("dateInput").value = S.date;      // 제목의 큰 날짜(누르면 달력)
@@ -702,19 +703,19 @@ function renderFleet() {
     (i === 0 && rt ? `<input class="ci" type="date" id="day1In" value="${esc(d)}"${r ? ` min="${esc(r.start_date)}"` : ""} aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동, 기준일자보다 앞은 안 됨)">` : esc(fmtMD(d))) + `</span></th>`).join("");
   const rows = fleetRows().map(v => fleetRowHtml(v, dates, choices, all)).join("");
   $("eqTable").innerHTML = `<thead><tr>${isPhoneW() ? "<th>도공번호</th><th>장비</th><th>블로워</th>" : "<th>도공번호 · 장비 · 블로워</th>"}<th>지원 여부</th>${head}${actCol() ? `<th class="unh">${canAllVeh() ? unhideHead() : ""}</th>` : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${(isPhoneW() ? 5 : 3) + dates.length}" class="empty">${S.fleetGo ? "지원 여부가 '지원'인 장비가 없습니다." : "장비가 없습니다."}${addRow && !S.fleetGo ? " 위의 [장비 추가]로 넣으세요." : ""}</td></tr>`}</tbody>`;
-  const eqFixed = isPhoneW() ? [plateColW(), em(5.8), em(5.4), em(5.8)] : [plateColW(), em(5.8)], eqAct = actCol() ? [isPhoneW() && canAllVeh() ? em(7) : isPhoneW() ? em(4) : em(4.2)] : [], eqDay = dayW();
-  fixCols($("eqTable"), [...eqFixed, ...dates.map(() => eqDay), ...eqAct], true);
-  // 위쪽 장비 현황 표는 지원일 칸 수와 상관없이 같은 크기(지원일 4칸 표의 폭, 2026-11-03 사용자 요청). 칸이 늘면 아래 표만 오른쪽으로 커짐
-  const sumW = isPhoneW() ? 0 : em(10.8) + em(5.8) + eqDay * 4 + eqAct.reduce((n, w) => n + w, 0);
+  const eqFixed = isPhoneW() ? [plateEm(), 5.8, 5.4, 5.8] : [plateEm(), 5.8], eqAct = actCol() ? (isPhoneW() ? (canAllVeh() ? 7 : 4) : 4.2) : 0;
+  dayCols($("eqTable"), eqFixed, dates.length, eqAct);
+  // 위쪽 장비 현황 표는 지원일 칸 수와 상관없이 같은 크기(글자 그대로, 지원일 4칸 표의 폭)로 가운데에(2026-11-03 사용자 요청). 칸 수에 따라 달라지는 건 아래 표뿐
+  const sumW = isPhoneW() ? 0 : em(10.8) + em(5.8) + em(11.7) * 4 + em(eqAct);
   $("orgGrid").style.maxWidth = sumW ? sumW + 2 + "px" : ""; fitPanel($("eqTable"), sumW + 2);
   placeUnhide();
 }
 // 컴퓨터: 도공번호 칸 아래에 장비·블로워를 함께(칸이 둘 줄어 표가 좁아짐, 2026-11-03 C안). 휴대폰: 칸을 따로
 const idCells = (id, type, blower) => isPhoneW() ? `<td>${id}</td><td>${type}</td><td>${blower}</td>` : `<td>${id}<div class="vid2"><span>${type}</span>${blower}</div></td>`;
 // 도공번호 칸 폭: 보통 장비 = 기관 이름 + 숫자 4자리. 지역본부 장비는 지사 이름 + 임차 + 숫자라 더 길어서, 보이는 장비 중 가장 긴 이름에 맞춤(제설차 칸과 겹치지 않게, 2026-11-03)
-function plateColW() {
-  const base = em(isPhoneW() ? 9.2 : 10.8);
-  return fleetRows().reduce((w, v) => Math.max(w, !isPool(v) ? base : canVeh(v) ? em(bn(v.home_branch).length * 1.04 + 9) : em(vname(v).length + 1.2)), base);
+function plateEm() {
+  const base = isPhoneW() ? 9.2 : 10.8;
+  return fleetRows().reduce((w, v) => Math.max(w, !isPool(v) ? base : canVeh(v) ? bn(v.home_branch).length * 1.04 + 9 : vname(v).length + 1.2), base);
 }
 const myPoolN = () => canPoolAdd() ? poolVehs(S.me.branch_id).length : 0;            // 지사 계정: 이 기준일자에 등록한 자기 지사 장비 수
 const actCol = () => canAllVeh() || myPoolN() > 0;       // 맨 끝 칸(숨기기·삭제): 관리자, 그리고 자기 지사 지역본부 장비가 있는 지사 계정
@@ -919,8 +920,7 @@ function renderTeam() {
   const head = dates.map((d, i) => `<th class="dayh">지원일 ${i + 1}<span class="sub">` +
     (i === 0 && ed ? `<input class="ci" type="date" id="day1InTeam" value="${esc(d)}"${r ? ` min="${esc(r.start_date)}"` : ""} aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동, 기준일자보다 앞은 안 됨)">` : esc(fmtMD(d))) + `</span></th>`).join("");
   $("teamTable").innerHTML = `<thead><tr><th>장비</th><th>지원 여부</th>${head}</tr></thead><tbody>${S.team.map(v => teamRowHtml(v, dates)).join("") || `<tr><td colspan="${2 + dates.length}" class="empty">장비가 없습니다.</td></tr>`}</tbody>`;
-  const tFixed = [em(11.5), em(5.8)], tDay = dayW();
-  fixCols($("teamTable"), [...tFixed, ...dates.map(() => tDay)], true); fitPanel($("teamTable"));
+  dayCols($("teamTable"), [11.5, 5.8], dates.length, 0); fitPanel($("teamTable"));
 }
 function teamRowHtml(v, dates) {
   const ed = canTeam(), r = curRound(), st = r ? stOf(r.id, v.id).status : "", [cls, label] = STATUS[st] || STATUS[""], id = esc(v.id);
@@ -1055,16 +1055,30 @@ function fixCols(table, cols, fit) {
   table.insertAdjacentHTML("afterbegin", `<colgroup>${cols.map(w => `<col style="width:${w}px">`).join("")}</colgroup>`);
 }
 // 기관별 장비·강원본부 지원장비·기관별 배치의 칸 크기(2026-11-03 사용자 요청: 컴퓨터에서 보기 좋게, 글자가 잘리지 않게). 칸 폭은 글자 크기(em)로 정해 글자와 함께 커짐
-// 글자 크기: 컴퓨터 13~16px = 지원일 6칸(약 92em)이 스크롤 막대를 빼고 화면에 들어오는 크기, 휴대폰 12.5px. CSS 는 --eq-fp 를 씀
+// 글자 크기: 컴퓨터 13~16px = 지원일 6칸(약 92em)이 화면과 표의 스크롤 막대를 빼고 들어오는 크기, 휴대폰 12.5px. CSS 는 --eq-fp 를 씀
+const SBW = (() => { const d = document.createElement("div"); d.style.cssText = "position:absolute;top:-99px;width:50px;height:50px;overflow:scroll"; document.documentElement.append(d); const w = d.offsetWidth - d.clientWidth; d.remove(); return w; })();   // 이 브라우저의 스크롤 막대 폭(숨겨져 있으면 0)
+const tableRoom = () => Math.min(innerWidth, 1680) - 48 - SBW * 2;      // 표가 쓸 수 있는 폭: main 여백 40 + 테두리 등 8 + 화면·표의 세로 스크롤 막대
 const isPhoneW = () => innerWidth <= 860;
-const FP = () => isPhoneW() ? 12.5 : Math.max(13, Math.min(16, Math.floor((Math.min(innerWidth, 1680) - 57) / 92 * 10) / 10));
+const FP = () => isPhoneW() ? 12.5 : Math.max(13, Math.min(16, Math.floor(tableRoom() / 92 * 10) / 10));
 const syncFP = () => document.documentElement.style.setProperty("--eq-fp", FP() + "px");
 syncFP();
 const em = n => Math.round(n * FP());
-// 지원일 칸: 칸 수와 상관없이 같은 폭(지사 드롭다운 + 시각 + ＋ 버튼이 잘리지 않는 폭). 그래서 2칸이면 표가 줄고 7칸부터 오른쪽으로 늘어남. 휴대폰은 176px
-const dayW = () => isPhoneW() ? 176 : em(11.7);
+// 지원일 칸(2026-11-03 사용자 요청: 칸이 많아도 컴퓨터에서는 가로 스크롤 없이 다 보이게): 보통은 지사·시각을 한 줄로(11.7em).
+// 다 안 들어오면 글자를 13px 까지 줄이고, 그래도 안 들어오면 지사·시각을 위아래 두 줄로(칸 폭 6.9~11.7em, 표 폭을 화면에 맞춤). 휴대폰은 176px 에 옆으로 밀어서 봄
+function dayFit(fixedEm, n) {
+  if (isPhoneW()) return { fp: 12.5, day: 176 / 12.5, stack: false };
+  const room = tableRoom(), tenth = x => Math.floor(x * 10) / 10, one = room / (fixedEm + 11.7 * n);
+  if (one >= 13) return { fp: Math.min(FP(), tenth(one)), day: 11.7, stack: false };
+  const fp = Math.max(12, Math.min(FP(), tenth(room / (fixedEm + 6.9 * n))));
+  return { fp, day: Math.max(6.9, Math.min(11.7, tenth((room / fp - fixedEm) / n))), stack: true };
+}
+function dayCols(table, fixedEm, n, actEm) {
+  const f = dayFit(fixedEm.reduce((a, w) => a + w, 0) + actEm, n), px = w => Math.round(w * f.fp);
+  table.style.fontSize = isPhoneW() ? "" : f.fp + "px"; table.classList.toggle("stack", f.stack);
+  fixCols(table, [...fixedEm.map(px), ...Array(n).fill(px(f.day)), ...(actEm ? [px(actEm)] : [])], true);
+}
 // 컴퓨터: 기준일자·현황 표·버튼 줄·저장 줄을 표와 같은 폭으로 맞춰 가운데에 둠(2026-11-03 C안). 표가 아주 좁아도 위쪽 줄이 들어가도록 860px 아래로는 안 줄임
-function fitPanel(table, min = 0) { table.closest(".panel").style.maxWidth = isPhoneW() ? "" : Math.max(parseFloat(table.style.width) + 2, min, 860) + "px"; }
+function fitPanel(table, min = 0) { table.closest(".panel").style.maxWidth = isPhoneW() ? "" : Math.max(parseFloat(table.style.width) + 2 + SBW, min, 860) + "px"; }      // 표 안에 세로 스크롤 막대가 생겨도 가로 스크롤이 안 생기게 그 폭까지
 let lastPageKey = innerWidth;
 addEventListener("resize", () => { if (innerWidth !== lastPageKey && S.me) { lastPageKey = innerWidth; clearTimeout(S.resizeT); S.resizeT = setTimeout(() => { syncFP(); renderMatrix(); renderFleet(); renderTeam(); renderAlloc(); }, 150); } });   // 창 폭이 바뀌면 칸 폭을 다시 계산
 function stickHead(table) {
