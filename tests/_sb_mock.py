@@ -101,7 +101,7 @@ class Mock:
         def _cell(c):
             s, p, t, k = round(((c[0] + c[1]) % 7) * 0.5, 1), round(((c[0] * c[1]) % 9) * 1.5, 1), -float((c[0] * 3 + c[1]) % 12), (c[0] % 10) + 3
             o = ((c[0] + 2 * c[1]) % 10) * 10                    # 최고 강수확률(%): 0~90
-            sr = {"s": [round(s / 4, 1) if 4 <= i < 8 else 0 for i in range(24)], "p": [round(p / 6, 1) if 2 <= i < 8 else 0 for i in range(24)], "t": [t + abs(i - k) * 0.5 for i in range(24)],
+            sr = {"s": [round(s / 4, 1) if 6 <= i < 10 else 0 for i in range(24)], "p": [round(p / 6, 1) if 2 <= i < 8 else 0 for i in range(24)], "t": [t + abs(i - k) * 0.5 for i in range(24)],
                   "r": [o if 2 <= i < 8 else max(o - 30, 0) for i in range(24)], "vn": 6}      # vn = 앞 6시각은 초단기예보 값(마이그레이션 60, 서버가 섞어 저장)
             return [c[0], c[1], sorted(c[2]), s, p, t, (_iss + _dt.timedelta(hours=2 + k)).isoformat(), sr, o]
         self.fc_cells = [_cell(c) for c in _ga["cells"] if c[2]]

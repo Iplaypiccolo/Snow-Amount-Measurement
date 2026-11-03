@@ -3,7 +3,8 @@
 --  * 지금까지: 단기예보만 저장(forecast_cells·branch_forecast), 초단기는 기관별 24시간 예보 탭의 [초단기예보] 버튼을 누를 때만 계산(57·58)
 --  * 바꿈: private.fc_apply 가 계산할 때 최신 초단기예보(3시간 안에 다 받은 발표분)가 있는 시각의 강수·기온·강수확률을 초단기 값으로 바꿔 넣음
 --    → forecast_cells·branch_forecast 자체가 섞은 값 → 지사별 요청·편성의 24시 예보, 확정 고정값(branch_fc), 기관별 24시간 예보 탭이 모두 같은 값
---  * 적설은 초단기예보에 없어(기상청도 같음) 24시간 모두 단기예보 값. 바다(-99) 등 초단기 값이 없는 칸은 단기 값
+--  * 적설: 초단기예보에는 적설 항목이 없음 → 초단기 시각(앞 6시간)의 적설은 0, 강수만(2026-11-04 사용자 결정 — 단기 적설을 섞지 않음).
+--    나머지 시각은 단기 적설. 바다(-99) 등 초단기 강수·기온·확률 값이 빈 칸은 그 값만 단기로 채움(적설은 그래도 0)
 --  * 초단기 발표분을 다 받을 때마다(10분마다) 지금 창(발표 시각·시작 시각) 그대로 다시 계산(private.fc_refresh). 매시 정각 창 옮기기·단기 새 발표도 자동으로 섞음
 --  * 초단기를 3시간 넘게 못 받으면 단기예보만(다음 계산 때부터)
 --  * series.vn = 앞에서 몇 시각이 초단기 값인지, branch_forecast.detail.vsrt_at·vn = 섞은 초단기 발표 시각·시각 수
@@ -49,7 +50,7 @@ begin
              max(case when h.vals[vcell.i] >= 0 then least(h.vals[vcell.i], 100) end) filter (where h.var = 'POP')::int as o
         from vcell join public.forecast_vsrt_hours h on h.tmfc = vt and h.tmef >= p_start and h.tmef < p_start + interval '24 hours'
        group by vcell.nx, vcell.ny, h.tmef)
-    select sh.nx, sh.ny, sh.tmef, sh.s, coalesce(vx.p, sh.p) as p, coalesce(vx.t, sh.t) as t, coalesce(vx.o, sh.o) as o, vx.tmef is not null as vs
+    select sh.nx, sh.ny, sh.tmef, case when vx.tmef is not null then 0 else sh.s end as s, coalesce(vx.p, sh.p) as p, coalesce(vx.t, sh.t) as t, coalesce(vx.o, sh.o) as o, vx.tmef is not null as vs
       from sh left join vx on vx.nx = sh.nx and vx.ny = sh.ny and vx.tmef = sh.tmef;
 
   drop table if exists _fc;

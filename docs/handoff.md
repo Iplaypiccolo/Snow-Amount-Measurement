@@ -44,6 +44,14 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-04 · 커밋 (이 기록 커밋 하나) · 앞 6시간 적설 = 0 (초단기만 따름) (Claude 채팅 작업)
+- 사용자: "앞 6시간은 전부 초단기, 나머지는 단기. 초단기엔 적설이 없으니 적설은 항상 0, 강수만 표출. 초단기 적설은 나중에 Claude Code 로 사이트 분석". → 바로 아래 기록의 '적설은 단기 그대로'를 바꿈.
+- **서버: 마이그레이션 60 적용 완료**(사용자 승인 뒤). 적용 전 되돌림 시험(60 + `forecast_vsrt_test.sql`) 31/31 통과, 실제 자료로 다시 계산 1.4초. 적용 뒤 확인: 격자 924칸 모두 `series.vn`=6, 앞 6시각 적설이 0 아닌 칸 0개, `branch_forecast.detail.vsrt_at` 채워짐(초단기 수집 뒤 자동 갱신 확인), 전환 함수 3개 삭제됨, `private.fc_refresh` 는 로그인 계정 실행 불가. 이 기록 아래 항목의 'Claude Code 가 할 일'은 끝남.
+- `supabase/migrations/20261104_60_forecast_blend.sql`: 초단기 값이 있는 시각은 적설 0(`case when vx.tmef is not null then 0`). 시험 `forecast_vsrt_test.sql` 기대값 B001 적설 12 → 9, 앞 6시각 s = 0.
+- 화면: `forecast/ui.js` 고정 창 표의 적설 줄도 앞 6시각 색칠(0), 안내 "초단기예보(적설 항목이 없어 0) · 나머지 = 단기예보". `guide/guide.js`·`index.html` 문구, 가짜 서버 적설을 앞 6시각 뒤로. 시험 `t_blend_no_toggle` 고침.
+- **확인 필요**: 날씨누리가 앞 6시간 적설을 어떻게 보여 주는지 사이트 분석(사용자가 Claude Code 에 맡김).
+— ✍ Claude 채팅 작성
+
 ### 2026-11-04 · 커밋 (이 기록 커밋 하나) · 24시간 예보 = 앞 6시간 초단기 + 나머지 단기, 전환 버튼·'발표 기준' 문구 없앰 (Claude 채팅 작업)
 - 사용자: "요청·편성의 기상현황을 6시간 초단기 + 나머지 24시까지 단기로, 기관별 24시간 예보도 같게(기상청과 동일), 토글·발표 기준 문구 없앰". 적설은 사용자 선택으로 단기 그대로(초단기에 적설 항목 없음).
 - **서버: `supabase/migrations/20261104_60_forecast_blend.sql` 은 파일만 있고 아직 적용 안 됨.** 이 채팅에서 보낸 적용·되돌림 시험이 앱 확인 창이 저절로 닫혀(0.6초) 네 번 모두 실행되지 않음. → **Claude Code 가 할 일**: ① 60 + `supabase/tests/forecast_vsrt_test.sql` 을 한 번에 되돌림 시험(끝의 일부러 낸 오류에 '실패 0' 확인) ② 사용자 확인 뒤 60 적용 ③ `select detail from branch_forecast limit 3`(vsrt_at·vn), `select count(*) from forecast_cells where series ? 'vn'` 으로 확인, 다음 초단기 수집 뒤(10~20분) `collector_state` 의 forecast_vsrt note 가 비었는지.

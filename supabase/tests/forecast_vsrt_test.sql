@@ -79,17 +79,17 @@ begin
     and not exists (select 1 from public.forecast_vsrt_runs where tmfc < t0)
     and (select ok and cursor = to_char(t0 at time zone 'Asia/Seoul', 'YYYYMMDDHH24MI') from public.collector_state where job = 'forecast_vsrt'));
   -- 섞은 24시간 예보(마이그레이션 60): 초단기를 다 받으면 지금 창 그대로 다시 계산 → 단기 표 자체가 앞 6시간 초단기 + 나머지 단기
-  perform pg_temp.yes('지사: 강수 3×6 + 단기 1×18 = 36, 최저 -8(시작 시각), 확률 90, 적설은 단기 그대로 12, 발표 시각은 단기', (select max_pcp_24h = 36 and min_tmp = -8 and min_tmp_at = h0 and max_pop_24h = 90 and max_snow_24h = 12
+  perform pg_temp.yes('지사: 강수 3×6 + 단기 1×18 = 36, 최저 -8(시작 시각), 확률 90, 적설 = 앞 6시간 0 + 단기 0.5×18 = 9, 발표 시각은 단기', (select max_pcp_24h = 36 and min_tmp = -8 and min_tmp_at = h0 and max_pop_24h = 90 and max_snow_24h = 9
       and issued_at = (p ->> 'tmfc')::timestamptz and (detail ->> 'start_at')::timestamptz = h0 and (detail ->> 'vsrt_at')::timestamptz = t0 and (detail ->> 'vn')::int = 6 from public.branch_forecast where branch_id = 'B001'),
     (select row_to_json(b)::text from public.branch_forecast b where branch_id = 'B001'));
-  perform pg_temp.yes('격자: 24시각 그대로, 앞 6시각만 초단기, 적설은 모두 단기, vn = 6', (select pcp_24h = 36 and tmin = -8 and pop_24h = 90 and snow_24h = 12
+  perform pg_temp.yes('격자: 24시각 그대로, 앞 6시각만 초단기(적설 0), 뒤는 단기, vn = 6', (select pcp_24h = 36 and tmin = -8 and pop_24h = 90 and snow_24h = 9
       and jsonb_array_length(series -> 'p') = 24 and (series -> 'p' ->> 0)::numeric = 3 and (series -> 'p' ->> 5)::numeric = 3 and (series -> 'p' ->> 6)::numeric = 1
       and (series -> 't' ->> 0)::numeric = -8 and (series -> 't' ->> 5)::numeric = 5 and (series -> 't' ->> 6)::numeric = 10
-      and (series -> 'r' ->> 2)::int = 90 and (series -> 'r' ->> 6)::int = 20 and (series -> 's' ->> 0)::numeric = 0.5 and (series ->> 'vn')::int = 6 from public.forecast_cells where nx = cx and ny = cy),
+      and (series -> 'r' ->> 2)::int = 90 and (series -> 'r' ->> 6)::int = 20 and (series -> 's' ->> 0)::numeric = 0 and (series -> 's' ->> 5)::numeric = 0 and (series -> 's' ->> 6)::numeric = 0.5 and (series ->> 'vn')::int = 6 from public.forecast_cells where nx = cx and ny = cy),
     (select left(series::text, 300) from public.forecast_cells where nx = cx and ny = cy));
-  perform pg_temp.yes('바다(-99) 칸은 단기 값 그대로', (select (series -> 'p' ->> 0)::numeric = 1 and (series -> 't' ->> 0)::numeric = 10 and (series -> 'r' ->> 0)::int = 20 from public.forecast_cells where nx = sx and ny = sy),
+  perform pg_temp.yes('바다(-99) 칸: 강수·기온·확률은 단기 값, 적설은 0', (select (series -> 'p' ->> 0)::numeric = 1 and (series -> 't' ->> 0)::numeric = 10 and (series -> 'r' ->> 0)::int = 20 and (series -> 's' ->> 0)::numeric = 0 from public.forecast_cells where nx = sx and ny = sy),
     (select left(series::text, 300) from public.forecast_cells where nx = sx and ny = sy));
-  perform pg_temp.yes('확정 고정값(branch_fc)도 섞은 값', (private.branch_fc('B001') ->> 'pcp')::numeric = 36 and (private.branch_fc('B001') ->> 'tmin')::numeric = -8 and (private.branch_fc('B001') ->> 'pop')::int = 90);
+  perform pg_temp.yes('확정 고정값(branch_fc)도 섞은 값', (private.branch_fc('B001') ->> 'snow')::numeric = 9 and (private.branch_fc('B001') ->> 'pcp')::numeric = 36 and (private.branch_fc('B001') ->> 'tmin')::numeric = -8 and (private.branch_fc('B001') ->> 'pop')::int = 90);
   ok1 := private.fc_roll();
   perform pg_temp.yes('매시 정각 다시 계산해도 섞은 값', ok1 and (select max_pcp_24h = 36 and min_tmp = -8 and (detail ->> 'vn')::int = 6 from public.branch_forecast where branch_id = 'B001'));
   -- 화면 읽기: 로그인 사용자는 forecast_grid 로 같은 값(추이에 vn)

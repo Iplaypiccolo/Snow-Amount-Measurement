@@ -7,7 +7,7 @@
      그림에 마우스를 올리면 세로·가로 보조선과 "몇 시 · 값". 지도 아무 데나 누르면 닫힘. 추이는 지사를 열 때만 서버에서 받음
    - 장비 지원의 지사별 요청·편성에서 예상 적설·강수를 누르면 이 탭의 그 지사로 바로 옵니다(window.ForecastUI.openBranch).
    - 격자는 번호 대신 지명(시군구 읍면동, data/grid_names.json — tools/build_grid_names.py 가 만듦)으로 보이고 번호는 작게 곁들임
-   - 값은 기상청 동네예보와 같은 방식(2026-11-04, 마이그레이션 60): 앞 6시간의 강수·확률·기온 = 초단기예보(10분마다), 나머지 시각과 적설 = 단기예보.
+   - 값(2026-11-04, 마이그레이션 60): 앞 6시간 = 초단기예보(10분마다, 강수·확률·기온. 적설 항목이 없어 적설은 0), 나머지 시각 = 단기예보.
      서버가 섞어 저장하므로 지사별 요청·편성·확정 값과 같음. 고정 창 표에서 초단기 시각은 색칠(series.vn). 전환 버튼·'발표 기준' 문구는 없앰
    - 격자를 누르면 뜨는 창(컴퓨터 화면만): 제목 줄을 끌어 옮기고, 아래쪽 모서리를 끌어 크기를 바꿈(글자도 같은 비율). 다른 격자를 눌러도 그대로이고 이 브라우저에 기억
    - 서버 읽기: branch_forecast(지사 59줄) 한 번 + 본부를 열 때 forecast_grid(그 본부 지사들의 격자, 수 KB) + 지사를 열 때 그 지사 추이(약 10KB)
@@ -119,7 +119,7 @@
       var d = hourAt(start, i), part = function (k) { return (sr[k] || []).slice(i, Math.min(i + step, to)); };
       var prev = i > 0 ? hourAt(start, i - step) : null, newDay = d && (i === 0 || (prev && prev.getDate() !== d.getDate()));   // 날짜는 맨 처음 칸과 날짜가 바뀌는 칸에만
       head += '<th' + (i < vn ? ' class="vs"' : '') + '>' + (d ? p2(d.getHours()) : '') + (newDay ? '<small>' + (d.getMonth() + 1) + '/' + d.getDate() + '</small>' : '') + '</th>';
-      rs += cellNum(sumOf(part('s'))); rp += mark(cellNum(sumOf(part('p'))), i); rt += mark(cellTmp(minOf(part('t'))), i); if (hasPop) ro += mark(cellPop(maxOf(part('r'))), i);
+      rs += mark(cellNum(sumOf(part('s'))), i); rp += mark(cellNum(sumOf(part('p'))), i); rt += mark(cellTmp(minOf(part('t'))), i); if (hasPop) ro += mark(cellPop(maxOf(part('r'))), i);
     }
     var u = step === 1 ? '' : (step + '시간 ');
     return '<table class="fc-tt fc-t' + step + '"><thead><tr><th class="lb">시</th>' + head + '</tr></thead><tbody>' +
@@ -134,7 +134,7 @@
   function trendBox(sr, start, big) {
     if (!sr) return '';
     if (!big) return '<div class="fc-trend-box">' + tableBlock(sr, start, 0, 24, 3) + '<div class="fc-tt-cap">칸 = 그 시각부터 3시간 합 (기온은 최저' + (sr.r && sr.r.length ? ', 확률은 최고' : '') + ')</div></div>';
-    return '<div class="fc-trend-box big">' + tableBlock(sr, start, 0, 12, 1) + tableBlock(sr, start, 12, 24, 1) + totalLine(sr) + (sr.vn ? '<div class="fc-tt-cap"><i class="fc-vs-key"></i>색칠한 칸 = 초단기예보(앞 ' + sr.vn + '시간) · 나머지·적설 = 단기예보</div>' : '') + '</div>';
+    return '<div class="fc-trend-box big">' + tableBlock(sr, start, 0, 12, 1) + tableBlock(sr, start, 12, 24, 1) + totalLine(sr) + (sr.vn ? '<div class="fc-tt-cap"><i class="fc-vs-key"></i>색칠한 칸 = 초단기예보(앞 ' + sr.vn + '시간, 적설 항목이 없어 0) · 나머지 = 단기예보</div>' : '') + '</div>';
   }
   // 고정 창 위치·크기(컴퓨터 화면만, 2026-11-03): scale = 글자·표 배율, x·y = 지도 안 왼쪽 위(null = 처음 자리 오른쪽 위). 지도보다 커지거나 밖으로 나가지 않게 맞춤
   var PIN_KEY = 'ss_fc_pin', PIN_BODY = 396, PIN_PAD = 22, PIN_MIN = 0.8;      // PIN_BODY·PIN_PAD = 배율 1일 때 표 폭·창 안팎 여백(px)
