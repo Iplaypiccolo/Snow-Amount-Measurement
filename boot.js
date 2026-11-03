@@ -147,6 +147,12 @@
   var rlBtns = [rlBtn, document.getElementById('snReload')].filter(Boolean);          // 넓은 화면 = 탭 줄, 휴대폰 = 머리글(탭을 가리지 않게, 2026-11-02)
   rlBtns.forEach(function(b){ b.addEventListener('click', function(){ var w = null; try { w = frame.contentWindow; } catch(e){} if (w && w.SSEqReload) w.SSEqReload(); }); });
   window.SSEqReloadState = function(busy, at){ rlBtns.forEach(function(b){ b.disabled = !!busy; b.textContent = busy ? '불러오는 중…' : '새로고침'; }); if (rlAt) rlAt.textContent = at || ''; };
+  // 휴대폰 머리글 접고 펴기(2026-11-03): 화면·사용법·계정 줄. 처음엔 접힘
+  var tnMore = document.getElementById('tnMore');
+  if (tnMore) tnMore.addEventListener('click', function(){
+    var row = tnMore.closest('.tn-row'), on = row.classList.toggle('more-open');
+    tnMore.setAttribute('aria-expanded', String(on)); tnMore.setAttribute('aria-label', '화면·계정 메뉴 ' + (on ? '접기' : '펴기')); tnMore.textContent = on ? '▴' : '▾';
+  });
   // 기준일자(2026-11-03 사용자 요청): 탭을 바꿔도 늘 보이게 위쪽 메뉴에. 목록·권한은 안쪽 화면이 알려 주고(SSEqRound), 고르기·삭제·만들기는 안쪽 화면이 함(SSEqRoundAct)
   var rdBoxes = [document.getElementById('eqRoundWide'), document.getElementById('eqRoundRow')].filter(Boolean), rdKey = '', rdS = null, rdOpen = false;
   function rdEsc(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); }

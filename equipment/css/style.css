@@ -851,18 +851,24 @@ table.fixcols th, table.fixcols td { overflow-wrap: anywhere; }
 .round-bar { position: sticky; top: var(--topbar-h, 0px); z-index: 15; border-color: #e0b400; }
 .round-bar select[data-round] { background-color: #fff3b0; border-color: #e0b400; color: #3a2f00; font-weight: 700; }
 
-/* 기관별 장비: 장비 현황 표(기관 카드 대신, 2026-11-03) */
+/* 기관별 장비: 장비 현황 표(기관 카드 대신, 2026-11-03). 열 = 기관 > 장비, 행 = 상태. 좁으면 옆으로 밀어 봄, 맨 왼쪽 칸은 고정 */
 .fleet-sum { margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
-.fs-table { width: 100%; max-width: 640px; border-collapse: collapse; background: var(--surface); font-size: 14px; }
-.fs-table th, .fs-table td { border: 1px solid var(--line); padding: 5px 10px; text-align: center; font-variant-numeric: tabular-nums; }
+.fs-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.fs-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.fs-table th, .fs-table td { border: 1px solid var(--line); padding: 5px 8px; text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 54px; }
 .fs-table thead th { background: var(--bg); font-weight: 600; font-size: 13px; }
-.fs-table .l { text-align: left; font-weight: 700; white-space: nowrap; }
-.fs-table .sum, .fs-table tfoot th, .fs-table tfoot td { font-weight: 700; }
-.fs-table tfoot th, .fs-table tfoot td { background: var(--bg); }
-.fs-assign td { text-align: left; vertical-align: top; width: 50%; }
-.fs-list { columns: auto 84px; column-gap: 12px; line-height: 1.55; }
-.fs-list > div { break-inside: avoid; white-space: nowrap; }
-.fs-more { max-width: 640px; font-size: 13px; }
+.fs-table .l { position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left; font-weight: 700; min-width: 76px; box-shadow: 1px 0 0 var(--line); }
+.fs-table thead .l { background: var(--bg); }
+.fs-table .ed { border-left-width: 2px; border-left-color: color-mix(in srgb, var(--ink-soft) 45%, var(--line)); }
+.fs-table .tot { background: var(--bg); font-weight: 700; }
+.fs-table td.z { color: var(--ink-soft); opacity: .55; }
+.fs-table .fs-sum th, .fs-table .fs-sum td { font-weight: 700; background: var(--bg); }
+.fs-table .fs-asgn th, .fs-table .fs-asgn td { font-weight: 700; border-top-width: 2px; border-top-color: color-mix(in srgb, var(--ink-soft) 45%, var(--line)); }
+.fs-table .fs-asg td { vertical-align: top; line-height: 1.55; font-size: 13px; }
+.fs-table td.fs-closed { color: var(--ink-soft); font-size: 12.5px; text-align: left; }
+.fs-tog { font: inherit; font-weight: 700; color: var(--ink); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; cursor: pointer; white-space: nowrap; }
+.fs-tog:disabled { opacity: .55; cursor: default; }
+.fs-more { font-size: 13px; }
 .fs-more summary { cursor: pointer; color: var(--ink-soft); padding: 2px 0; }
 
 /* 지사별 요청·편성: 맨 위 전체 줄 */

@@ -44,6 +44,10 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 장비 현황 표를 기관별 열로, 휴대폰 머리글 접기, 페이지 버튼 순서
+- 서버 변경 없음. `equipment/js/app.js renderOrgGrid`: 열 기관 > 장비, 행 상태, 배정지 접고 폄(`S.fleetAssignOpen`). `index.html`·`boot.js`: `#tnMore`, `#snReload` 를 기준일자 줄로, 페이지 버튼 순서. `guide/guide.js` 안내 고침. 시험 `t_fleet_sum`·`t_eq_round_bar`.
+— ✍ Claude Code 작성
+
 ### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 기준일자 위쪽 메뉴로, 기관별 장비 요약 표, 배정은 확정 지사만, 요청·편성 전체 줄
 - 서버 변경 없음. `index.html`·`boot.js`: 기준일자(`#eqRoundWide`·`#eqRoundRow`, `SSEqRound`). `equipment/js/app.js`: `syncRoundTop`·`SSEqRoundAct`, `renderOrgGrid`(표), `totalRow`, 기관별 배정 줄 조건. `guide/guide.js`: 기준일자·전체 합계·장비 현황 안내 고침.
 - 칸(id) 변경 없음(`#orgGrid` 의 class 만 바뀜) → UI_VERSION 그대로.

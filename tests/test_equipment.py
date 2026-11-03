@@ -143,7 +143,7 @@ def t_status_maintenance(p):
     check(p.locator(rsel("V002", d0)).input_value() == "" and route(p, "V002", d0) == ["대관령"] and ev(p, f"effRec('{d0}', 'V002').stops.length") == 0, "정비중이면 경로를 지우지 않고 숨김(되돌리면 다시 보임)")
     check(p.locator(rsel("V002", d0)).is_disabled(), "정비중이면 경로 입력 잠금")
     check(ev(p, "stOf(S.round, 'V002').status") == "M" and ev(p, "vehById('V002').status") == "O", "지원 여부는 고른 기준일자에만(장비 줄 값은 그대로)")
-    check("정비중" in p.locator("#fleetSum thead").inner_text(), "장비 현황 표에 정비중")
+    check("정비중" in p.locator("#fleetSum tbody").inner_text(), "장비 현황 표에 정비중")
     p.click("#save-fleet [data-revert]"); p.wait_for_timeout(200)
     check(route(p, "V002", d0) == ["대관령"] and p.locator("[data-vs=V002]").input_value() == "O", "되돌리기")
 
@@ -1172,32 +1172,51 @@ def t_confirm_stale(p):
     p.click("#confirmAll"); p.wait_for_timeout(300); check(p.locator("#confirmAll").count() == 0, "다시 누르면 전부 확정")
 
 def t_fleet_sum(p):
-    """2026-11-03: 기관별 장비의 요약 = 표(행 장비, 열 상태, 계). 이동정비차 없음, 아래에 장비별로 어느 지사에 몇 대 배정됐는지. 기관 버튼을 고르면 그 기관만"""
+    """2026-11-03: 기관별 장비의 요약 표 — 열 = 기관 > 장비(이동정비차 없음, 지역본부는 제설차만, 맨 끝 전체), 행 = 상태·계·배정, 맨 아래 배정지(접고 폄)"""
     tab(p, "fleet")
     check(p.locator("#orgGrid .org").count() == 0 and p.locator("#fleetSum").count() == 1, "카드 대신 표")
-    check(p.locator("#fleetSum thead").inner_text().split() == ["장비", "지원", "지원", "불가", "정비중", "미정", "계"], p.locator("#fleetSum thead").inner_text())
-    check([x.split()[0] for x in p.locator("#fleetSum tbody tr, #fleetSum tfoot tr").all_inner_texts()] == ["제설차", "제설기", "계"] and "이동정비차" not in p.locator("#orgGrid").inner_text(), "행 = 제설차·제설기·계, 이동정비차 없음")
-    cnt = lambda t, st, org="null": ev(p, f"(() => {{ const r = curRound(); return S.vehicles.filter(v => shownIn(v, r) && v.type === '{t}' && ({org} === null || v.org === {org}) && (stOf(r.id, v.id).status === '{st}')).length; }})()")
-    c = lambda row, k: int(p.locator(f"#fleetSum tr[data-fsrow='{row}'] [data-fs='{k}']").inner_text())
+    h1 = [x.strip() for x in p.locator("#fleetSum thead tr").nth(0).locator("th").all_inner_texts()]
+    check(h1 == ["상태", "서울경기", "충북", "전북", "대구경북", "지역본부", "전체"], f"첫 줄 = 기관: {h1}")
+    h2 = [x.strip() for x in p.locator("#fleetSum thead tr").nth(1).locator("th").all_inner_texts()]
+    check(h2 == ["제설차", "제설기"] * 4 + ["제설차"] + ["제설차", "제설기"], f"둘째 줄 = 장비, 지역본부는 제설차만: {h2}")
+    check("이동정비차" not in p.locator("#orgGrid").inner_text(), "이동정비차 없음")
+    rows = [p.locator(f"#fleetSum tr[data-fsrow='{r}'] th").inner_text().strip() for r in ("지원", "지원 불가", "정비중", "미정", "계", "배정")]
+    check(rows == ["지원", "지원 불가", "정비중", "미정", "계", "배정"], f"행 = 상태: {rows}")
+    cnt = lambda o, t, st: ev(p, f"(() => {{ const r = curRound(); return S.vehicles.filter(v => shownIn(v, r) && v.type === '{t}' && ({'true' if o is None else repr(o) + ' === v.org'}) && stOf(r.id, v.id).status === '{st}').length; }})()")
+    c = lambda k: int(p.locator(f"#fleetSum [data-fs='{k}']").inner_text())
+    for o in ("서울경기", "충북", "전북", "대구경북"):
+        for t in ("제설차", "제설기"):
+            for k, st in (("O", "O"), ("X", "X"), ("M", "M"), ("none", "")): check(c(f"{o}:{t}:{k}") == cnt(o, t, st), f"{o} {t} {k}")
+            check(c(f"{o}:{t}:sum") == sum(c(f"{o}:{t}:{k}") for k in ("O", "X", "M", "none")), f"{o} {t} 계")
     for t in ("제설차", "제설기"):
-        for k, st in (("O", "O"), ("X", "X"), ("M", "M"), ("none", "")): check(c(t, k) == cnt(t, st), f"{t} {k}: {c(t, k)} {cnt(t, st)}")
-        check(c(t, "sum") == c(t, "O") + c(t, "X") + c(t, "M") + c(t, "none"), f"{t} 계")
-    for k in ("O", "X", "M", "none", "sum"): check(c("계", k) == c("제설차", k) + c("제설기", k), f"계 줄 {k}")
-    # 기관 버튼: 그 기관만
-    p.click("[data-fo='서울경기']"); p.wait_for_timeout(200); check(c("제설차", "O") == cnt("제설차", "O", "'서울경기'"), "기관을 고르면 그 기관만")
-    p.click("[data-fo='전체']"); p.wait_for_timeout(200)
+        for k, st in (("O", "O"), ("X", "X"), ("M", "M"), ("none", "")): check(c(f"전체:{t}:{k}") == cnt(None, t, st), f"전체 {t} {k}")
     # 지원 여부를 바꾸면 바로 바뀜
-    n0 = c("제설차", "sum"); vid = ev(p, "S.vehicles.find(v => v.type === '제설차' && !v.home_branch && shownIn(v, curRound()) && stOf(S.round, v.id).status !== 'M').id"); a0 = c("제설차", "M")
-    p.select_option(f"select[data-vs='{vid}']", "M"); p.wait_for_timeout(200); check(c("제설차", "M") == a0 + 1 and c("제설차", "sum") == n0, "정비중으로 바꾸면 표가 바로 바뀜(계는 같음)")
+    vid, org = ev(p, "(() => { const v = S.vehicles.find(v => v.type === '제설차' && !v.home_branch && shownIn(v, curRound()) && stOf(S.round, v.id).status !== 'M'); return [v.id, v.org]; })()")
+    a0, n0 = c(f"{org}:제설차:M"), c(f"{org}:제설차:sum")
+    p.select_option(f"select[data-vs='{vid}']", "M"); p.wait_for_timeout(200); check(c(f"{org}:제설차:M") == a0 + 1 and c(f"{org}:제설차:sum") == n0, "정비중으로 바꾸면 표가 바로 바뀜(계는 같음)")
     ev(p, "(S.sdraft.clear(), refresh())"); p.wait_for_timeout(100)
-    # 배정: 지사 이름 + 대수 한 줄씩, 확정된 지사만
+    # 배정지: 칸마다 지사 이름 + 대수 한 줄씩, 확정된 지사만
     bs = ev(p, "S.order.filter(b => isFixed(b.id)).slice(0, 2).map(b => [b.id, b.name])"); check(len(bs) == 2, f"확정 지사 2곳: {bs}")
-    ev(p, f"(S.alloc.clear(), S.alloc.set(ak('서울경기', '{bs[0][0]}'), {{ truck: 2, blower: 0 }}), S.alloc.set(ak('충북', '{bs[0][0]}'), {{ truck: 1, blower: 1 }}), S.alloc.set(ak('서울경기', '{bs[1][0]}'), {{ truck: 1, blower: 0 }}), refresh())"); p.wait_for_timeout(150)
-    lines = p.locator("#fleetAssign [data-fsl='제설차'] .fs-list > div").all_inner_texts()
-    check(lines == [f"{bs[0][1]} 3", f"{bs[1][1]} 1"], f"제설차 배정 줄바꿈: {lines}")
-    check(p.locator("#fleetAssign [data-fsl='제설기'] .fs-list > div").all_inner_texts() == [f"{bs[0][1]} 1"] and p.locator("#fleetAssign [data-fsa='제설차']").inner_text() == "4", "제설기 배정·합계")
-    tops = ev(p, "[...document.querySelectorAll('#fleetAssign [data-fsl=\\'제설차\\'] .fs-list > div')].map(e => e.getBoundingClientRect().height)")
-    check(all(h > 0 for h in tops), "배정 줄이 보임")
+    ev(p, f"(S.alloc.clear(), S.fleetAssignOpen = null, S.alloc.set(ak('서울경기', '{bs[0][0]}'), {{ truck: 2, blower: 0 }}), S.alloc.set(ak('충북', '{bs[0][0]}'), {{ truck: 1, blower: 1 }}), S.alloc.set(ak('서울경기', '{bs[1][0]}'), {{ truck: 1, blower: 0 }}), refresh())"); p.wait_for_timeout(150)
+    lst = lambda k: p.locator(f"#fleetSum [data-fsl='{k}'] > div").all_inner_texts()
+    check(lst("서울경기:제설차") == [f"{bs[0][1]} 2", f"{bs[1][1]} 1"], f"서울경기 제설차: {lst('서울경기:제설차')}")
+    check(lst("충북:제설기") == [f"{bs[0][1]} 1"] and lst("전체:제설차") == [f"{bs[0][1]} 3", f"{bs[1][1]} 1"], "칸마다 줄바꿈, 전체는 합")
+    check(p.locator("#fleetSum [data-fsa='서울경기:제설차']").inner_text() == "3" and p.locator("#fleetSum [data-fsa='전체:제설차']").inner_text() == "4", "배정 대수 줄")
+    # 접고 펴기: 배정 대수 줄은 그대로
+    tog = p.locator("#fleetSum [data-fsopen]"); check(tog.get_attribute("aria-expanded") == "true", "짧으면 펴짐")
+    tog.click(); p.wait_for_timeout(100)
+    check(p.locator("#fleetSum [data-fsl]").count() == 0 and p.locator("#fleetSum [data-fsopen]").get_attribute("aria-expanded") == "false" and p.locator("#fleetSum [data-fsa='서울경기:제설차']").inner_text() == "3", "접으면 지사 줄만 사라짐")
+    ev(p, "refresh()"); p.wait_for_timeout(100); check(p.locator("#fleetSum [data-fsl]").count() == 0, "다시 그려도 접힌 그대로")
+    p.locator("#fleetSum [data-fsopen]").click(); p.wait_for_timeout(100); check(p.locator("#fleetSum [data-fsl]").count() > 0, "다시 펴짐")
+    # 길면 처음엔 접힘
+    ids = ev(p, "S.order.slice(0, 8).map(b => b.id)")
+    ev(p, f"(S.fleetAssignOpen = null, S.rdraft.clear(), {ids}.forEach(id => {{ S.reqs[id] = {{ ...REQ_DEF, ...(S.reqs[id] || {{}}), confirmed: true, assigned_truck: 1 }}; S.alloc.set(ak('서울경기', id), {{ truck: 1, blower: 0 }}); }}), refresh())"); p.wait_for_timeout(150)
+    check(p.locator("#fleetSum [data-fsopen]").get_attribute("aria-expanded") == "false" and p.locator("#fleetSum [data-fsl]").count() == 0, "배정지가 많으면 처음엔 접힘")
+    # 좁은 화면: 표만 옆으로 밀림, 맨 왼쪽 칸 고정
+    p.set_viewport_size({"width": 375, "height": 800}); p.wait_for_timeout(200)
+    check(ev(p, "document.scrollingElement.scrollWidth") <= 376 and ev(p, "(() => { const w = document.querySelector('.fs-wrap'); return w.scrollWidth > w.clientWidth; })()"), "휴대폰: 화면은 그대로, 표만 옆으로")
+    check(ev(p, "getComputedStyle(document.querySelector('#fleetSum th.l')).position") == "sticky", "상태 칸 고정")
+    p.set_viewport_size({"width": 1400, "height": 900})
 
 def t_alloc_fixed_only(p):
     """2026-11-03: 기관별 배정에는 편성이 확정된 지사만. 확정을 취소하면 안 보이고, 다시 확정하면 배정 그대로 돌아옴"""
