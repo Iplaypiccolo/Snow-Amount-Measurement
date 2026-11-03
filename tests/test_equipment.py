@@ -1558,7 +1558,7 @@ def t_report(p):
     check("신속대응팀 제설장비 지원 현황" in txt and f"총 {M['total']}대 (" in txt and row["name"] in txt and "기관별 지원 현황" in txt and M["notes"][0] in txt, txt[:300])
     check("<w:pgSz w:w=\"11906\" w:h=\"16838\"/>" in doc, "A4 세로")
     check('<w:tblLayout w:type="fixed"/>' in doc and '<w:tab w:val="right"' in doc and "<w:tab/>" in doc, "칸 폭 고정, 지원장비 칸은 이름 왼쪽·대수 오른쪽 고정 위치(탭)")
-    check(ev(p, "getComputedStyle(document.querySelector('#rpPage .rp-t')).tableLayout") == "fixed" and ev(p, "document.querySelectorAll('#rpPage .rp-t col').length") == 6, "미리 보기도 칸 폭 고정")
+    check(ev(p, "getComputedStyle(document.querySelector('#rpPage .rp-t')).tableLayout") == "fixed" and ev(p, "document.querySelectorAll('#rpPage .rp-t col').length") == 8, "미리 보기도 칸 폭 고정")
     # A4 한 장 모양(794×1123) 그대로, 화면 폭에 맞게 줄여 보임(2026-11-02) — 휴대폰 폭에서도 표가 깨지지 않음
     box = ev(p, "(() => { const pg = document.querySelector('#rpPage'); return [pg.offsetWidth, pg.offsetHeight, pg.scrollHeight] })()")
     check(box[0] == 794 and box[1] == 1123 and box[2] <= 1123, f"종이 = A4 794×1123, 내용이 한 장 안: {box}")
@@ -1570,6 +1570,40 @@ def t_report(p):
     p.click("#sheetClose")
     with p.expect_download() as dl2: p.click("#rptDoc")              # 이동 현황 위의 [Word 받기]도
     check(dl2.value.suggested_filename.endswith(".docx"), "위쪽 [Word 받기]")
+
+def t_report_snow_warning(p):
+    """2026-11-03: 보고서의 대수와 지원장비 사이에 강설량·특보(지사당 두 줄). 특보는 대설 글자 없이 주의보·경보·예비(발효시각). 오늘 보고서에만 값, 다른 날짜는 '-'. 미리 보기와 워드가 같음"""
+    import re, xml.dom.minidom as md
+    wt = lambda js: ev(p, f"SSReport.wxText({js})")
+    check(wt("{ level: '주의', ef: '2026-11-03T06:00:00+09:00' }") == "주의보(11.3 06:00)", wt("{ level: '주의', ef: '2026-11-03T06:00:00+09:00' }"))
+    check(wt("{ level: '경보', ef: '2026-12-25T23:10:00+09:00' }") == "경보(12.25 23:10)", "경보")
+    check(wt("{ level: '예비', ef: '2026-11-03T17:58:00+09:00' }") == "예비(11.3 12~18시)", wt("{ level: '예비', ef: '2026-11-03T17:58:00+09:00' }"))
+    check(wt("{ level: '예비', ef: '2026-11-03T16:20:00+09:00' }") == "예비(11.3 16:20)", "약속 시각이 아닌 예비")
+    check(wt("{ level: '주의', ef: null }") == "주의보" and wt("{ level: null }") == "특보 없음" and wt("{ none: true }") == "-", "발효 없음·특보 없음·값 없음")
+    tab(p, "move"); ev(p, "setDate(todayISO())"); p.wait_for_timeout(200)
+    M = ev(p, "SSReport.model(S.date)"); rows = [r for g in M["groups"] for r in g["rows"]]; check(rows, "보고서 지사 있음")
+    for r in rows:
+        want = ev(p, f"(() => {{ const f = fcOf('{r['id']}'); return f && !f.none && f.snow != null ? fmtCm(f.snow) + 'cm' : '-'; }})()")
+        check(r["wx"]["snow"] == want, f"{r['name']}: 강설량 = 이동 현황 카드와 같은 값 {r['wx']} / {want}")
+        check("대설" not in r["wx"]["warn"] and re.fullmatch(r"(주의보|경보|예비)(\(\d+\.\d+ .+\))?|특보 없음|-", r["wx"]["warn"]), f"{r['name']}: 특보 글자 {r['wx']}")
+    on = [r for r in rows if r["wx"]["lv"]]; check(on, f"샘플에 주의보·경보 지사: {[r['wx'] for r in rows]}")
+    p.click("#rptView"); p.wait_for_selector("#rpPage"); p.wait_for_timeout(150)
+    r = ev(p, """(() => { const t = document.querySelector('#rpPage .rp-t'), body = t.tBodies[0], on = t.querySelector('td.rp-on');
+      return { head: t.tHead.innerText, rows: body.rows.length, labels: [...t.querySelectorAll('td.rp-l')].map(c => c.textContent), red: on && getComputedStyle(on).color, over: [...t.querySelectorAll('td,th')].filter(c => c.scrollWidth > c.clientWidth + 1).map(c => c.textContent.trim().slice(0, 18)), first: [...t.rows[0].cells].map(c => c.textContent.trim()) }; })()""")
+    check("강설량(24시간)" in r["head"] and "특보" in r["head"], r["head"]); check(r["first"][:3] == ["피지원기관", "대 수", "강설량(24시간)·특보"], f"대수 다음 칸: {r['first']}")
+    check(r["rows"] == len(rows) * 2 and r["labels"] == ["강설량", "특보"] * len(rows), f"지사당 두 줄: {r['rows']} {r['labels']}")
+    check(r["red"] == "rgb(238, 0, 0)", f"주의보·경보 강조 {r['red']}"); check(not r["over"], f"글자가 칸을 넘지 않음: {r['over']}")
+    check(ev(p, "document.querySelector('#rpPage').scrollHeight") <= 1123, "한 장 안")
+    p.click("#sheetClose"); p.wait_for_timeout(100)
+    doc = ev(p, "SSReport.docXml(SSReport.model(S.date))"); md.parseString(doc); txt = "".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", doc))
+    check("강설량(24시간)·특보" in txt and txt.count("강설량") == len(rows) + 1 and on[0]["wx"]["warn"] in txt and on[0]["wx"]["snow"] in txt, "워드도 같은 내용: " + txt[:200])
+    check('<w:gridCol w:w="760"/>' in doc and doc.count("<w:vMerge/>") >= len(rows) * 6, "워드: 강설량·특보 두 줄, 나머지 칸은 합침")
+    check(all(r.count("<w:tc>") in (1, 4, 5, 6, 7, 8) for r in re.findall(r"<w:tr>.*?</w:tr>|<w:tr .*?</w:tr>", doc)), "워드: 줄마다 칸 수 정상")
+    # 다른 날짜: 날짜별 예보가 없으므로 '-'
+    ev(p, "setDate(addDays(todayISO(), 1))"); p.wait_for_timeout(250)
+    o = [r["wx"] for g in ev(p, "SSReport.model(S.date)")["groups"] for r in g["rows"]]
+    check(o and all(w["snow"] == "-" and w["warn"] == "-" and not w["lv"] for w in o), f"내일 보고서는 '-': {o}")
+    ev(p, "setDate(todayISO())"); p.wait_for_timeout(200)
 
 def t_back_button(p):
     """2026-11-02: 뒤로가기 = 이전 탭(페이지를 떠나지 않음). 창(장비 상세 등)이 열려 있으면 뒤로가기는 창만 닫음"""
@@ -1665,7 +1699,7 @@ def t_route_perm_admin_only(p):
     check("권한이 없습니다" in toast(p), "화면을 우회해 다른 기관 경로를 보내도 거절: " + toast(p))
     as_user(p, "admin1"); tab(p, "fleet"); check(p.locator("#eqTable select[data-rv]").count() > 0 and p.locator("#day1In").count() == 1, "관리자는 지원일 칸 전부")
 
-TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_reqs_read_fail, t_confirm_stale, t_fleet_sum, t_tables_sizes, t_fleet_sum_fixed, t_no_hscroll_real_bars, t_table_look, t_branch_names_sticky, t_move_compact, t_round_ten_days, t_alloc_fixed_only, t_branch_totals, t_removed_hints, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_reqs_read_fail, t_confirm_stale, t_fleet_sum, t_tables_sizes, t_fleet_sum_fixed, t_no_hscroll_real_bars, t_table_look, t_branch_names_sticky, t_move_compact, t_round_ten_days, t_alloc_fixed_only, t_branch_totals, t_removed_hints, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_report_snow_warning, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,

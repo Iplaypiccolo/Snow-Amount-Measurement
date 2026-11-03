@@ -5,6 +5,8 @@
    - 도착일시: 그 지사로 새로 오는 장비 중 가장 빠른 시각. 새로 오는 장비가 없고 전날부터 이어 지원 중이면 처음 온 때 + '(연속)'
    - 지원장비 칸: 기계화부 = 기관 이름(서울경기 1), 지역본부 장비 = 보낸 지사 이름(시흥 2 — 2026-11-02 사용자 요청), 강원 신속대응팀 = 강원팀
    - 아래 네모: 기계화부 N대(서울경기 10, …) / 지역본부 N대(서울경기 2대, …) / 강원 신속대응팀 N대 — 있는 것만
+   - 강설량·특보(2026-11-03 사용자 요청, 지사당 두 줄): 강설량 = 24시간 예보 cm, 특보 = 대설만 주의보·경보·예비(발효시각). 이동 현황 카드와 같은 값(확정한 지사는 확정 순간 값)
+     날짜별 예보는 없으므로 오늘 보고서에만 값을 넣고 다른 날짜는 '-'
    - 워드 파일은 외부 프로그램 없이 여기서 직접 만듦(.docx = 압축 파일 안의 XML). 한글(HWP)에서도 열 수 있음
    ============================================================ */
 (function () {
@@ -26,6 +28,21 @@
     return [...g.values()].sort((a, b) => a.key - b.key || a.label.localeCompare(b.label, "ko"));
   };
 
+  // 지사 한 곳의 강설량·특보 글자. lv = 강조할 단계(주의보·경보만)
+  const WX_NAME = { "예비": "예비", "주의": "주의보", "경보": "경보" };
+  function wxText(w) {
+    if (w.none) return "-";
+    if (!w.level) return "특보 없음";
+    const name = WX_NAME[w.level] || w.level, t = w.ef ? new Date(w.ef) : null; if (!t || isNaN(t)) return name;
+    const hm = `${p2(t.getHours())}:${p2(t.getMinutes())}`, slot = w.level === "예비" && EF_SLOT[hm] ? (EF_SLOT[hm].match(/\d+~\d+시/) || [hm])[0] : hm;      // 예비특보의 발효는 기상청 약속 시각 → 시간대
+    return `${name}(${t.getMonth() + 1}.${t.getDate()} ${slot})`;
+  }
+  function wxOf(id, d) {
+    if (d !== todayISO()) return { snow: "-", warn: "-", lv: null };
+    const f = fcOf(id), w = warnOf(id);
+    return { snow: f && !f.none && f.snow != null ? `${fmtCm(f.snow)}cm` : "-", warn: wxText(w), lv: !w.none && (w.level === "주의" || w.level === "경보") ? w.level : null };
+  }
+
   // 보고서 자료(날짜 하나)
   function model(d) {
     const moves = movesOn(d).filter(m => m.pos), byB = new Map();
@@ -42,7 +59,7 @@
           const s = list.filter(isC).map(m => contSince(m.v.id, d, b.id)).sort((x, y) => (x.date + (x.time || "")).localeCompare(y.date + (y.time || "")))[0];
           eta = `${mdDow(s.date)}${s.time ? " " + s.time : ""} (연속)`;
         }
-        return { id: b.id, name: b.name, n: list.length, truck: group(list.filter(m => m.v.type === "제설차")), blower: group(list.filter(m => m.v.type === "제설기")), eta };
+        return { id: b.id, name: b.name, n: list.length, wx: wxOf(b.id, d), truck: group(list.filter(m => m.v.type === "제설차")), blower: group(list.filter(m => m.v.type === "제설기")), eta };
       });
       if (rows.length) groups.push({ hq: h.name, rows });
     });
@@ -58,19 +75,20 @@
   }
 
   // 표 칸 폭(워드와 미리 보기가 같음, 글자 길이와 상관없이 고정 — 2026-11-02 사용자 요청). 합 = A4 폭 - 여백 = 9906 twips
-  const COLW = [1350, 1250, 850, 2300, 2300, 1856], COLW_SUM = COLW.reduce((a, b) => a + b, 0);
+  const COLW = [1050, 1050, 650, 760, 1950, 1400, 1400, 1646], COLW_SUM = COLW.reduce((a, b) => a + b, 0);
   /* ---------- 미리 보기(화면) ---------- */
   const cellLines = arr => arr.map(x => `<div class="rp-src"><span>${esc(x.label)}</span><span>${x.n}</span></div>`).join("");
   function html(M) {
     let body = "";
     M.groups.forEach(g => g.rows.forEach((r, i) => {
-      body += `<tr class="${i ? "in" : "first"}">${i ? "" : `<th class="rp-hq" rowspan="${g.rows.length}">${esc(g.hq)}</th>`}<th class="rp-br">${esc(r.name)}</th><td class="c">${r.n}</td><td>${cellLines(r.truck)}</td><td>${cellLines(r.blower)}</td><td class="c">${esc(r.eta)}</td></tr>`;
+      body += `<tr class="${i ? "in" : "first"}">${i ? "" : `<th class="rp-hq" rowspan="${g.rows.length * 2}">${esc(g.hq)}</th>`}<th class="rp-br" rowspan="2">${esc(r.name)}</th><td class="c" rowspan="2">${r.n}</td><td class="rp-l">강설량</td><td class="c">${esc(r.wx.snow)}</td><td rowspan="2">${cellLines(r.truck)}</td><td rowspan="2">${cellLines(r.blower)}</td><td class="c" rowspan="2">${esc(r.eta).replace(" (연속)", "<br>(연속)")}</td></tr>` +
+        `<tr class="rp-w2"><td class="rp-l">특보</td><td class="c${r.wx.lv ? " rp-on" : ""}">${esc(r.wx.warn)}</td></tr>`;
     }));
     return `<div class="rp-page" id="rpPage"><div class="rp-title">${TITLE}</div><div class="rp-date">${esc(fullDate(M.date))}</div>
       <div class="rp-sum"><b>□ 장비지원 : 총 ${M.total}대 (<span class="red">제설차 ${M.trucks}대, 제설기 ${M.blowers}대</span>)</b><span class="rp-cnt">※ ${M.branches}개 기관 지원</span></div>
-      <table class="rp-t"><colgroup>${COLW.map(w => `<col style="width:${(w / COLW_SUM * 100).toFixed(2)}%">`).join("")}</colgroup><thead><tr><th colspan="2" rowspan="2">피지원기관</th><th rowspan="2">대 수</th><th colspan="2">신속대응팀 지원장비</th><th rowspan="2">비 고<br>(도착일시)</th></tr><tr><th>제설차</th><th>제설기</th></tr>
-      <tr class="rp-tot"><th colspan="2">계</th><th>${M.total}</th><th>${M.trucks}</th><th>${M.blowers}</th><th></th></tr></thead>
-      <tbody>${body || `<tr><td colspan="6" class="c">${esc(fmtMD(M.date))}에 지원하는 장비가 없습니다.</td></tr>`}</tbody></table>
+      <table class="rp-t"><colgroup>${COLW.map(w => `<col style="width:${(w / COLW_SUM * 100).toFixed(2)}%">`).join("")}</colgroup><thead><tr><th colspan="2" rowspan="2">피지원기관</th><th rowspan="2">대 수</th><th colspan="2" rowspan="2">강설량(24시간)·특보</th><th colspan="2">신속대응팀 지원장비</th><th rowspan="2">비 고<br>(도착일시)</th></tr><tr><th>제설차</th><th>제설기</th></tr>
+      <tr class="rp-tot"><th colspan="2">계</th><th>${M.total}</th><th colspan="2"></th><th>${M.trucks}</th><th>${M.blowers}</th><th></th></tr></thead>
+      <tbody>${body || `<tr><td colspan="8" class="c">${esc(fmtMD(M.date))}에 지원하는 장비가 없습니다.</td></tr>`}</tbody></table>
       <div class="rp-nt">※ 기관별 지원 현황</div><div class="rp-box">${M.notes.length ? M.notes.map(n => `<div>○ ${esc(n)}</div>`).join("") : "<div>○ 없음</div>"}</div></div>`;
   }
   function openPreview() {
@@ -111,14 +129,14 @@
   }
   function docXml(M) {
     const W = COLW, TW = COLW_SUM;
-    const lines = M.groups.reduce((n, g) => n + g.rows.reduce((k, r) => k + Math.max(1, r.truck.length, r.blower.length), 0), 0);
+    const lines = M.groups.reduce((n, g) => n + g.rows.reduce((k, r) => k + Math.max(2, r.truck.length, r.blower.length), 0), 0);
     // 1쪽에 들어가게: 표에 쓸 수 있는 높이(약 175mm ≈ 496pt, 제목·요약·머리줄·아래 네모를 뺀 것)를 줄 수로 나눠 한 줄 높이를 정함(최대 18pt)
     // 글자는 줄 높이의 약 75%(5.5pt~10.5pt). 지사가 아주 많으면(줄 70개 이상) 글자가 너무 작아져 2쪽이 될 수 있음
     const hp = Math.min(18, 450 / Math.max(lines, 1)), sz = Math.max(11, Math.min(21, Math.round(hp * 0.75 * 2))), line = Math.round(hp * 20);
     const hc = (t, o = {}) => para(run(t, { sz: 19, b: 1 }), { jc: "center", before: 30, after: 30 });     // 머리줄·계: 글자 크기 고정(9.5pt)
     const c = (t, o = {}) => para(run(t, { sz, b: o.b, color: o.color }), { jc: o.jc || "center", line, exact: 1, ind: o.ind });
     // 지원장비 칸: 이름은 왼쪽, 대수는 오른쪽 고정 위치(탭) — 이름 길이에 따라 글자 사이가 벌어지지 않게(예전 'distribute' 대신)
-    const TAB = W[3] - 80 - 120, srcCell = arr => arr.length ? arr.map(s => para(run(s.label, { sz }) + `<w:r><w:rPr>${FONT}<w:sz w:val="${sz}"/></w:rPr><w:tab/></w:r>` + run(String(s.n), { sz }), { jc: "left", line, exact: 1, ind: 120, tab: TAB })).join("") : c("");
+    const TAB = W[5] - 80 - 120, srcCell = arr => arr.length ? arr.map(s => para(run(s.label, { sz }) + `<w:r><w:rPr>${FONT}<w:sz w:val="${sz}"/></w:rPr><w:tab/></w:r>` + run(String(s.n), { sz }), { jc: "left", line, exact: 1, ind: 120, tab: TAB })).join("") : c("");
     const thick = B("single", 12), thin = B("single", 4), dot = B("dotted", 4);
     const tblPr = (w, extra = "") => `<w:tblPr><w:tblW w:w="${w}" w:type="dxa"/><w:jc w:val="center"/>${extra}<w:tblLayout w:type="fixed"/><w:tblCellMar><w:left w:w="40" w:type="dxa"/><w:right w:w="40" w:type="dxa"/></w:tblCellMar></w:tblPr>`;
     const grid = `<w:tblGrid>${W.map(w => `<w:gridCol w:w="${w}"/>`).join("")}</w:tblGrid>`;
@@ -126,16 +144,21 @@
     const hb = { bd: { bottom: B("single", 8) } };
     let t = `<w:tbl>${tblPr(TW, tblB)}${grid}`;
     // 머리 두 줄 + 계
-    t += `<w:tr><w:trPr><w:tblHeader/></w:trPr>${cell(W[0] + W[1], hc("피지원기관", { b: 1 }), { span: 2, vm: "restart", fill: "F2F2F2" })}${cell(W[2], hc("대 수", { b: 1 }), { vm: "restart", fill: "F2F2F2" })}` +
-      `${cell(W[3] + W[4], hc("신속대응팀 지원장비", { b: 1 }), { span: 2, fill: "F2F2F2" })}${cell(W[5], hc("비 고", { b: 1 }) + c("(도착일시)", { b: 1 }), { vm: "restart", fill: "F2F2F2" })}</w:tr>`;
-    t += `<w:tr><w:trPr><w:tblHeader/></w:trPr>${cell(W[0] + W[1], "", { span: 2, vm: "c", fill: "F2F2F2", ...hb })}${cell(W[2], "", { vm: "c", fill: "F2F2F2", ...hb })}${cell(W[3], hc("제설차", { b: 1 }), { fill: "F2F2F2", ...hb })}${cell(W[4], hc("제설기", { b: 1 }), { fill: "F2F2F2", ...hb })}${cell(W[5], "", { vm: "c", fill: "F2F2F2", ...hb })}</w:tr>`;
+    t += `<w:tr><w:trPr><w:tblHeader/></w:trPr>${cell(W[0] + W[1], hc("피지원기관", { b: 1 }), { span: 2, vm: "restart", fill: "F2F2F2" })}${cell(W[2], hc("대 수", { b: 1 }), { vm: "restart", fill: "F2F2F2" })}${cell(W[3] + W[4], hc("강설량(24시간)·특보", { b: 1 }), { span: 2, vm: "restart", fill: "F2F2F2" })}` +
+      `${cell(W[5] + W[6], hc("신속대응팀 지원장비", { b: 1 }), { span: 2, fill: "F2F2F2" })}${cell(W[7], hc("비 고", { b: 1 }) + c("(도착일시)", { b: 1 }), { vm: "restart", fill: "F2F2F2" })}</w:tr>`;
+    t += `<w:tr><w:trPr><w:tblHeader/></w:trPr>${cell(W[0] + W[1], "", { span: 2, vm: "c", fill: "F2F2F2", ...hb })}${cell(W[2], "", { vm: "c", fill: "F2F2F2", ...hb })}${cell(W[3] + W[4], "", { span: 2, vm: "c", fill: "F2F2F2", ...hb })}${cell(W[5], hc("제설차", { b: 1 }), { fill: "F2F2F2", ...hb })}${cell(W[6], hc("제설기", { b: 1 }), { fill: "F2F2F2", ...hb })}${cell(W[7], "", { vm: "c", fill: "F2F2F2", ...hb })}</w:tr>`;
     const tot = { fill: "FFFF00", bd: { bottom: B("single", 8) } };
-    t += `<w:tr>${cell(W[0] + W[1], hc("계", { b: 1 }), { span: 2, ...tot })}${cell(W[2], hc(M.total, { b: 1 }), tot)}${cell(W[3], hc(M.trucks, { b: 1 }), tot)}${cell(W[4], hc(M.blowers, { b: 1 }), tot)}${cell(W[5], hc(""), tot)}</w:tr>`;
-    if (!M.groups.length) t += `<w:tr>${cell(TW, c(`${fmtMD(M.date)}에 지원하는 장비가 없습니다.`), { span: 6 })}</w:tr>`;
+    t += `<w:tr>${cell(W[0] + W[1], hc("계", { b: 1 }), { span: 2, ...tot })}${cell(W[2], hc(M.total, { b: 1 }), tot)}${cell(W[3] + W[4], hc(""), { span: 2, ...tot })}${cell(W[5], hc(M.trucks, { b: 1 }), tot)}${cell(W[6], hc(M.blowers, { b: 1 }), tot)}${cell(W[7], hc(""), tot)}</w:tr>`;
+    if (!M.groups.length) t += `<w:tr>${cell(TW, c(`${fmtMD(M.date)}에 지원하는 장비가 없습니다.`), { span: 8 })}</w:tr>`;
     M.groups.forEach((g, gi) => g.rows.forEach((r, i) => {
       const top = { top: i ? dot : (gi ? B("single", 8) : thin) };               // 같은 본부 안은 점선, 본부가 바뀌면 굵은 선
-      t += `<w:tr><w:trPr><w:cantSplit/></w:trPr>${i ? cell(W[0], "", { vm: "c", bd: { top: "w:val=\"nil\"" } }) : cell(W[0], c(g.hq, { jc: "distribute", ind: 120 }), { vm: "restart", bd: top })}` +
-        `${cell(W[1], c(r.name, { jc: "distribute", ind: 140 }), { bd: top })}${cell(W[2], c(r.n), { bd: top })}${cell(W[3], srcCell(r.truck), { bd: top })}${cell(W[4], srcCell(r.blower), { bd: top })}${cell(W[5], c(r.eta), { bd: top })}</w:tr>`;
+      // 지사마다 두 줄(강설량 / 특보). 나머지 칸은 두 줄을 합침. 값 글자는 칸에 한 줄로 들어가도록 9.5pt 까지
+      const vs = Math.min(sz, 19), vc = (t, o = {}) => para(run(t, { sz: vs, b: o.b, color: o.color }), { jc: "center", line, exact: 1 }), etas = r.eta.split(" (연속)");
+      const etaCell = etas.length > 1 ? c(etas[0]) + c("(연속)") : c(r.eta), lb = { fill: "F2F2F2" };
+      t += `<w:tr><w:trPr><w:cantSplit/></w:trPr>${i ? cell(W[0], "", { vm: "c", bd: { top: "w:val=\"nil\"" } }) : cell(W[0], c(g.hq, { jc: "distribute", ind: 40 }), { vm: "restart", bd: top })}` +
+        `${cell(W[1], c(r.name, { jc: "distribute", ind: 40 }), { vm: "restart", bd: top })}${cell(W[2], c(r.n), { vm: "restart", bd: top })}${cell(W[3], vc("강설량", { b: 1 }), { ...lb, bd: top })}${cell(W[4], vc(r.wx.snow), { bd: top })}` +
+        `${cell(W[5], srcCell(r.truck), { vm: "restart", bd: top })}${cell(W[6], srcCell(r.blower), { vm: "restart", bd: top })}${cell(W[7], etaCell, { vm: "restart", bd: top })}</w:tr>` +
+        `<w:tr><w:trPr><w:cantSplit/></w:trPr>${cell(W[0], "", { vm: "c" })}${cell(W[1], "", { vm: "c" })}${cell(W[2], "", { vm: "c" })}${cell(W[3], vc("특보", { b: 1 }), lb)}${cell(W[4], vc(r.wx.warn, r.wx.lv ? { b: 1, color: "FF0000" } : {}))}${cell(W[5], "", { vm: "c" })}${cell(W[6], "", { vm: "c" })}${cell(W[7], "", { vm: "c" })}</w:tr>`;
     }));
     t += `</w:tbl>`;
     // 제목(회색 상자) · 날짜 · 요약 · 표 · 아래 네모(점선)
@@ -181,7 +204,7 @@
     toast(`${fmtMD(M.date)} 보고서(워드)를 내려받았습니다`);
   }
 
-  window.SSReport = { model, html, docXml, files: FILES, zip, open: openPreview, download, srcLabel, fitPage };
+  window.SSReport = { model, html, docXml, files: FILES, zip, open: openPreview, download, srcLabel, fitPage, wxText };
   document.addEventListener("click", e => {
     const t = e.target.closest && e.target.closest("#rptView, #rptDoc"); if (!t) return;
     if (t.id === "rptView") openPreview(); else download();

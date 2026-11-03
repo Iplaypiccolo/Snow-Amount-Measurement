@@ -763,8 +763,11 @@ table.eq.team { min-width: 720px; }
 .rp-t tbody { font-size: var(--rp-fs); } .rp-t tbody th, .rp-t tbody td { padding-top: calc(var(--rp-fs) * .2); padding-bottom: calc(var(--rp-fs) * .2); }   /* 지사가 많으면 글자·줄을 줄여 한 장에 */
 .rp-t thead th { background: #f2f2f2; font-weight: 700; } .rp-t .rp-tot th { background: #ff0; font-weight: 700; border-bottom: 2px solid #000; }
 .rp-t tbody tr.in > * { border-top: 1px dotted #000; } .rp-t tbody tr.first > * { border-top: 2px solid #000; }
-.rp-t .rp-hq, .rp-t .rp-br { letter-spacing: .3em; white-space: nowrap; }
+.rp-t .rp-hq, .rp-t .rp-br { letter-spacing: .1em; white-space: nowrap; }
 .rp-t td.c { text-align: center; white-space: nowrap; }
+.rp-t tbody td.rp-l { padding-left: 2px; padding-right: 2px; background: #f2f2f2; font-weight: 700; white-space: nowrap; }   /* 강설량·특보 항목 이름 */
+.rp-t tbody td.rp-on { color: #e00; font-weight: 700; }   /* 주의보·경보 */
+.rp-t tbody tr.rp-w2 > * { border-top: 1px solid #000; }
 .rp-src { display: flex; justify-content: space-between; gap: 8px; padding: 0 6px; }
 .rp-src span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .rp-t td, .rp-t th { overflow: hidden; }
 .rp-nt { margin: 12px 0 6px; font-size: 14px; }

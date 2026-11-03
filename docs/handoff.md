@@ -44,6 +44,10 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 보고서에 강설량·특보 추가
+- 서버 변경 없음. `equipment/js/report.js`: `wxText`·`wxOf`, 표 칸 8개(`COLW`), 미리 보기·워드 지사당 두 줄. `equipment/css/style.css`: `.rp-l`·`.rp-on`. 시험 `t_report_snow_warning`.
+— ✍ Claude Code 작성
+
 ### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 이동 현황 표 디자인 통일, 지사별 요청·편성 이름 칸 고정
 - 서버 변경 없음. `equipment/css/style.css` 맨 끝 묶음 두 개(`#matrix`, `#branchTable` 첫 칸 sticky). 시험 `t_branch_names_sticky`, `t_table_look` 에 이동 현황 추가.
 — ✍ Claude Code 작성
