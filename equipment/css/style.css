@@ -860,7 +860,8 @@ table.fixcols th, table.fixcols td { overflow-wrap: anywhere; }
 .fs-table .l { position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left; font-weight: 700; min-width: 76px; box-shadow: 1px 0 0 var(--line); }
 .fs-table thead .l { background: var(--bg); }
 .fs-table .ed { border-left-width: 2px; border-left-color: color-mix(in srgb, var(--ink-soft) 45%, var(--line)); }
-.fs-table .tot { background: var(--bg); font-weight: 700; }
+.fs-table .tot, .fs-table thead th.tot, .fs-table .fs-sum td.tot { background: #fff3b0; color: #3a2f00; font-weight: 700; }
+.fs-table td.tot.z { opacity: 1; color: #6b5a10; }
 .fs-table td.z { color: var(--ink-soft); opacity: .55; }
 .fs-table .fs-sum th, .fs-table .fs-sum td { font-weight: 700; background: var(--bg); }
 .fs-table .fs-asgn th, .fs-table .fs-asgn td { font-weight: 700; border-top-width: 2px; border-top-color: color-mix(in srgb, var(--ink-soft) 45%, var(--line)); }
@@ -874,4 +875,60 @@ table.fixcols th, table.fixcols td { overflow-wrap: anywhere; }
 /* 지사별 요청·편성: 맨 위 전체 줄 */
 #branchTable thead tr.tot th { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; border-bottom: 2px solid var(--line); }
 #branchTable thead tr.tot th small { font-size: 11px; font-weight: 500; color: var(--ink-soft); }
+
+/* 표를 작게(2026-11-03 사용자 요청: 지사별 요청·편성처럼 글자·줄을 줄여 한눈에). 기관별 장비·강원본부 지원장비·기관별 배정·장비 현황 */
+#eqTable, #teamTable, #allocTable { font-size: 12.5px; line-height: 1.2; }
+#eqTable th, #eqTable td, #teamTable th, #teamTable td { padding: 2px 4px; }
+#allocTable th, #allocTable td { padding: 2px 3px; }
+#eqTable thead th, #teamTable thead th, #allocTable thead th { font-size: 12px; }
+#eqTable .plate, #teamTable .plate { font-size: 12.5px; }
+#eqTable input.ci:not([type=checkbox]), #eqTable select.ci, #teamTable input.ci:not([type=checkbox]), #teamTable select.ci, #allocTable input.ci { height: 24px; min-height: 24px; padding: 0 3px; font-size: 12.5px; }
+#eqTable input[type=checkbox], #teamTable input[type=checkbox] { width: 14px; height: 14px; margin: 0; vertical-align: middle; }
+#eqTable .pnum { gap: 2px; }
+#eqTable .pnum .pfx { font-size: 12.5px; }
+#eqTable .pnum input.ci { width: 40px; flex: none; text-align: center; font-variant-numeric: tabular-nums; }
+#eqTable .pnum .rent { display: inline-flex; align-items: center; gap: 2px; font-size: 11.5px; white-space: nowrap; }
+#eqTable .pnum .sfx { font-size: 12px; }
+#eqTable .blw { gap: 4px; } #eqTable .bl { font-size: 12px; gap: 2px; }
+#eqTable .status, #teamTable .status, #allocTable .status { padding-top: 0; padding-bottom: 0; font-size: 11.5px; }
+#eqTable .tag, #teamTable .tag, #allocTable .tag { padding-top: 0; padding-bottom: 0; font-size: 11px; }
+#eqTable .btn.sm, #teamTable .btn.sm { min-height: 22px; padding: 0 5px; font-size: 12px; }
+#eqTable td.vact .btn + .btn { margin-left: 2px; }
+#eqTable th.dayh .sub, #teamTable th.dayh .sub { display: inline; margin-left: 4px; font-size: 11.5px; }
+#eqTable th.dayh .sub:has(input), #teamTable th.dayh .sub:has(input) { margin-left: 2px; }
+#eqTable th.dayh input.ci, #teamTable th.dayh input.ci { display: inline-block; width: 88px; max-width: 88px; height: 22px; min-height: 22px; padding: 0 1px; font-size: 11px; }
+#eqTable th.dayh, #teamTable th.dayh { white-space: nowrap; overflow: hidden; }
+.eq.fixcols .slot { gap: 2px; }
+.eq.fixcols .slot select.ci { min-width: 66px; padding-right: 0; }
+.eq.fixcols .slot input.ci.tm { width: 44px; height: 24px; min-height: 24px; padding: 0 1px; }
+.eq.fixcols .slot .slot-x { gap: 2px; }
+.eq.fixcols .slot .btn.sm, .eq.fixcols .slot .slot-x .btn.sm { min-height: 22px; padding: 0 4px; font-size: 12px; }
+.eq.fixcols select[data-vs].ci { padding-left: 2px; padding-right: 0; }
+#allocTable input.ci.num { width: 44px; -moz-appearance: textfield; appearance: textfield; text-align: center; }
+#allocTable input.num::-webkit-outer-spin-button, #allocTable input.num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+#allocTable .tag { white-space: normal; }
+#panel-fleet .table-wrap, #panel-gwteam .table-wrap, #panel-alloc .table-wrap { width: fit-content; max-width: 100%; }   /* 상자도 표만큼만 */
+/* 위쪽 버튼 줄·현황 표도 함께 */
+#panel-fleet .toolbar, #panel-gwteam .toolbar { margin-bottom: 6px; gap: 4px 8px; }
+#fleetFilters .chip, #fleetFilters .btn, #teamFilters .chip, #teamFilters .btn { min-height: 26px; padding: 2px 11px; font-size: 12.5px; }
+#fleetFilters .ci, #teamFilters .ci { min-height: 26px; height: 26px; padding-top: 0; padding-bottom: 0; font-size: 12.5px; }
+#fleetFilters .tb-row { gap: 4px 8px; }
+#fleetFilters .tb-label, #fleetFilters .ctl, #fleetFilters .mode { font-size: 12.5px; }
+.fleet-sum { margin-bottom: 8px; gap: 4px; }
+.fs-table { font-size: 12.5px; line-height: 1.2; }
+.fs-table th, .fs-table td { padding: 2px 6px; min-width: 44px; }
+.fs-table thead th { font-size: 12px; }
+.fs-table .status { padding-top: 0; padding-bottom: 0; font-size: 11.5px; }
+.fs-table .fs-asg td { font-size: 12px; line-height: 1.35; }
+.fs-tog { padding: 0 5px; font-size: 12px; }
+.fs-table .l { min-width: 66px; }
+@media (max-width: 860px) {                                     /* 휴대폰: 위쪽 줄을 한 줄씩(옆으로 밀어서 봄), 여백을 줄여 세로로 짧게 */
+  main:has(#panel-fleet:not([hidden])), main:has(#panel-alloc:not([hidden])), main:has(#panel-gwteam:not([hidden])) { padding: 6px 8px 40px; }
+  #fleetFilters .tb-row, #teamFilters .tb-row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; white-space: nowrap; }
+  #fleetFilters .tb-row > *, #teamFilters .tb-row > * { flex-shrink: 0; }
+  #fleetFilters .tb-right { margin-left: 0; }
+  .fs-table th, .fs-table td { padding: 2px 4px; min-width: 38px; }
+  .fs-table .l { min-width: 58px; }
+  .savebar { padding: 6px 10px; margin-top: 6px; }
+}
 

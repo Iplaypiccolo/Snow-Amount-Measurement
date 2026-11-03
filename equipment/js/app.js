@@ -688,7 +688,7 @@ function renderFleet() {
       brOpts.map(b => `<option value="B:${esc(b.id)}"${S.nvSel === "B:" + b.id ? " selected" : ""}>${esc(b.name)}${all ? "" : " (지역본부 장비)"}</option>`).join("") + `</select>` +
       (pb ? `<label class="rent"><input type="checkbox" id="nvRent"${S.nvRent ? " checked" : ""}> 임차</label>`
           : `<select class="ci" id="nvType" aria-label="새 장비 종류">${TYPES.map(t => `<option>${t}</option>`).join("")}</select>`) +
-      `<span class="pnum"><span class="pfx" id="nvPfx">${esc(pb ? bn(pb) + (S.nvRent ? " 임차" : "") : S.nvSel)}</span><input class="ci" id="nvPlate" inputmode="numeric" maxlength="5" placeholder="${pb ? (S.nvRent ? "1" : "252") : "901"}" aria-label="${pb ? "새 장비 번호(숫자만)" : "새 장비 도공번호(숫자만)"}"><span class="sfx">호</span></span><button type="button" class="btn" id="vehAdd">${pb ? "등록" : "추가"}</button>`
+      `<span class="pnum"><span class="pfx" id="nvPfx">${esc(pb ? bn(pb) + (S.nvRent ? " 임차" : "") : S.nvSel)}</span><input class="ci" id="nvPlate" inputmode="numeric" maxlength="4" placeholder="${pb ? (S.nvRent ? "1" : "252") : "901"}" aria-label="${pb ? "새 장비 번호(숫자만)" : "새 장비 도공번호(숫자만)"}"><span class="sfx">호</span></span><button type="button" class="btn" id="vehAdd">${pb ? "등록" : "추가"}</button>`
     : myB ? `<span class="tb-label">장비 추가</span><span class="hint" id="poolWait">지사별 요청·편성에서 '타지사 지원 가능' 대수를 넣고 관리자가 확정하면 ${esc(bn(myB))} 지사의 장비를 등록할 수 있습니다.</span>` : "";
   $("fleetFilters").innerHTML =
     `<div class="tb-row"><span class="tb-label">기관</span><span class="fgroup">${["전체", ...SOURCE_ORGS()].map(orgChip).join("")}</span>` +
@@ -702,8 +702,12 @@ function renderFleet() {
     (i === 0 && rt ? `<input class="ci" type="date" id="day1In" value="${esc(d)}"${r ? ` min="${esc(r.start_date)}"` : ""} aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동, 기준일자보다 앞은 안 됨)">` : esc(fmtMD(d))) + `</span></th>`).join("");
   const rows = fleetRows().map(v => fleetRowHtml(v, dates, choices, all)).join("");
   $("eqTable").innerHTML = `<thead><tr><th>도공번호</th><th>장비</th><th>블로워</th><th>지원 여부</th>${head}${actCol() ? `<th class="unh">${canAllVeh() ? unhideHead() : ""}</th>` : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${5 + dates.length}" class="empty">${S.fleetGo ? "지원 여부가 '지원'인 장비가 없습니다." : "장비가 없습니다."}${addRow && !S.fleetGo ? " 위의 [장비 추가]로 넣으세요." : ""}</td></tr>`}</tbody>`;
-  fixCols($("eqTable"), [146, 84, 92, 140, ...dates.map(() => null), ...(actCol() ? [112] : [])]);
+  fixCols($("eqTable"), [plateColW(), 60, 68, 76, ...dates.map(() => null), ...(actCol() ? [canAllVeh() ? 92 : 50] : [])], true);
   placeUnhide();
+}
+// 도공번호 칸 폭: 보통 장비 = 기관 이름 + 숫자 4자리. 지역본부 장비는 지사 이름 + 임차 + 숫자라 더 길어서, 보이는 장비 중 가장 긴 이름에 맞춤(제설차 칸과 겹치지 않게, 2026-11-03)
+function plateColW() {
+  return fleetRows().reduce((w, v) => Math.max(w, !isPool(v) ? 118 : canVeh(v) ? bn(v.home_branch).length * 13 + 112 : vname(v).length * 12.5 + 14), 118);
 }
 const myPoolN = () => canPoolAdd() ? poolVehs(S.me.branch_id).length : 0;            // 지사 계정: 이 기준일자에 등록한 자기 지사 장비 수
 const actCol = () => canAllVeh() || myPoolN() > 0;       // 맨 끝 칸(숨기기·삭제): 관리자, 그리고 자기 지사 지역본부 장비가 있는 지사 계정
@@ -718,7 +722,7 @@ function blowerCell(v, ed) {
 function poolRowHtml(v, dates, choices) {
   const ed = canVeh(v), bid = v.home_branch, id = esc(v.id), nm = esc(vname(v));
   const nameCell = ed ? `<span class="pnum pool"><span class="pfx">${esc(bn(bid))}</span><label class="rent"><input type="checkbox" data-vr="${id}" data-fk="vr:${id}"${vval(v, "rented") ? " checked" : ""} aria-label="${nm} 임차"> 임차</label>` +
-      `<input class="ci" inputmode="numeric" maxlength="5" data-vp="${id}" data-fk="vp:${id}" value="${esc(poolNum(v))}" placeholder="${vval(v, "rented") ? "1" : "252"}" aria-label="${nm} 번호 숫자"><span class="sfx">호</span></span>`
+      `<input class="ci" inputmode="numeric" maxlength="4" data-vp="${id}" data-fk="vp:${id}" value="${esc(poolNum(v))}" placeholder="${vval(v, "rented") ? "1" : "252"}" aria-label="${nm} 번호 숫자"><span class="sfx">호</span></span>`
     : `<span class="plate">${nm}</span>`;
   return `<tr class="pool${S.vdraft.has(v.id) ? " changed" : ""}" data-vrow="${id}" data-home="${esc(bid)}"><td>${nameCell}</td><td>${esc(v.type)}</td><td>${blowerCell(v, false)}</td>` +
     `<td><span class="status go">지원</span>${offerOk(bid) ? "" : ` <span class="tag warn pool-wait" title="이 지사의 타지사 지원 가능 대수가 확정되지 않았습니다(확정이 취소됨)">확정 전</span>`}</td>` +
@@ -732,7 +736,7 @@ function fleetRowHtml(v, dates, choices, all) {
     const statusCell = ed && r ? `<select class="ci" data-vs="${esc(v.id)}" data-fk="vs:${esc(v.id)}" aria-label="${esc(vname(v))} 지원 여부"${S.sdraft.has(v.id) ? ' data-changed="1"' : ""}>${Object.keys(STATUS).map(s => `<option value="${s}" ${st === s ? "selected" : ""}>${STATUS[s][1]}</option>`).join("")}</select>`
       : r ? `<span class="status ${cls}">${label}</span>` : '<span class="muted">-</span>';
     const old = !plateNum(v) && vval(v, "plate");      // 예전 차량번호 형식이 남은 장비: 숫자를 새로 넣어야 함
-    const plateCell = ed ? `<span class="pnum"${hvA(tv, "plate")}><span class="pfx">${esc(v.org)}</span><input class="ci" inputmode="numeric" maxlength="5" data-vp="${esc(v.id)}" data-fk="vp:${esc(v.id)}" value="${esc(plateNum(v))}" placeholder="901" aria-label="도공번호 숫자"><span class="sfx">호</span></span>${old ? `<div class="muted sm">예전 번호 ${esc(old)}</div>` : ""}`
+    const plateCell = ed ? `<span class="pnum"${hvA(tv, "plate")}><span class="pfx">${esc(v.org)}</span><input class="ci" inputmode="numeric" maxlength="4" data-vp="${esc(v.id)}" data-fk="vp:${esc(v.id)}" value="${esc(plateNum(v))}" placeholder="901" aria-label="도공번호 숫자"><span class="sfx">호</span></span>${old ? `<div class="muted sm">예전 번호 ${esc(old)}</div>` : ""}`
       : H(tv, "plate", `<span class="plate">${esc(vname(v))}</span>`);
     const changed = S.vdraft.has(v.id) || S.sdraft.has(v.id) ? " changed" : "";
     return `<tr class="${changed}" data-vrow="${esc(v.id)}"><td>${plateCell}</td><td>${esc(v.type)}</td><td>${blowerCell(v, ed)}</td><td>${statusCell}</td>${dates.map(d => `<td data-cell="${esc(rk(d, v.id))}">${slotCell(v, d, canRoute(), choices)}</td>`).join("")}` +
@@ -749,12 +753,12 @@ function unhideHead() {
   return `<button type="button" class="btn sm" id="unhideBtn" aria-expanded="${S.unhideOpen}">숨김 취소(${l.length})</button>` +
     (S.unhideOpen ? `<div class="unhide-pop" role="dialog" aria-label="숨긴 장비">${l.map(v => `<div class="uh-row"><span class="plate">${esc(vname(v))}</span><span class="muted">${esc(v.type)}</span><button type="button" class="btn sm" data-unhide="${esc(v.id)}">숨김 취소</button></div>`).join("")}</div>` : "");
 }
-// 장비 현황 표(2026-11-03 사용자 요청, 기관 카드 대신): 열 = 기관(서울경기…지역본부·전체) 아래 장비(제설차·제설기, 이동정비차 뺌), 행 = 지원·지원 불가·정비중·미정·계, 그 아래 배정 대수와 배정지(접고 폄)
+// 장비 현황 표(2026-11-03 사용자 요청, 기관 카드 대신): 열 = 전체·기관(서울경기…지역본부) 아래 장비(제설차·제설기, 이동정비차 뺌), 행 = 지원·지원 불가·정비중·미정·계, 그 아래 배정 대수와 배정지(접고 폄)
 // 지원 가능 대수(status O)는 지사별 요청·편성의 맨 위 줄에도 씀
 const fleetCount = (t, st, orgs) => { const r = curRound(); return !r ? 0 : S.vehicles.filter(v => shownIn(v, r) && (!t || v.type === t) && MOVE_TYPES.includes(v.type) && (!orgs || !orgs.size || orgs.has(v.org)) && (st === null || stOf(r.id, v.id).status === st)).length; };
 function renderOrgGrid() {
   const rowsDef = [["O", "지원", "go"], ["X", "지원 불가", "stop"], ["M", "정비중", "fix"], ["", "미정", "wait"]], AO = [...S.orgs, POOL];
-  const OC = [...S.orgs.map(o => [o, MOVE_TYPES]), [POOL, ["제설차"]], [null, MOVE_TYPES]];        // 지역본부는 제설차만, 맨 끝 = 전체
+  const OC = [[null, MOVE_TYPES], ...S.orgs.map(o => [o, MOVE_TYPES]), [POOL, ["제설차"]]];        // 맨 앞 = 전체(강조), 지역본부는 제설차만
   const cols = OC.flatMap(([o, ts]) => ts.map(t => ({ o, t, k: `${o || "전체"}:${t}`, f: t === "제설차" ? "truck" : "blower" })));
   const last = c => c.o === null ? " tot" : "", edge = c => OC.find(x => x[0] === c.o)[1][0] === c.t ? " ed" : "";
   const num = (c, st) => { const n = fleetCount(c.t, st, c.o ? new Set([c.o]) : null); return `<td class="${(n ? "" : "z") + last(c) + edge(c)}" data-fs="${esc(c.k)}:${st === null ? "sum" : st || "none"}">${n}</td>`; };
@@ -908,7 +912,7 @@ function renderTeam() {
   const head = dates.map((d, i) => `<th class="dayh">지원일 ${i + 1}<span class="sub">` +
     (i === 0 && ed ? `<input class="ci" type="date" id="day1InTeam" value="${esc(d)}"${r ? ` min="${esc(r.start_date)}"` : ""} aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동, 기준일자보다 앞은 안 됨)">` : esc(fmtMD(d))) + `</span></th>`).join("");
   $("teamTable").innerHTML = `<thead><tr><th>장비</th><th>지원 여부</th>${head}</tr></thead><tbody>${S.team.map(v => teamRowHtml(v, dates)).join("") || `<tr><td colspan="${2 + dates.length}" class="empty">장비가 없습니다.</td></tr>`}</tbody>`;
-  fixCols($("teamTable"), [130, 140, ...dates.map(() => null)]);
+  fixCols($("teamTable"), [150, 76, ...dates.map(() => null)], true);
 }
 function teamRowHtml(v, dates) {
   const ed = canTeam(), r = curRound(), st = r ? stOf(r.id, v.id).status : "", [cls, label] = STATUS[st] || STATUS[""], id = esc(v.id);
@@ -1034,13 +1038,17 @@ function afterReq(id) {          // 지사 요청 칸을 고친 뒤: 그 줄 표
   patchTotals(); afterAnyChange();
 }
 // 제목 줄이 두 줄인 표: 스크롤해도 두 줄이 겹치지 않게, 둘째 줄은 첫 줄 높이만큼 아래에 붙임(높이는 화면 폭에 따라 달라서 매번 잼)
-// 표 칸 폭 고정(2026-11-03 사용자 요청 — 글자 수에 따라 들쭉날쭉하지 않게). cols = 칸마다 폭(px), null = 지원일 칸(남는 폭을 똑같이 나눠 갖고 DAY_MIN 아래로는 안 줄어듦)
-// 화면이 합계보다 넓으면 같은 비율로 넓어지고, 좁으면 옆으로 밀어서 봄. 계정·자료와 상관없이 같은 폭
-const DAY_MIN = 176;
-function fixCols(table, cols) {
+// 표 칸 폭 고정(2026-11-03 사용자 요청 — 글자 수에 따라 들쭉날쭉하지 않게). cols = 칸마다 폭(px), null = 지원일 칸
+// fit = true: 표 폭 = 칸 폭 합계(남는 자리를 채우지 않음). 지원일 칸은 늘 같은 폭이라 칸 수만큼 표가 줄고 늘어남 — 6칸이 1366px 화면에 스크롤 없이 들어가는 폭(휴대폰은 예전 폭)
+// fit 이 아니면 화면이 합계보다 넓을 때 같은 비율로 넓어지고, 좁으면 옆으로 밀어서 봄
+const DAY_W = () => innerWidth <= 860 ? 176 : 150;
+let lastDayW = DAY_W();
+addEventListener("resize", () => { const w = DAY_W(); if (w !== lastDayW && S.me) { renderFleet(); renderTeam(); } lastDayW = w; });      // 창 폭이 휴대폰 기준을 넘나들 때만 다시 그림
+function fixCols(table, cols, fit) {
+  const sum = cols.reduce((n, w) => n + (w == null ? DAY_W() : w), 0);
   table.classList.add("fixcols");
-  table.style.minWidth = cols.reduce((n, w) => n + (w == null ? DAY_MIN : w), 0) + "px";
-  table.insertAdjacentHTML("afterbegin", `<colgroup>${cols.map(w => w == null ? "<col>" : `<col style="width:${w}px">`).join("")}</colgroup>`);
+  table.style.minWidth = sum + "px"; table.style.width = fit ? sum + "px" : "";
+  table.insertAdjacentHTML("afterbegin", `<colgroup>${cols.map(w => `<col style="width:${w == null ? DAY_W() : w}px">`).join("")}</colgroup>`);
 }
 function stickHead(table) {
   if (!table || !table.tHead || !table.offsetParent) return;
@@ -1268,7 +1276,7 @@ function renderAlloc() {
     `<tr class="al-av"><th class="l">배정 / 지원 가능</th>${S.orgs.map(o => avc(o, "truck", "제설차") + avc(o, "blower", "제설기")).join("")}${avc(POOL, "truck", "제설차")}<td></td><td></td></tr>` +
     `<tr class="al-done"><th class="l" title="기계화부 장비는 기계화부가, 지역본부 장비는 관리자가 지원일 1의 지사를 정한 대수">장비 지정</th>${S.orgs.map(o => done(o, true)).join("")}${done(POOL, false)}<td></td><td></td></tr></tfoot>`;
   $("allocTable").innerHTML = head + `<tbody>${body}</tbody>` + foot;
-  fixCols($("allocTable"), [150, ...S.orgs.flatMap(() => [88, 88]), 104, 76, 76]);
+  fixCols($("allocTable"), [96, ...S.orgs.flatMap(() => [54, 54]), 62, 62, 62], true);
   stickHead($("allocTable"));
 }
 async function saveAlloc() {

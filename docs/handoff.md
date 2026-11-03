@@ -44,6 +44,10 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 장비 표 크기 줄임, 지원일 칸 고정 폭, 전체 칸 맨 앞
+- 서버 변경 없음. `equipment/js/app.js`: `fixCols(표, 폭, fit)`, `DAY_W`, `plateColW`, 번호 입력 4자리. `equipment/css/style.css`: 표 작게. 시험 `t_tables_compact`, `t_fixed_columns`·`t_fleet_sum` 고침.
+— ✍ Claude Code 작성
+
 ### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 로그인 뒤 첫 화면을 장비 지원으로
 - 서버 변경 없음. `index.html` `data-first="equip"`, `boot.js`: `bootFirst`, `SSShowPage`, `SSSnowPending`, 뒤로가기 끝 = 장비 지원. 시험 `t_first_page_equip`·`t_first_page_equip_first_forecast`, 나머지 시험은 `T.route` 가 강설량 측정에서 시작하게 함.
 — ✍ Claude Code 작성
