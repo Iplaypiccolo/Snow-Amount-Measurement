@@ -16,6 +16,9 @@
   --wait: #6B7785;
   --wait-bg: #EDF0F3;
   --mine: #1D5FD1;         /* 지사별 요청·편성: 내 계정이 입력하는 표 */
+  --th-bg: #24405C; --th-ink: #FFFFFF; --th-soft: #CBD9E6; --th-line: #4A6783; --th-mine: #1D5FD1;   /* 입력 표의 제목: 진한 남색(내 입력 표는 파랑) */
+  --grp-bg: #DCE6EE;       /* 입력 표의 묶음·합계 줄 */
+  --cell-line: #BECCD8; --frame: #8FA3B5;   /* 입력 표의 칸 선·바깥 테두리 */
   --radius: 10px;
   --font: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
   box-sizing: border-box;
@@ -29,6 +32,7 @@
   --bg: #0F151C; --surface: #18212B; --ink: #E7EDF2; --ink-soft: #97A5B2;
   --line: #2A3643; --go: #4CC398; --go-bg: #12342A; --stop: #F07272; --stop-bg: #3A1C1E;
   --wait: #97A5B2; --wait-bg: #232E3A; color-scheme: dark;
+  --th-bg: #2F4A63; --th-ink: #F2F6F9; --th-soft: #B8C8D6; --th-line: #4F6B86; --th-mine: #2E6FD8; --grp-bg: #24323F; --cell-line: #3A4957; --frame: #566878;
 }
 *, *::before, *::after { box-sizing: inherit; }
 html { scroll-padding-top: env(safe-area-inset-top, 0px); }
@@ -724,8 +728,8 @@ table.alloc { min-width: 760px; }
 :is(#eqTable, #teamTable) th.dayh { border-left: 1px solid var(--line); }
 :is(#eqTable, #teamTable) td[data-cell] { box-shadow: inset 1px 0 0 var(--line); }
 /* ⑤ 제목 줄: 묶음 이름은 진하게, 단위·둘째 줄은 작게. 지사 이름은 굵게 */
-#branchTable thead tr:first-child th, #allocTable thead tr:first-child th, :is(#eqTable, #teamTable) thead th { font-size: 13.5px; font-weight: 700; color: var(--ink); background: color-mix(in srgb, var(--ink-soft) 9%, var(--bg)); }
-#branchTable thead tr:nth-child(2) th, #allocTable thead tr:nth-child(2) th { font-size: 12px; font-weight: 500; color: var(--ink-soft); }
+#branchTable thead tr:first-child th, #allocTable thead tr:first-child th, :is(#eqTable, #teamTable) thead th { font-size: 13.5px; font-weight: 700; color: var(--th-ink); background: var(--th-bg); }
+#branchTable thead tr:nth-child(2) th, #allocTable thead tr:nth-child(2) th { font-size: 12px; font-weight: 500; color: var(--th-soft); background: var(--th-bg); }
 #branchTable tbody tr[data-b] td:first-child, #allocTable tbody td:first-child { font-weight: 600; }
 #branchTable tbody tr[data-b]:not(.active):not(.locked) td:first-child { color: var(--ink-soft); }   /* 굵기는 그대로(바꾸면 칸 폭이 흔들림) */
 /* 터치 화면(마우스 없음): ①로 숨긴 입력칸 테두리를 옅게 남기고(드롭다운은 원래 보임), 기관별 장비의 [＋]도 늘 보임 */
@@ -774,12 +778,13 @@ table.eq.team { min-width: 720px; }
 #branchTable thead tr:first-child th:first-child, #branchTable tbody td:first-child { border-left: 1px solid var(--line); }
 #branchTable thead tr > :last-child, #branchTable tbody tr > :last-child { border-right: 1px solid var(--line); }
 #branchTable thead tr:first-child th:not(.blk-gap) { box-shadow: inset 0 1px 0 var(--line), inset 0 -1px 0 var(--line); }
-/* 내가 입력하는 표: 제목 파랑 + 위 굵은 줄 + 테두리, 내용은 옅은 파랑. 다른 표는 그대로(관리자는 왼쪽 표도 고칠 수 있으므로 흐리게 하지 않음) */
-#branchTable.mine-right thead th.adm, #branchTable.mine-left thead th:not(.adm):not(.blk-gap) { background: color-mix(in srgb, var(--mine) 20%, var(--surface)); color: var(--ink); }
+/* 내가 입력하는 표: 제목 진한 파랑 + 테두리, 내용은 옅은 파랑. 다른 표는 그대로(관리자는 왼쪽 표도 고칠 수 있으므로 흐리게 하지 않음) */
+#branchTable.mine-right thead th.adm, #branchTable.mine-left thead th:not(.adm):not(.blk-gap) { background: var(--th-mine); color: #FFFFFF; }
 #branchTable.mine-right thead tr:first-child th.adm, #branchTable.mine-left thead tr:first-child th:not(.adm):not(.blk-gap) { box-shadow: inset 0 3px 0 var(--mine), inset 0 -1px 0 var(--line); }
-#branchTable.mine-right thead th.adm .thsub, #branchTable.mine-left thead th:not(.adm):not(.blk-gap) .thsub { color: var(--ink); }
+#branchTable.mine-right thead th.adm .thsub, #branchTable.mine-left thead th:not(.adm):not(.blk-gap) .thsub { color: #FFFFFF; }
+#branchTable.mine-right thead tr.tot th.adm, #branchTable.mine-left thead tr.tot th:not(.adm):not(.blk-gap) { background: color-mix(in srgb, var(--mine) 20%, var(--surface)); color: var(--ink); }
 #branchTable.mine-right tbody tr:not(.hq):not(.locked) td.adm, #branchTable.mine-left tbody tr:not(.hq):not(.locked) td:not(.adm):not(.blk-gap) { background: color-mix(in srgb, var(--mine) 6%, transparent); }
-#branchTable.mine-right tbody tr.hq td.adm, #branchTable.mine-left tbody tr.hq td:not(.adm):not(.blk-gap) { background: color-mix(in srgb, var(--mine) 13%, var(--bg)); }
+#branchTable.mine-right tbody tr.hq td.adm, #branchTable.mine-left tbody tr.hq td:not(.adm):not(.blk-gap) { background: color-mix(in srgb, var(--mine) 16%, var(--grp-bg)); }
 #branchTable.mine-right .blk-gap { border-right: 2px solid var(--mine); }
 #branchTable.mine-right thead tr > :last-child, #branchTable.mine-right tbody tr > :last-child { border-right: 2px solid var(--mine); }
 #branchTable.mine-left .blk-gap { border-left: 2px solid var(--mine); }
@@ -866,7 +871,6 @@ table.fixcols th, table.fixcols td { overflow-wrap: anywhere; }
 .fs-table .fs-sum th, .fs-table .fs-sum td { font-weight: 700; background: var(--bg); }
 .fs-table .fs-asgn th, .fs-table .fs-asgn td { font-weight: 700; border-top-width: 2px; border-top-color: color-mix(in srgb, var(--ink-soft) 45%, var(--line)); }
 .fs-table .fs-asg td { vertical-align: top; line-height: 1.55; font-size: 13px; }
-.fs-table td.fs-closed { color: var(--ink-soft); font-size: 12.5px; text-align: left; }
 .fs-tog { font: inherit; font-weight: 700; color: var(--ink); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; cursor: pointer; white-space: nowrap; }
 .fs-tog:disabled { opacity: .55; cursor: default; }
 .fs-more { font-size: 13px; }
@@ -986,3 +990,34 @@ table.fixcols th, table.fixcols td { overflow-wrap: anywhere; }
   #eqTable th.unh .btn { white-space: normal; }
 }
 @media (min-width: 1200px) { .hq-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 14px; } }
+
+/* 입력 표 구분(2026-11-03 사용자 요청): 지사별 요청·편성 ~ 강원본부 지원장비. 바탕 = 옅은 회청색, 제목 = 진한 남색, 내용 = 흰색, 묶음·합계 줄 = 중간 색. 칸 선도 진하게. 글자는 모두 가운데 */
+:is(#branchTable, #eqTable, #teamTable, #allocTable, .fs-table) { --line: var(--cell-line); }
+:is(#branchTable, #eqTable, #teamTable, #allocTable, .fs-table) thead { --line: var(--th-line); }
+:is(#branchTable, #eqTable, #teamTable, #allocTable, .fs-table) thead tr.tot { --line: var(--cell-line); }
+:is(#branchTable, #eqTable, #teamTable, #allocTable, .fs-table) :is(th, td) { text-align: center; }
+:is(#panel-fleet, #panel-alloc, #panel-gwteam) .table-wrap, .fs-wrap { border-color: var(--frame); }
+.branch thead th, .fs-table thead th:not(.tot), .fs-table thead th.l { background: var(--th-bg); color: var(--th-ink); }
+#branchTable .blk-gap { --line: var(--cell-line); }
+#branchTable thead tr.tot th { background: var(--grp-bg); color: var(--ink); }
+#branchTable thead tr.tot th small { color: var(--ink-soft); }
+#branchTable thead .fcbase { color: var(--th-soft); border-bottom-color: var(--th-soft); }
+:is(#branchTable, #eqTable, #teamTable, #allocTable) thead :is(input, select) { color: var(--ink); background-color: var(--surface); }   /* 입력칸·버튼은 제목의 흰 글자를 물려받지 않음 */
+:where(#branchTable, #eqTable, #teamTable, #allocTable) thead .btn:where(:not(.cf):not(.primary)) { color: var(--ink); background: var(--surface); }
+#branchTable thead .thsub, :is(#eqTable, #teamTable) thead th .sub { color: var(--th-soft); }
+.branch tr.hq td, #branchTable tr.hq td.adm { background: var(--grp-bg); }
+.branch tr.hq td:first-child::before { color: var(--ink); }
+.alloc tfoot th, .alloc tfoot td { background: var(--grp-bg); }
+.fs-table tbody .l, .fs-table .fs-sum th, .fs-table .fs-sum td:not(.tot) { background: var(--grp-bg); }
+.fs-tog { display: inline-flex; align-items: center; gap: .25em; border-color: var(--frame); background: var(--surface); }
+.fs-tog:hover { background: color-mix(in srgb, var(--plow) 18%, var(--surface)); }
+:is(#eqTable, #teamTable) .slot-x, .vid2, :is(#eqTable, #teamTable) .slot.offday { justify-content: center; }
+@media (min-width: 861px) {
+  /* 지사별 요청·편성 제목: 위아래를 넓히고 글자를 조금 키움(내용 줄은 그대로 촘촘하게) */
+  #branchTable thead th { padding-top: 6px; padding-bottom: 6px; line-height: 1.25; }
+  #branchTable thead tr:first-child th, #branchTable th.wxh, #branchTable th.svh { font-size: 13.5px; }
+  #branchTable thead tr:nth-child(2) th, #branchTable th.ofh { font-size: 12.5px; }
+  #branchTable .thsub { font-size: 11px; }
+  #branchTable .fcbase { font-size: 11px; }
+  #branchTable thead tr.tot th { padding-top: 4px; padding-bottom: 4px; font-size: 13.5px; }
+}

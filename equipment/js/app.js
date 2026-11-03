@@ -761,7 +761,7 @@ function unhideHead() {
   return `<button type="button" class="btn sm" id="unhideBtn" aria-expanded="${S.unhideOpen}">숨김 취소(${l.length})</button>` +
     (S.unhideOpen ? `<div class="unhide-pop" role="dialog" aria-label="숨긴 장비">${l.map(v => `<div class="uh-row"><span class="plate">${esc(vname(v))}</span><span class="muted">${esc(v.type)}</span><button type="button" class="btn sm" data-unhide="${esc(v.id)}">숨김 취소</button></div>`).join("")}</div>` : "");
 }
-// 장비 현황 표(2026-11-03 사용자 요청, 기관 카드 대신): 열 = 전체·기관(서울경기…지역본부) 아래 장비(제설차·제설기, 이동정비차 뺌), 행 = 지원·지원 불가·정비중·미정·계, 그 아래 배정 대수와 배정지(접고 폄)
+// 장비 현황 표(2026-11-03 사용자 요청, 기관 카드 대신): 열 = 전체·기관(서울경기…지역본부) 아래 장비(제설차·제설기, 이동정비차 뺌), 행 = 지원·지원 불가·정비중·미정·계, 그 아래 배정 대수. 배정 칸의 화살표를 누르면 배정지 줄이 나타남
 // 지원 가능 대수(status O)는 지사별 요청·편성의 맨 위 줄에도 씀
 const fleetCount = (t, st, orgs) => { const r = curRound(); return !r ? 0 : S.vehicles.filter(v => shownIn(v, r) && (!t || v.type === t) && MOVE_TYPES.includes(v.type) && (!orgs || !orgs.size || orgs.has(v.org)) && (st === null || stOf(r.id, v.id).status === st)).length; };
 function renderOrgGrid() {
@@ -772,7 +772,7 @@ function renderOrgGrid() {
   const num = (c, st) => { const n = fleetCount(c.t, st, c.o ? new Set([c.o]) : null); return `<td class="${(n ? "" : "z") + last(c) + edge(c)}" data-fs="${esc(c.k)}:${st === null ? "sum" : st || "none"}">${n}</td>`; };
   const assign = c => S.order.filter(b => isFixed(b.id)).map(b => [b, (c.o ? [c.o] : AO).reduce((n, o) => n + (aval(o, b.id)[c.f] || 0), 0)]).filter(x => x[1] > 0);
   const lists = cols.map(assign), maxLines = Math.max(0, ...lists.map(l => l.length));
-  const open = S.fleetAssignOpen ?? maxLines <= 6;                 // 처음엔 짧으면 펴고 길면 접음. 누르면 그대로 기억(이 화면 안에서)
+  const open = !!S.fleetAssignOpen && maxLines > 0;                // 처음엔 접힘. 누르면 그대로 기억(이 화면 안에서)
   const pv = poolVehs(), cap = offerBranches().reduce((n, b) => n + offerOf(b.id), 0), brs = S.order.filter(b => offerOk(b.id) || pv.some(v => v.home_branch === b.id));
   const more = AO.map(orgAllocHtml).join("") + (cap || pv.length ? `<div class="al-org pool-brs" data-orgcard="${POOL}"><div class="al-head"><b>${POOL}</b> · 지원 가능(확정) <b data-pcap>${cap}대</b> · 등록 <b data-preg>${pv.length}대</b> · 임차 ${pv.filter(v => vval(v, "rented")).length}대</div>` +
     brs.map(b => { const n = pv.filter(v => v.home_branch === b.id).length, ok = offerOk(b.id), c = ok ? offerOf(b.id) : 0; return `<span class="al-chip${!ok ? " over" : n >= c ? " full" : ""}" data-pbr="${esc(b.id)}">${esc(b.name)} ${n}/${ok ? c : "확정 전"}</span>`; }).join("") + `</div>` : "");
@@ -780,10 +780,8 @@ function renderOrgGrid() {
     `<tr>${cols.map(c => `<th class="${(edge(c) + last(c)).trim()}">${c.t}</th>`).join("")}</tr></thead><tbody>` +
     rowsDef.map(([st, lab, cls]) => `<tr data-fsrow="${esc(lab)}"><th class="l"><span class="status ${cls}">${lab}</span></th>${cols.map(c => num(c, st)).join("")}</tr>`).join("") +
     `<tr class="fs-sum" data-fsrow="계"><th class="l">계</th>${cols.map(c => num(c, null)).join("")}</tr>` +
-    `<tr class="fs-asgn" data-fsrow="배정"><th class="l">배정</th>${cols.map((c, i) => { const n = lists[i].reduce((a, x) => a + x[1], 0); return `<td class="${(n ? "" : "z") + last(c) + edge(c)}" data-fsa="${esc(c.k)}">${n}</td>`; }).join("")}</tr>` +
-    `<tr class="fs-asg"><th class="l"><button type="button" class="fs-tog" data-fsopen aria-expanded="${open}" ${maxLines ? "" : "disabled"}>배정지 <span aria-hidden="true">${open ? "▴" : "▾"}</span></button></th>` +
-      (open ? cols.map((c, i) => `<td class="${last(c).trim()}${edge(c)}" data-fsl="${esc(c.k)}">${lists[i].length ? lists[i].map(([b, n]) => `<div data-fsb="${esc(b.id)}">${esc(b.name)} ${n}</div>`).join("") : '<span class="muted">-</span>'}</td>`).join("")
-        : `<td colspan="${cols.length}" class="fs-closed">${maxLines ? "접혀 있습니다. [배정지]를 누르면 지사별 대수가 보입니다." : "아직 배정이 없습니다."}</td>`) + `</tr></tbody></table></div>` +
+    `<tr class="fs-asgn" data-fsrow="배정"><th class="l">${maxLines ? `<button type="button" class="fs-tog" data-fsopen aria-expanded="${open}" aria-label="배정지 ${open ? "접기" : "펴기"}">배정 <span aria-hidden="true">${open ? "▴" : "▾"}</span></button>` : "배정"}</th>${cols.map((c, i) => { const n = lists[i].reduce((a, x) => a + x[1], 0); return `<td class="${(n ? "" : "z") + last(c) + edge(c)}" data-fsa="${esc(c.k)}">${n}</td>`; }).join("")}</tr>` +
+    (open ? `<tr class="fs-asg"><th class="l">배정지</th>${cols.map((c, i) => `<td class="${last(c).trim()}${edge(c)}" data-fsl="${esc(c.k)}">${lists[i].length ? lists[i].map(([b, n]) => `<div data-fsb="${esc(b.id)}">${esc(b.name)} ${n}</div>`).join("") : '<span class="muted">-</span>'}</td>`).join("")}</tr>` : "") + `</tbody></table></div>` +
     (more ? `<details class="fs-more" id="fleetMore"${S.fleetMore ? " open" : ""}><summary>기관별 지정 현황</summary>${more}</details>` : "");
   const d = $("fleetMore"); if (d) d.ontoggle = () => { S.fleetMore = d.open; };
 }

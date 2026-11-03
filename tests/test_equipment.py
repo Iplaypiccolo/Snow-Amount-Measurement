@@ -515,7 +515,7 @@ def t_warning_auto_badge(p):
     wb = p.locator("#wBaseHead"); check(wb.inner_text().endswith("기준") and ev(p, "getComputedStyle(document.getElementById('wBaseHead')).borderBottomStyle") == "dashed", "대설특보 발표 아래 ○ 기준(점선): " + wb.inner_text())
     wb.hover(); p.wait_for_timeout(100); check("10분마다 업데이트" in p.locator("#tip").inner_text(), "기준에 마우스를 올리면 업데이트 주기: " + p.locator("#tip").inner_text())
     p.hover("#fcBaseHead"); p.wait_for_timeout(100); check("매시 정각 업데이트" in p.locator("#tip").inner_text(), p.locator("#tip").inner_text())
-    col = ev(p, "getComputedStyle(document.getElementById('fcBaseHead')).color"); check(col == "rgb(29, 79, 160)", f"기준 글자는 잘 보이는 파랑(노랑 아님): {col}")
+    col = ev(p, "getComputedStyle(document.getElementById('fcBaseHead')).color"); check(col == ev(p, "getComputedStyle(document.querySelector('#branchTable thead th.fch')).getPropertyValue('--th-soft')") or col == "rgb(203, 217, 230)", f"기준 글자는 진한 제목 바탕에서 잘 보이는 밝은 색: {col}")
     tab(p, "move"); card = p.locator(".dest", has_text="대관령")
     check(card.locator(".tag.wb").inner_text() == "대설주의보", "이동 현황 카드도 고정값")
     tab(p, "branch"); p.click(f"[data-confirm='{bid(p, '춘천')}']"); p.wait_for_timeout(300)
@@ -1089,7 +1089,7 @@ def t_branch_compact(p):
     tab(p, "branch")
     m = lambda: ev(p, """(() => { const t = document.querySelector('#branchTable'), w = t.parentElement, r = w.getBoundingClientRect();
       return { row: t.querySelector('tbody tr[data-b]').getBoundingClientRect().height, head: t.tHead.getBoundingClientRect().height, bottom: r.bottom, h: innerHeight, wrap: r.height, table: t.getBoundingClientRect().height }; })()""")
-    a = m(); check(a["row"] <= 32 and a["head"] <= 72, f"줄·제목 높이: {a}")
+    a = m(); check(a["row"] <= 32 and 80 <= a["head"] <= 120, f"줄·제목 높이(제목은 컴퓨터에서 조금 넓게, 2026-11-03): {a}")
     check(a["table"] <= a["wrap"] or a["h"] - 16 <= a["bottom"] <= a["h"], f"표 창이 화면 아래 끝까지: {a}")
     check(ev(p, "document.scrollingElement.scrollHeight <= innerHeight + 1"), "표 창 밖의 바깥 스크롤 없음(넓은 화면)")
     p.set_viewport_size({"width": 1440, "height": 700}); p.wait_for_timeout(250); b = m()
@@ -1179,7 +1179,7 @@ def t_confirm_stale(p):
     p.click("#confirmAll"); p.wait_for_timeout(300); check(p.locator("#confirmAll").count() == 0, "다시 누르면 전부 확정")
 
 def t_fleet_sum(p):
-    """2026-11-03: 기관별 장비의 요약 표 — 열 = 기관 > 장비(이동정비차 없음, 지역본부는 제설차만, 맨 끝 전체), 행 = 상태·계·배정, 맨 아래 배정지(접고 폄)"""
+    """2026-11-03: 기관별 장비의 요약 표 — 열 = 기관 > 장비(이동정비차 없음, 지역본부는 제설차만, 맨 끝 전체), 행 = 상태·계·배정, 배정 칸의 화살표로 배정지 줄을 펴고 접음"""
     tab(p, "fleet")
     check(p.locator("#orgGrid .org").count() == 0 and p.locator("#fleetSum").count() == 1, "카드 대신 표")
     h1 = [x.strip() for x in p.locator("#fleetSum thead tr").nth(0).locator("th").all_inner_texts()]
@@ -1189,7 +1189,7 @@ def t_fleet_sum(p):
     bg = lambda sel: ev(p, "getComputedStyle(document.querySelector(`" + sel + "`)).backgroundColor")
     check(bg("#fleetSum thead th.tot") == "rgb(255, 243, 176)" and bg("#fleetSum tr[data-fsrow='지원'] td.tot") == "rgb(255, 243, 176)" and bg("#fleetSum tr[data-fsrow='지원'] td:not(.tot)") != "rgb(255, 243, 176)", "전체 칸 강조")
     check("이동정비차" not in p.locator("#orgGrid").inner_text(), "이동정비차 없음")
-    rows = [p.locator(f"#fleetSum tr[data-fsrow='{r}'] th").inner_text().strip() for r in ("지원", "지원 불가", "정비중", "미정", "계", "배정")]
+    rows = [p.locator(f"#fleetSum tr[data-fsrow='{r}'] th").inner_text().replace("▾", "").replace("▴", "").strip() for r in ("지원", "지원 불가", "정비중", "미정", "계", "배정")]
     check(rows == ["지원", "지원 불가", "정비중", "미정", "계", "배정"], f"행 = 상태: {rows}")
     cnt = lambda o, t, st: ev(p, f"(() => {{ const r = curRound(); return S.vehicles.filter(v => shownIn(v, r) && v.type === '{t}' && ({'true' if o is None else repr(o) + ' === v.org'}) && stOf(r.id, v.id).status === '{st}').length; }})()")
     c = lambda k: int(p.locator(f"#fleetSum [data-fs='{k}']").inner_text())
@@ -1206,21 +1206,22 @@ def t_fleet_sum(p):
     ev(p, "(S.sdraft.clear(), refresh())"); p.wait_for_timeout(100)
     # 배정지: 칸마다 지사 이름 + 대수 한 줄씩, 확정된 지사만
     bs = ev(p, "S.order.filter(b => isFixed(b.id)).slice(0, 2).map(b => [b.id, b.name])"); check(len(bs) == 2, f"확정 지사 2곳: {bs}")
-    ev(p, f"(S.alloc.clear(), S.fleetAssignOpen = null, S.alloc.set(ak('서울경기', '{bs[0][0]}'), {{ truck: 2, blower: 0 }}), S.alloc.set(ak('충북', '{bs[0][0]}'), {{ truck: 1, blower: 1 }}), S.alloc.set(ak('서울경기', '{bs[1][0]}'), {{ truck: 1, blower: 0 }}), refresh())"); p.wait_for_timeout(150)
+    ev(p, f"(S.alloc.clear(), S.fleetAssignOpen = true, S.alloc.set(ak('서울경기', '{bs[0][0]}'), {{ truck: 2, blower: 0 }}), S.alloc.set(ak('충북', '{bs[0][0]}'), {{ truck: 1, blower: 1 }}), S.alloc.set(ak('서울경기', '{bs[1][0]}'), {{ truck: 1, blower: 0 }}), refresh())"); p.wait_for_timeout(150)
     lst = lambda k: p.locator(f"#fleetSum [data-fsl='{k}'] > div").all_inner_texts()
     check(lst("서울경기:제설차") == [f"{bs[0][1]} 2", f"{bs[1][1]} 1"], f"서울경기 제설차: {lst('서울경기:제설차')}")
     check(lst("충북:제설기") == [f"{bs[0][1]} 1"] and lst("전체:제설차") == [f"{bs[0][1]} 3", f"{bs[1][1]} 1"], "칸마다 줄바꿈, 전체는 합")
     check(p.locator("#fleetSum [data-fsa='서울경기:제설차']").inner_text() == "3" and p.locator("#fleetSum [data-fsa='전체:제설차']").inner_text() == "4", "배정 대수 줄")
     # 접고 펴기: 배정 대수 줄은 그대로
-    tog = p.locator("#fleetSum [data-fsopen]"); check(tog.get_attribute("aria-expanded") == "true", "짧으면 펴짐")
+    tog = p.locator("#fleetSum tr[data-fsrow='배정'] th [data-fsopen]"); check(tog.get_attribute("aria-expanded") == "true" and "배정" in tog.inner_text() and "배정지" not in tog.inner_text(), "화살표는 배정 칸에")
+    check(p.locator("#fleetSum tr.fs-asg th").inner_text() == "배정지", "펴면 배정지 줄이 나타남")
     tog.click(); p.wait_for_timeout(100)
     check(p.locator("#fleetSum [data-fsl]").count() == 0 and p.locator("#fleetSum [data-fsopen]").get_attribute("aria-expanded") == "false" and p.locator("#fleetSum [data-fsa='서울경기:제설차']").inner_text() == "3", "접으면 지사 줄만 사라짐")
-    ev(p, "refresh()"); p.wait_for_timeout(100); check(p.locator("#fleetSum [data-fsl]").count() == 0, "다시 그려도 접힌 그대로")
+    ev(p, "refresh()"); p.wait_for_timeout(100); check(p.locator("#fleetSum [data-fsl]").count() == 0 and p.locator("#fleetSum tr.fs-asg").count() == 0, "다시 그려도 접힌 그대로, 배정지 줄 자체가 없음")
     p.locator("#fleetSum [data-fsopen]").click(); p.wait_for_timeout(100); check(p.locator("#fleetSum [data-fsl]").count() > 0, "다시 펴짐")
-    # 길면 처음엔 접힘
+    # 처음엔 접힘
     ids = ev(p, "S.order.slice(0, 8).map(b => b.id)")
     ev(p, f"(S.fleetAssignOpen = null, S.rdraft.clear(), {ids}.forEach(id => {{ S.reqs[id] = {{ ...REQ_DEF, ...(S.reqs[id] || {{}}), confirmed: true, assigned_truck: 1 }}; S.alloc.set(ak('서울경기', id), {{ truck: 1, blower: 0 }}); }}), refresh())"); p.wait_for_timeout(150)
-    check(p.locator("#fleetSum [data-fsopen]").get_attribute("aria-expanded") == "false" and p.locator("#fleetSum [data-fsl]").count() == 0, "배정지가 많으면 처음엔 접힘")
+    check(p.locator("#fleetSum [data-fsopen]").get_attribute("aria-expanded") == "false" and p.locator("#fleetSum [data-fsl]").count() == 0, "처음엔 접힘")
     # 좁은 화면: 표만 옆으로 밀림, 맨 왼쪽 칸 고정
     p.set_viewport_size({"width": 375, "height": 800}); p.wait_for_timeout(200)
     check(ev(p, "document.scrollingElement.scrollWidth") <= 376 and ev(p, "(() => { const w = document.querySelector('.fs-wrap'); return w.scrollWidth > w.clientWidth; })()"), "휴대폰: 화면은 그대로, 표만 옆으로")
@@ -1330,6 +1331,39 @@ def t_no_hscroll_real_bars(p):
             q.close()
     finally:
         b2.close()
+
+def t_table_look(p):
+    """2026-11-03: 지사별 요청·편성 ~ 강원본부 지원장비. 제목·내용·바탕 색이 뚜렷이 다름, 제목은 흰 글자, 모두 가운데 정렬. 다크 모드도 같음"""
+    lum = lambda c: (lambda v: .2126 * v[0] + .7152 * v[1] + .0722 * v[2])([float(x) for x in c[c.index("(") + 1:-1].replace(",", " ").split()[:3]])
+    style = lambda sel, f: ev(p, f"(() => {{ const e = document.querySelector({sel!r}); return e ? getComputedStyle(e).{f} : null; }})()")
+    page = lambda: ev(p, "getComputedStyle(document.body).backgroundColor")
+    def look(tag):
+        for tb, head, cell in (("branch", "#branchTable thead th.fch", "#branchTable tbody tr[data-b] td:nth-child(2)"), ("fleet", "#eqTable thead th", "#eqTable tbody td[data-cell]"), ("fleet", "#fleetSum thead th:not(.tot)", "#fleetSum tbody td:not(.tot)"), ("alloc", "#allocTable thead th", "#allocTable tbody td:nth-child(2)"), ("gwteam", "#teamTable thead th", "#teamTable tbody td[data-cell]")):
+            tab(p, tb); p.wait_for_timeout(120)
+            hb, hc = style(head, "backgroundColor"), style(head, "color")
+            check(abs(lum(hb) - lum(page())) >= 30 and abs(lum(hb) - lum(hc)) >= 120, f"{tag} {head}: 제목이 바탕·글자와 뚜렷이 다름 {hb} {hc} {page()}")
+            check(style(head, "textAlign") == "center", f"{tag} {head}: 제목 가운데")
+            check(style(cell, "textAlign") == "center", f"{tag} {cell}: 내용 가운데")
+    # 제목 줄 안의 입력칸·버튼: 글자가 자기 바탕과 뚜렷이 다름(제목의 흰 글자를 물려받으면 안 보임)
+    def inner(tag):
+        for tb in ("branch", "fleet", "gwteam"):
+            tab(p, tb); p.wait_for_timeout(120)
+            r = ev(p, """[...document.querySelectorAll('#panel-branch thead :is(.btn, input, select), #panel-fleet thead :is(.btn, input, select), #panel-gwteam thead :is(.btn, input, select)')].filter(e => e.offsetParent).map(e => { const c = getComputedStyle(e); return [e.textContent.trim().slice(0, 8) || e.id, c.color, c.backgroundColor]; })""")
+            check(r, f"{tag} {tb}: 제목 줄의 입력칸·버튼을 찾음")
+            for name, fg, bgc in r:
+                check(abs(lum(fg) - lum(bgc)) >= 90, f"{tag} {tb} {name}: 글자가 보임 {fg} / {bgc}")
+    look("밝은"); inner("밝은")
+    tab(p, "branch"); check(style("#branchTable thead th.fch", "backgroundColor") != style("#branchTable tbody tr.hq td", "backgroundColor") != page(), "묶음 줄 색도 다름")
+    check(style("#branchTable tbody tr[data-b] td.l", "textAlign") == "center" and style("#branchTable tbody tr.hq td", "textAlign") == "center", "지사 이름·본부 줄도 가운데")
+    tab(p, "fleet"); check(style("#fleetSum tbody .l", "textAlign") == "center", "장비 현황 맨 왼쪽 열도 가운데")
+    off = ev(p, "(() => { const c = document.querySelector('#eqTable tbody td:first-child'), a = c.querySelector('.pnum, .plate').getBoundingClientRect(), r = c.getBoundingClientRect(); return Math.abs(a.left + a.width / 2 - (r.left + r.width / 2)); })()")
+    check(off <= 6, f"도공번호 칸도 가운데: {off}")
+    ev(p, "document.documentElement.dataset.theme = 'dark'"); p.wait_for_timeout(150); look("다크"); inner("다크")
+    ev(p, "document.documentElement.dataset.theme = 'light'"); p.wait_for_timeout(100)
+    # 휴대폰: 지사별 요청·편성 제목은 넓히지 않음
+    tab(p, "branch"); h = lambda: ev(p, "document.querySelector('#branchTable thead tr:first-child').getBoundingClientRect().height")
+    wide = h(); p.set_viewport_size({"width": 375, "height": 800}); p.wait_for_timeout(300); check(h() < wide + 30, f"휴대폰 제목 높이 {h()} / {wide}")
+    p.set_viewport_size({"width": 1440, "height": 1000}); p.wait_for_timeout(300)
 
 def t_move_compact(p):
     """2026-11-03 2안: 이동 현황 표는 숫자 칸 80px, 표와 카드가 같은 폭으로 가운데에, 넓은 화면은 카드 3열. 휴대폰은 그대로"""
@@ -1607,7 +1641,7 @@ def t_route_perm_admin_only(p):
     check("권한이 없습니다" in toast(p), "화면을 우회해 다른 기관 경로를 보내도 거절: " + toast(p))
     as_user(p, "admin1"); tab(p, "fleet"); check(p.locator("#eqTable select[data-rv]").count() > 0 and p.locator("#day1In").count() == 1, "관리자는 지원일 칸 전부")
 
-TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_reqs_read_fail, t_confirm_stale, t_fleet_sum, t_tables_sizes, t_fleet_sum_fixed, t_no_hscroll_real_bars, t_move_compact, t_round_ten_days, t_alloc_fixed_only, t_branch_totals, t_removed_hints, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_reqs_read_fail, t_confirm_stale, t_fleet_sum, t_tables_sizes, t_fleet_sum_fixed, t_no_hscroll_real_bars, t_table_look, t_move_compact, t_round_ten_days, t_alloc_fixed_only, t_branch_totals, t_removed_hints, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
