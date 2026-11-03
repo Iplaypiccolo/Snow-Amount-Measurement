@@ -51,7 +51,11 @@
       initApp(); if(window.JurisdictionUI){ JurisdictionUI.init(); }
       if(window.ForecastUI){ ForecastUI.init(); }
       var fc = /^#fc=(B\d{3})$/.exec(location.hash); if (fc) window.SSOpenForecast(fc[1]);      // 장비 지원에서 따로 열린 경우(#fc=지사번호)
-      else { var ft = document.querySelector('.tab-btn[data-tab=forecast]'); if (ft) ft.click(); }   // 첫 탭 = 기관별 24시간 예보
+      else {
+        var openSnow = function(){ var ft = document.querySelector('.tab-btn[data-tab=forecast]'); if (ft) ft.click(); };   // 강설량 측정의 첫 탭 = 기관별 24시간 예보
+        if (document.getElementById('shell').dataset.page === 'equip') window.SSSnowPending = openSnow;   // 장비 지원을 보는 중이면 강설량 측정을 처음 열 때(지도는 화면이 보일 때 그려야 함, 자료도 그때 받음)
+        else openSnow();
+      }
       var can = function(p){ return !!(window.SS_CAN && window.SS_CAN(p)); };
       if (can('log.view')) { var elb = document.getElementById('eqLogBtn'); if (elb) elb.hidden = false; }   // 왼쪽 메뉴 '로그 기록': 장비 화면과 같은 권한(log.view)
       // 지사가 올린 구간 변경 요청이 있으면 알림창·탭 표시 (요청을 승인할 수 있는 juris.edit 권한)
@@ -67,8 +71,8 @@
         var gv = document.getElementById('view-grid'); if (gv && gv.parentNode) gv.parentNode.removeChild(gv);          // 권한이 없으면 화면 자체를 없앰
         var gb = document.getElementById('tabGridBtn'); if (gb && gb.parentNode) gb.parentNode.removeChild(gb);
       }
-      // 사용법 안내(guide/guide.js): 위쪽 [사용법] 버튼 + 이 브라우저·아이디로 처음이면 강설량 측정 안내(장비 지원에서 따로 연 예보 창은 빼고)
-      if (window.SSGuide) { SSGuide.init(); if (!fc) SSGuide.auto('snow'); }
+      // 사용법 안내(guide/guide.js): 위쪽 [사용법] 버튼 + 이 브라우저·아이디로 처음이면 지금 페이지 안내(장비 지원에서 따로 연 예보 창은 빼고)
+      if (window.SSGuide) { SSGuide.init(); if (!fc) SSGuide.auto(document.getElementById('shell').dataset.page); }
     };
     document.body.appendChild(s);
   }).catch(function(err){
@@ -77,7 +81,12 @@
     document.body.innerHTML = ''; document.body.appendChild(box);
   });
   }
-  SSGate.start({ onReady: bootApp });
+  // 로그인 뒤 첫 화면 = 장비 지원(2026-11-03 사용자 요청, index.html 의 data-first). 장비 지원을 먼저 보여 주고 강설량 측정 자료는 뒤에서 읽음. #fc= 로 열린 예보 창은 예외
+  function bootFirst(profile){
+    if (document.getElementById('shell').dataset.first === 'equip' && !/^#fc=/.test(location.hash)) setTimeout(function(){ if (window.SSShowPage) SSShowPage('equip'); }, 0);
+    bootApp(profile);
+  }
+  SSGate.start({ onReady: bootFirst });
 })();
 
 /* 위쪽 메뉴(2026-10-10): 강설량 측정 / 장비 지원 전환 + 그 페이지의 메뉴 줄. 장비 지원은 안쪽 화면(iframe)이라 그 화면의 탭을 대신 눌러 줍니다.
@@ -112,7 +121,11 @@
     theme.hidden = name !== 'equip';
     if(name === 'equip' && !frame.getAttribute('src')){ frame.setAttribute('src', frame.dataset.src); }
     if(name === 'equip'){ paintEq(); applyEqTab(); paintTheme(); if (window.SSGuide) SSGuide.auto('equip'); }   // 장비 지원을 처음 열면 그 페이지 사용법(지원 과정 그림)
-    if(name === 'snow'){ setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, 50); } // 지도 크기 다시 맞춤
+    if(name === 'snow'){
+      if (window.SSSnowPending) { var open1 = window.SSSnowPending; window.SSSnowPending = null; open1(); }        // 장비 지원부터 열었으면 이때 첫 탭을 엶
+      if (window.SSGuide) SSGuide.auto('snow');
+      setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, 50);                                   // 지도 크기 다시 맞춤
+    }
   }
   /* 뒤로가기 = 이전 탭(2026-11-02 사용자 요청). 사람이 누른 탭 바꾸기(위쪽 강설량 측정/장비 지원, 강설량 측정 탭, 장비 지원 탭)마다
      브라우저 기록에 한 칸을 남기고, 뒤로가기(popstate)가 오면 그 칸의 화면·탭으로 되돌림. 코드가 대신 누른 클릭(isTrusted=false)은 남기지 않음 */
@@ -126,7 +139,7 @@
     try{ history.pushState(s, '', s.sp === 'equip' ? '#equip' : location.pathname + location.search); }catch(e){}
   }
   window.addEventListener('popstate', function(e){
-    var s = e.state && e.state.ss ? e.state : (e.state && e.state.ssSheet ? null : { sp: 'snow', st: 'forecast' });   // 처음 칸(기록 없음) = 첫 화면
+    var s = e.state && e.state.ss ? e.state : (e.state && e.state.ssSheet ? null : shell.dataset.first === 'equip' ? { sp: 'equip', et: 'move' } : { sp: 'snow', st: 'forecast' });   // 처음 칸(기록 없음) = 첫 화면
     if (!s) return;
     navLock = true;
     try{
@@ -189,6 +202,7 @@
     var t = document.querySelector('.tab-btn[data-tab=forecast]'); if(t){ t.click(); }
     pushNav();                                     // 장비 지원에서 넘어왔으면 뒤로가기로 장비 지원에 돌아감
   };
-  // 새로 열거나 다시 로그인하면 항상 첫 화면(강설량 측정)부터. 예전 주소의 #equip 은 지움
+  window.SSShowPage = show;
+  // 새로 열거나 다시 로그인하면 항상 첫 화면(장비 지원)부터. 예전 주소의 #equip 은 지움
   if(location.hash === '#equip'){ try{ history.replaceState(null, '', location.pathname + location.search); }catch(e){} }
 })();

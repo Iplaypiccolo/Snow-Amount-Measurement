@@ -425,7 +425,47 @@ def t_eq_round_no_edit(b):
     p.click(".page-btn[data-page=equip]"); p.wait_for_timeout(2000)
     w = p.locator("#eqRoundWide"); check(w.locator(".eq-round-sel").is_visible() and w.locator("[data-rd=more]").count() == 0 and w.locator("[data-rd=make]").count() == 0, "드롭다운만")
 
-TESTS += [t_mode_switch, t_mode_no_data, t_pin_move_resize, t_phone_fit, t_eq_round_bar, t_eq_round_no_edit]
+def t_first_page_equip(b):
+    """2026-11-03: 로그인 뒤 첫 화면 = 장비 지원. 강설량 측정은 처음 열 때 자료를 받고 지도가 제대로 그려짐. 뒤로가기 끝도 장비 지원"""
+    T.FIRST["snow"] = False
+    try:
+        p, m = open_page(b); p.wait_for_timeout(1500)
+        frame = next(f for f in p.frames if "equipment/index.html" in f.url)
+        check(p.locator("#shell").get_attribute("data-page") == "equip" and "active" in p.locator(".page-btn[data-page=equip]").get_attribute("class") and "active" not in p.locator(".page-btn[data-page=snow]").get_attribute("class"), "첫 화면 = 장비 지원")
+        check(p.locator("#page-equip").is_visible() and not p.locator("#page-snow").is_visible() and p.locator(".eq-btn[data-eqtab=move]").is_visible() and not p.locator(".tab-btn[data-tab=map]").is_visible(), "장비 지원 메뉴")
+        frame.wait_for_selector("#matrix tbody tr", timeout=20000); check(p.locator(".eq-btn[data-eqtab=move]").get_attribute("class").count("active") == 1, "첫 탭 = 이동 현황")
+        check(not m.fc_calls and J(p, f"{S}.map === null"), "강설량 측정 자료·지도는 아직 안 만듦")
+        p.click(".page-btn[data-page=snow]"); p.wait_for_timeout(1200)
+        check(p.locator("#view-forecast").is_visible() and "active" in p.locator(".tab-btn[data-tab=forecast]").get_attribute("class"), "강설량 측정 = 기관별 24시간 예보부터")
+        check(J(p, f"{S}.map.getSize().x") > 300 and J(p, f"{S}.lines.getLayers().length") > 900 and p.locator("#fc-tree [data-fchq]").count() == 9, "지도·목록이 제대로 그려짐")
+        p.click(".tab-btn[data-tab=map]"); p.wait_for_timeout(900)
+        size = J(p, "(() => { const m = document.querySelector('#view-map .leaflet-container') || document.querySelector('#map'); return m ? m.getBoundingClientRect().width : 0; })()")
+        check(p.locator("#view-map").is_visible() and size > 300, f"관측소 지도도 제대로: {size}")
+        p.click(".page-btn[data-page=equip]"); p.wait_for_timeout(300); p.click(".page-btn[data-page=snow]"); p.wait_for_timeout(300)
+        check("active" in p.locator(".tab-btn[data-tab=map]").get_attribute("class"), "다시 와도 보던 탭 그대로")
+        # 뒤로가기: 처음 칸 = 장비 지원
+        p.go_back(); p.wait_for_timeout(300); p.go_back(); p.wait_for_timeout(300); p.go_back(); p.wait_for_timeout(300); p.go_back(); p.wait_for_timeout(400)
+        check(p.locator("#shell").get_attribute("data-page") == "equip", "뒤로가기 끝 = 첫 화면(장비 지원)")
+        # 요청·편성에서 예보로 넘어가면 강설량 측정의 그 지사(첫 화면이 장비 지원이어도)
+        br = J(p, f"{S}.state ? {S}.state.order[0] : null")
+        p.evaluate(f"SSOpenForecast('{br}')"); p.wait_for_timeout(800)
+        check(p.locator("#shell").get_attribute("data-page") == "snow" and J(p, f"{S}.focus") == br, "예보로 넘어가기")
+    finally:
+        T.FIRST["snow"] = True
+
+def t_first_page_equip_first_forecast(b):
+    """장비 지원에서 강설량 측정을 한 번도 안 열고 바로 예보로 넘어가도 그 지사가 열림. #fc= 로 연 창은 강설량 측정 그대로"""
+    T.FIRST["snow"] = False
+    try:
+        p, m = open_page(b); p.wait_for_timeout(1500)
+        br = p.evaluate("(window.JURIS.doc.branches[0] || {}).id"); p.evaluate(f"SSOpenForecast('{br}')"); p.wait_for_timeout(1000)
+        check(p.locator("#shell").get_attribute("data-page") == "snow" and J(p, f"{S}.focus") == br and J(p, f"{S}.map.getSize().x") > 300, f"바로 예보로: {J(p, S + '.focus')}")
+        q, m2 = open_page(b, hash=f"#fc={br}"); q.wait_for_timeout(1500)
+        check(q.locator("#shell").get_attribute("data-page") == "snow" and not q.locator("#equipFrame").get_attribute("src"), "#fc= 창은 강설량 측정, 장비 지원은 안 불러옴")
+    finally:
+        T.FIRST["snow"] = True
+
+TESTS += [t_mode_switch, t_mode_no_data, t_pin_move_resize, t_phone_fit, t_eq_round_bar, t_eq_round_no_edit, t_first_page_equip, t_first_page_equip_first_forecast]
 
 if __name__ == "__main__":
     only = sys.argv[1:]

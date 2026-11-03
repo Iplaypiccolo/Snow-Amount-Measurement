@@ -44,6 +44,10 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 로그인 뒤 첫 화면을 장비 지원으로
+- 서버 변경 없음. `index.html` `data-first="equip"`, `boot.js`: `bootFirst`, `SSShowPage`, `SSSnowPending`, 뒤로가기 끝 = 장비 지원. 시험 `t_first_page_equip`·`t_first_page_equip_first_forecast`, 나머지 시험은 `T.route` 가 강설량 측정에서 시작하게 함.
+— ✍ Claude Code 작성
+
 ### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 장비 현황 표를 기관별 열로, 휴대폰 머리글 접기, 페이지 버튼 순서
 - 서버 변경 없음. `equipment/js/app.js renderOrgGrid`: 열 기관 > 장비, 행 상태, 배정지 접고 폄(`S.fleetAssignOpen`). `index.html`·`boot.js`: `#tnMore`, `#snReload` 를 기준일자 줄로, 페이지 버튼 순서. `guide/guide.js` 안내 고침. 시험 `t_fleet_sum`·`t_eq_round_bar`.
 — ✍ Claude Code 작성
