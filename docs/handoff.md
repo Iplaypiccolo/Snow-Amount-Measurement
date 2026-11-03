@@ -44,6 +44,16 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-04 · 커밋 (이 기록 커밋 하나) · 24시간 예보 = 앞 6시간 초단기 + 나머지 단기, 전환 버튼·'발표 기준' 문구 없앰 (Claude 채팅 작업)
+- 사용자: "요청·편성의 기상현황을 6시간 초단기 + 나머지 24시까지 단기로, 기관별 24시간 예보도 같게(기상청과 동일), 토글·발표 기준 문구 없앰". 적설은 사용자 선택으로 단기 그대로(초단기에 적설 항목 없음).
+- **서버: `supabase/migrations/20261104_60_forecast_blend.sql` 은 파일만 있고 아직 적용 안 됨.** 이 채팅에서 보낸 적용·되돌림 시험이 앱 확인 창이 저절로 닫혀(0.6초) 네 번 모두 실행되지 않음. → **Claude Code 가 할 일**: ① 60 + `supabase/tests/forecast_vsrt_test.sql` 을 한 번에 되돌림 시험(끝의 일부러 낸 오류에 '실패 0' 확인) ② 사용자 확인 뒤 60 적용 ③ `select detail from branch_forecast limit 3`(vsrt_at·vn), `select count(*) from forecast_cells where series ? 'vn'` 으로 확인, 다음 초단기 수집 뒤(10~20분) `collector_state` 의 forecast_vsrt note 가 비었는지.
+  - 60 내용: `private.fc_apply` 교체(최신 초단기 3시간 안의 RN1·T1H·POP 으로 그 시각 강수·기온·확률을 바꿔 합침, `series.vn`·`detail.vsrt_at·vn`, 최저기온 시각을 배열 집계로), 새 `private.fc_refresh`(지금 창 그대로 다시 계산, advisory lock), `forecast_vsrt_put` 이 다 받으면 fc_refresh(실패해도 받은 자료는 남기고 note 에 기록), 전환용 `forecast_vsrt_overview`·`forecast_vsrt_grid`·`private.fc_vsrt_cells` 삭제. 표·권한 규칙·예약은 그대로.
+  - 서버 적용 전에도 화면은 문제없음(값만 단기예보 그대로).
+- 화면: `forecast/ui.js` 전환 버튼·초단기 전용 읽기 없앰, 위쪽 안내 = 예보 구간만, 고정 창 표의 앞 시각 색칠은 `series.vn` 으로 유지. `equipment/js/app.js` 24시 예보 옆 '○시 발표 기준'(`#fcBaseHead`) 없앰. `guide/guide.js`·`index.html` 안내 문구. 가짜 서버 초단기 함수 지우고 추이에 `vn: 6`.
+- 시험: `t_blend_no_toggle`(새), `t_mode_switch`·`t_mode_no_data` 지움, `t_levels`·`t_phone_fit`·`test_guide`·`test_equipment` 고침, `forecast_test.sql` 은 시작할 때 초단기도 비움. 전체 368/368.
+- **확인 필요**: 날씨누리 동네예보가 앞 6시간의 적설을 어떻게 보여 주는지 비교(사용자가 나중에 Claude Code 에 맡긴다고 함). 초단기 수집이 보통 두 번(약 10분)에 걸쳐 끝남 — 섞이는 초단기는 10~20분 전 발표분.
+— ✍ Claude 채팅 작성
+
 ### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 보기·기관 토글 한 번에 하나만
 - 서버 변경 없음. `equipment/js/app.js`: `[data-bv]`·`[data-fo]`·`#onlyGo` 클릭, `orgChip`([모든 기관] 없앰). 시험 고침.
 — ✍ Claude Code 작성
