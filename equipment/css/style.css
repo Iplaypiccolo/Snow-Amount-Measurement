@@ -1021,3 +1021,32 @@ table.fixcols th, table.fixcols td { overflow-wrap: anywhere; }
   #branchTable .fcbase { font-size: 11px; }
   #branchTable thead tr.tot th { padding-top: 4px; padding-bottom: 4px; font-size: 13.5px; }
 }
+
+/* 이동 현황 표도 입력 표와 같은 디자인(2026-11-03 사용자 요청): 제목 진한 남색, 내용 흰색, 본부 칸·합계 줄 중간 색, 합계 열은 장비 현황 표의 전체 칸과 같은 노랑, 모두 가운데 */
+#matrix { --mline: var(--cell-line); --line: var(--cell-line); }
+#matrix thead { --mline: var(--th-line); --line: var(--th-line); }
+#matrix thead th, #matrix thead tr:nth-child(2) th { background: var(--th-bg); color: var(--th-ink); box-shadow: none; }
+#matrix thead tr:nth-child(2) th { color: var(--th-soft); }
+#matrix tbody th, #matrix tfoot th { text-align: center; padding-left: 4px; padding-right: 4px; }
+#matrix tbody th { background: var(--surface); }
+#matrix tbody th.hqc, #matrix tbody tr:hover th.hqc, #matrix tfoot th, #matrix tfoot td { background: var(--grp-bg); }
+#matrix tfoot th, #matrix tfoot td { box-shadow: inset 0 2px 0 var(--frame); }
+#matrix .tm:not(.tot) { background: var(--surface); }
+#matrix tfoot .tm:not(.tot) { background: var(--grp-bg); }
+#matrix thead tr th.tm:not(.tot) { background: var(--th-bg); }
+#matrix thead tr th.tot, #matrix tbody td.tot, #matrix tfoot td.tot, #matrix tbody tr:hover td.tot { background: #fff3b0; color: #3a2f00; }
+#matrix td.tot.zero { color: #6b5a10; }
+.matrix-wrap { border-radius: 8px; }
+
+/* 지사별 요청·편성: 옆으로 밀어도 본부·지사 이름이 보이게 맨 왼쪽 칸 고정(2026-11-03 사용자 요청). 밑의 칸이 비치지 않도록 바탕을 불투명하게 */
+/* left: -1px = 겹친 테두리는 칸과 함께 고정되지 않으므로, 칸을 1px 더 밀어 그 틈으로 밀린 칸의 글자가 비치지 않게 함. 테두리 두께는 그대로 둠(바꾸면 계정마다 칸 폭이 1px 달라짐) */
+#branchTable thead tr:first-child th:first-child, #branchTable thead tr.tot th:first-child { position: sticky; left: -1px; z-index: 6; }
+#branchTable thead tr:first-child th:first-child { box-shadow: inset -2px 0 0 var(--th-line); }
+#branchTable thead tr.tot th:first-child { box-shadow: inset -2px 0 0 var(--frame); }
+#branchTable tbody td:first-child { position: sticky; left: -1px; z-index: 2; background-color: var(--surface); box-shadow: inset -2px 0 0 var(--frame); }
+#branchTable tbody tr.mine td:first-child, #branchTable tbody tr.changed td:first-child { box-shadow: inset 4px 0 0 var(--plow), inset -2px 0 0 var(--frame); }
+#branchTable.mine-left thead tr:first-child th:first-child { box-shadow: inset 3px 0 0 var(--mine), inset -2px 0 0 var(--th-line); }
+#branchTable.mine-left thead tr.tot th:first-child, #branchTable.mine-left tbody td:first-child { box-shadow: inset 3px 0 0 var(--mine), inset -2px 0 0 var(--frame); }
+#branchTable tbody tr.hq td:first-child { background-color: var(--grp-bg); }
+#branchTable tbody tr.locked td:first-child { background-color: color-mix(in srgb, var(--plow) 12%, var(--surface)); }
+#branchTable.mine-left tbody tr:not(.hq):not(.locked) td:first-child:not(.adm):not(.blk-gap) { background-color: color-mix(in srgb, var(--mine) 6%, var(--surface)); }

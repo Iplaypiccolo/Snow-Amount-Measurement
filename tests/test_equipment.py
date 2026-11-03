@@ -641,7 +641,7 @@ def t_confirmed_row_locked(p):
     p.click(f"[data-unconfirm='{cj}']"); p.wait_for_timeout(300)
     check(row(cj).locator("input[data-f=req_truck]").count() == 1 and row(cj).locator("input[data-f=assigned_truck]").count() == 1, "취소하면 다시 고칠 수 있음")
     bg = lambda b: ev(p, f"getComputedStyle(document.querySelector(\"tr[data-b='{b}'] td\")).backgroundColor")
-    check("locked" not in (row(cj).get_attribute("class") or "") and bg(cj) != bg(dg) and bg(cj) in ("rgba(0, 0, 0, 0)", "transparent"), f"취소하면 줄 바탕도 흰색으로(확정 줄만 노랑): {bg(cj)} / {bg(dg)}")
+    check("locked" not in (row(cj).get_attribute("class") or "") and bg(cj) != bg(dg) and bg(cj) in ("rgba(0, 0, 0, 0)", "transparent", "rgb(255, 255, 255)"), f"취소하면 줄 바탕도 흰색으로(확정 줄만 노랑): {bg(cj)} / {bg(dg)}")
     as_user(p, "br2"); tab(p, "branch"); yy = bid(p, "양양")
     check(row(yy).locator("input:not([disabled]), select:not([disabled])").count() == 0 and row(yy).locator("input[data-f=wx_manual][disabled]").count() == 1, "지사 계정: 확정된 자기 지사 줄도 비활성(체크칸 포함)")
     # 다른 화면(관리자)에서 그사이 확정 → 이 화면은 아직 모름 → 저장하면 '이미 확정' 안내 + 최신으로 다시 읽음
@@ -1333,12 +1333,12 @@ def t_no_hscroll_real_bars(p):
         b2.close()
 
 def t_table_look(p):
-    """2026-11-03: 지사별 요청·편성 ~ 강원본부 지원장비. 제목·내용·바탕 색이 뚜렷이 다름, 제목은 흰 글자, 모두 가운데 정렬. 다크 모드도 같음"""
+    """2026-11-03: 이동 현황 ~ 강원본부 지원장비. 제목·내용·바탕 색이 뚜렷이 다름, 제목은 흰 글자, 모두 가운데 정렬. 다크 모드도 같음"""
     lum = lambda c: (lambda v: .2126 * v[0] + .7152 * v[1] + .0722 * v[2])([float(x) for x in c[c.index("(") + 1:-1].replace(",", " ").split()[:3]])
     style = lambda sel, f: ev(p, f"(() => {{ const e = document.querySelector({sel!r}); return e ? getComputedStyle(e).{f} : null; }})()")
     page = lambda: ev(p, "getComputedStyle(document.body).backgroundColor")
     def look(tag):
-        for tb, head, cell in (("branch", "#branchTable thead th.fch", "#branchTable tbody tr[data-b] td:nth-child(2)"), ("fleet", "#eqTable thead th", "#eqTable tbody td[data-cell]"), ("fleet", "#fleetSum thead th:not(.tot)", "#fleetSum tbody td:not(.tot)"), ("alloc", "#allocTable thead th", "#allocTable tbody td:nth-child(2)"), ("gwteam", "#teamTable thead th", "#teamTable tbody td[data-cell]")):
+        for tb, head, cell in (("move", "#matrix thead th.orgh:not(.tot)", "#matrix tbody td:not(.tot)"), ("move", "#matrix thead tr:nth-child(2) th:not(.tot)", "#matrix tbody th[scope=row]"), ("branch", "#branchTable thead th.fch", "#branchTable tbody tr[data-b] td:nth-child(2)"), ("fleet", "#eqTable thead th", "#eqTable tbody td[data-cell]"), ("fleet", "#fleetSum thead th:not(.tot)", "#fleetSum tbody td:not(.tot)"), ("alloc", "#allocTable thead th", "#allocTable tbody td:nth-child(2)"), ("gwteam", "#teamTable thead th", "#teamTable tbody td[data-cell]")):
             tab(p, tb); p.wait_for_timeout(120)
             hb, hc = style(head, "backgroundColor"), style(head, "color")
             check(abs(lum(hb) - lum(page())) >= 30 and abs(lum(hb) - lum(hc)) >= 120, f"{tag} {head}: 제목이 바탕·글자와 뚜렷이 다름 {hb} {hc} {page()}")
@@ -1353,6 +1353,12 @@ def t_table_look(p):
             for name, fg, bgc in r:
                 check(abs(lum(fg) - lum(bgc)) >= 90, f"{tag} {tb} {name}: 글자가 보임 {fg} / {bgc}")
     look("밝은"); inner("밝은")
+    # 이동 현황: 합계 열은 장비 현황 표의 전체 칸과 같은 노랑, 본부 칸·합계 줄은 중간 색, 내용은 흰색
+    tab(p, "move"); yellow = "rgb(255, 243, 176)"
+    check(style("#matrix thead th.tot", "backgroundColor") == yellow and style("#matrix tbody td.tot", "backgroundColor") == yellow and style("#matrix tfoot td.tot", "backgroundColor") == yellow, "합계 열 노랑")
+    check(style("#matrix tbody th.hqc", "backgroundColor") == style("#matrix tfoot th", "backgroundColor") != style("#matrix tbody td:not(.tot)", "backgroundColor"), "본부 칸·합계 줄 색")
+    check(style("#matrix tbody td.tm", "backgroundColor") == "rgb(255, 255, 255)", "신속대응팀 칸도 내용과 같은 흰색")
+    check(style("#matrix tfoot th", "textAlign") == "center", "합계 글자 가운데")
     tab(p, "branch"); check(style("#branchTable thead th.fch", "backgroundColor") != style("#branchTable tbody tr.hq td", "backgroundColor") != page(), "묶음 줄 색도 다름")
     check(style("#branchTable tbody tr[data-b] td.l", "textAlign") == "center" and style("#branchTable tbody tr.hq td", "textAlign") == "center", "지사 이름·본부 줄도 가운데")
     tab(p, "fleet"); check(style("#fleetSum tbody .l", "textAlign") == "center", "장비 현황 맨 왼쪽 열도 가운데")
@@ -1364,6 +1370,24 @@ def t_table_look(p):
     tab(p, "branch"); h = lambda: ev(p, "document.querySelector('#branchTable thead tr:first-child').getBoundingClientRect().height")
     wide = h(); p.set_viewport_size({"width": 375, "height": 800}); p.wait_for_timeout(300); check(h() < wide + 30, f"휴대폰 제목 높이 {h()} / {wide}")
     p.set_viewport_size({"width": 1440, "height": 1000}); p.wait_for_timeout(300)
+
+def t_branch_names_sticky(p):
+    """2026-11-03: 지사별 요청·편성을 옆으로 밀어도 본부·지사 이름이 보임(맨 왼쪽 칸 고정). 밑의 칸이 비치지 않게 바탕이 불투명. 계정·줄 종류마다 확인"""
+    p.set_viewport_size({"width": 375, "height": 800}); p.wait_for_timeout(300)
+    for u in ("admin1", "hq-gw", "br1", "viewer"):
+        as_user(p, u); tab(p, "branch"); p.wait_for_timeout(150)
+        r = ev(p, """(() => { const t = document.querySelector('#branchTable'), w = t.parentElement; w.scrollLeft = 500; const wl = w.getBoundingClientRect().left;
+          const cells = [t.tHead.rows[0].cells[0], t.querySelector('thead tr.tot th'), ...t.querySelectorAll('tbody tr.hq td:first-child'), ...t.querySelectorAll('tbody tr[data-b]:not(.locked) td:first-child'), ...t.querySelectorAll('tbody tr.locked td:first-child')].filter(c => c && c.offsetParent);
+          const bad = cells.filter(c => { const b = getComputedStyle(c).backgroundColor; return Math.abs(c.getBoundingClientRect().left - wl) > 1.5 || b.includes('/') || b.startsWith('rgba') || b === 'transparent'; }).map(c => c.textContent.trim().slice(0, 8) + ' ' + getComputedStyle(c).backgroundColor);
+          const c0 = t.querySelector('tbody tr[data-b] td:first-child').getBoundingClientRect(), hit = document.elementFromPoint(c0.left + c0.width / 2, c0.top + c0.height / 2);
+          const h0 = t.tHead.rows[0].cells[0].getBoundingClientRect(), hh = document.elementFromPoint(h0.left + h0.width / 2, h0.top + h0.height / 2);
+          return { scrolled: w.scrollLeft, n: cells.length, leak: cells.filter(c => getComputedStyle(c).left !== '-1px').length, bad, onTop: !!hit && !!hit.closest('td:first-child'), headTop: !!hh && hh === t.tHead.rows[0].cells[0], w: c0.width }; })()""")
+        check(r["scrolled"] > 100 and r["n"] >= 10, f"{u}: 옆으로 밀림 {r}")
+        check(not r["bad"], f"{u}: 첫 칸이 왼쪽에 붙고 바탕이 불투명 {r['bad']}")
+        check(r["leak"] == 0, f"{u}: 왼쪽 테두리 틈으로 밀린 글자가 비치지 않음 {r['leak']}")
+        check(r["onTop"] and r["headTop"], f"{u}: 이름 칸이 다른 칸보다 위에 {r}")
+        ev(p, "document.querySelector('#branchTable').parentElement.scrollLeft = 0")
+    as_user(p, "admin1"); p.set_viewport_size({"width": 1440, "height": 1000}); p.wait_for_timeout(300)
 
 def t_move_compact(p):
     """2026-11-03 2안: 이동 현황 표는 숫자 칸 80px, 표와 카드가 같은 폭으로 가운데에, 넓은 화면은 카드 3열. 휴대폰은 그대로"""
@@ -1641,7 +1665,7 @@ def t_route_perm_admin_only(p):
     check("권한이 없습니다" in toast(p), "화면을 우회해 다른 기관 경로를 보내도 거절: " + toast(p))
     as_user(p, "admin1"); tab(p, "fleet"); check(p.locator("#eqTable select[data-rv]").count() > 0 and p.locator("#day1In").count() == 1, "관리자는 지원일 칸 전부")
 
-TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_reqs_read_fail, t_confirm_stale, t_fleet_sum, t_tables_sizes, t_fleet_sum_fixed, t_no_hscroll_real_bars, t_table_look, t_move_compact, t_round_ten_days, t_alloc_fixed_only, t_branch_totals, t_removed_hints, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_reqs_read_fail, t_confirm_stale, t_fleet_sum, t_tables_sizes, t_fleet_sum_fixed, t_no_hscroll_real_bars, t_table_look, t_branch_names_sticky, t_move_compact, t_round_ten_days, t_alloc_fixed_only, t_branch_totals, t_removed_hints, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,

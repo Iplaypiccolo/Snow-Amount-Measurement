@@ -44,6 +44,10 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 이동 현황 표 디자인 통일, 지사별 요청·편성 이름 칸 고정
+- 서버 변경 없음. `equipment/css/style.css` 맨 끝 묶음 두 개(`#matrix`, `#branchTable` 첫 칸 sticky). 시험 `t_branch_names_sticky`, `t_table_look` 에 이동 현황 추가.
+— ✍ Claude Code 작성
+
 ### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 입력 표 색 구분, 가운데 정렬, 배정 화살표
 - 서버 변경 없음. `equipment/css/style.css`: 토큰 `--th-*`·`--grp-bg`·`--cell-line`·`--frame`, 맨 끝 묶음. `equipment/js/app.js renderOrgGrid`: 배정 칸 화살표, 처음엔 접힘. `guide/guide.js` 안내 고침. 시험 `t_table_look`, `t_fleet_sum`·`t_branch_compact` 고침.
 — ✍ Claude Code 작성
