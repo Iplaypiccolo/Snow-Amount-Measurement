@@ -44,6 +44,10 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 장비 현황 표 크기 고정
+- 서버 변경 없음. `equipment/js/app.js renderFleet`: `#orgGrid` 폭을 지원일 4칸 표 폭으로 고정, `fitPanel(table, min)`. 시험 `t_fleet_sum_fixed`.
+— ✍ Claude Code 작성
+
 ### 2026-11-03 · 커밋 (이 기록 커밋 하나) · 이동 현황·장비 표 크기 개선 (이동 2안, C안)
 - 서버 변경 없음. `equipment/js/app.js`: `FP`·`syncFP`·`dayW`·`fitPanel`·`idCells`, 이동 현황 칸 폭, 글꼴 뒤 `stickHead`. `equipment/css/style.css`: 맨 끝 컴퓨터 전용 묶음. 시험 `t_move_compact`, `t_tables_sizes`·`t_fixed_columns` 등 고침.
 — ✍ Claude Code 작성

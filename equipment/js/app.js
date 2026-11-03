@@ -703,7 +703,10 @@ function renderFleet() {
   const rows = fleetRows().map(v => fleetRowHtml(v, dates, choices, all)).join("");
   $("eqTable").innerHTML = `<thead><tr>${isPhoneW() ? "<th>도공번호</th><th>장비</th><th>블로워</th>" : "<th>도공번호 · 장비 · 블로워</th>"}<th>지원 여부</th>${head}${actCol() ? `<th class="unh">${canAllVeh() ? unhideHead() : ""}</th>` : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${(isPhoneW() ? 5 : 3) + dates.length}" class="empty">${S.fleetGo ? "지원 여부가 '지원'인 장비가 없습니다." : "장비가 없습니다."}${addRow && !S.fleetGo ? " 위의 [장비 추가]로 넣으세요." : ""}</td></tr>`}</tbody>`;
   const eqFixed = isPhoneW() ? [plateColW(), em(5.8), em(5.4), em(5.8)] : [plateColW(), em(5.8)], eqAct = actCol() ? [isPhoneW() && canAllVeh() ? em(7) : isPhoneW() ? em(4) : em(4.2)] : [], eqDay = dayW();
-  fixCols($("eqTable"), [...eqFixed, ...dates.map(() => eqDay), ...eqAct], true); fitPanel($("eqTable"));
+  fixCols($("eqTable"), [...eqFixed, ...dates.map(() => eqDay), ...eqAct], true);
+  // 위쪽 장비 현황 표는 지원일 칸 수와 상관없이 같은 크기(지원일 4칸 표의 폭, 2026-11-03 사용자 요청). 칸이 늘면 아래 표만 오른쪽으로 커짐
+  const sumW = isPhoneW() ? 0 : em(10.8) + em(5.8) + eqDay * 4 + eqAct.reduce((n, w) => n + w, 0);
+  $("orgGrid").style.maxWidth = sumW ? sumW + 2 + "px" : ""; fitPanel($("eqTable"), sumW + 2);
   placeUnhide();
 }
 // 컴퓨터: 도공번호 칸 아래에 장비·블로워를 함께(칸이 둘 줄어 표가 좁아짐, 2026-11-03 C안). 휴대폰: 칸을 따로
@@ -1061,7 +1064,7 @@ const em = n => Math.round(n * FP());
 // 지원일 칸: 칸 수와 상관없이 같은 폭(지사 드롭다운 + 시각 + ＋ 버튼이 잘리지 않는 폭). 그래서 2칸이면 표가 줄고 7칸부터 오른쪽으로 늘어남. 휴대폰은 176px
 const dayW = () => isPhoneW() ? 176 : em(11.7);
 // 컴퓨터: 기준일자·현황 표·버튼 줄·저장 줄을 표와 같은 폭으로 맞춰 가운데에 둠(2026-11-03 C안). 표가 아주 좁아도 위쪽 줄이 들어가도록 860px 아래로는 안 줄임
-function fitPanel(table) { table.closest(".panel").style.maxWidth = isPhoneW() ? "" : Math.max(parseFloat(table.style.width) + 2, 860) + "px"; }
+function fitPanel(table, min = 0) { table.closest(".panel").style.maxWidth = isPhoneW() ? "" : Math.max(parseFloat(table.style.width) + 2, min, 860) + "px"; }
 let lastPageKey = innerWidth;
 addEventListener("resize", () => { if (innerWidth !== lastPageKey && S.me) { lastPageKey = innerWidth; clearTimeout(S.resizeT); S.resizeT = setTimeout(() => { syncFP(); renderMatrix(); renderFleet(); renderTeam(); renderAlloc(); }, 150); } });   // 창 폭이 바뀌면 칸 폭을 다시 계산
 function stickHead(table) {

@@ -1286,6 +1286,22 @@ def t_tables_sizes(p):
     tab(p, "alloc"); check(fs("#allocTable") == 12.5, "휴대폰 기관별 배치 글자")
     p.set_viewport_size({"width": 1400, "height": 900}); p.wait_for_timeout(300)
 
+def t_fleet_sum_fixed(p):
+    """2026-11-03: 기관별 장비의 지원일 칸을 늘리거나 줄여도 위쪽 장비 현황 표는 같은 크기, 아래 표만 달라짐. 휴대폰은 그대로"""
+    box = lambda sel: ev(p, f"(() => {{ const r = document.querySelector('{sel}').getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }})()")
+    for w in (1366, 1920):
+        p.set_viewport_size({"width": w, "height": 900}); p.wait_for_timeout(350); tab(p, "fleet"); got = []
+        for n in ("2", "4", "6", "8", "10"):
+            p.select_option("#colsSel", n); p.wait_for_timeout(200); got.append((box(".fs-table"), box("#eqTable")[0]))
+        check(len({tuple(x[0]) for x in got}) == 1, f"{w}: 위쪽 표 크기 그대로 {[x[0] for x in got]}")
+        lw = [x[1] for x in got]; check(lw == sorted(lw) and lw[0] < lw[-1], f"{w}: 아래 표만 커짐 {lw}")
+        check(ev(p, "Math.abs(document.querySelector('.fs-table').getBoundingClientRect().left - document.querySelector('#eqTable').parentElement.getBoundingClientRect().left) <= 2"), f"{w}: 위아래 표의 왼쪽이 맞음")
+        p.select_option("#colsSel", "4"); p.wait_for_timeout(200)
+        check(abs(box(".fs-wrap")[0] - box("#eqTable")[0]) <= 3, f"{w}: 4칸이면 위아래 폭이 같음 {box('.fs-wrap')} {box('#eqTable')}")
+    p.set_viewport_size({"width": 375, "height": 800}); p.wait_for_timeout(350); tab(p, "fleet")
+    check(ev(p, "document.querySelector('#orgGrid').style.maxWidth") == "", "휴대폰은 폭을 정하지 않음")
+    p.set_viewport_size({"width": 1440, "height": 1000}); p.wait_for_timeout(300)
+
 def t_move_compact(p):
     """2026-11-03 2안: 이동 현황 표는 숫자 칸 80px, 표와 카드가 같은 폭으로 가운데에, 넓은 화면은 카드 3열. 휴대폰은 그대로"""
     cols = lambda: ev(p, "getComputedStyle(document.querySelector('.hq-cards')).gridTemplateColumns.split(' ').length")
@@ -1562,7 +1578,7 @@ def t_route_perm_admin_only(p):
     check("권한이 없습니다" in toast(p), "화면을 우회해 다른 기관 경로를 보내도 거절: " + toast(p))
     as_user(p, "admin1"); tab(p, "fleet"); check(p.locator("#eqTable select[data-rv]").count() > 0 and p.locator("#day1In").count() == 1, "관리자는 지원일 칸 전부")
 
-TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_reqs_read_fail, t_confirm_stale, t_fleet_sum, t_tables_sizes, t_move_compact, t_round_ten_days, t_alloc_fixed_only, t_branch_totals, t_removed_hints, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_reqs_read_fail, t_confirm_stale, t_fleet_sum, t_tables_sizes, t_fleet_sum_fixed, t_move_compact, t_round_ten_days, t_alloc_fixed_only, t_branch_totals, t_removed_hints, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
