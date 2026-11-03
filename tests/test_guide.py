@@ -87,7 +87,7 @@ def t_first_login_admin(b, ctx, m):
     check(t[0] == "제설 업무 시스템" and t[1] == "기관별 24시간 예보" and t[-1] == "사용법 다시 보기", t)
     check(not any("계정별" in x for x in t), f"계정별 권한 표는 뺐음(2026-11-01): {t}")
     for x in ["기관별 24시간 예보", "연도별 신적설", "관측소 지도", "기관별 관할 고속도로", "데이터 출처", "예보 격자 편입"]: check(x in t, f"관리자 강설량 안내에 '{x}' 없음: {t}")
-    check(t.index("예보 격자 편입") < t.index("발표 기준") < t.index("사용법 다시 보기") and "시즌 선택" not in t and "검색" not in t,
+    check(t.index("예보 격자 편입") < t.index("예보 구간") < t.index("사용법 다시 보기") and "시즌 선택" not in t and "검색" not in t,
           f"위쪽 탭 소개를 다 한 뒤 첫 탭(24시간 예보) 칸 설명만, 다른 탭 칸은 그 탭에 들어갈 때: {t}")
     wait_closed(p)
     check(p.evaluate("localStorage.getItem('ss_guide:snow:admin-01')") == "1", "끝까지 보면 이 브라우저에 봤음 표시")
@@ -263,7 +263,7 @@ def t_help_and_who(b, ctx, m):
     """2026-11-02: [? 사용법]으로 다시 볼 때는 위쪽 탭 소개 없이 지금 탭 칸 설명만 · 칸마다 쓰는 계정 표지(관리자만 되는 것만 '관리자') · 필터 안내 없음"""
     p = open_site(ctx, m); login(p, "admin-01"); wait_open(p, "snow"); p.click("#sgStop"); wait_closed(p)
     p.click("#sgHelp"); wait_open(p, "snow"); t = titles(p)
-    check(t[0] == "제설 업무 시스템" and "발표 기준" in t and not any(x in t for x in ["기관별 24시간 예보", "연도별 신적설", "관측소 지도", "예보 격자 편입", "사용법 다시 보기"]),
+    check(t[0] == "제설 업무 시스템" and "예보 구간" in t and not any(x in t for x in ["기관별 24시간 예보", "연도별 신적설", "관측소 지도", "예보 격자 편입", "사용법 다시 보기"]),
           f"[사용법] = 첫 장 + 지금 탭 칸만(탭 소개·다시 보기 장 없음): {t}")
     p.click(".page-btn[data-page=equip]"); wait_open(p, "equip"); p.click("#sgStop"); wait_closed(p)
     p.click(".eq-btn[data-eqtab=branch]"); wait_open(p, "equip")

@@ -9,7 +9,8 @@
    - 경로는 (날짜, 장비)마다 한 줄로 서버에 남습니다. 다른 날짜를 확정해도 지난 날짜 경로는 지워지지 않습니다.
    - 특보: 서버가 10분마다 기상청에서 받아 둔 것(warning_status)을 자동 표시. 확정한 지사는 확정 순간 값을 서버가 남김(warn_* 열)
      24시 예보 [적설 | 강수 | 확률 | 기온](2026-10-15 '24시 강설'에서 이름 바꿈, 최저기온 묶음을 합침): 확률 = 지사 격자의 24시간 중 가장 높은 강수확률(%, branch_forecast.max_pop_24h — 시각 없이 값만. 직접입력 줄은 '-').
-     적설·강수: 기상청 단기예보 격자의 1시간 신적설(cm)·1시간 강수량(mm) 24시간 합 중 지사 격자의 가장 큰 값(branch_forecast).
+     적설·강수: 기상청 예보 격자의 1시간 신적설(cm)·1시간 강수량(mm) 24시간 합 중 지사 격자의 가장 큰 값(branch_forecast).
+     2026-11-04(마이그레이션 60): 기상청 동네예보처럼 앞 6시간의 강수·확률·기온 = 초단기예보, 나머지·적설 = 단기예보(서버가 섞어 저장). 제목 옆 '○시 발표 기준'은 뺌
      확정하면 서버가 그 순간 값을 남김(fc_* 열). 값을 누르면 강설량 측정 → 기관별 24시간 예보의 그 지사로 이동. 확정한 지사 줄은 바탕이 노랑
      기온: 같은 예보의 1시간 기온 24시간 중 가장 낮은 값(지사 격자 중 가장 추운 곳, branch_forecast.min_tmp). 그 시각 칸은 2026-10-15 뺌
      [기상현황 직접입력]을 켜면 적설·강수·최저기온·대설특보(종류·발표·발효)를 지사가 직접 넣음(wx_* 열) — 자동 값 대신 보이고, 눌러도 예보로 가지 않음
@@ -278,13 +279,6 @@ function fcInner(bid, k = "snow") {
     : k === "tmin" ? (v != null && v <= -10 ? " cold2" : v != null && v <= 0 ? " cold" : "") : " at";
   return `<span class="fcv${cls}" data-fb="${esc(bid)}" data-fk2="${k}" tabindex="0" role="link">${v == null ? "-" : esc(fcText(k, v))}</span>`;
 }
-// 표 제목 옆 "몇 시 기준": 지금 예보(가장 최근 발표)
-function fcBase() {
-  const xs = Object.values(S.fc).filter(f => Date.now() - Date.parse(f.issued_at) <= 12 * 3600e3);
-  if (!xs.length) return "예보 없음";
-  const t = xs.reduce((a, f) => (f.issued_at > a ? f.issued_at : a), xs[0].issued_at);
-  return `${fmtHour(t)} 발표 기준`;
-}
 function warnBase() {
   const w = S.warn; if (!w || !w.ok || !w.fetched_at) return "자료 없음";
   return `${fmtShort(w.fetched_at)} 기준`;
@@ -299,7 +293,6 @@ function paintWarn() {                // 자동 값만 새로 그림(직접입�
   document.querySelectorAll("[data-pcell]").forEach(td => { if (!isManual(td.dataset.pcell)) td.innerHTML = fcInner(td.dataset.pcell, "pcp"); });
   document.querySelectorAll("[data-ocell]").forEach(td => { if (!isManual(td.dataset.ocell)) td.innerHTML = fcInner(td.dataset.ocell, "pop"); });
   document.querySelectorAll("[data-tcell]").forEach(td => { if (!isManual(td.dataset.tcell)) td.innerHTML = fcInner(td.dataset.tcell, "tmin"); });
-  const fb = document.getElementById("fcBaseHead"); if (fb) fb.textContent = fcBase();
   const wb = document.getElementById("wBaseHead"); if (wb) wb.textContent = warnBase();
   document.querySelectorAll("tr[data-b]").forEach(tr => {
     const td = tr.querySelector("[data-wcell]"); if (!td || isManual(tr.dataset.b)) return;
@@ -496,7 +489,7 @@ function placeTip(el) {
   tip.style.top = top + "px"; tip.style.left = Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8)) + "px";
 }
 // 표 제목의 '○시 기준'(점선)에 마우스를 올리면 얼마마다 새로 받는지
-const BASE_TIP = { fc: "매시 정각 업데이트 — 다음 정시부터 24시간으로 다시 계산(예보 자료는 단기예보 발표 02·05·08·11·14·17·20·23시 15분 뒤 새로 받음)", warn: "10분마다 업데이트 — 매시 01·11·21·31·41·51분" };
+const BASE_TIP = { warn: "10분마다 업데이트 — 매시 01·11·21·31·41·51분" };
 function showBaseTip(el) { tip.innerHTML = `<b>${esc(BASE_TIP[el.dataset.bt] || "")}</b>`; placeTip(el); }
 const hideTip = () => { tip.hidden = true; };
 ["mouseover", "focusin"].forEach(ev => document.addEventListener(ev, e => { if (!e.target.closest) return; const bt = e.target.closest("[data-bt]"); if (bt) return showBaseTip(bt); const el = e.target.closest("[data-hv]"); if (el) showTip(el); }));
@@ -1111,7 +1104,7 @@ function renderBranch() {
   const conf = can("req.confirm");
   // 칸 순서: 지사 | 기상(24시 예보[적설·강수·확률·기온]·대설특보·직접입력) | 지사 요청 | 도착 요청 | 타지사 지원 가능 | 저장 ║ 편성 | 확정
   // ║ = 빈 칸(blk-gap)으로 표 둘처럼 나눔: 왼쪽 = 지사·본부가 넣는 표, 오른쪽(adm) = 관리자가 넣는 표. 내 계정의 표는 파란색(mine-left / mine-right)
-  let h = `<thead><tr><th class="l" rowspan="2">지사</th><th colspan="4" class="fch">24시 예보 <small class="fcbase" id="fcBaseHead" data-bt="fc" tabindex="0">${esc(fcBase())}</small></th><th colspan="3" class="wh">대설특보 발표 <small class="fcbase" id="wBaseHead" data-bt="warn" tabindex="0">${esc(warnBase())}</small></th><th class="wxh" rowspan="2">기상현황<br>직접입력</th><th colspan="2">지사 요청</th><th class="l" rowspan="2">도착 요청</th><th class="ofh" rowspan="2">타지사<br>지원 가능<small class="thsub">제설차</small></th><th class="svh" rowspan="2">저장</th><th class="blk-gap" rowspan="2" aria-hidden="true"></th><th colspan="2" class="adm adm0">편성</th><th class="adm">확정</th></tr>
+  let h = `<thead><tr><th class="l" rowspan="2">지사</th><th colspan="4" class="fch">24시 예보</th><th colspan="3" class="wh">대설특보 발표 <small class="fcbase" id="wBaseHead" data-bt="warn" tabindex="0">${esc(warnBase())}</small></th><th class="wxh" rowspan="2">기상현황<br>직접입력</th><th colspan="2">지사 요청</th><th class="l" rowspan="2">도착 요청</th><th class="ofh" rowspan="2">타지사<br>지원 가능<small class="thsub">제설차</small></th><th class="svh" rowspan="2">저장</th><th class="blk-gap" rowspan="2" aria-hidden="true"></th><th colspan="2" class="adm adm0">편성</th><th class="adm">확정</th></tr>
     <tr><th class="fch c-sn">적설<small class="thsub">cm</small></th><th class="fch c-sn">강수<small class="thsub">mm</small></th><th class="fch">확률<small class="thsub">%</small></th><th class="fch tmh c-sn" title="24시간 중 가장 낮은 기온">기온<small class="thsub">최저 ℃</small></th><th class="wh c-wk">종류</th><th class="wh c-wt">발표</th><th class="wh c-wt c-we">발효</th><th>제설차</th><th>제설기</th><th class="adm adm0">제설차</th><th class="adm">제설기</th><th class="cf adm">${conf ? bulkCell(null) : ""}</th></tr>${totalRow()}</thead><tbody>`;
   const has = b => hasReq(b.id) || S.rdraft.has(b.id);                  // 요청 있음(입력 중 포함)
   const mine = b => (m.branch_id === b.id) || (can("req.edit.hq") && !can("req.confirm") && b.hq_id === m.hq_id);

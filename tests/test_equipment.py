@@ -514,8 +514,8 @@ def t_warning_auto_badge(p):
     check(p.locator("#tip").is_hidden(), "지사 칸에 마우스를 올려도 설명 없음(2026-10-05)")
     wb = p.locator("#wBaseHead"); check(wb.inner_text().endswith("기준") and ev(p, "getComputedStyle(document.getElementById('wBaseHead')).borderBottomStyle") == "dashed", "대설특보 발표 아래 ○ 기준(점선): " + wb.inner_text())
     wb.hover(); p.wait_for_timeout(100); check("10분마다 업데이트" in p.locator("#tip").inner_text(), "기준에 마우스를 올리면 업데이트 주기: " + p.locator("#tip").inner_text())
-    p.hover("#fcBaseHead"); p.wait_for_timeout(100); check("매시 정각 업데이트" in p.locator("#tip").inner_text(), p.locator("#tip").inner_text())
-    col = ev(p, "getComputedStyle(document.getElementById('fcBaseHead')).color"); check(col == ev(p, "getComputedStyle(document.querySelector('#branchTable thead th.fch')).getPropertyValue('--th-soft')") or col == "rgb(203, 217, 230)", f"기준 글자는 진한 제목 바탕에서 잘 보이는 밝은 색: {col}")
+    check(p.locator("#fcBaseHead").count() == 0, "24시 예보 옆 '발표 기준' 없음(2026-11-04)")
+    col = ev(p, "getComputedStyle(document.getElementById('wBaseHead')).color"); check(col == ev(p, "getComputedStyle(document.querySelector('#branchTable thead th.wh')).getPropertyValue('--th-soft')") or col == "rgb(203, 217, 230)", f"기준 글자는 진한 제목 바탕에서 잘 보이는 밝은 색: {col}")
     tab(p, "move"); card = p.locator(".dest", has_text="대관령")
     check(card.locator(".tag.wb").inner_text() == "대설주의보", "이동 현황 카드도 고정값")
     tab(p, "branch"); p.click(f"[data-confirm='{bid(p, '춘천')}']"); p.wait_for_timeout(300)
@@ -556,9 +556,9 @@ def t_private_hq_hidden_in_branch_tab(p):
     check(p.locator(f"#branchTable tr[data-b='{bid(p, '민자')}']").count() == 0, "민자 지사 줄 없음")
 
 def t_snow_forecast(p):
-    """24시 강설 [적설 | 강수] = 기상청 단기예보 24시간 합의 지사 최댓값, 제목 옆 발표 기준, 확정하면 그 값(빨간 네모), 누르면 기관별 24시간 예보로"""
+    """24시 강설 [적설 | 강수] = 기상청 예보(앞 6시간 초단기 + 단기) 24시간 합의 지사 최댓값, 확정하면 그 값(빨간 네모), 누르면 기관별 24시간 예보로"""
     tab(p, "branch"); head = p.locator("#branchTable thead").inner_text()
-    check(p.locator("[data-f=snow_cm]").count() == 0 and "24시 예보" in head and "적설" in head and "강수" in head and "기온" in head and "발표 기준" in head and "시각" not in head, "24시 예보 아래 적설·강수·확률·기온(시각 칸 없음), 발표 기준: " + head)
+    check(p.locator("[data-f=snow_cm]").count() == 0 and "24시 예보" in head and "적설" in head and "강수" in head and "기온" in head and "발표 기준" not in head and "시각" not in head, "24시 예보 아래 적설·강수·확률·기온(시각 칸·발표 기준 없음): " + head)
     check(p.locator(f"td[data-pcell='{bid(p, '춘천')}']").inner_text() == "6.2", "춘천 강수 6.2mm")
     fc = lambda n: p.locator(f"td[data-fcell='{bid(p, n)}']").inner_text().replace(chr(10), "")
     check(fc("춘천") == "3.5" and fc("대관령") == "12.1" and fc("양양") == "8.0", f"확정 전 = 지금 예보, 확정 = 확정 때 값: {fc('춘천')} {fc('대관령')} {fc('양양')}")

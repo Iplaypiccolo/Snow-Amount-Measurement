@@ -70,15 +70,7 @@
 .fc-pin-br{color:#555;font-size:11.5px;}
 .fc-detail td:first-child{font-family:inherit;}
 
-/* 단기예보 ↔ 초단기예보 전환(2026-11-03) */
-#view-forecast .jr-head{gap:8px;flex-wrap:wrap;}
-.fc-mode{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff;flex:none;}
-.fc-mode button{border:0;background:none;padding:5px 10px;font:inherit;font-size:12.5px;font-weight:700;color:var(--muted);cursor:pointer;white-space:nowrap;}
-.fc-mode button+button{border-left:1px solid var(--line);}
-.fc-mode button[aria-pressed=true]{background:var(--accent);color:#fff;}
-.fc-mode button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
-.fc-note{color:var(--muted);font-size:12px;}
-/* 초단기 값으로 바뀐 칸 */
+/* 초단기예보 값인 칸(앞 6시간, 2026-11-04 늘 섞음) */
 .fc-tt th.vs,.fc-tt td.vs{background:#fff3c4;}
 .fc-vs-key{display:inline-block;width:10px;height:10px;margin-right:4px;background:#fff3c4;border:1px solid #d6c27a;vertical-align:-1px;}
 /* 고정 창: 제목을 끌어 이동, 아래 모서리로 크기 조절(컴퓨터 화면만, 폭·글자 배율은 ui.js) */

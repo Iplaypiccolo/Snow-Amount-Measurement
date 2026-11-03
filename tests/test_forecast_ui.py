@@ -51,7 +51,7 @@ def t_levels(b):
     p.click(".tab-btn[data-tab=forecast]"); p.wait_for_timeout(900)
     check(p.locator("#view-forecast").is_visible(), "탭이 보여야 함")
     check(J(p, f"{S}.lines.getLayers().length") > 900 and layers(p) == 0, "전체: 고속도로 노선만(격자 없음)")
-    check("발표 기준" in p.locator("#fc-meta").inner_text() and "24시간 합" in p.locator("#fc-meta").inner_text(), p.locator("#fc-meta").inner_text())
+    check("발표" not in p.locator("#fc-meta").inner_text() and "24시간 합" in p.locator("#fc-meta").inner_text() and " ~ " in p.locator("#fc-meta").inner_text(), "예보 구간만(발표 기준 문구 없음, 2026-11-04): " + p.locator("#fc-meta").inner_text())
     check(p.locator("#fc-tree [data-fchq]").count() == 9 and p.locator("#fc-tree [data-fcbr]").count() == 0, "처음엔 본부 줄만(민자 없음)")
     check("최저" in p.locator(".fc-cols").inner_text() and "℃" in p.locator("#fc-tree [data-fchq='강원']").inner_text(), "본부 줄에 최저기온")
     check("cm" in p.locator("#fc-tree [data-fchq='강원']").inner_text() and "mm" in p.locator("#fc-tree [data-fchq='강원']").inner_text(), "본부 줄에 적설·강수 최댓값")
@@ -248,48 +248,20 @@ def t_top_menu(b):
 
 TESTS = [t_pin_chart, t_first_tab_and_order, t_levels, t_open_from_equipment, t_branch_user_can_view, t_legend_show, t_auto_pick, t_top_menu]
 
-def t_mode_switch(b):
-    """2026-11-03(58): 기본은 단기예보. [초단기예보]를 눌러도 같은 24시간 표 — 앞 6시간의 강수·확률·기온만 바뀌고 합계·왼쪽 목록도 그 값, 적설은 그대로. [단기예보]로 돌아오면 원래 값"""
+def t_blend_no_toggle(b):
+    """2026-11-04(60): 전환 버튼 없음. 서버가 앞 6시간 초단기 + 나머지 단기로 섞어 둔 값을 그대로 — 고정 창 표의 앞 6시각 강수·확률·기온만 색칠, 적설 줄은 색칠 안 함"""
     p, m = open_page(b)
     p.click(".tab-btn[data-tab=forecast]"); p.wait_for_timeout(900)
-    pressed = lambda: p.locator("#fc-mode [aria-pressed=true]").inner_text()
-    check(pressed() == "단기예보" and "24시간 합" in p.locator("#fc-meta").inner_text() and "초단기" not in p.locator("#fc-meta").inner_text() and not m.vsrt_calls, "기본 = 단기예보, 초단기는 안 받음")
+    check(p.locator("#fc-mode, [data-fcmode]").count() == 0, "단기/초단기 전환 버튼 없음")
+    meta = p.locator("#fc-meta").inner_text(); check("발표" not in meta and "초단기" not in meta and "24시간 합" in meta, "위쪽 안내 = 예보 구간만: " + meta)
     p.click("#fc-tree [data-fchq='강원']"); p.wait_for_timeout(600)
     br = J(p, f"{S}.state.order.find(id => {S}.state.branches[id].hq === '강원')")
     p.click(f"#fc-tree [data-fcbr='{br}']"); p.wait_for_timeout(800)
-    f0 = J(p, f"{S}.bf['{br}']"); rows0 = p.locator(".fc-detail tbody tr").count(); col = lambda: p.locator(".fc-pin .fc-tt thead").first.locator("th").count()
-    check(col() == 13 and p.locator(".fc-pin .fc-tt").count() == 2 and p.locator(".fc-pin .fc-tt td.vs").count() == 0, "단기: 12시간 표 2개, 색칠한 칸 없음")
-    p.click("#fc-mode [data-fcmode=vsrt]"); p.wait_for_timeout(800)
-    meta = p.locator("#fc-meta").inner_text()
-    check(pressed() == "초단기예보" and "24시간 합" in meta and "앞 6시간" in meta and "적설은 단기예보" in meta, "안내: " + meta)
-    check(set(m.vsrt_calls) == {"overview", "grid", "series"}, f"초단기 자료를 받음: {m.vsrt_calls}")
-    f1 = J(p, f"{S}.bf['{br}']")
-    check(f1["max_pcp_24h"] == f0["max_pcp_24h"] + 5 and f1["min_tmp"] == f0["min_tmp"] - 1 and f1["max_pop_24h"] == 95 and f1["max_snow_24h"] == f0["max_snow_24h"], f"왼쪽 값: 강수·기온·확률만 바뀌고 적설 그대로 {f0} {f1}")
-    row = p.locator(f"#fc-tree [data-fcbr='{br}']").inner_text(); check(f"{f1['max_pcp_24h']:.1f}" in row and "95" in row, "지사 줄: " + row)
-    check("적설(cm)" in p.locator(".fc-detail thead").inner_text() and p.locator(".fc-detail tbody tr").count() == rows0 and p.locator(".fc-detail tbody tr").first.locator("td").count() == 6, "격자 표: 칸 그대로")
-    check(p.locator("#fc-pin").is_visible() and p.locator(".fc-pin .fc-tt").count() == 2 and col() == 13 and p.locator(".fc-pin .fc-tt th.s").count() == 2, "추이 표: 같은 24시간 표, 적설 줄 그대로")
     t1 = p.locator(".fc-pin .fc-tt").first
+    check(p.locator(".fc-pin .fc-tt").count() == 2 and t1.locator("thead th").count() == 13, "같은 24시간 표(12시간 두 개)")
     check(t1.locator("thead th.vs").count() == 6 and t1.locator("td.vs").count() == 18 and p.locator(".fc-pin .fc-tt").last.locator(".vs").count() == 0, "앞 6시각의 강수·확률·기온만 색칠(뒤 표는 없음)")
     check(t1.locator("tbody tr").nth(0).locator("td.vs").count() == 0, "적설 줄은 색칠 안 함")
-    check("24시간 합" in p.locator(".fc-pin .fc-tt-sum").inner_text() and "적설" in p.locator(".fc-pin .fc-tt-sum").inner_text() and "색칠한 칸" in p.locator(".fc-pin").inner_text(), "합계·안내")
-    leg = p.locator("#fc-legend")
-    check(leg.locator(".fc-show").inner_text().split() == ["적설", "강수", "확률", "기온"] and leg.locator(".fc-ramp-t").inner_text() == "적설량", "범례·칸 색은 그대로 적설 기준")
-    n = len(m.fc_calls) + len(m.fc_series_calls)
-    p.click("#fc-mode [data-fcmode=shrt]"); p.wait_for_timeout(500)
-    check(pressed() == "단기예보" and J(p, f"{S}.bf['{br}'].max_pcp_24h") == f0["max_pcp_24h"] and "초단기" not in p.locator("#fc-meta").inner_text() and p.locator(".fc-pin .fc-tt td.vs").count() == 0, "단기로 돌아오면 원래 값")
-    check(len(m.fc_calls) + len(m.fc_series_calls) == n, "단기는 다시 받지 않음")
-    # 요청·편성에서 지사로 오면 늘 단기
-    p.click("#fc-mode [data-fcmode=vsrt]"); p.wait_for_timeout(500)
-    J(p, f"ForecastUI.openBranch('{br}')"); check(pressed() == "단기예보", "요청·편성에서 오면 단기예보로")
-
-def t_mode_no_data(b):
-    """초단기예보를 못 받았으면 안내만 뜨고 값은 단기예보와 같음"""
-    m = SBM.Mock(); m.vsrt_on = False; p, m = open_page(b, m)
-    p.click(".tab-btn[data-tab=forecast]"); p.wait_for_timeout(800)
-    br = J(p, f"{S}.state.order.find(id => {S}.state.branches[id].hq === '강원')"); f0 = J(p, f"{S}.bf['{br}'].max_pcp_24h")
-    p.click("#fc-mode [data-fcmode=vsrt]"); p.wait_for_timeout(500)
-    check("초단기예보 없음" in p.locator("#fc-meta").inner_text() and J(p, f"{S}.bf['{br}'].max_pcp_24h") == f0, p.locator("#fc-meta").inner_text())
-    p.click("#fc-tree [data-fchq='강원']"); p.wait_for_timeout(500); check(layers(p) > 0, "격자는 보임")
+    cap = p.locator(".fc-pin").inner_text(); check("색칠한 칸 = 초단기예보" in cap and "적설 = 단기예보" in cap, "안내: " + cap)
 
 def t_pin_move_resize(b):
     """2026-11-03: 격자 창을 끌어 옮기고 모서리로 크기를 바꿈(글자도 같은 비율). 다른 격자를 눌러도 그대로, 다시 열어도 기억. 지도 밖으로 나가지 않음"""
@@ -353,8 +325,6 @@ def t_phone_fit(b):
     p.locator(".fc-detail tbody tr").nth(1).click(); p.wait_for_timeout(400); fits("격자 누름")
     check(p.locator("#fc-pin").is_visible(), "격자를 누르면 표가 뜸")
     p.locator(".fc-pin-x").click(); p.wait_for_timeout(200); check(not p.locator("#fc-pin").is_visible(), "닫기 버튼으로 닫힘")
-    p.locator("#fc-mode [data-fcmode=vsrt]").click(); p.wait_for_timeout(800); fits("초단기")
-    mode = box("#fc-mode"); check(mode[1] <= 375, f"전환 버튼이 화면 안에: {mode}")
     # 모바일에는 옮기기·크기 조절 없음(컴퓨터에서 기억한 값이 있어도)
     p.evaluate("localStorage.setItem('ss_fc_pin', JSON.stringify({scale: 1.6, x: 500, y: 300}))"); p.reload(); p.wait_for_function("window.ForecastUI && ForecastUI._state().inited", timeout=60000)
     p.evaluate("document.querySelector('.tab-btn[data-tab=forecast]').click()"); p.wait_for_timeout(800)
@@ -465,7 +435,7 @@ def t_first_page_equip_first_forecast(b):
     finally:
         T.FIRST["snow"] = True
 
-TESTS += [t_mode_switch, t_mode_no_data, t_pin_move_resize, t_phone_fit, t_eq_round_bar, t_eq_round_no_edit, t_first_page_equip, t_first_page_equip_first_forecast]
+TESTS += [t_blend_no_toggle, t_pin_move_resize, t_phone_fit, t_eq_round_bar, t_eq_round_no_edit, t_first_page_equip, t_first_page_equip_first_forecast]
 
 if __name__ == "__main__":
     only = sys.argv[1:]

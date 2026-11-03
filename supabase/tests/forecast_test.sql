@@ -20,7 +20,7 @@ declare a uuid := gen_random_uuid(); p jsonb; fg jsonb; vr text; nc int; k int; 
 begin
   insert into auth.users (id, aud, role, email) values (a,'authenticated','authenticated','fa@t.test');
   insert into public.profiles (id,username,display_name,role,perms,must_change) values (a,'ft-adm','관리자','admin','{}',false);
-  delete from public.forecast_runs;
+  delete from public.forecast_runs; delete from public.forecast_vsrt_runs;      -- 초단기가 섞이지 않게(60)
 
   perform pg_temp.chk('로그인 사용자: 계획 함수 거절','authenticated',a,'select public.forecast_plan()','err:42501');
   perform pg_temp.chk('로그인 사용자: 넣기 함수 거절','authenticated',a,'select public.forecast_put(now(), ''SNO'', now(), ''{1}'')','err:42501');
