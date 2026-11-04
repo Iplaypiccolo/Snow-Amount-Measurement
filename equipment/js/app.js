@@ -771,24 +771,12 @@ function renderOrgGrid() {
   const assign = c => S.order.filter(b => isFixed(b.id)).map(b => [b, (c.o ? [c.o] : AO).reduce((n, o) => n + (aval(o, b.id)[c.f] || 0), 0)]).filter(x => x[1] > 0);
   const lists = cols.map(assign), maxLines = Math.max(0, ...lists.map(l => l.length));
   const open = !!S.fleetAssignOpen && maxLines > 0;                // 처음엔 접힘. 누르면 그대로 기억(이 화면 안에서)
-  const pv = poolVehs(), cap = offerBranches().reduce((n, b) => n + offerOf(b.id), 0), brs = S.order.filter(b => offerOk(b.id) || pv.some(v => v.home_branch === b.id));
-  const more = AO.map(orgAllocHtml).join("") + (cap || pv.length ? `<div class="al-org pool-brs" data-orgcard="${POOL}"><div class="al-head"><b>${POOL}</b> · 지원 가능(확정) <b data-pcap>${cap}대</b> · 등록 <b data-preg>${pv.length}대</b> · 임차 ${pv.filter(v => vval(v, "rented")).length}대</div>` +
-    brs.map(b => { const n = pv.filter(v => v.home_branch === b.id).length, ok = offerOk(b.id), c = ok ? offerOf(b.id) : 0; return `<span class="al-chip${!ok ? " over" : n >= c ? " full" : ""}" data-pbr="${esc(b.id)}">${esc(b.name)} ${n}/${ok ? c : "확정 전"}</span>`; }).join("") + `</div>` : "");
   $("orgGrid").innerHTML = `<div class="fs-wrap"><table class="fs-table" id="fleetSum"><thead><tr><th class="l" rowspan="2">상태</th>${OC.map(([o, ts]) => `<th colspan="${ts.length}" class="ed${o ? "" : " tot"}">${esc(o || "전체")}</th>`).join("")}</tr>` +
     `<tr>${cols.map(c => `<th class="${(edge(c) + last(c)).trim()}">${c.t}</th>`).join("")}</tr></thead><tbody>` +
     rowsDef.map(([st, lab, cls]) => `<tr data-fsrow="${esc(lab)}"><th class="l"><span class="status ${cls}">${lab}</span></th>${cols.map(c => num(c, st)).join("")}</tr>`).join("") +
     `<tr class="fs-sum" data-fsrow="계"><th class="l">계</th>${cols.map(c => num(c, null)).join("")}</tr>` +
     `<tr class="fs-asgn" data-fsrow="배정"><th class="l">${maxLines ? `<button type="button" class="fs-tog" data-fsopen aria-expanded="${open}" aria-label="배정지 ${open ? "접기" : "펴기"}">배정 <span aria-hidden="true">${open ? "▴" : "▾"}</span></button>` : "배정"}</th>${cols.map((c, i) => { const n = lists[i].reduce((a, x) => a + x[1], 0); return `<td class="${(n ? "" : "z") + last(c) + edge(c)}" data-fsa="${esc(c.k)}">${n}</td>`; }).join("")}</tr>` +
-    (open ? `<tr class="fs-asg"><th class="l">배정지</th>${cols.map((c, i) => `<td class="${last(c).trim()}${edge(c)}" data-fsl="${esc(c.k)}">${lists[i].length ? lists[i].map(([b, n]) => `<div data-fsb="${esc(b.id)}">${esc(b.name)} ${n}</div>`).join("") : '<span class="muted">-</span>'}</td>`).join("")}</tr>` : "") + `</tbody></table></div>` +
-    (more ? `<details class="fs-more" id="fleetMore"${S.fleetMore ? " open" : ""}><summary>기관별 지정 현황</summary>${more}</details>` : "");
-  const d = $("fleetMore"); if (d) d.ontoggle = () => { S.fleetMore = d.open; };
-}
-// 기관 카드 아래: 관리자가 배정한 지사별 대수와 기계화부가 지정한 대수(지원일 1). 배정이 없는 기관은 아무것도 안 보임
-function orgAllocHtml(org) {
-  const a = orgAllocSummary(org); if (!a.total) return "";
-  const state = a.over ? '<span class="tag warn">배정 초과</span>' : a.done === a.total ? '<span class="status go">지정 완료</span>' : "";
-  return `<div class="al-org" data-alorg="${esc(org)}"><div class="al-head"><b>배정 ${a.total}대</b> · 지정 ${a.done}대 ${state}</div>` +
-    a.items.map(x => `<span class="al-chip${x.used > x.cap ? " over" : x.used === x.cap ? " full" : ""}">${esc(bn(x.bid))} ${x.type === "제설차" ? "차" : "기"} ${x.used}/${x.cap}</span>`).join("") + `</div>`;
+    (open ? `<tr class="fs-asg"><th class="l">배정지</th>${cols.map((c, i) => `<td class="${last(c).trim()}${edge(c)}" data-fsl="${esc(c.k)}">${lists[i].length ? lists[i].map(([b, n]) => `<div data-fsb="${esc(b.id)}">${esc(b.name)} ${n}</div>`).join("") : '<span class="muted">-</span>'}</td>`).join("")}</tr>` : "") + `</tbody></table></div>`;
 }
 // 바뀐 장비 한 줄 / 칸 하나만 다시 그림. 그 칸에 있던 커서는 되살림
 function keepFocus(fn) { const a = document.activeElement, fk = a && a.dataset && a.dataset.fk; fn(); if (fk) { const n = [...document.querySelectorAll("[data-fk]")].find(i => i.dataset.fk === fk); if (n && n !== document.activeElement) n.focus(); } }

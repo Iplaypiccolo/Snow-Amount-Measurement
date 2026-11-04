@@ -44,6 +44,12 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-04 · 커밋 (이 기록 커밋 하나) · 기관별 장비 '기관별 지정 현황' 없앰 (Claude 채팅 작업)
+- 사용자: "기관별 장비 상단 표 아래에 붙은 기관별 지정 현황은 없애자". 서버 변경 없음.
+- `equipment/js/app.js renderOrgGrid`: `#fleetMore`(details)·`orgAllocHtml` 지움(계산 `orgAllocSummary` 는 장비 칸 '배정 초과' 표시에 그대로 씀). CSS `.fs-more`·`.al-org`·`.al-chip` 지움.
+- 시험: 카드 글자를 보던 확인을 `orgAllocSummary`·`poolVehs`·`offerOf` 값으로 바꿈(`t_allocation`·`t_pool_vehicles`). 장비 지원 82/82.
+— ✍ Claude 채팅 작성
+
 ### 2026-11-04 · 커밋 (이 기록 커밋 하나) · 기관별 장비 '미정' 없앰, 새 기준일자 = 지원 여부 빈칸 — 마이그레이션 63 서버 적용 (Claude 채팅 작업)
 - 사용자: "기관별 장비에서 미정은 빼자, 새 기준일자가 들어오면 모든 장비는 빈칸으로". 고른 것: 겹치는 기간에 경로가 이미 잡힌 '지원' 장비는 지원 유지, 드롭다운 빈칸은 처음에만.
 - 서버 63(사용자 승인 뒤 적용): `create_round`·`private.gw_team_carry` 이어받기 → 빈칸(예외 위 규칙). 되돌림 시험 21/21(장비)·강원팀 1건 의도대로, 적용 뒤 함수 본문·권한(로그인 가능, 비로그인 불가) 확인. 시험 SQL `round_status_test.sql`·`gw_team_test.sql` 기대값 고침.
