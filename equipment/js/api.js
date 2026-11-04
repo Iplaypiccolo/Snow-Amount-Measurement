@@ -23,7 +23,8 @@ const Api = (() => {
     // 지역본부 장비(마이그레이션 44)
     "SA004": "이 지사의 '타지사 지원 가능' 대수가 확정된 뒤에 장비를 등록할 수 있습니다.", "SA005": "지역본부 장비는 자기(출발) 지사로 보낼 수 없습니다.",
     "SA006": "기관별 배치 합계는 그 지사의 편성 대수(제설차·제설기 각각)보다 많을 수 없습니다.",
-    "SA007": "값이 방금 바뀌어 이번 확정은 취소했습니다. 새 값을 확인한 뒤 필요하면 다시 눌러 주세요." };
+    "SA007": "값이 방금 바뀌어 이번 확정은 취소했습니다. 새 값을 확인한 뒤 필요하면 다시 눌러 주세요.",
+    "SA008": "아래 칸(다음 지사)의 도착 예상 시각은 앞 지사보다 늦어야 합니다. 시각을 고친 뒤 다시 확정하세요." };
   const TEAM_ERR = { "42501": "강원본부 지원장비는 관리자와 강원본부 계정만 고칠 수 있습니다.", "23514": "다른 기준일자가 맡은 날짜이거나, 그날 지원 가능이 아닌 장비의 경로입니다. 새로고침(F5) 후 다시 확인해 주세요.", "22023": "저장할 내용이 없거나 기준일자가 없습니다." };
   const isTeamId = id => /^GW\d+$/.test(String(id || ""));
   const POOL = "지역본부", VCOLS = "id,org,type,plate,status,sort,active,blower_s,blower_l,hidden_after,round_id,home_branch,rented";
@@ -151,6 +152,14 @@ const Api = (() => {
     const bname = id => (db.branches.find(b => b.id === id) || {}).name || "";
     const poolNameOk = v => { const pfx = bname(v.home_branch) + (v.rented ? "임차" : ""); return !!bname(v.home_branch) && String(v.plate).startsWith(pfx) && /^\d{1,5}$/.test(String(v.plate).slice(pfx.length)); };
     const err = (c, msg) => ({ ok: false, message: msg || ERR[c], code: c });
+    // 서버 흉내(마이그레이션 64): 시각이 있는 칸끼리 앞보다 늦어야 함. 첫 지사가 연속지원(전날 마지막 지사)이면 첫 칸은 뺌
+    const prevISO = iso => { const t = new Date(iso + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() - 1); return t.toISOString().slice(0, 10); };
+    const simTimesOk = r => {
+      const pd = prevISO(r.date), pr = r.team_id ? db.teamRoutes.find(x => x.team_id === r.team_id && x.date === pd) : db.routes.find(x => x.vehicle_id === r.vehicle_id && x.date === pd);
+      const cont = !!pr && pr.stops.length > 0 && pr.stops[pr.stops.length - 1] === r.stops[0]; let last = null;
+      return (r.times || []).every((x, i) => { if (!x || (i === 0 && cont)) return true; const ok = !last || x > last; last = x; return ok; });
+    };
+    const repeated = r => r.stops.some((s, i) => i > 0 && s === r.stops[i - 1]);
     // 강원 신속대응팀(마이그레이션 48): 관리자 또는 강원본부 계정만
     const teamOk = () => !!actor && (actor.role === "admin" || (actor.role === "hq" && (db.hqs.find(h => h.id === actor.hq_id) || {}).name === "강원"));
     // 서버 흉내(마이그레이션 46): 편성이 확정될 때 배정이 편성보다 많으면 — 편성 0 은 그 종류 배정을 지우고, 한 기관만 배정받았으면 그 기관을 편성 대수로(여러 기관이면 그대로)
@@ -196,7 +205,8 @@ const Api = (() => {
         if (!teamOk()) return done(err("42501", TEAM_ERR["42501"]));
         const rd = db.rounds.find(r => r.id === +round); if (!rd || (!routes.length && !status.length)) return done(err("22023", TEAM_ERR["22023"]));
         if (status.some(x => !["", "O", "X", "M"].includes(x.status || "") || (x.status === "O" && x.off_from && x.off_from < rd.start_date))) return done(err("23514", TEAM_ERR["23514"]));
-        if (routes.some(r => (gov(r.date) || {}).id !== +round || r.stops.some(b => !db.branches.some(x => x.id === b)) || new Set(r.stops).size !== r.stops.length)) return done(err("23514", TEAM_ERR["23514"]));
+        if (routes.some(r => (gov(r.date) || {}).id !== +round || r.stops.some(b => !db.branches.some(x => x.id === b)) || r.stops.some((s, i) => i > 0 && s === r.stops[i - 1]))) return done(err("23514", TEAM_ERR["23514"]));      // 64: 바로 연달아 같은 지사만 거절
+        if (routes.some(r => !simTimesOk(r))) return done(err("SA008"));
         const keep = clone(db.teamStatus), row = tid => db.teamStatus.find(x => x.round_id === +round && x.team_id === tid);
         status.forEach(x => { let w = row(x.team_id); if (!w) { w = { round_id: +round, team_id: x.team_id, status: "", off_from: null }; db.teamStatus.push(w); }
           w.status = x.status || ""; w.off_from = w.status === "O" ? x.off_from || null : null; w.updated_at = new Date().toISOString(); });
@@ -287,6 +297,8 @@ const Api = (() => {
         if ((routes.length || status.length) && !db.rounds.some(r => r.id === +round)) return done({ ok: false, message: "저장할 내용이 없거나 기준일자가 없습니다.", code: "22023" });
         if (vehicles.some(v => !vehOk(v.id)) || status.some(x => !vehOk(x.vehicle_id))) return done({ ok: false, message: ERR["42501"], code: "42501" });
         const vof = id => db.vehicles.find(x => x.id === id) || {};
+        if (routes.some(repeated)) return done(err("23514", "바로 앞과 같은 지사는 한 번만 들어갑니다."));      // 64
+        if (routes.some(r => r.stops.length && !simTimesOk(r))) return done(err("SA008"));
         if (status.some(x => vof(x.vehicle_id).org === POOL && (x.status !== "O" || x.off_from))) return done(err("23514", "지역본부 장비의 지원 여부는 늘 '지원'입니다."));
         if (can("equip.route") && routes.some(r => { const h = vof(r.vehicle_id).home_branch; return h && r.stops.includes(h); })) return done(err("SA005"));   // 지사 계정은 아래에서 먼저 42501(서버와 같은 순서, 55)
         if (!can("equip.route")) { const c = ownRoutesErr(); if (c) return done({ ok: false, message: ERR[c], code: c }); }

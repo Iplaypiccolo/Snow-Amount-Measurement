@@ -50,7 +50,7 @@
     const groups = [];
     S.hqs.forEach(h => {
       const rows = S.order.filter(b => b.hq_id === h.id && byB.has(b.id)).map(b => {
-        const list = byB.get(b.id), at = m => m.rec.stops.indexOf(b.id);
+        const list = byB.get(b.id), at = m => m.p;      // 지금 있는 방문(같은 지사를 두 번 들를 수 있음, 64)
         const isC = m => at(m) === 0 && isCont(m.v.id, d, b.id);
         const etas = list.filter(m => !isC(m)).map(m => (m.rec.times || [])[at(m)]).filter(Boolean).sort();
         let eta = "미정";

@@ -122,8 +122,8 @@ const rk = (date, vid) => date + "|" + vid;
 // 경로 한 칸 = { stops: 들르는 지사들, revised: 수정본인지(아니면 최초 지원), times: 지사마다 도착 예상 시각 "HH:MM" 또는 null }
 const EMPTY = { stops: [], revised: false, times: [] };
 function normRec(r) {
-  r = r || EMPTY; const seen = new Set(), stops = [], times = [];
-  (r.stops || []).forEach((s, i) => { if (s && !seen.has(s)) { seen.add(s); stops.push(s); times.push((r.times || [])[i] || null); } });
+  r = r || EMPTY; const stops = [], times = [];      // 2026-11-04(64): 같은 지사를 다시 들를 수 있음(인천→시흥→인천) — 바로 연달아 같은 지사만 하나로
+  (r.stops || []).forEach((s, i) => { if (s && s !== stops[stops.length - 1]) { stops.push(s); times.push((r.times || [])[i] || null); } });
   return stops.length ? { stops, revised: !!r.revised, times } : EMPTY;
 }
 const recOf = (date, vid) => { const k = rk(date, vid); return S.draft.has(k) ? S.draft.get(k) : (S.routes.get(k) || EMPTY); };
@@ -140,6 +140,16 @@ const stOf = (rid, vid) => { const b = S.rstat.get(rid + "|" + vid) || ST0, d = 
 const availOn = (vid, d) => { const r = govRound(d); if (!r) return false; const x = stOf(r.id, vid); return x.status === "O" && (!x.off_from || d < x.off_from); };
 const effRec = (d, vid) => availOn(vid, d) ? recOf(d, vid) : EMPTY;                       // 화면에 보이는 경로(지원 불가인 날은 없음)
 // 연속지원: 전날 마지막으로 들른 지사 = 오늘 첫 번째 지사 → 오늘 그 지사의 도착 시각 대신 "연속지원"(사용자 결정 2026-10-08)
+// 하루 경로의 도착 예상 시각 순서(2026-11-04, 서버 마이그레이션 64와 같은 규칙): 시각이 있는 칸끼리 앞 칸보다 늦어야 함(같은 시각도 안 됨), 빈 칸은 건너뜀.
+// 첫 지사가 연속지원이면 첫 칸 시각은 화면에 안 보이므로 뺌. 어긋나면 { j: 뒤 칸, i: 앞 칸 } 을 돌려줌
+function timeOrderBad(d, vid, rec) {
+  const st = rec.stops, tm = rec.times || []; let last = -1;
+  for (let j = 0; j < st.length; j++) { const x = tm[j]; if (!x || (j === 0 && isCont(vid, d, st[0]))) continue; if (last >= 0 && x <= tm[last]) return { j, i: last }; last = j; }
+  return null;
+}
+const timeOrderMsg = (rec, b) => `${bn(rec.stops[b.j])} 도착 시각(${rec.times[b.j]})은 앞 지사 ${bn(rec.stops[b.i])}(${rec.times[b.i]})보다 늦어야 합니다`;
+// 같은 지사를 하루에 두 번 들를 수 있어(64), 지사 카드·보고서는 '지금 있는 곳(p) 이후의 그 지사 방문'을 씀
+const occAt = (stops, bid, p = 0) => { for (let i = p; i < stops.length; i++) if (stops[i] === bid) return i; return -1; };
 const isCont = (vid, d, stop) => { if (!stop) return false; const p = effRec(addDays(d, -1), vid).stops; return p.length > 0 && p[p.length - 1] === stop; };
 // 숨긴 장비(hidden_after): 그 날짜보다 늦게 시작하는 기준일자부터 기관별 장비 목록에서 안 보임(이전 기준일자·이동 현황 기록은 그대로)
 // 지역본부 장비는 등록한 기준일자에서만 보임(다른 기준일자에서는 목록·카드·대수에 안 나옴)
@@ -610,7 +620,7 @@ addEventListener("resize", fitFilters);
 if (window.ResizeObserver) new ResizeObserver(() => fitFilters()).observe($("filters"));   // 탭을 옮겨 다시 보일 때·iframe 크기가 바뀔 때도
 const matches = v => (S.org === "전체" || v.org === S.org) && (S.type === "전체" || v.type === S.type);
 function vehicleRow(v, stops, rec, bid, m) {
-  const k = rec && bid ? rec.stops.indexOf(bid) : -1;
+  const k = rec && bid ? occAt(rec.stops, bid, m ? m.p : 0) : -1;      // 같은 지사를 두 번 들르면 지금 있는 곳 이후의 방문(64)
   const cont = !!(rec && bid && k === 0 && isCont(v.id, S.date, bid));   // 전날부터 이어서 지원(연속지원)
   const eta = rec && bid && k === 0 && !cont ? (rec.times || [])[0] : null;   // 첫 지사에 도착할 예상 시각(두 번째 지사부터는 '이동' 시각)
   // 이동 표시(아직 안 한 이동만): 지금 있는 지사 = 다음에 나갈 이동, 앞으로 갈 지사 = 들어올 이동. 이미 한 이동은 안 보임
@@ -624,12 +634,12 @@ function renderDest() {
   S.hqs.forEach(h => {
     const cards = [];
     S.order.filter(b => b.hq_id === h.id).forEach(b => {
-      const list = moves.filter(m => m.stops.indexOf(b.id) >= m.p && matches(m.v)), arr = rval(b.id, "arrive_at");   // 이미 떠난 지사에서는 안 보임
+      const list = moves.filter(m => occAt(m.stops, b.id, m.p) >= 0 && matches(m.v)), arr = rval(b.id, "arrive_at");   // 이미 떠난 지사에서는 안 보임(다시 들를 예정이면 보임)
       const arriveToday = arr && arr.slice(0, 10) === S.date && rval(b.id, "confirmed");
       if (!list.length && (filtered || !arriveToday)) return;       // 그날 이동도, 확정된 도착 요청도 없는 지사는 숨김
       const t = `round_requests:${S.round},${b.id}`, fc = fcOf(b.id), snow = fc && !fc.none ? fc.snow : null, why = rval(b.id, "reason");
-      const contOf = m => m.rec.stops[0] === b.id && isCont(m.v.id, S.date, b.id);
-      const etas = [...new Set(list.filter(m => !contOf(m)).map(m => (m.rec.times || [])[m.rec.stops.indexOf(b.id)]).filter(Boolean))].sort();   // 연속지원 장비는 도착 시각 계산에서 뺌
+      const contOf = m => occAt(m.rec.stops, b.id, m.p) === 0 && isCont(m.v.id, S.date, b.id);
+      const etas = [...new Set(list.filter(m => !contOf(m)).map(m => (m.rec.times || [])[occAt(m.rec.stops, b.id, m.p)]).filter(Boolean))].sort();   // 연속지원 장비는 도착 시각 계산에서 뺌
       // 새로 오는 장비의 시각이 없고 연속지원 장비가 있으면 '미정' 대신 그 지사에 처음 와 있던 때(전날부터 이어서 지원 중)
       const since = etas.length ? null : list.filter(contOf).map(m => contSince(m.v.id, S.date, b.id)).sort((x, y) => (x.date + (x.time || "")).localeCompare(y.date + (y.time || "")))[0];
       cards.push(`<article class="dest" data-bid="${esc(b.id)}"><div class="dest-head">
@@ -866,11 +876,18 @@ function readCell(vid, d, timeOnly) {
     if (stop && stop !== "__del" && stop !== "__off") { stops.push(stop); times.push(tm ? normTime(tm.value) || null : rec.times[j] || null); } });
   return { stops, times, revised: isTeamId(vid) ? false : timeOnly ? rec.revised : S.revisedMode };     // 신속대응팀은 최초 지원/수정본 구분 없음
 }
+// 확정 전에 고친 경로의 시각 순서를 한 번 더 봄(지사를 바꿔 숨었던 첫 칸 시각이 다시 보이는 경우 등). 어긋나면 안내하고 확정하지 않음
+function orderBlock(keys) {
+  for (const k of keys) { const [d, vid] = k.split("|"), x = S.draft.get(k), b = x && x.stops.length ? timeOrderBad(d, vid, x) : null;
+    if (b) { toast(`${fmtMD(d)} ${vname(vehById(vid))}: ${timeOrderMsg(x, b)}. 시각을 고친 뒤 다시 확정하세요.`, true); return true; } }
+  return false;
+}
 async function confirmFleet() {
   if (S.preview) return toast("미리보기에서는 확정할 수 없습니다. '내 아이디'로 돌아오세요.", true);
   const vehicles = [...S.vdraft].map(([id, f]) => ({ id, ...f })), routes = draftKeys(false).map(k => { const [date, vehicle_id] = k.split("|"), x = S.draft.get(k);
     return { date, vehicle_id, stops: x.stops, revised: x.revised, times: x.times.some(Boolean) ? x.times : null }; });
   const status = sdraftKeys(false).map(vehicle_id => { const x = S.sdraft.get(vehicle_id); return { vehicle_id, status: x.status, off_from: x.off_from || null }; });       // 신속대응팀 변경은 그 탭의 [확정]으로
+  if (orderBlock(draftKeys(false))) return;
   if (!vehicles.length && !routes.length && !status.length) return;
   if ((routes.length || status.length) && !S.round) return toast("기준일자가 없어 지원 여부·경로를 확정할 수 없습니다. 지사별 요청·편성에서 기준일자를 먼저 만드세요.", true);
   const what = [routes.length ? `경로 ${routes.length}칸` : "", status.length ? `지원 여부 ${status.length}대` : "", vehicles.length ? `장비 ${vehicles.length}대(번호·블로워)` : ""].filter(Boolean).join(", ");
@@ -918,6 +935,7 @@ async function confirmTeam() {
   const routes = draftKeys(true).map(k => { const [date, team_id] = k.split("|"), x = S.draft.get(k); return { date, team_id, stops: x.stops, revised: false, times: x.times.some(Boolean) ? x.times : null }; });
   const status = sdraftKeys(true).map(team_id => { const x = S.sdraft.get(team_id); return { team_id, status: x.status, off_from: x.off_from || null }; });
   if (!routes.length && !status.length) return;
+  if (orderBlock(draftKeys(true))) return;
   if (!S.round) return toast("기준일자가 없어 확정할 수 없습니다. 지사별 요청·편성에서 기준일자를 먼저 만드세요.", true);
   const what = [routes.length ? `경로 ${routes.length}칸` : "", status.length ? `지원 여부 ${status.length}대` : ""].filter(Boolean).join(", ");
   if (!confirm(`강원 신속대응팀 ${what} 변경을 확정할까요?
@@ -1512,7 +1530,9 @@ document.addEventListener("change", async e => {
   if (t.dataset.rv) {                       // 경로 칸(관리자): 그 (날짜, 장비)의 지사 목록을 다시 모음
     const vid = t.dataset.rv, d = t.dataset.rd, v = vehById(vid); if (!v || !(isTeam(v) ? canTeam() : canRoute())) return refresh();
     if (t.value === "__off") { setStat(vid, { off_from: d }); return patchVehicle(vid); }          // 지원 불가(이날부터): 이날·뒷날 칸이 지원 불가로
-    S.extraStop.delete(rk(d, vid)); setRoute(d, vid, readCell(vid, d)); return patchCell(vid, d);
+    const rc = readCell(vid, d);
+    if (rc.stops.some((s, i) => i > 0 && s === rc.stops[i - 1])) toast("바로 앞과 같은 지사는 한 번만 들어갑니다(다른 지사를 들렀다 다시 오는 것은 됩니다)", true);
+    S.extraStop.delete(rk(d, vid)); setRoute(d, vid, rc); return patchCell(vid, d);
   }
   if (t.dataset.ra) {                       // 기계화부: 그 지원일의 피지원 지사(배정받은 지사 중 한 곳, 2026-11-02 모든 지원일). 다른 칸의 남은 대수 표시도 바뀌므로 표를 다시 그림
     const vid = t.dataset.ra, d = t.dataset.rd, v = vehById(vid), cr = curRound(), g = govRound(d); if (!v || isPool(v) || !routeOwn(v) || !cr || !g || g.id !== cr.id) return refresh();
@@ -1534,7 +1554,13 @@ document.addEventListener("change", async e => {
     const vid = t.dataset.rt, d = t.dataset.rd, v = vehById(vid); if (!v || !(isTeam(v) ? canTeam() : canRoute() || routeOwn(v))) return refresh();
     const nt = normTime(t.value);
     if (nt === undefined) { toast("시각은 0730 또는 07:30 처럼 넣으세요 (00:00~23:59)", true); return patchCell(vid, d); }
-    t.value = nt || ""; setRoute(d, vid, readCell(vid, d, true)); return patchCell(vid, d);
+    t.value = nt || ""; const rc = readCell(vid, d, true), bad = nt ? timeOrderBad(d, vid, rc) : null;
+    if (bad) {                              // 앞 지사보다 늦어야 함(2026-11-04): 방금 넣은 칸을 비우고 안내
+      const td = t.closest("td"), rows = td ? [...td.querySelectorAll(".slot-x")].filter(r => { const s = r.querySelector("select[data-rv]"); return !s || (s.value && s.value !== "__del" && s.value !== "__off"); }) : [];
+      const me = rows.findIndex(r => r.contains(t)); toast(timeOrderMsg(rc, bad), true);
+      if (me >= 0 && me < rc.times.length) rc.times[me] = null; t.value = "";
+    }
+    setRoute(d, vid, rc); return patchCell(vid, d);
   }
   if (t.id === "modeInit" || t.id === "modeRev") {     // [최초 지원]/[수정본]: 둘 중 하나, 표 전체에 한 번에 적용
     S.revisedMode = t.id === "modeRev" ? t.checked : !t.checked; return renderFleet();

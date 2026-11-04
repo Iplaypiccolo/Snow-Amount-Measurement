@@ -136,6 +136,38 @@ def t_multi_stop_add_and_delete(p):
     check(route(p, "V002", d1) == [] and ev(p, f"S.draft.get('{d1}|V002').stops.length") == 0, "모두 지우면 빈 경로(확정하면 그 날짜 줄 삭제)")
     confirm_fleet(p); check(ev(p, f"S.routes.has('{d1}|V002')") is False, "확정 후 서버에서도 삭제")
 
+def t_route_revisit_and_order(p):
+    """2026-11-04(64): 같은 지사를 다시 들를 수 있음(A→B→A), 바로 연달아는 하나로. 아래 칸 시각은 앞 지사보다 늦어야(같은 시각도 안 됨)"""
+    tab(p, "fleet"); d = day(p, 1)
+    vid = ev(p, f"(() => {{ const v = S.vehicles.find(v => !v.round_id && v.type === '제설차' && stOf(S.round, v.id).status === 'O' && !routeOf('{d}', v.id).length && document.querySelector(`select[data-fk='r:{d}:${{v.id}}:0']`)); return v && v.id; }})()")
+    check(bool(vid), "빈 경로 장비 하나")
+    opts = [o for o in p.locator(rsel(vid, d) + " option").evaluate_all("os => os.filter(o => /^B/.test(o.value) && !o.disabled).map(o => o.value)")]
+    prev = ev(p, f"routeOf(addDays('{d}', -1), '{vid}').slice(-1)[0] || ''"); opts = [o for o in opts if o != prev]   # 연속지원(첫 시각 숨김)이 아니게
+    A, B = opts[0], opts[1]
+    p.select_option(rsel(vid, d), A); p.wait_for_timeout(200)
+    p.click(f"[data-stop-add='{d}|{vid}']"); p.wait_for_timeout(150); p.select_option(f"select[data-fk='rn:{d}:{vid}:1']", B); p.wait_for_timeout(200)
+    ti = lambda j: f"input[data-fk='t:{d}:{vid}:{j}']"
+    p.fill(ti(0), "1300"); p.press(ti(0), "Tab"); p.wait_for_timeout(150)
+    p.fill(ti(1), "1100"); p.press(ti(1), "Tab"); p.wait_for_timeout(200)
+    check("늦어야" in toast(p) and p.locator(ti(1)).input_value() == "" and ev(p, f"recOf('{d}', '{vid}').times") == ["13:00", None], "앞 지사(13:00)보다 이른 11:00 은 안내하고 비움: " + toast(p))
+    p.fill(ti(1), "1300"); p.press(ti(1), "Tab"); p.wait_for_timeout(200)
+    check(p.locator(ti(1)).input_value() == "" and ev(p, f"recOf('{d}', '{vid}').times[1]") is None, "같은 시각(13:00)도 안 됨")
+    p.fill(ti(1), "1500"); p.press(ti(1), "Tab"); p.wait_for_timeout(200)
+    check(ev(p, f"recOf('{d}', '{vid}').times") == ["13:00", "15:00"], "15:00 은 됨")
+    p.click(f"[data-stop-add='{d}|{vid}']"); p.wait_for_timeout(150); p.select_option(f"select[data-fk='rn:{d}:{vid}:2']", A); p.wait_for_timeout(200)
+    check(ev(p, f"routeOf('{d}', '{vid}')") == [A, B, A], f"A→B→A 다시 들르기: {ev(p, f'routeOf(`{d}`, `{vid}`)')}")
+    p.fill(ti(2), "1700"); p.press(ti(2), "Tab"); p.wait_for_timeout(200)
+    check(ev(p, f"recOf('{d}', '{vid}').times") == ["13:00", "15:00", "17:00"], "17:00")
+    p.click(f"[data-stop-add='{d}|{vid}']"); p.wait_for_timeout(150); p.select_option(f"select[data-fk='rn:{d}:{vid}:3']", A); p.wait_for_timeout(200)
+    check("바로 앞과 같은 지사" in toast(p) and ev(p, f"routeOf('{d}', '{vid}')") == [A, B, A], "바로 연달아 같은 지사는 하나로(안내)")
+    confirm_fleet(p); check("확정했습니다" in toast(p) and ev(p, f"S.routes.get(rk('{d}', '{vid}')).stops") == [A, B, A], "확정: " + toast(p))
+    # 확정 전 한 번 더: 순서가 어긋난 칸이 남아 있으면 확정하지 않음
+    ev(p, f"(S.draft.set(rk('{d}', '{vid}'), {{ stops: ['{A}', '{B}'], times: ['14:00', '12:00'], revised: false }}), updateSavebars())")
+    confirm_fleet(p); check("늦어야" in toast(p) and ev(p, f"S.draft.has(rk('{d}', '{vid}'))"), "어긋난 시각이 남으면 확정 안 함: " + toast(p))
+    ev(p, "(S.draft.clear(), refresh())")
+    # 같은 지사를 두 번 들를 때 '지금 위치 이후의 방문'
+    check(ev(p, f"occAt(['{A}', '{B}', '{A}'], '{A}', 1)") == 2 and ev(p, f"occAt(['{A}', '{B}', '{A}'], '{A}', 0)") == 0 and ev(p, f"occAt(['{A}', '{B}'], '{A}', 1)") == -1, "occAt")
+
 def t_status_maintenance(p):
     tab(p, "fleet"); d0 = day(p, 0)
     opts = p.locator("[data-vs=V002] option").all_inner_texts(); sv = ev(p, "(S.rstat.get(S.round + '|V002') || ST0).status")
@@ -1727,7 +1759,7 @@ def t_route_perm_admin_only(p):
     check("권한이 없습니다" in toast(p), "화면을 우회해 다른 기관 경로를 보내도 거절: " + toast(p))
     as_user(p, "admin1"); tab(p, "fleet"); check(p.locator("#eqTable select[data-rv]").count() > 0 and p.locator("#day1In").count() == 1, "관리자는 지원일 칸 전부")
 
-TESTS = [t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_reqs_read_fail, t_confirm_stale, t_fleet_sum, t_tables_sizes, t_fleet_sum_fixed, t_no_hscroll_real_bars, t_table_look, t_branch_names_sticky, t_first_col_fixed_opaque, t_move_compact, t_round_ten_days, t_alloc_fixed_only, t_branch_totals, t_removed_hints, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_report_snow_warning, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
+TESTS = [t_route_revisit_and_order, t_route_perm_admin_only, t_gw_team, t_branch_two_tables, t_branch_compact, t_fixed_columns, t_reqs_read_fail, t_confirm_stale, t_fleet_sum, t_tables_sizes, t_fleet_sum_fixed, t_no_hscroll_real_bars, t_table_look, t_branch_names_sticky, t_first_col_fixed_opaque, t_move_compact, t_round_ten_days, t_alloc_fixed_only, t_branch_totals, t_removed_hints, t_branch_bulk_save, t_hq_bulk_marks_branch_saved, t_report, t_report_snow_warning, t_back_button, t_branch_saved, t_alloc_follow_assign, t_pool_round_delete, t_fleet_only_go, t_pool_vehicles, t_reload, t_allocation, t_moves_between_branches, t_round_status_rules, t_hide_vehicle, t_views_and_choices_after_confirm_all, t_confirm_all_by_hq, t_confirmed_row_locked, t_weather_manual, t_load, t_move_hierarchy, t_dest_order_and_day_tag, t_route_choices_confirmed_only, t_confirm_keeps_history, t_day1_header_and_columns,
          t_multi_stop_add_and_delete, t_status_maintenance, t_reset_button, t_permissions_equip_own, t_branch_permissions, t_branch_save_confirm_and_arrive,
          t_round_create, t_history_tooltip_per_cell, t_log_tab, t_plate_edit, t_vehicle_add_delete, t_dest_layout_and_jump, t_link_numbers_no_underline_hover_bg, t_fleet_sort_blower_delete, t_fleet_header_stays_on_top, t_theme_toggle,
          t_unsaved_guard_on_user_switch, t_xss_text_is_escaped, t_no_driver_info_anywhere,
