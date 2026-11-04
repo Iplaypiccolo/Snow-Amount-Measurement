@@ -44,6 +44,12 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-04 · 커밋 (이 기록 커밋 하나) · 강원본부 지원장비(강원 신속대응팀) 순서 원주 · 대관령 · 강릉 · 양양 — 마이그레이션 65 서버 적용
+- 사용자 요청. `gw_team.sort` 만 바꿈(GW1 원주 1 · GW3 대관령 2 · GW4 강릉 3 · GW2 양양 4). 번호·이름·경로·지원 여부는 그대로. 적용 뒤 서버에서 순서 확인.
+- 샘플(`equipment/js/sample-data.js`)·가짜 서버(`tests/_sb_mock.py`)·시험 기대값을 같은 순서로. 전체 시험 통과.
+- 못 한 것: 실제 사이트 화면에서 순서 보기(이 작업 공간에서 github.io 접속 안 됨).
+— ✍ Claude Code 작성
+
 ### 2026-11-04 · 커밋 (이 기록 커밋 하나) · 저장소 이름 Snow-Amount-Measurement → snow (사이트 주소 변경)
 - 사용자가 GitHub 에서 저장소 이름을 `snow` 로 바꿈 → 사이트 **`https://iplaypiccolo.github.io/snow/`**. 예전 주소 `…/Snow-Amount-Measurement/` 는 열리지 않음(GitHub 가 사이트 주소는 넘겨주지 않음). 도메인이 같아 로그인·사용법 안내 기록은 그대로.
 - 서버: Edge Function `import-reference` v3 배포(`REPO = 'Iplaypiccolo/snow'`) — 배포된 본문이 저장소 파일과 같음을 확인. `raw.githubusercontent.com/Iplaypiccolo/snow/main/data/stations.json` 200 확인.

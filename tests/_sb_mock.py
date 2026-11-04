@@ -332,7 +332,7 @@ class Mock:
                 return send(200, dict(nr, carried=len(self.vehicles)))
             if tbl in ("gw_team", "gw_team_routes", "gw_team_status") and req.method == "GET":     # 강원 신속대응팀(마이그레이션 48): 4대 고정, 경로·지원 여부는 비어 있음
                 if not self.usable(u): return send(200, [])
-                return send(200, [{"id": f"GW{i + 1}", "name": n, "sort": i + 1} for i, n in enumerate(["원주", "양양", "대관령", "강릉"])] if tbl == "gw_team" else [])
+                return send(200, [{"id": g, "name": n, "sort": i + 1} for i, (g, n) in enumerate([("GW1", "원주"), ("GW3", "대관령"), ("GW4", "강릉"), ("GW2", "양양")])] if tbl == "gw_team" else [])
             if tbl == "round_vehicle_status" and req.method == "GET":
                 if not self.usable(u): return send(200, [])
                 return send(200, [x for x in self.rstatus if "eq.%d" % x["round_id"] in q.get("round_id", [""])])

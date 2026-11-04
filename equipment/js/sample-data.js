@@ -107,7 +107,7 @@ function makeSample(today) {
   [["대관령", 12, 16, -10, 90], ["양양", 8, 10, -3, 70], ["엄정", 0, 0, 2, 20]].forEach(([n, v, p, t, o]) => Object.assign(requests.find(r => r.round_id === 2 && r.branch_id === B(n)), { fc_snow: v, fc_pcp: p, fc_snow_hi: v, fc_pcp_hi: p, fc_pop: o, fc_tmin: t, fc_tmin_at: kst(1, "06:00"), fc_tmfc: kst(0, "05:00"), fc_at: at(0, 6) }));
   fix("대관령", "주의", [["L1022520", "강릉산지", "주의", "대설", kst(-1, "22:00"), kst(0, "01:00")]]); fix("양양", null, []); fix("엄정", null, [], "기상청 자료를 30분 넘게 받지 못함");
   // 강원 신속대응팀(강원본부 지원장비, 마이그레이션 48): 이름 고정 4대. 처음엔 모든 기준일자에서 미정, 경로 없음(기존 시연 숫자는 그대로)
-  const team = [["GW1", "원주"], ["GW2", "양양"], ["GW3", "대관령"], ["GW4", "강릉"]].map(([id, name], i) => ({ id, name, sort: i + 1 }));
+  const team = [["GW1", "원주"], ["GW3", "대관령"], ["GW4", "강릉"], ["GW2", "양양"]].map(([id, name], i) => ({ id, name, sort: i + 1 }));
   const teamStatus = rounds.flatMap(r => team.map(t => ({ round_id: r.id, team_id: t.id, status: "", off_from: null, updated_at: new Date(Date.now() - 3600e3).toISOString() })));
   return { hqs, branches, holdings, vehicles, routes, rounds, status, requests, allocations: [], audit, orgs: ["서울경기", "충북", "전북", "대구경북"], zones, zoneAuto, zoneOver: [], warnActive, warnBase, warnFc, warnEf, warnEfPre, forecast, team, teamStatus, teamRoutes: [] };
 }

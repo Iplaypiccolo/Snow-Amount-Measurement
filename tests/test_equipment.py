@@ -1716,7 +1716,7 @@ def t_gw_team(p):
     for uid, on in (("admin1", True), ("hq-gw", True), ("br1", False), ("eq-sg", False), ("viewer", False)):
         as_user(p, uid); check(p.locator("#teamTabBtn").is_visible() == on, f"{uid}: 탭 보임 {on}")
     as_user(p, "hq-gw"); tab(p, "gwteam")
-    check(p.locator("#teamTable tbody td:first-child .plate").all_inner_texts() == ["원주", "양양", "대관령", "강릉"], "4대, 이름 고정(2026-11-02 홍천 → 양양)")
+    check(p.locator("#teamTable tbody td:first-child .plate").all_inner_texts() == ["원주", "대관령", "강릉", "양양"], "4대, 이름 고정(2026-11-02 홍천 → 양양)")
     check(p.locator(rsel("GW1", d0)).is_disabled(), "미정이면 경로 칸이 꺼져 있음")
     p.select_option("#teamTable select[data-vs=GW1]", "O"); p.wait_for_timeout(100)
     groups = ev(p, f"[...document.querySelector(\"{rsel('GW1', d0)}\").querySelectorAll('optgroup')].map(g => g.label)")
