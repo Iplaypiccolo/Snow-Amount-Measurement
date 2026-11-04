@@ -66,6 +66,8 @@ python tools/run_all_tests.py            # 전체 시험 (약 5분, 병렬). --f
 - 일회용 시작 토큰(`settings` 의 `bootstrap_token`, 15분)으로 Edge Function 을 부르는 방식이 있다. 쓸 때는 `pg_net` 을 `extensions` 스키마에 잠시 만들고 **끝나면 반드시 지운다**.
 
 ## 알려진 함정
+
+- 4일 예보 2단계 선행 조사(2026-11-05): `collect-forecast` v5의 `{"probe":"TMP","probeAt":{"tmfc":"2026110423","tmef":"2026110800"}}`는 관리자/기존 수집 토큰 인증 후 지정 시각 한 건을 조회해 요약만 반환(계획·예보 저장·실패 기록 없음). 시험 386/386, 실제24건 정상. 먼 날짜의 일부 기온은 01·02시도 값이 있었으나 눈·비 표본은 모두0이어서 정량/정성 코드 판별은 미완료. 수집 범위는 기존27시간 유지, 확대 SQL 미적용. 자세한 결과·제약은 `docs/stage2-probe-results.md`.
 - Supabase API 경로는 **WHERE 없는 DELETE 를 막는다**(`where true` 필요).
 - 서버는 한 번에 **1,000줄**까지만 돌려준다 → `auth/events.js` 가 나눠 읽는다.
 - `raw.githubusercontent.com` 은 몇 분 캐시한다 → 서버 이전 함수를 부를 때 **커밋 번호(`ref`)를 지정**한다.

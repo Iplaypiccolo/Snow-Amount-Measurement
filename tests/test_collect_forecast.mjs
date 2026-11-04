@@ -132,6 +132,75 @@ await test('시험 호출(probe): 한 시각만 받아 요약만 돌려주고 �
   assert.equal(gridStats('1,2,3').ok, false); assert.equal(gridStats(null), null);
 });
 
+// 지정 시각 조사: 실제 저장 경로에 접근하지 않는지 가짜 의존성으로 확인.
+{
+const good = { probe: 'TMP', probeAt: { tmfc: '2026110423', tmef: '2026110800' } };
+const zeros = Array(NX * NY).fill('0').join(',');
+const snowy = Array(NX * NY).fill('2').join(',');
+function world(options = {}) {
+  const state = { calls: [], mutations: 0, clock: 0 };
+  state.key = options.noKey ? '' : 'fixture_key';
+  state.deps = {
+    now: () => state.clock,
+    env: () => state.key,
+    auth: { getUser: async () => ({ id: 'fixture-user' }) },
+    store: new Proxy({
+      getProfileById: async () => ({ role: options.role || 'admin', disabled: false }),
+      tokenOk: async () => true,
+    }, { get(target, prop) { return target[prop] || (async () => { state.mutations++; throw new Error('DB plan/write forbidden for probeAt'); }); } }),
+    fetchText: async url => { state.calls.push(url); state.clock += 250; return options.response || { status: 200, text: zeros }; },
+  };
+  return state;
+}
+async function call(w, body, authenticated = true) {
+  const response = await handle(new Request('https://fixture/probe', { method: 'POST', headers: authenticated ? { authorization: 'Bearer fixture' } : {}, body: JSON.stringify(body) }), w.deps);
+  return { status: response.status, data: await response.json() };
+}
+
+await test('먼 시각 한 건만 조회하고 DB 계획·쓰기 없음', async () => {
+  const w = world(), r = await call(w, good);
+  assert.equal(r.status, 200); assert.equal(r.data.ok, true); assert.equal(w.calls.length, 1); assert.equal(w.mutations, 0);
+  const u = new URL(w.calls[0]); assert.equal(u.searchParams.get('tmfc'), good.probeAt.tmfc); assert.equal(u.searchParams.get('tmef'), good.probeAt.tmef);
+  assert.equal(r.data.response_bytes, new TextEncoder().encode(zeros).byteLength); assert.equal(r.data.elapsed_ms, 250); assert.equal(r.data.all_zero, true);
+});
+await test('신적설도 동일한 지정 시각으로 조회, 요약에 인증키 없음', async () => {
+  const w = world({ response: { status: 200, text: snowy } }), r = await call(w, { ...good, probe: 'SNO' });
+  assert.equal(r.data.stats.max, 2); assert.equal(r.data.all_zero, false); assert.equal(w.calls.length, 1); assert.equal(w.mutations, 0); assert.ok(!JSON.stringify(r.data).includes(w.key));
+});
+await test('비관리자와 비로그인 조회 차단', async () => {
+  for (const [w, auth] of [[world({ role: 'viewer' }), true], [world(), false]]) { assert.equal((await call(w, good, auth)).status, 401); assert.equal(w.calls.length, 0); }
+});
+for (const [name, body] of [
+  ['불가능한 날짜', { ...good, probeAt: { tmfc: '2026023023', tmef: '2026030100' } }],
+  ['발표 전 시각', { ...good, probeAt: { tmfc: '2026110423', tmef: '2026110422' } }],
+  ['같은 시각', { ...good, probeAt: { tmfc: '2026110423', tmef: '2026110423' } }],
+  ['120시간 초과', { ...good, probeAt: { tmfc: '2026110423', tmef: '2026111000' } }],
+  ['발표 시각이 아닌 03시', { ...good, probeAt: { tmfc: '2026110403', tmef: '2026110404' } }],
+  ['없는 변수', { ...good, probe: 'SECRET' }],
+  ['초단기와 혼용', { ...good, vsrt: true }],
+  ['probe 누락', { probeAt: good.probeAt }],
+  ['null 시각', { ...good, probeAt: null }],
+]) {
+  await test(name + '은 실제 요청 전에 거절', async () => { const w = world(); assert.equal((await call(w, body)).status, 400); assert.equal(w.calls.length, 0); assert.equal(w.mutations, 0); });
+}
+await test('120시간 경계 허용', async () => {
+  const w = world(), r = await call(w, { ...good, probeAt: { tmfc: '2026110423', tmef: '2026110923' } });
+  assert.equal(r.data.ok, true); assert.equal(w.calls.length, 1);
+});
+await test('키가 없으면 DB 실패 기록도 남기지 않음', async () => {
+  const w = world({ noKey: true }), r = await call(w, good);
+  assert.equal(r.data.error, 'no_key'); assert.equal(w.calls.length, 0); assert.equal(w.mutations, 0);
+});
+await test('상위 서버 오류는 재시도·저장 없이 상태만 반환', async () => {
+  const w = world({ response: { status: 503, text: 'fixture_key and upstream message' } }), r = await call(w, good);
+  assert.equal(r.data.ok, false); assert.equal(r.data.status, 503); assert.equal(w.calls.length, 1); assert.equal(w.mutations, 0); assert.ok(!JSON.stringify(r.data).includes(w.key));
+});
+await test('격자 형식 오류도 원문·키를 반환하지 않음', async () => {
+  const w = world({ response: { status: 200, text: 'fixture_key' } }), r = await call(w, good);
+  assert.equal(r.data.ok, false); assert.equal(w.calls.length, 1); assert.equal(w.mutations, 0); assert.ok(!JSON.stringify(r.data).includes(w.key));
+});
+}
+
 const ok = results.filter((r) => r[1]).length;
 results.forEach((r) => console.log((r[1] ? 'PASS ' : 'FAIL ') + r[0] + (r[1] ? '' : '  → ' + r[2])));
 console.log('\n' + ok + '/' + results.length + ' 통과'); process.exit(ok === results.length ? 0 : 1);

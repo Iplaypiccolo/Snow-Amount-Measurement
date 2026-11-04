@@ -109,14 +109,34 @@ async function collectVsrt(deps, key) {
   return json(200, { ok: !lastErr || done, done, tmfc: used && kstMinute(used), hours: put, waiting: !used, error: done ? undefined : lastErr || undefined });
 }
 
+// 2단계 조사 전용: 지정한 단기 발표/발효 시각 한 건을 조회. DB 계획·저장·실패 기록을 부르지 않음.
+async function probeAt(body, deps, key) {
+  const v = String(body.probe || '').toUpperCase(), q = body.probeAt;
+  const stamp = (s) => {
+    if (typeof s !== 'string' || !/^20\d{8}$/.test(s)) return null;
+    const ms = Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8), +s.slice(8, 10)) - 9 * 3600e3;
+    return Number.isFinite(ms) && kstHour(new Date(ms).toISOString()) === s ? ms : null;
+  };
+  if (!q || typeof q !== 'object' || body.vsrt || !PROBE_VARS.includes(v)) return json(400, { ok: false, error: 'bad_probe_time' });
+  const fc = stamp(q.tmfc), ef = stamp(q.tmef);
+  if (fc === null || ef === null || ![2, 5, 8, 11, 14, 17, 20, 23].includes(+q.tmfc.slice(8)) || ef <= fc || ef - fc > 120 * 3600e3) return json(400, { ok: false, error: 'bad_probe_time' });
+  if (!key) return json(200, { ok: false, error: 'no_key' });
+  const started = deps.now();
+  const r = await deps.fetchText(`${GRID_URL}?tmfc=${q.tmfc}&tmef=${q.tmef}&vars=${v}&authKey=${encodeURIComponent(key)}`);
+  const stats = r.status === 200 ? gridStats(r.text) : null;
+  return json(200, { ok: r.status === 200 && !!(stats && stats.ok), probe: v, tmfc: q.tmfc, tmef: q.tmef, status: r.status,
+    response_bytes: new TextEncoder().encode(String(r.text || '')).byteLength, elapsed_ms: deps.now() - started,
+    all_zero: !!(stats && stats.ok && stats.valid === NX * NY && stats.min === 0 && stats.max === 0), stats });
+}
+
 export async function handle(req, deps) {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return json(405, { ok: false, error: 'method' });
   if (!(await allowed(req, deps))) return json(401, { ok: false, error: 'unauthorized' });
   const key = String(deps.env('KMA_AUTH_KEY') || '').trim();
-  if (!key) { await deps.store.fail('KMA_AUTH_KEY 비밀값이 없음'); return json(200, { ok: false, error: 'no_key' }); }
-
   let body = {}; try { body = (await req.json()) || {}; } catch (e) { body = {}; }
+  if (Object.prototype.hasOwnProperty.call(body, 'probeAt')) return probeAt(body, deps, key);
+  if (!key) { await deps.store.fail('KMA_AUTH_KEY 비밀값이 없음'); return json(200, { ok: false, error: 'no_key' }); }
   if (body.vsrt) return body.probe ? probeVsrt(body, deps, key) : collectVsrt(deps, key);
   if (body.probe) {                                   // 시험 호출: 한 시각만 받아 요약만(저장 안 함)
     const v = String(body.probe).toUpperCase();
