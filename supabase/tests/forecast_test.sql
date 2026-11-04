@@ -28,8 +28,8 @@ begin
 
   set local role service_role; p := public.forecast_plan(); reset role;
   select count(distinct (nx, ny)) into nc from private.grid_effective(); st0 := (p ->> 'start_at')::timestamptz;   -- 다음 계획(done)에는 start_at 이 없어 따로 둠
-  perform pg_temp.yes('계획: 가장 최근 발표분, 다음 정시부터 27시각 × 적설·강수·기온·강수확률·강수형태, 지사 격자 전부(확률·강수형태는 맨 뒤 54개)', not (p ->> 'done')::boolean and jsonb_array_length(p -> 'missing') = 135 and jsonb_array_length(p -> 'cells') = nc
-    and not exists (select 1 from jsonb_array_elements(p -> 'missing') with ordinality m where (m.ordinality <= 81) = (m.value ->> 0 in ('POP', 'PTY')))
+  perform pg_temp.yes('계획: 가장 최근 발표분, 제공 끝까지5종, 가까운27시각의81개 핵심·54개 보조 먼저', not (p ->> 'done')::boolean and (p ->> 'extended')::boolean and jsonb_array_length(p -> 'missing') = 5*((extract(epoch from ((p ->> 'end_at')::timestamptz-st0))/3600)::int+1) and jsonb_array_length(p -> 'cells') = nc
+    and not exists (select 1 from jsonb_array_elements(p -> 'missing') with ordinality m where m.ordinality <=135 and (m.ordinality <= 81) = (m.value ->> 0 in ('POP', 'PTY')))
     and (p ->> 'tmfc')::timestamptz = private.fc_latest_tmfc() and (p ->> 'start_at')::timestamptz = date_trunc('hour', now()) + interval '1 hour', p::text);
   -- 강수확률: B001 의 첫 격자는 시작 5시간 뒤 60%·나머지 30%, 다른 격자는 20%
   -- B001 의 첫 격자만 매시간 1.5cm·강수 2mm, 기온은 시작 7시간 뒤와 15시간 뒤 -6℃(같으면 이른 시각), 나머지 3℃. 다른 격자는 0·0·10℃, 바다(-99)인 격자 하나
@@ -47,8 +47,9 @@ begin
       and (select max_snow_24h = 36 and max_pcp_24h = 48 and max_pop_24h is null from public.branch_forecast where branch_id = 'B001')
       and (select not (series ? 'r') and pop_24h is null from public.forecast_cells where nx = cx and ny = cy)); end if;
     if i = 134 then perform pg_temp.yes('134개째까지는 끝나지 않음', (select done_at is null from public.forecast_runs where tmfc = (p ->> 'tmfc')::timestamptz)); end if;
+    if i = 135 then perform pg_temp.yes('135개로 가까운 화면 완료, 먼 시각은 계속 수집', (select aux_at is not null and done_at is null from public.forecast_runs where tmfc=(p->>'tmfc')::timestamptz)); end if;
   end loop;
-  perform pg_temp.yes('강수확률·강수형태까지 135개가 모이면 끝: B001 최고 강수확률 60%(시작 5시간 뒤), 격자 추이 24시각', (select done_at is not null from public.forecast_runs where tmfc = (p ->> 'tmfc')::timestamptz)
+  perform pg_temp.yes('먼 시각까지 전부 모이면 끝(가까운 화면은135개에서 이미 갱신): B001 최고 강수확률 60%(시작 5시간 뒤), 격자 추이 24시각', (select done_at is not null from public.forecast_runs where tmfc = (p ->> 'tmfc')::timestamptz)
     and (select max_pop_24h = 60 from public.branch_forecast where branch_id = 'B001')
     and (select pop_24h = 60 and jsonb_array_length(series -> 'r') = 24 and (series -> 'r' ->> 5)::int = 60 and (series -> 'r' ->> 0)::int = 30 from public.forecast_cells where nx = cx and ny = cy));
   perform pg_temp.yes('62: 강수형태가 있는데 양 0 = ~1 → 범위 위쪽(B001 격자는 양이 있어 그대로 48·36, 다른 격자 0~2mm·0~2cm)', (select pcp_hi = 48 and snow_hi = 36 and not (series ? 'pq') from public.forecast_cells where nx = cx and ny = cy)
@@ -64,7 +65,10 @@ begin
   perform pg_temp.yes('창 한 시간 뒤 = 받은 범위 안이면 다시 계산(36 - 1.5 + 3 = 37.5)', ok1
     and (select max_snow_24h = 37.5 and (detail ->> 'start_at')::timestamptz = st0 + interval '1 hour' from public.branch_forecast where branch_id = 'B001'));
   ok1 := private.fc_apply((p ->> 'tmfc')::timestamptz, st0 + interval '4 hours');
-  perform pg_temp.yes('받은 범위(27시간)를 넘는 창은 계산하지 않음(마지막 창 그대로)', not ok1
+  perform pg_temp.yes('확대 수집 범위 안이면27시간을 넘어서도 창 계산 가능', ok1
+    and (select max_snow_24h = 37.5 from public.branch_forecast where branch_id = 'B001'));
+  ok1 := private.fc_apply((p ->> 'tmfc')::timestamptz, (p ->> 'end_at')::timestamptz + interval '1 hour');
+  perform pg_temp.yes('실제 받은 끝을 넘는 창은 계산하지 않음(마지막 창 그대로)', not ok1
     and (select max_snow_24h = 37.5 from public.branch_forecast where branch_id = 'B001'));
   perform private.fc_apply((p ->> 'tmfc')::timestamptz, st0);                                  -- 아래 확정 시험은 처음 창(36)으로
   perform pg_temp.yes('바다(-99)는 0 으로', (select count(*) = 0 from public.branch_forecast where max_snow_24h < 0));

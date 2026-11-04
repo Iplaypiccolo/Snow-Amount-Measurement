@@ -201,6 +201,54 @@ await test('격자 형식 오류도 원문·키를 반환하지 않음', async (
 });
 }
 
+await test('확장: 전국 TMP가0이면5종을 건너뛰고 같은 시각을 더 요청하지 않음', async () => {
+  const w = world(); const h = w.plan.start_at; w.plan.extended = true;
+  w.plan.missing = ['TMP','SNO','PCP','POP','PTY'].map(v => [v,h]);
+  w.resp = () => ({ status: 200, text: Array(NX*NY).fill('0').join(',') });
+  const skipped=[]; w.deps.store.skip=async (t,h) => { skipped.push(h); return { data:{ok:true,done:false},error:null }; };
+  const r=await call(w); assert.deepEqual(skipped,[h]);assert.equal(w.fetched.length,1);assert.equal(w.puts.length,0);assert.equal(r.j.missing,0);
+});
+await test('확장: 고른 지사만0이고 전국 다른 칸에 값이 있으면 빈 시각으로 보지 않음', async () => {
+  const w=world();w.plan.extended=true;w.plan.missing=[['TMP',w.plan.start_at]];
+  const a=Array(NX*NY).fill('0');a[0]='5';w.resp=()=>({status:200,text:a.join(',')});
+  w.deps.store.skip=async()=>{throw Error('must not skip');};await call(w);assert.equal(w.puts.length,1);assert.deepEqual(w.puts[0][2],[0,0]);
+});
+await test('확장: SNO0은 정상적인 강설 없음, 빈 시각 판별은 TMP만 사용', async () => {
+  const w=world();w.plan.extended=true;w.plan.missing=[['SNO',w.plan.start_at]];w.resp=()=>({status:200,text:Array(NX*NY).fill('0').join(',')});
+  w.deps.store.skip=async()=>{throw Error('must not skip');};await call(w);assert.equal(w.puts.length,1);
+});
+await test('이전 서버 계획에서는 새 skip RPC를 부르지 않음', async () => {
+  const w=world();w.plan.missing=[['TMP',w.plan.start_at]];w.resp=()=>({status:200,text:Array(NX*NY).fill('0').join(',')});
+  w.deps.store.skip=async()=>{throw Error('legacy plan');};await call(w);assert.equal(w.puts.length,1);
+});
+await test('확장: 빈 시각 기록이 실패하면 수집 중단 후 다음 예약에 남김', async () => {
+  const w=world();w.plan.extended=true;w.plan.missing=[['TMP',w.plan.start_at],['SNO',w.plan.start_at]];
+  w.resp=()=>({status:200,text:Array(NX*NY).fill('0').join(',')});w.deps.store.skip=async()=>({data:null,error:{message:'fixture'}});
+  const r=await call(w);assert.equal(r.j.ok,false);assert.equal(w.fetched.length,1);assert.equal(w.fails[0],'DB 저장 실패');
+});
+await test('계측: 실제 요청·본문·재시도를 세고 비밀값을 반환하지 않음', async () => {
+  const w=world();w.plan.missing=[['SNO',w.plan.start_at]];w.resp=(u,n)=>n===1?{status:504,text:''}:{status:200,text:G};
+  const meters=[];w.deps.store.usage=async(...args)=>{meters.push(args);return true;};const r=await call(w);
+  assert.deepEqual(r.j.usage,{calls:2,bytes:new TextEncoder().encode(G).byteLength,retries:1});assert.equal(r.j.usage_saved,true);
+  assert.equal(meters.length,1);assert.equal(meters[0][1],false);assert.ok(!JSON.stringify(meters).includes(w.key));assert.ok(!JSON.stringify(r.j).includes(w.key));
+});
+await test('계측: 초단기는 별도 종류로 기록', async () => {
+  const w=vworld();const meters=[];w.deps.store.usage=async(...args)=>{meters.push(args);return true;};const r=await call(w,{token:'tok'},'{"vsrt":true}');
+  assert.equal(r.j.usage.calls,18);assert.equal(meters[0][1],true);
+});
+await test('계측: 실패해도 이미 저장한 예보는 정상 응답 유지', async () => {
+  const w=world();w.plan.missing=[['SNO',w.plan.start_at]];w.deps.store.usage=async()=>{throw Error('meter unavailable');};const r=await call(w);
+  assert.equal(r.j.ok,true);assert.equal(r.j.usage_saved,false);assert.equal(w.puts.length,1);assert.equal(w.fails.length,0);
+});
+await test('계측: 한국 자정 양쪽 요청은 각각의 날짜로 기록', async () => {
+  const w=world();w.clock=Date.parse('2026-11-04T14:59:59.900Z');w.plan.missing=[['SNO',w.plan.start_at],['PCP',w.plan.start_at]];
+  const days=[];w.deps.store.usage=async(day)=>{days.push(day);return true;};await call(w);assert.deepEqual(days,['2026-11-04','2026-11-05']);
+});
+await test('재시도도120초 예산이 끝나면 추가 요청하지 않음', async () => {
+  const w=world();w.plan.missing=[['SNO',w.plan.start_at]];w.deps.fetchText=async(u)=>{w.fetched.push(u);w.clock+=70000;return{status:504,text:''};};
+  const r=await call(w);assert.equal(w.fetched.length,2);assert.ok(r.j.error.includes('시간이 모자라'));assert.equal(w.puts.length,0);
+});
+
 const ok = results.filter((r) => r[1]).length;
 results.forEach((r) => console.log((r[1] ? 'PASS ' : 'FAIL ') + r[0] + (r[1] ? '' : '  → ' + r[2])));
 console.log('\n' + ok + '/' + results.length + ' 통과'); process.exit(ok === results.length ? 0 : 1);

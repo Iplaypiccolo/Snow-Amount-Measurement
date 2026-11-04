@@ -89,6 +89,7 @@ async function collectVsrt(deps, key) {
       const url = `${VSRT_URL}?tmfc=${kstMinute(tmfc)}&tmef=${kstHour(tmef)}&vars=${v}&authKey=${encodeURIComponent(key)}`;
       let vals = null, status = 0;
       for (let i = 0; i < TRIES && !vals && !notReady; i++) {
+        if (deps.now() - t0 > BUDGET_MS) { status = 'budget'; break; }
         if (i) await deps.sleep(RETRY_MS);
         const r = await deps.fetchText(url); status = r.status;
         if (r.status === 200 && String(r.text).includes('dfs_file_read')) { notReady = true; break; }
@@ -96,7 +97,7 @@ async function collectVsrt(deps, key) {
         if (r.status === 200 && !vals) { status = 'format'; break; }
       }
       if (notReady) break;
-      if (!vals) { lastErr = status === 'format' ? '기상청 격자 형식이 다름(키·주소 확인)' : `기상청 응답 ${status || '연결 실패'} (초단기 ${v} ${kstHour(tmef)})`; break; }
+      if (!vals) { lastErr = status === 'budget' ? '시간이 모자라 다음 예약 때 이어서' : status === 'format' ? '기상청 격자 형식이 다름(키·주소 확인)' : `기상청 응답 ${status || '연결 실패'} (초단기 ${v} ${kstHour(tmef)})`; break; }
       const { data: res, error: e2 } = await deps.store.vsrtPut(tmfc, v, tmef, vals);
       if (e2) { lastErr = 'DB 저장 실패'; break; }
       put++; done = !!(res && res.done);
@@ -129,6 +130,27 @@ async function probeAt(body, deps, key) {
     all_zero: !!(stats && stats.ok && stats.valid === NX * NY && stats.min === 0 && stats.max === 0), stats });
 }
 
+// 실제 기상청 요청만 한국 날짜별로 계측. 조사 호출과 DB 계획 조회는 제외.
+async function withUsage(deps, vsrt, work) {
+  const days = new Map(), seen = new Set();
+  const measured = { ...deps, async fetchText(url) {
+    const day = new Date(deps.now() + 9 * 3600e3).toISOString().slice(0, 10);
+    const u = days.get(day) || { calls: 0, bytes: 0, retries: 0 };
+    u.calls++; if (seen.has(url)) u.retries++; seen.add(url); days.set(day, u);
+    const r = await deps.fetchText(url); u.bytes += new TextEncoder().encode(String(r.text || '')).byteLength; return r;
+  } };
+  let response, saved = true;
+  try { response = await work(measured); }
+  finally {
+    for (const [day, u] of days) {
+      try { if (!deps.store.usage || await deps.store.usage(day, vsrt, u.calls, u.bytes, u.retries) !== true) saved = false; }
+      catch { saved = false; } // 계측 실패가 이미 저장한 예보를 실패로 바꾸지 않음
+    }
+  }
+  const usage = [...days.values()].reduce((a, u) => ({ calls: a.calls + u.calls, bytes: a.bytes + u.bytes, retries: a.retries + u.retries }), { calls: 0, bytes: 0, retries: 0 });
+  return json(response.status, { ...await response.json(), usage, usage_saved: saved });
+}
+
 export async function handle(req, deps) {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return json(405, { ok: false, error: 'method' });
@@ -137,7 +159,7 @@ export async function handle(req, deps) {
   let body = {}; try { body = (await req.json()) || {}; } catch (e) { body = {}; }
   if (Object.prototype.hasOwnProperty.call(body, 'probeAt')) return probeAt(body, deps, key);
   if (!key) { await deps.store.fail('KMA_AUTH_KEY 비밀값이 없음'); return json(200, { ok: false, error: 'no_key' }); }
-  if (body.vsrt) return body.probe ? probeVsrt(body, deps, key) : collectVsrt(deps, key);
+  if (body.vsrt) return body.probe ? probeVsrt(body, deps, key) : withUsage(deps, true, (d) => collectVsrt(d, key));
   if (body.probe) {                                   // 시험 호출: 한 시각만 받아 요약만(저장 안 함)
     const v = String(body.probe).toUpperCase();
     if (!PROBE_VARS.includes(v)) return json(400, { ok: false, error: 'bad_probe' });
@@ -150,30 +172,39 @@ export async function handle(req, deps) {
     return json(200, { ok: r.status === 200 && !!(stats && stats.ok), probe: v, status: r.status, tmfc: kstHour(pl.tmfc), tmef: kstHour(ef), stats, head });
   }
 
+  return withUsage(deps, false, (d) => collectShort(d, key));
+}
+
+async function collectShort(deps, key) {
   const { data: plan, error } = await deps.store.plan();
   if (error || !plan) return json(500, { ok: false, error: 'db' });
   if (plan.done) return json(200, { ok: true, done: true, tmfc: plan.tmfc });
   if (!plan.cells || !plan.cells.length) return json(200, { ok: false, error: 'no_cells' });
 
-  const t0 = deps.now(), tmfc = kstHour(plan.tmfc);
-  let put = 0, lastErr = null, done = false;
+  const t0 = deps.now(), tmfc = kstHour(plan.tmfc), skipped = new Set();
+  let put = 0, resolved = 0, lastErr = null, done = false;
   for (const [v, tmef] of plan.missing) {
+    if (skipped.has(Date.parse(tmef))) continue;
     if (deps.now() - t0 > BUDGET_MS) { lastErr = lastErr || '시간이 모자라 다음 예약 때 이어서'; break; }
     const url = `${GRID_URL}?tmfc=${tmfc}&tmef=${kstHour(tmef)}&vars=${v}&authKey=${encodeURIComponent(key)}`;
-    let vals = null, status = 0;
+    let vals = null, status = 0, empty = false;
     for (let i = 0; i < TRIES && !vals; i++) {
+      if (deps.now() - t0 > BUDGET_MS) { status = 'budget'; break; }
       if (i) await deps.sleep(RETRY_MS);
       const r = await deps.fetchText(url); status = r.status;
       vals = r.status === 200 ? pickCells(r.text, plan.cells) : null;
+      if (vals && plan.extended && v === 'TMP') { const s = gridStats(r.text); empty = !!(s && s.ok && s.valid === NX * NY && s.min === 0 && s.max === 0); }
       if (r.status === 200 && !vals) { status = 'format'; break; }        // 형식이 다르면(키 오류 안내문 등) 다시 해도 같음
     }
-    if (!vals) { lastErr = status === 'format' ? '기상청 격자 형식이 다름(키·주소 확인)' : `기상청 응답 ${status || '연결 실패'} (${v} ${kstHour(tmef)})`; break; }
-    const { data: res, error: e2 } = await deps.store.put(plan.tmfc, v, tmef, vals);
+    if (!vals) { lastErr = status === 'budget' ? '시간이 모자라 다음 예약 때 이어서' : status === 'format' ? '기상청 격자 형식이 다름(키·주소 확인)' : `기상청 응답 ${status || '연결 실패'} (${v} ${kstHour(tmef)})`; break; }
+    const { data: res, error: e2 } = empty ? await deps.store.skip(plan.tmfc, tmef) : await deps.store.put(plan.tmfc, v, tmef, vals);
+    if (empty && !e2) skipped.add(Date.parse(tmef));
     if (e2) { lastErr = 'DB 저장 실패'; break; }
+    resolved += empty ? plan.missing.filter(([, h]) => Date.parse(h) === Date.parse(tmef)).length : 1;
     put++; done = !!(res && res.done);
     if (done) break;
     await deps.sleep(GAP_MS);
   }
   if (lastErr && !done) await deps.store.fail(lastErr);
-  return json(200, { ok: !lastErr || done, done, tmfc, hours: put, missing: plan.missing.length - put, error: done ? undefined : lastErr || undefined });
+  return json(200, { ok: !lastErr || done, done, tmfc, hours: put, missing: plan.missing.length - resolved, error: done ? undefined : lastErr || undefined });
 }
