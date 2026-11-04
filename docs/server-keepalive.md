@@ -10,7 +10,7 @@
 - 참고: GitHub 는 **공개 저장소**에서 60일 동안 활동(커밋)이 없으면 예약 작업을 멈춥니다. 비공개 저장소는 해당 없음.
 
 ## 2. ⚠ 저장소를 비공개로 바꾸기 전에: 사이트 주소 문제
-- **GitHub 무료 계정은 비공개 저장소로 GitHub Pages 를 쓸 수 없습니다.** 비공개로 바꾸는 순간 `https://iplaypiccolo.github.io/Snow-Amount-Measurement/` 가 열리지 않습니다.
+- **GitHub 무료 계정은 비공개 저장소로 GitHub Pages 를 쓸 수 없습니다.** 비공개로 바꾸는 순간 `https://iplaypiccolo.github.io/snow/` 가 열리지 않습니다.
 - 무료로 계속 쓰려면 사이트를 **Cloudflare Pages(무료)** 로 옮기는 것을 권합니다. 비공개 GitHub 저장소를 연결하면 `main` 에 올릴 때마다 자동으로 다시 배포됩니다. 주소는 `https://<이름>.pages.dev` 로 바뀝니다.
   1. Cloudflare 계정 만들기(사용자가 직접) → **Workers & Pages → Create → Pages → Connect to Git** → GitHub 로그인 후 이 저장소만 허용
   2. 빌드 설정: Framework **None**, Build command **비움**, Output directory **/**(저장소 맨 위)

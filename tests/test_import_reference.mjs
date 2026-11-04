@@ -111,7 +111,7 @@ await test('인증: 로그인 안 함 · 엉뚱한 토큰 · 관리자가 아닌
 await test('plan: 관리자는 요약만 받고 DB 에는 아무것도 넣지 않는다', async () => {
   const w = world(); admin(w); const r = await J(await call(w, { action: 'plan' }, { jwt: 'jwt-a' }));
   assert.equal(r.status, 200); assert.equal(r.body.summary.sections, 1025); assert.equal(r.body.summary.section_km, 5734.713); assert.equal(w.imported, null);
-  assert.equal(w.fetched.length, 6); assert.ok(w.fetched.every((u) => u.startsWith('https://raw.githubusercontent.com/Iplaypiccolo/Snow-Amount-Measurement/main/data/')));
+  assert.equal(w.fetched.length, 6); assert.ok(w.fetched.every((u) => u.startsWith('https://raw.githubusercontent.com/Iplaypiccolo/snow/main/data/')));
 });
 
 await test('load: 시작 토큰으로 한 번만 가능하고, 넣은 개수가 요약과 같다', async () => {

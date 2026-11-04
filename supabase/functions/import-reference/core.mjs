@@ -6,7 +6,7 @@
 //  * 동작: action "plan" = 읽고 검사해서 요약만 돌려줌(DB 변경 없음), action "load" = 검사 통과 시 DB 함수가 한 번에 교체(전부 성공 또는 전부 취소)
 //  * 순수 로직(build)은 Node 로 시험 가능: tests/test_import_reference.mjs
 // ============================================================
-export const REPO = 'Iplaypiccolo/Snow-Amount-Measurement';
+export const REPO = 'Iplaypiccolo/snow';
 const REF_RE = /^(main|[0-9a-f]{7,40})$/;
 const FILES = ['sections', 'stations', 'hierarchy', 'grid_assign', 'jurisdiction_changes', 'grid_changes'];
 const MAX_FILE = 5 * 1024 * 1024;

@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / 'tools' / '.grid_names_cache.json'
 OUT = ROOT / 'data' / 'grid_names.json'
-UA = 'snow-support-gridnames/1.0 (one-time naming of KMA forecast grid cells; github.com/Iplaypiccolo/Snow-Amount-Measurement)'
+UA = 'snow-support-gridnames/1.0 (one-time naming of KMA forecast grid cells; github.com/Iplaypiccolo/snow)'
 
 # 기상청 단기예보 격자(LCC) → 위경도 — grid/core.js fromGrid 와 같은 식
 RE, GRID, SLAT1, SLAT2, OLON, OLAT, XO, YO = 6371.00877, 5.0, 30.0, 60.0, 126.0, 38.0, 43, 136

@@ -4,7 +4,7 @@
 
 ## 이 프로젝트
 고속도로 제설 업무용 웹 시스템. 화면은 **GitHub Pages**(정적 파일), 서버는 **Supabase**(서울, 무료 플랜).
-- 저장소: `Iplaypiccolo/Snow-Amount-Measurement` (공개) · 사이트: `https://iplaypiccolo.github.io/Snow-Amount-Measurement/`
+- 저장소: `Iplaypiccolo/snow` (공개, 2026-11-04 `Snow-Amount-Measurement` 에서 이름 바꿈 — 예전 사이트 주소는 열리지 않음) · 사이트: `https://iplaypiccolo.github.io/snow/`
 - Supabase 프로젝트: `snow-support` (ref `yzwbnohzhnctdvufntig`). **다른 프로젝트 `Snowpath`(도쿄)는 건드리지 않는다.**
 - 화면 4개: 강설량 측정 / 기관별 관할 고속도로 / 예보 격자 편입(grid.edit 권한) / 장비 지원. 관리 콘솔 `/admin/`.
 

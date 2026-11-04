@@ -19,7 +19,7 @@
 ## 2. 저장소 받기
 데스크톱 앱의 폴더 선택은 **이미 내려받은 폴더만** 고를 수 있는 경우가 있으니 먼저 받아 둡니다.
 ```
-git clone https://github.com/Iplaypiccolo/Snow-Amount-Measurement.git
+git clone https://github.com/Iplaypiccolo/snow.git
 ```
 (GitHub Desktop 으로 받아도 됩니다.) 이 저장소는 공개라서 받는 데 로그인이 필요 없지만, **올리는(push) 데는 GitHub 로그인이 필요**합니다 — `git push` 를 처음 할 때 나오는 로그인 창에서 로그인하세요. **토큰을 대화나 파일에 붙여 넣지 마세요.**
 
@@ -47,7 +47,7 @@ claude mcp add --transport http supabase-rw "https://mcp.supabase.com/mcp?projec
 ## 5. 채팅과 이어 가기
 - **Claude Code → 채팅**: 일을 마칠 때 `docs/handoff.md` 에 기록하고 푸시(CLAUDE.md 에 규칙으로 적혀 있음). 급하면 채팅에 "handoff.md 최신 항목 읽어 줘"라고 말하면 됩니다.
 - **채팅 → Claude Code**: 채팅의 Claude 가 `main` 에 올린 것은 `git pull` 로 받습니다. 세션을 시작할 때 항상 pull 하라고 CLAUDE.md 에 적어 두었습니다.
-- 채팅 쪽에서 새 대화를 시작할 때 첫 문장: *"저장소 Iplaypiccolo/Snow-Amount-Measurement 의 CLAUDE.md, docs/handoff.md, 최근 커밋 30개를 먼저 읽고 현재 상태를 요약해 줘."*
+- 채팅 쪽에서 새 대화를 시작할 때 첫 문장: *"저장소 Iplaypiccolo/snow 의 CLAUDE.md, docs/handoff.md, 최근 커밋 30개를 먼저 읽고 현재 상태를 요약해 줘."*
 - 두 곳이 동시에 `main` 에 올리면 충돌할 수 있습니다. **한 번에 한 곳에서만 작업**하는 것을 권합니다.
 
 ## 6. 막힐 때 (공개된 알려진 문제)

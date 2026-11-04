@@ -44,6 +44,15 @@
 
 ## 기록 (최신이 맨 위)
 
+### 2026-11-04 · 커밋 (이 기록 커밋 하나) · 저장소 이름 Snow-Amount-Measurement → snow (사이트 주소 변경)
+- 사용자가 GitHub 에서 저장소 이름을 `snow` 로 바꿈 → 사이트 **`https://iplaypiccolo.github.io/snow/`**. 예전 주소 `…/Snow-Amount-Measurement/` 는 열리지 않음(GitHub 가 사이트 주소는 넘겨주지 않음). 도메인이 같아 로그인·사용법 안내 기록은 그대로.
+- 서버: Edge Function `import-reference` v3 배포(`REPO = 'Iplaypiccolo/snow'`) — 배포된 본문이 저장소 파일과 같음을 확인. `raw.githubusercontent.com/Iplaypiccolo/snow/main/data/stations.json` 200 확인.
+- 고친 곳: `CLAUDE.md`(저장소·사이트 주소), `docs/admin-console.md`·`login-gate.md`·`server-keepalive.md`·`claude-code-setup.md`, `tests/test_import_reference.mjs`, `tools/build_grid_names.py`(안내 문구). 화면 코드는 상대 경로라 고칠 것 없음. 지도는 OpenStreetMap(키 없음), VWorld 는 안 씀.
+- 채팅 쪽: git 주소를 `https://github.com/Iplaypiccolo/snow` 로(예전 주소도 GitHub 가 당분간 넘겨주지만 바꿔 둘 것).
+- 시험: `run_all_tests --fast` 129/129(화면 코드는 바뀌지 않음 — 바로 앞 푸시에서 전체 370/370).
+- 못 한 것: 새 사이트 주소가 열리는지 — 이 작업 공간에서는 github.io 에 접속이 안 됨 → 사용자 확인 필요.
+— ✍ Claude Code 작성
+
 ### 2026-11-04 · 커밋 (이 기록 커밋 하나) · 기관별 장비 경로: 같은 지사 다시 들르기 + 아래 칸 시각은 앞 지사보다 늦게 — 마이그레이션 64 서버 적용 (Claude 채팅 작업)
 - 사용자: "＋는 다음으로 이동한다는 뜻이니 아래 칸 시각은 앞보다 늦어야(지금은 인천 13:00 → 시흥 11:00 이 저장됨)", "인천 13시 → 시흥 15시 → 인천 17시처럼 같은 기관으로 돌아갈 수 있어야(지금은 자동으로 빠짐)".
 - 서버 64(`20261104_64_route_order.sql`, 사용자 승인 뒤 적용): `check_route`·`gw_route_check` — 바로 앞과 같은 지사만 금지, 새 `private.route_times_ok` 로 시각 순서 검사(빈 시각 건너뜀, 연속지원 첫 칸 제외) → `SA008`. 적용 전 서버 경로 3줄 모두 새 규칙에 맞음. 되돌림 시험 `supabase/tests/route_order_test.sql` 15/15.

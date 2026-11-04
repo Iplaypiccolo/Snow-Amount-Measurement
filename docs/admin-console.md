@@ -1,7 +1,7 @@
 # 관리 콘솔 사용 안내 (`/admin/`)
 
 로그인, 비밀번호 변경, 계정 관리, **비밀번호 일괄 설정(엑셀표)**, 접속 로그를 한 화면에서 합니다.
-- 주소(병합 후): `https://iplaypiccolo.github.io/Snow-Amount-Measurement/admin/`
+- 주소(병합 후): `https://iplaypiccolo.github.io/snow/admin/`
 - 서버는 Supabase `snow-support`(서울)입니다. 이 화면에는 비밀 키가 없고, **무엇을 할 수 있는지는 서버가 매번 검사**합니다. (화면에서 버튼을 숨기는 것은 편의 기능)
 - 회사 컴퓨터에서 `supabase.co` 주소가 열려야 로그인됩니다. 안 열리면 "서버에 연결할 수 없습니다"가 나옵니다.
 

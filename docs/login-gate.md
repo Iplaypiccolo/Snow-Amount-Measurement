@@ -1,6 +1,6 @@
 # 첫 화면 로그인 잠금 · 자동 로그인 · 아이디 저장
 
-`https://iplaypiccolo.github.io/Snow-Amount-Measurement/` 의 **첫 화면 전체**(강설량 측정, 기관별 관할 고속도로, 예보 격자 편입, 장비 지원)는 로그인해야 열립니다.
+`https://iplaypiccolo.github.io/snow/` 의 **첫 화면 전체**(강설량 측정, 기관별 관할 고속도로, 예보 격자 편입, 장비 지원)는 로그인해야 열립니다.
 (자동 시험: `tests/test_login_gate.py` 12항목)
 
 ## 1. 어떻게 동작하나
