@@ -1,5 +1,5 @@
 -- ============================================================
--- 초단기예보 받기(57)·24시간 예보에 섞기(60) 시험 — SQL Editor 에 통째로 붙여넣고 실행(60 적용 뒤)
+-- 초단기예보 받기(57)·24시간 예보에 섞기(60·61) 시험 — SQL Editor 에 통째로 붙여넣고 실행(61 적용 뒤)
 -- 마지막에 일부러 오류를 내서 시험 자료를 전부 되돌립니다(지금 예보도 원래대로). "전체 N, 실패 0" 이어야 합니다.
 -- ============================================================
 create temp table if not exists _t (n serial, name text, got text, want text, ok boolean);
@@ -98,6 +98,15 @@ begin
   perform pg_temp.yes('forecast_grid: 섞은 값·추이 vn', exists (select 1 from jsonb_array_elements(fs -> 'cells') c where (c ->> 0)::int = cx and (c ->> 1)::int = cy and (c ->> 4)::numeric = 36 and (c ->> 5)::numeric = -8 and (c ->> 8)::int = 90 and (c -> 7 ->> 'vn')::int = 6), left(fs::text, 300));
   perform pg_temp.yes('전환 보기 함수는 지움', to_regprocedure('public.forecast_vsrt_overview()') is null and to_regprocedure('public.forecast_vsrt_grid(text[],boolean)') is null and to_regprocedure('private.fc_vsrt_cells(text[],boolean)') is null);
   perform pg_temp.chk('로그인 사용자: 다시 계산 함수 직접 호출 거절','authenticated',a,'select private.fc_refresh()','err:42501');
+
+  -- 61: 기상청이 아직 안 나온 시각을 모두 0 으로 채워 줌 → 그 시각은 섞지 않고 단기 값
+  update public.forecast_vsrt_hours set vals = array_fill(0::real, array[nc]) where tmfc = t0 and tmef = h0 + interval '5 hours';
+  ok1 := private.fc_refresh();
+  perform pg_temp.yes('빈 시각(모두 0)은 섞지 않음: vn 5, 6번째 시각은 단기(강수 1·기온 10·적설 0.5), 최저기온은 0 이 아님', ok1 and (select (series ->> 'vn')::int = 5 and (series -> 'p' ->> 5)::numeric = 1 and (series -> 't' ->> 5)::numeric = 10 and (series -> 's' ->> 5)::numeric = 0.5
+      and pcp_24h = 34 and snow_24h = 9.5 and tmin = -8 from public.forecast_cells where nx = cx and ny = cy)
+    and (select max_pcp_24h = 34 and min_tmp = -8 and (detail ->> 'vn')::int = 5 from public.branch_forecast where branch_id = 'B001')
+    and not exists (select 1 from public.branch_forecast where min_tmp = 0 and min_tmp_at = h0 + interval '5 hours'),
+    (select left(series::text, 300) from public.forecast_cells where nx = cx and ny = cy));
 
   -- 다 받은 뒤
   set local role service_role; q := public.forecast_vsrt_plan(); reset role;
