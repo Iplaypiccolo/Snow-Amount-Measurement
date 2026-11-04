@@ -250,8 +250,12 @@ def t_top_menu(b):
 TESTS = [t_pin_chart, t_first_tab_and_order, t_levels, t_open_from_equipment, t_branch_user_can_view, t_legend_show, t_auto_pick, t_top_menu]
 
 def t_blend_no_toggle(b):
-    """2026-11-04(60): 전환 버튼 없음. 서버가 앞 6시간 초단기(적설 0) + 나머지 단기로 섞어 둔 값을 그대로 — 고정 창 표의 앞 6시각 전부 색칠, 적설은 0"""
-    p, m = open_page(b)
+    """2026-11-04(60): 전환 버튼 없음. 서버가 앞 6시간 초단기(신적설은 단기) + 나머지 단기로 섞어 둔 값을 그대로 — 고정 창 표의 앞 6시각 전부 색칠, 신적설은 단기"""
+    m = SBM.Mock()
+    for c in m.fc_cells:
+        c[7]["s"] = [1] * 6 + [0] * 18
+        c[3] = 6; c[10] = 6; c[7].pop("sq", None)
+    p, m = open_page(b, m)
     p.click(".tab-btn[data-tab=forecast]"); p.wait_for_timeout(900)
     check(p.locator("#fc-mode, [data-fcmode]").count() == 0, "단기/초단기 전환 버튼 없음")
     meta = p.locator("#fc-meta").inner_text(); check("발표" not in meta and "초단기" not in meta and "24시간 합" in meta, "위쪽 안내 = 예보 구간만: " + meta)
@@ -261,8 +265,8 @@ def t_blend_no_toggle(b):
     t1 = p.locator(".fc-pin .fc-tt").first
     check(p.locator(".fc-pin .fc-tt").count() == 2 and t1.locator("thead th").count() == 13, "같은 24시간 표(12시간 두 개)")
     check(t1.locator("thead th.vs").count() == 6 and t1.locator("td.vs").count() == 24 and p.locator(".fc-pin .fc-tt").last.locator(".vs").count() == 0, "앞 6시각 전부(적설·강수·확률·기온) 색칠, 뒤 표는 없음")
-    sn = t1.locator("tbody tr").nth(0).locator("td.vs").all_inner_texts(); check(sn == ["0"] * 6, f"앞 6시간 적설 = 0(초단기에 적설 없음): {sn}")
-    cap = p.locator(".fc-pin").inner_text(); check("색칠한 칸 = 초단기예보" in cap and "적설 항목이 없어 0" in cap, "안내: " + cap)
+    sn = t1.locator("tbody tr").nth(0).locator("td.vs").all_inner_texts(); check(sn == ["1"] * 6, f"앞 6시간 신적설 = 단기 값 1: {sn}")
+    cap = p.locator(".fc-pin").inner_text(); check("색칠한 칸 = 초단기예보" in cap and "신적설은 모든 시각 단기예보" in cap, "안내: " + cap)
 
 def t_pin_move_resize(b):
     """2026-11-03: 격자 창을 끌어 옮기고 모서리로 크기를 바꿈(글자도 같은 비율). 다른 격자를 눌러도 그대로, 다시 열어도 기억. 지도 밖으로 나가지 않음"""

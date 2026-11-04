@@ -1,5 +1,5 @@
 -- ============================================================
--- 초단기예보 받기(57)·24시간 예보에 섞기(60·61) 시험 — SQL Editor 에 통째로 붙여넣고 실행(61 적용 뒤)
+-- 초단기예보 받기(57)·24시간 예보에 섞기(60·61) 시험 — SQL Editor 에 통째로 붙여넣고 실행(67 적용 뒤)
 -- 마지막에 일부러 오류를 내서 시험 자료를 전부 되돌립니다(지금 예보도 원래대로). "전체 N, 실패 0" 이어야 합니다.
 -- ============================================================
 create temp table if not exists _t (n serial, name text, got text, want text, ok boolean);
@@ -17,8 +17,11 @@ create or replace function pg_temp.yes(name text, cond boolean, info text defaul
 begin insert into _t(name, got, want, ok) values (name, case when cond then 'true' else 'false ' || info end, 'true', coalesce(cond, false)); end $f$;
 do $t$
 declare a uuid := gen_random_uuid(); p jsonb; q jsonb; vr text; nc int; k int; sea int; h timestamptz; h0 timestamptz; t0 timestamptz; v real[]; cx int; cy int; sx int; sy int; i int; cnt bigint; bad bigint; ok1 boolean; o jsonb; fg jsonb; fs jsonb;
+  frozen_before text;
   putq text := 'select public.forecast_vsrt_put(%L, %L, %L, %L::real[])';
 begin
+  select md5(coalesce(jsonb_agg(to_jsonb(rr) order by rr.round_id, rr.branch_id), '[]'::jsonb)::text)
+    into frozen_before from public.round_requests rr where rr.confirmed;
   insert into auth.users (id, aud, role, email) values (a,'authenticated','authenticated','fv@t.test');
   insert into public.profiles (id,username,display_name,role,perms,must_change) values (a,'fv-adm','관리자','admin','{}',false);
   delete from public.forecast_runs; delete from public.forecast_vsrt_runs;
@@ -79,19 +82,19 @@ begin
     and not exists (select 1 from public.forecast_vsrt_runs where tmfc < t0)
     and (select ok and cursor = to_char(t0 at time zone 'Asia/Seoul', 'YYYYMMDDHH24MI') from public.collector_state where job = 'forecast_vsrt'));
   -- 섞은 24시간 예보(마이그레이션 60): 초단기를 다 받으면 지금 창 그대로 다시 계산 → 단기 표 자체가 앞 6시간 초단기 + 나머지 단기
-  perform pg_temp.yes('지사: 강수 3×6 + 단기 1×18 = 36, 최저 -8(시작 시각), 확률 90, 적설 = 앞 6시간 0 + 단기 0.5×18 = 9, 발표 시각은 단기', (select max_pcp_24h = 36 and min_tmp = -8 and min_tmp_at = h0 and max_pop_24h = 90 and max_snow_24h = 9
+  perform pg_temp.yes('지사: 강수 3×6 + 단기 1×18 = 36, 최저 -8(시작 시각), 확률 90, 적설 = 단기 0.5×24 = 12, 발표 시각은 단기', (select max_pcp_24h = 36 and min_tmp = -8 and min_tmp_at = h0 and max_pop_24h = 90 and max_snow_24h = 12
       and issued_at = (p ->> 'tmfc')::timestamptz and (detail ->> 'start_at')::timestamptz = h0 and (detail ->> 'vsrt_at')::timestamptz = t0 and (detail ->> 'vn')::int = 6 from public.branch_forecast where branch_id = 'B001'),
     (select row_to_json(b)::text from public.branch_forecast b where branch_id = 'B001'));
-  perform pg_temp.yes('격자: 24시각 그대로, 앞 6시각만 초단기(적설 0), 뒤는 단기, vn = 6', (select pcp_24h = 36 and tmin = -8 and pop_24h = 90 and snow_24h = 9
+  perform pg_temp.yes('격자: 24시각 그대로, 앞 6시각은 기온·강수·확률만 초단기(신적설은 단기), 뒤는 단기, vn = 6', (select pcp_24h = 36 and tmin = -8 and pop_24h = 90 and snow_24h = 12
       and jsonb_array_length(series -> 'p') = 24 and (series -> 'p' ->> 0)::numeric = 3 and (series -> 'p' ->> 5)::numeric = 3 and (series -> 'p' ->> 6)::numeric = 1
       and (series -> 't' ->> 0)::numeric = -8 and (series -> 't' ->> 5)::numeric = 5 and (series -> 't' ->> 6)::numeric = 10
-      and (series -> 'r' ->> 2)::int = 90 and (series -> 'r' ->> 6)::int = 20 and (series -> 's' ->> 0)::numeric = 0 and (series -> 's' ->> 5)::numeric = 0 and (series -> 's' ->> 6)::numeric = 0.5 and (series ->> 'vn')::int = 6 from public.forecast_cells where nx = cx and ny = cy),
+      and (series -> 'r' ->> 2)::int = 90 and (series -> 'r' ->> 6)::int = 20 and (series -> 's' ->> 0)::numeric = 0.5 and (series -> 's' ->> 5)::numeric = 0.5 and (series -> 's' ->> 6)::numeric = 0.5 and (series ->> 'vn')::int = 6 from public.forecast_cells where nx = cx and ny = cy),
     (select left(series::text, 300) from public.forecast_cells where nx = cx and ny = cy));
-  perform pg_temp.yes('바다(-99) 칸: 강수·기온·확률은 단기 값, 적설은 0', (select (series -> 'p' ->> 0)::numeric = 1 and (series -> 't' ->> 0)::numeric = 10 and (series -> 'r' ->> 0)::int = 20 and (series -> 's' ->> 0)::numeric = 0 from public.forecast_cells where nx = sx and ny = sy),
+  perform pg_temp.yes('바다(-99) 칸: 강수·기온·확률은 단기 값, 적설은 단기 0.5', (select (series -> 'p' ->> 0)::numeric = 1 and (series -> 't' ->> 0)::numeric = 10 and (series -> 'r' ->> 0)::int = 20 and (series -> 's' ->> 0)::numeric = 0.5 from public.forecast_cells where nx = sx and ny = sy),
     (select left(series::text, 300) from public.forecast_cells where nx = sx and ny = sy));
   perform pg_temp.yes('62: 초단기 강수형태 있음 + 양 0 = ~1mm(다른 격자 강수 1×18 = 18 → 범위 18~24, 앞 6시각 pq = 1)', exists (select 1 from public.forecast_cells where nx <> sx and pcp_24h = 18 and pcp_hi = 24 and (series -> 'pq' ->> 0)::int = 1 and (series -> 'pq' ->> 6)::int = 0)
     and (select pcp_hi = 36 from public.forecast_cells where nx = cx and ny = cy));
-  perform pg_temp.yes('확정 고정값(branch_fc)도 섞은 값', (private.branch_fc('B001') ->> 'snow')::numeric = 9 and (private.branch_fc('B001') ->> 'pcp')::numeric = 36 and (private.branch_fc('B001') ->> 'tmin')::numeric = -8 and (private.branch_fc('B001') ->> 'pop')::int = 90);
+  perform pg_temp.yes('확정 고정값(branch_fc)도 섞은 값', (private.branch_fc('B001') ->> 'snow')::numeric = 12 and (private.branch_fc('B001') ->> 'pcp')::numeric = 36 and (private.branch_fc('B001') ->> 'tmin')::numeric = -8 and (private.branch_fc('B001') ->> 'pop')::int = 90);
   ok1 := private.fc_roll();
   perform pg_temp.yes('매시 정각 다시 계산해도 섞은 값', ok1 and (select max_pcp_24h = 36 and min_tmp = -8 and (detail ->> 'vn')::int = 6 from public.branch_forecast where branch_id = 'B001'));
   -- 화면 읽기: 로그인 사용자는 forecast_grid 로 같은 값(추이에 vn)
@@ -105,10 +108,24 @@ begin
   update public.forecast_vsrt_hours set vals = array_fill(0::real, array[nc]) where tmfc = t0 and tmef = h0 + interval '5 hours';
   ok1 := private.fc_refresh();
   perform pg_temp.yes('빈 시각(모두 0)은 섞지 않음: vn 5, 6번째 시각은 단기(강수 1·기온 10·적설 0.5), 최저기온은 0 이 아님', ok1 and (select (series ->> 'vn')::int = 5 and (series -> 'p' ->> 5)::numeric = 1 and (series -> 't' ->> 5)::numeric = 10 and (series -> 's' ->> 5)::numeric = 0.5
-      and pcp_24h = 34 and snow_24h = 9.5 and tmin = -8 from public.forecast_cells where nx = cx and ny = cy)
+      and pcp_24h = 34 and snow_24h = 12 and tmin = -8 from public.forecast_cells where nx = cx and ny = cy)
     and (select max_pcp_24h = 34 and min_tmp = -8 and (detail ->> 'vn')::int = 5 from public.branch_forecast where branch_id = 'B001')
     and not exists (select 1 from public.branch_forecast where min_tmp = 0 and min_tmp_at = h0 + interval '5 hours'),
     (select left(series::text, 300) from public.forecast_cells where nx = cx and ny = cy));
+
+  -- 67: 앞 6시간도 단기 SNO·PTY로 미량 적설 판정. 초단기 PTY와 구분.
+  update public.forecast_hours set vals = array_fill(0::real, array[nc]) where tmfc = (p ->> 'tmfc')::timestamptz and var = 'SNO';
+  update public.forecast_hours set vals = array_fill(3::real, array[nc]) where tmfc = (p ->> 'tmfc')::timestamptz and var = 'PTY';
+  ok1 := private.fc_refresh();
+  perform pg_temp.yes('67: 앞 6시간도 단기 눈 형태 + 신적설 0이면 ~1cm, 24시간 범위 0~24', ok1 and
+    (select snow_24h = 0 and snow_hi = 24 and (series -> 'sq' ->> 0)::int = 1 and (series -> 'sq' ->> 6)::int = 1
+       from public.forecast_cells where nx = cx and ny = cy));
+  update public.forecast_hours set vals = array_fill(1::real, array[nc]) where tmfc = (p ->> 'tmfc')::timestamptz and var = 'PTY';
+  ok1 := private.fc_refresh();
+  perform pg_temp.yes('67: 단기 비 형태이면 신적설 0을 ~1cm로 추정하지 않음', ok1 and
+    (select snow_24h = 0 and snow_hi = 0 and not (series ? 'sq') from public.forecast_cells where nx = cx and ny = cy));
+  update public.forecast_hours set vals = array_fill(0.5::real, array[nc]) where tmfc = (p ->> 'tmfc')::timestamptz and var = 'SNO';
+  ok1 := private.fc_refresh();
 
   -- 다 받은 뒤
   set local role service_role; q := public.forecast_vsrt_plan(); reset role;
@@ -127,6 +144,10 @@ begin
   set local role service_role; perform public.forecast_vsrt_fail('시험 실패'); reset role;
   perform pg_temp.yes('실패 기록: 초단기 상태만(단기 상태는 그대로)', (select not ok and note = '시험 실패' from public.collector_state where job = 'forecast_vsrt')
     and exists (select 1 from public.collector_runs where job = 'forecast_vsrt' and error = '시험 실패') and (select ok from public.collector_state where job = 'forecast'));
+
+  perform pg_temp.yes('67: 예보를 여러 번 재계산해도 기존 확정 자료 전체가 그대로',
+    frozen_before = (select md5(coalesce(jsonb_agg(to_jsonb(rr) order by rr.round_id, rr.branch_id), '[]'::jsonb)::text)
+                      from public.round_requests rr where rr.confirmed));
 
   select count(*), count(*) filter (where not ok) into cnt, bad from _t;
   raise exception E'초단기예보 시험 — 전체 %, 실패 %\n%', cnt, bad, coalesce((select string_agg('FAIL ' || name || ' → ' || got || ' / ' || want, E'\n' order by n) from _t where not ok), '(모두 통과)');
