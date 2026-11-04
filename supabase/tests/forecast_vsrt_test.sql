@@ -52,10 +52,10 @@ begin
     and (q -> 'candidates' ->> 2)::timestamptz = t0 - interval '20 minutes', q::text);
   insert into public.forecast_vsrt_runs (tmfc, cells) values (t0 - interval '20 minutes', p -> 'cells');      -- 아직 끝나지 않은 예전 발표분(뒤에서 지워지는지 봄)
   set local role service_role; q := public.forecast_vsrt_begin(t0); reset role;
-  perform pg_temp.yes('시작: 다음 정시부터 6시각 × 기온·강수·확률 = 18개, 격자 전부', jsonb_array_length(q -> 'missing') = 18 and jsonb_array_length(q -> 'cells') = nc
+  perform pg_temp.yes('시작: 다음 정시부터 6시각 × 기온·강수·확률·강수형태 = 24개, 격자 전부', jsonb_array_length(q -> 'missing') = 24 and jsonb_array_length(q -> 'cells') = nc
     and (select min((x ->> 1)::timestamptz) = h0 and max((x ->> 1)::timestamptz) = h0 + interval '5 hours' from jsonb_array_elements(q -> 'missing') x), q::text);
   set local role service_role; q := public.forecast_vsrt_begin(t0); reset role;
-  perform pg_temp.yes('다시 시작해도 같은 발표분(이어서)', jsonb_array_length(q -> 'missing') = 18 and (select count(*) = 1 from public.forecast_vsrt_runs where tmfc = t0));
+  perform pg_temp.yes('다시 시작해도 같은 발표분(이어서)', jsonb_array_length(q -> 'missing') = 24 and (select count(*) = 1 from public.forecast_vsrt_runs where tmfc = t0));
 
   -- 잘못된 넣기
   v := array_fill(0::real, array[nc]);
@@ -68,14 +68,14 @@ begin
   -- 넣기: B001 격자만 시작 시각 기온 -8, 강수 6시각 모두 3, 시작 2시간 뒤 확률 90. 나머지 격자 기온 5·강수 0·확률 40, 바다(-99) 격자 하나
   i := 0;
   for vr, h in select x ->> 0, (x ->> 1)::timestamptz from jsonb_array_elements(q -> 'missing') x loop
-    v := array_fill(case vr when 'T1H' then 5 when 'RN1' then 0 else 40 end::real, array[nc]);
+    v := array_fill(case vr when 'T1H' then 5 when 'RN1' then 0 when 'PTY' then 1 else 40 end::real, array[nc]);      -- 62: 다른 격자는 6시각 모두 비(1)인데 양 0 → ~1mm
     v[k] := case vr when 'T1H' then (case when h = h0 then -8 else 5 end) when 'RN1' then 3 else (case when h = h0 + interval '2 hours' then 90 else 40 end) end;
     v[sea] := -99;
     set local role service_role; perform public.forecast_vsrt_put(t0, vr, h, v); reset role;
     i := i + 1;
-    if i = 17 then perform pg_temp.yes('17개째까지는 끝나지 않음', (select done_at is null from public.forecast_vsrt_runs where tmfc = t0)); end if;
+    if i = 23 then perform pg_temp.yes('23개째까지는 끝나지 않음', (select done_at is null from public.forecast_vsrt_runs where tmfc = t0)); end if;
   end loop;
-  perform pg_temp.yes('18개째: 끝 표시, 예전 발표분 지움, 수집 상태', (select done_at is not null from public.forecast_vsrt_runs where tmfc = t0)
+  perform pg_temp.yes('24개째: 끝 표시, 예전 발표분 지움, 수집 상태', (select done_at is not null from public.forecast_vsrt_runs where tmfc = t0)
     and not exists (select 1 from public.forecast_vsrt_runs where tmfc < t0)
     and (select ok and cursor = to_char(t0 at time zone 'Asia/Seoul', 'YYYYMMDDHH24MI') from public.collector_state where job = 'forecast_vsrt'));
   -- 섞은 24시간 예보(마이그레이션 60): 초단기를 다 받으면 지금 창 그대로 다시 계산 → 단기 표 자체가 앞 6시간 초단기 + 나머지 단기
@@ -89,6 +89,8 @@ begin
     (select left(series::text, 300) from public.forecast_cells where nx = cx and ny = cy));
   perform pg_temp.yes('바다(-99) 칸: 강수·기온·확률은 단기 값, 적설은 0', (select (series -> 'p' ->> 0)::numeric = 1 and (series -> 't' ->> 0)::numeric = 10 and (series -> 'r' ->> 0)::int = 20 and (series -> 's' ->> 0)::numeric = 0 from public.forecast_cells where nx = sx and ny = sy),
     (select left(series::text, 300) from public.forecast_cells where nx = sx and ny = sy));
+  perform pg_temp.yes('62: 초단기 강수형태 있음 + 양 0 = ~1mm(다른 격자 강수 1×18 = 18 → 범위 18~24, 앞 6시각 pq = 1)', exists (select 1 from public.forecast_cells where nx <> sx and pcp_24h = 18 and pcp_hi = 24 and (series -> 'pq' ->> 0)::int = 1 and (series -> 'pq' ->> 6)::int = 0)
+    and (select pcp_hi = 36 from public.forecast_cells where nx = cx and ny = cy));
   perform pg_temp.yes('확정 고정값(branch_fc)도 섞은 값', (private.branch_fc('B001') ->> 'snow')::numeric = 9 and (private.branch_fc('B001') ->> 'pcp')::numeric = 36 and (private.branch_fc('B001') ->> 'tmin')::numeric = -8 and (private.branch_fc('B001') ->> 'pop')::int = 90);
   ok1 := private.fc_roll();
   perform pg_temp.yes('매시 정각 다시 계산해도 섞은 값', ok1 and (select max_pcp_24h = 36 and min_tmp = -8 and (detail ->> 'vn')::int = 6 from public.branch_forecast where branch_id = 'B001'));

@@ -249,19 +249,22 @@ async function loadWarn() { const [r, f] = await Promise.all([Api.warnings(), Ap
 function fcOf(bid) {      // { snow, pcp, pop, tmin, tmin_at, tmfc, start, end, nx, ny, pnx, pny, fixed, at, manual } 또는 { none } / null(예보 없음)
   const r = S.reqs[bid];
   if (isManual(bid)) return { snow: rval(bid, "wx_snow"), pcp: rval(bid, "wx_pcp"), tmin: rval(bid, "wx_tmin"), tmin_at: rval(bid, "wx_tmin_at"), manual: true, fixed: isConf(bid) };
-  if (r && r.confirmed) return r.fc_at ? { snow: r.fc_snow, pcp: r.fc_pcp, pop: r.fc_pop, tmin: r.fc_tmin, tmin_at: r.fc_tmin_at, tmfc: r.fc_tmfc, fixed: true, at: r.fc_at } : { none: true };
+  if (r && r.confirmed) return r.fc_at ? { snow: r.fc_snow, pcp: r.fc_pcp, snow_hi: r.fc_snow_hi, pcp_hi: r.fc_pcp_hi, pop: r.fc_pop, tmin: r.fc_tmin, tmin_at: r.fc_tmin_at, tmfc: r.fc_tmfc, fixed: true, at: r.fc_at } : { none: true };
   const f = S.fc[bid];
   if (!f || Date.now() - Date.parse(f.issued_at) > 12 * 3600e3) return null;
   const d = f.detail || {};
-  return { snow: f.max_snow_24h, pcp: f.max_pcp_24h, pop: f.max_pop_24h, tmin: f.min_tmp, tmin_at: f.min_tmp_at, tmfc: f.issued_at, start: d.start_at, end: d.end_at, nx: f.worst_nx, ny: f.worst_ny, pnx: d.pcp_nx, pny: d.pcp_ny, fixed: false };
+  return { snow: f.max_snow_24h, pcp: f.max_pcp_24h, snow_hi: f.max_snow_hi, pcp_hi: f.max_pcp_hi, pop: f.max_pop_24h, tmin: f.min_tmp, tmin_at: f.min_tmp_at, tmfc: f.issued_at, start: d.start_at, end: d.end_at, nx: f.worst_nx, ny: f.worst_ny, pnx: d.pcp_nx, pny: d.pcp_ny, fixed: false };
 }
 const fmtCm = v => v == null ? "-" : (Math.round(v * 10) / 10).toFixed(1);
+// 예보 적설·강수(2026-11-04): 기상청 격자 값은 정수로만 옴 → 소수점 없이. '1mm·1cm 미만' 시각이 있으면 범위(아래~위, 위 = '~1' 시각마다 +1, 0~1 은 '~1'). 직접입력 값은 넣은 그대로(소수점 한 자리)
+const rngTxt = (lo, hi) => { if (lo == null) return "-"; const a = Math.round(lo), b = hi == null ? a : Math.round(hi); return b > a ? (a === 0 && b === 1 ? "~1" : `${a}~${b}`) : String(a); };
+const fcAmt = (f, k) => !f || f.none || f[k] == null ? "-" : f.manual ? fmtCm(f[k]) : rngTxt(f[k], f[k + "_hi"]);
 const fmtTmp = v => v == null ? "-" : String(Math.round(v * 10) / 10);                        // 기온(℃): -5, 1.5
 const fmtHM = iso => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? `${p2(d.getHours())}:${p2(d.getMinutes())}` : "-"; };   // 직접입력 특보 시각(시:분)
 // k = "snow"(적설 cm) / "pcp"(강수 mm) / "pop"(강수확률 % — 예보 값만, 직접입력 줄은 '-') / "tmin"(최저기온 ℃). 값을 누르면 기관별 24시간 예보의 그 지사로.
 // 직접입력이면 입력칸(고칠 수 없으면 값만, 누를 수 없음)
 const WX_FIELD = { snow: "wx_snow", pcp: "wx_pcp", tmin: "wx_tmin" };      // 최저기온 시각 칸은 2026-10-15 사용자 요청으로 뺌(값은 서버에 그대로)
-const fcText = (k, v) => k === "tmin" ? fmtTmp(v) : k === "pop" ? String(Math.round(v)) : fmtCm(v);
+const fcText = (k, v) => k === "tmin" ? fmtTmp(v) : k === "pop" ? String(Math.round(v)) : fmtCm(v);      // 직접입력 줄 값
 function fcInner(bid, k = "snow") {
   const f = fcOf(bid), v = f && !f.none ? f[k] : null;
   if (f && f.manual) {
@@ -275,9 +278,10 @@ function fcInner(bid, k = "snow") {
   }
   if (!f) return `<span class="muted fcv" data-fb="${esc(bid)}" data-fk2="${k}" tabindex="0">-</span>`;
   if (f.none) return `<span class="muted">-</span>`;
-  const cls = k === "snow" ? (v >= 5 ? " hi" : v > 0 ? " some" : "") : k === "pcp" ? (v >= 30 ? " hi" : v > 0 ? " wet" : "") : k === "pop" ? (v >= 60 ? " wet" : "")
+  const vh = k === "snow" || k === "pcp" ? Math.max(v || 0, f[k + "_hi"] || 0) : v;      // 범위가 있으면 위쪽으로 색
+  const cls = k === "snow" ? (vh >= 5 ? " hi" : vh > 0 ? " some" : "") : k === "pcp" ? (vh >= 30 ? " hi" : vh > 0 ? " wet" : "") : k === "pop" ? (v >= 60 ? " wet" : "")
     : k === "tmin" ? (v != null && v <= -10 ? " cold2" : v != null && v <= 0 ? " cold" : "") : " at";
-  return `<span class="fcv${cls}" data-fb="${esc(bid)}" data-fk2="${k}" tabindex="0" role="link">${v == null ? "-" : esc(fcText(k, v))}</span>`;
+  return `<span class="fcv${cls}" data-fb="${esc(bid)}" data-fk2="${k}" tabindex="0" role="link">${v == null ? "-" : esc(k === "snow" || k === "pcp" ? fcAmt(f, k) : fcText(k, v))}</span>`;
 }
 function warnBase() {
   const w = S.warn; if (!w || !w.ok || !w.fetched_at) return "자료 없음";
@@ -629,7 +633,7 @@ function renderDest() {
       cards.push(`<article class="dest" data-bid="${esc(b.id)}"><div class="dest-head">
         <h3 class="dest-name">${esc(b.name)}<span>${esc(h.name)}본부</span></h3>
         <div class="dest-time">${since ? `<strong>${esc(fmtMD(since.date) + (since.time ? " " + since.time : ""))}부터</strong><small>연속지원 중</small>` : `<strong>${etas.length ? esc(fmtMD(S.date) + " " + etas[0]) : "미정"}</strong><small>도착 예상${etas.length > 1 ? " (가장 이른 장비, 장비마다 다름)" : ""}</small>`}</div>
-        <div class="dest-meta">${list.length ? "" : `<span class="tag req">도착 요청 ${esc(fmtTime(arr))}</span>`}${snow != null ? (fc.manual ? `<span class="tag snow">적설 ${esc(fmtCm(snow))}cm · 강수 ${esc(fmtCm(fc.pcp))}mm${fc.tmin != null ? ` · 최저 ${esc(fmtTmp(fc.tmin))}℃` : ""} (직접입력)</span>` : `<span class="tag snow" data-fb="${esc(b.id)}" tabindex="0">예상 적설 ${esc(fmtCm(snow))}cm · 강수 ${esc(fmtCm(fc.pcp))}mm${fc.tmin != null ? ` · 최저 ${esc(fmtTmp(fc.tmin))}℃` : ""}</span>`) : ""}${warnOf(b.id).level ? `<span class="tag wb ${WLV[warnOf(b.id).level][0]}" data-wb="${esc(b.id)}">${esc(wlabel(warnOf(b.id).level, "대설"))}</span>` : ""}
+        <div class="dest-meta">${list.length ? "" : `<span class="tag req">도착 요청 ${esc(fmtTime(arr))}</span>`}${snow != null ? (fc.manual ? `<span class="tag snow">적설 ${esc(fmtCm(snow))}cm · 강수 ${esc(fmtCm(fc.pcp))}mm${fc.tmin != null ? ` · 최저 ${esc(fmtTmp(fc.tmin))}℃` : ""} (직접입력)</span>` : `<span class="tag snow" data-fb="${esc(b.id)}" tabindex="0">예상 적설 ${esc(fcAmt(fc, "snow"))}cm · 강수 ${esc(fcAmt(fc, "pcp"))}mm${fc.tmin != null ? ` · 최저 ${esc(fmtTmp(fc.tmin))}℃` : ""}</span>`) : ""}${warnOf(b.id).level ? `<span class="tag wb ${WLV[warnOf(b.id).level][0]}" data-wb="${esc(b.id)}">${esc(wlabel(warnOf(b.id).level, "대설"))}</span>` : ""}
           ${why ? `<span class="tag">사유: ${H(t, "reason", esc(why))}</span>` : ""}</div></div>
         ${list.length ? list.map(m => vehicleRow(m.v, m.stops, m.rec, b.id, m)).join("") : `<div class="empty-state" style="border:0">조건에 맞는 장비가 없습니다.</div>`}</article>`);
     });
@@ -1181,7 +1185,7 @@ async function saveBranchRows(ids, extra, msg) {
   list.forEach(({ o, f }) => { S.reqs[o.branch_id] = { ...REQ_DEF, round_id: S.round, branch_id: o.branch_id, ...(S.reqs[o.branch_id] || {}), ...f, ...mark(f), updated_at: vers[o.branch_id] ?? (S.reqs[o.branch_id] || {}).updated_at }; S.rdraft.delete(o.branch_id); });
   if (extra && "confirmed" in extra) {                // 확정하면 서버가 그 순간 대설 특보·예보를 남김 → 다시 읽어 표시
     await loadReqs();
-    if (extra.confirmed && ids.length === 1) { const f = fcOf(ids[0]); msg += ` (대설특보: ${wlabel(warnOf(ids[0]).level, "대설")}, 적설 ${f && f.snow != null ? fmtCm(f.snow) + "cm" : "없음"}·강수 ${f && f.pcp != null ? fmtCm(f.pcp) + "mm" : "없음"}·최저 ${f && f.tmin != null ? fmtTmp(f.tmin) + "℃" : "없음"})`; }
+    if (extra.confirmed && ids.length === 1) { const f = fcOf(ids[0]); msg += ` (대설특보: ${wlabel(warnOf(ids[0]).level, "대설")}, 적설 ${f && f.snow != null ? fcAmt(f, "snow") + "cm" : "없음"}·강수 ${f && f.pcp != null ? fcAmt(f, "pcp") + "mm" : "없음"}·최저 ${f && f.tmin != null ? fmtTmp(f.tmin) + "℃" : "없음"})`; }
   }
   await loadAudit(); refresh(); toast(msg); if (extra && extra.confirmed) flashRows(ids);
 }

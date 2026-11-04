@@ -40,7 +40,7 @@
   function wxOf(id, d) {
     if (d !== todayISO()) return { snow: "-", warn: "-", lv: null };
     const f = fcOf(id), w = warnOf(id);
-    return { snow: f && !f.none && f.snow != null ? `${fmtCm(f.snow)}cm` : "-", warn: wxText(w), lv: !w.none && (w.level === "주의" || w.level === "경보") ? w.level : null };
+    return { snow: f && !f.none && f.snow != null ? `${fcAmt(f, "snow")}cm` : "-", warn: wxText(w), lv: !w.none && (w.level === "주의" || w.level === "경보") ? w.level : null };
   }
 
   // 보고서 자료(날짜 하나)

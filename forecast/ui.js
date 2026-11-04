@@ -21,7 +21,10 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function p2(n) { return String(n).padStart(2, '0'); }
   function fmtHour(iso) { var d = new Date(iso); return isNaN(d) ? '-' : (d.getMonth() + 1) + '/' + d.getDate() + ' ' + p2(d.getHours()) + '시'; }
-  function num(v) { return v == null ? '-' : (Math.round(v * 10) / 10).toFixed(1); }
+  function num(v) { return v == null ? '-' : String(Math.round(v)); }                             // 적설·강수(2026-11-04): 기상청 격자 값은 정수로만 옴 → 소수점 없이
+  // 범위(마이그레이션 62): '1mm·1cm 미만' 시각마다 위쪽 +1 → '0~3', 한 시각뿐이면 '~1'. hi 가 없으면(예전 자료) 아래쪽만
+  function rng(lo, hi) { if (lo == null) return '-'; var a = Math.round(lo), b = hi == null ? a : Math.round(hi); return b > a ? (a === 0 && b === 1 ? '~1' : a + '~' + b) : String(a); }
+  function cntOf(a) { return a.filter(function (v) { return v; }).length; }
   function tmp(v) { return v == null ? '-' : String(Math.round(v * 10) / 10); }                 // 기온(℃): -5, 1.5
   function pct(v) { return v == null ? '-' : String(Math.round(v)); }                             // 강수확률(%): 60
   function hh(iso) { var d = iso ? new Date(iso) : null; return d && !isNaN(d) ? p2(d.getHours()) + '시' : '-'; }
@@ -109,7 +112,7 @@
   function minOf(a) { var x = a.filter(function (v) { return v != null; }); return x.length ? Math.min.apply(null, x) : null; }
   function maxOf(a) { var x = a.filter(function (v) { return v != null; }); return x.length ? Math.max.apply(null, x) : null; }
   function cellPop(v) { return v == null ? '<td class="z">-</td>' : v === 0 ? '<td class="z">0</td>' : '<td class="v">' + pct(v) + '</td>'; }
-  function cellNum(v) { return v == null ? '<td class="z">-</td>' : v === 0 ? '<td class="z">0</td>' : '<td class="v">' + num(v) + '</td>'; }
+  function cellNum(v, tc) { if (v == null) return '<td class="z">-</td>'; if (tc) return '<td class="v tr">' + rng(v, v + tc) + '</td>'; return v === 0 ? '<td class="z">0</td>' : '<td class="v">' + num(v) + '</td>'; }      // tc = 그 칸의 '~1' 시각 수
   function cellTmp(v) { return v == null ? '<td class="z">-</td>' : '<td class="v' + (v < 0 ? ' neg' : '') + '">' + tmp(v) + '</td>'; }
   // from~to(번호) 구간을 step 시간씩 묶어 표 하나 — step 3 이면 합·최저, step 1 이면 그 시각 값
   function tableBlock(sr, start, from, to, step) {
@@ -119,7 +122,7 @@
       var d = hourAt(start, i), part = function (k) { return (sr[k] || []).slice(i, Math.min(i + step, to)); };
       var prev = i > 0 ? hourAt(start, i - step) : null, newDay = d && (i === 0 || (prev && prev.getDate() !== d.getDate()));   // 날짜는 맨 처음 칸과 날짜가 바뀌는 칸에만
       head += '<th' + (i < vn ? ' class="vs"' : '') + '>' + (d ? p2(d.getHours()) : '') + (newDay ? '<small>' + (d.getMonth() + 1) + '/' + d.getDate() + '</small>' : '') + '</th>';
-      rs += mark(cellNum(sumOf(part('s'))), i); rp += mark(cellNum(sumOf(part('p'))), i); rt += mark(cellTmp(minOf(part('t'))), i); if (hasPop) ro += mark(cellPop(maxOf(part('r'))), i);
+      rs += mark(cellNum(sumOf(part('s')), cntOf(part('sq'))), i); rp += mark(cellNum(sumOf(part('p')), cntOf(part('pq'))), i); rt += mark(cellTmp(minOf(part('t'))), i); if (hasPop) ro += mark(cellPop(maxOf(part('r'))), i);
     }
     var u = step === 1 ? '' : (step + '시간 ');
     return '<table class="fc-tt fc-t' + step + '"><thead><tr><th class="lb">시</th>' + head + '</tr></thead><tbody>' +
@@ -128,7 +131,8 @@
       '<tr><th class="lb t">' + (step === 1 ? '기온' : '최저기온') + '<small>℃</small></th>' + rt + '</tr></tbody></table>';
   }
   function totalLine(sr) {
-    return '<div class="fc-tt-sum">24시간 합 · 적설 <b>' + num(sumOf(sr.s || [])) + '</b>cm · 강수 <b>' + num(sumOf(sr.p || [])) + '</b>mm' + (sr.r && sr.r.length ? ' · 확률 최고 <b>' + pct(maxOf(sr.r)) + '</b>%' : '') + ' · 최저 <b>' + tmp(minOf(sr.t || [])) + '</b>℃</div>';
+    var s = sumOf(sr.s || []), p = sumOf(sr.p || []);
+    return '<div class="fc-tt-sum">24시간 합 · 적설 <b>' + rng(s, s == null ? null : s + cntOf(sr.sq || [])) + '</b>cm · 강수 <b>' + rng(p, p == null ? null : p + cntOf(sr.pq || [])) + '</b>mm' + (sr.r && sr.r.length ? ' · 확률 최고 <b>' + pct(maxOf(sr.r)) + '</b>%' : '') + ' · 최저 <b>' + tmp(minOf(sr.t || [])) + '</b>℃</div>';
   }
   // big = false: 마우스 말풍선(3시간 단위 한 표), true: 고정 창(1시간 단위, 12시간씩 두 표)
   function trendBox(sr, start, big) {
@@ -197,9 +201,10 @@
     g.cells.forEach(function (c) {
       if ((c[2] || []).indexOf(id) < 0) return;
       var key = c[0] + ',' + c[1], sr = all[key]; if (!sr) return;
-      if (c[3] > 0) put(0, key, c[3], c);
-      if (c[4] > 0 && c[5] != null && c[5] <= COLD) put(1, key, c[4], c);
-      if (c[4] > 0) put(2, key, c[4], c);
+      var sv = Math.max(c[3] || 0, c[10] || 0), pv = Math.max(c[4] || 0, c[9] || 0);      // 범위가 있으면 위쪽 값으로(62)
+      if (sv > 0) put(0, key, sv, c);
+      if (pv > 0 && c[5] != null && c[5] <= COLD) put(1, key, pv, c);
+      if (pv > 0) put(2, key, pv, c);
       if (c[5] != null && c[5] <= COLD) put(3, key, -c[5], c);
     });
     for (var i = 0; i < best.length; i++) if (best[i]) return { key: best[i].key, why: WHY[i] };
@@ -226,15 +231,15 @@
     var g = S.grid[S.hq]; if (!g || !g.cells) return;
     var fresh = g.tmfc && Date.now() - Date.parse(g.tmfc) <= STALE, fit = fitLines(cellPx());
     g.cells.forEach(function (c) {
-      var nx = c[0], ny = c[1], bs = c[2] || [], snow = fresh ? c[3] : null, pcp = fresh ? c[4] : null, tmin = fresh ? c[5] : null, tat = fresh ? c[6] : null, pop = fresh && c[8] != null ? c[8] : null;
+      var nx = c[0], ny = c[1], bs = c[2] || [], snow = fresh ? c[3] : null, pcp = fresh ? c[4] : null, tmin = fresh ? c[5] : null, tat = fresh ? c[6] : null, pop = fresh && c[8] != null ? c[8] : null, phi = fresh ? c[9] : null, shi = fresh ? c[10] : null;      // phi·shi = 범위 위쪽(62)
       var mine = S.focus ? bs.indexOf(S.focus) >= 0 : true;
       if (S.focus && !mine) return;                                  // 지사를 고르면 그 지사 격자만
-      var col = S.focus ? snowColor(snow) : JC.colorOf(st(), bs[0], S.hq);
+      var col = S.focus ? snowColor(snow > 0 ? snow : shi > 0 ? 0.5 : snow) : JC.colorOf(st(), bs[0], S.hq);      // ~1cm 만 있으면 '<1' 색
       var key = nx + ',' + ny, pinned = S.focus && S.pin === key;
       var poly = L.polygon(G.cellCorners(nx, ny), { weight: pinned ? 4 : S.focus ? 1.5 : 1, color: pinned ? '#FFC400' : S.focus ? '#33424f' : col, fillColor: col, fillOpacity: S.focus ? 0.7 : 0.28, opacity: 0.9 });
       var sr = S.focus && fresh && S.series[S.focus] ? S.series[S.focus][key] : null;
       poly.bindTooltip('<b>' + esc(cellName(nx, ny)) + '</b>' + cellNo(nx, ny) + '<br>' + bs.map(function (b) { return esc(bname(b)); }).join(', ') +
-        (S.focus ? '<br>24시간 적설 <b>' + num(snow) + 'cm</b> · 강수 <b>' + num(pcp) + 'mm</b>' + (pop != null ? ' · 확률 최고 <b>' + pct(pop) + '%</b>' : '') + '<br>최저기온 <b>' + tmp(tmin) + '℃</b> (' + esc(hh(tat)) + ')' +
+        (S.focus ? '<br>24시간 적설 <b>' + rng(snow, shi) + 'cm</b> · 강수 <b>' + rng(pcp, phi) + 'mm</b>' + (pop != null ? ' · 확률 최고 <b>' + pct(pop) + '%</b>' : '') + '<br>최저기온 <b>' + tmp(tmin) + '℃</b> (' + esc(hh(tat)) + ')' +
           (sr ? trendBox(sr, S.series[S.focus]._start, false) : '') : ''),
         { sticky: true, opacity: 1, className: 'gr-tip' + (sr ? ' fc-tip' : '') });
       poly.on('click', function () {
@@ -243,9 +248,10 @@
       });
       poly.addTo(S.cells);
       if (S.focus) {                                                 // 지사: 격자마다 값(적설 / 강수)
-        var hot = snow > 0 || pcp > 0, zc = function (v) { return v > 0 ? '' : ' class="z"'; };      // 적설·강수가 있는 칸만 크게, 0 은 흐리게
-        var has = { s: snow > 0, p: pcp > 0, o: pop > 0, t: tmin != null };
-        var html = { s: '<b' + zc(snow) + '>' + num(snow) + '</b>', p: '<span' + zc(pcp) + '>' + num(pcp) + '</span>', o: '<i' + zc(pop) + '>' + pct(pop) + '%</i>', t: '<em>' + tmp(tmin) + '°</em>' };
+        var sv = Math.max(snow || 0, shi || 0), pv = Math.max(pcp || 0, phi || 0);      // 범위가 있으면 위쪽으로 '있음' 판단
+        var hot = sv > 0 || pv > 0, zc = function (v) { return v > 0 ? '' : ' class="z"'; };      // 적설·강수가 있는 칸만 크게, 0 은 흐리게
+        var has = { s: sv > 0, p: pv > 0, o: pop > 0, t: tmin != null };
+        var html = { s: '<b' + zc(sv) + '>' + rng(snow, shi) + '</b>', p: '<span' + zc(pv) + '>' + rng(pcp, phi) + '</span>', o: '<i' + zc(pop) + '>' + pct(pop) + '%</i>', t: '<em>' + tmp(tmin) + '°</em>' };
         var on = ['s', 'p', 'o', 't'].filter(function (k) { return S.show[k] && !(k === 'o' && pop == null); });      // 체크한 값(적설 > 강수 > 확률 > 기온 순)
         if (on.length > fit) {                                       // 다 못 넣으면: 값이 있는 것 먼저, 같은 조건이면 위 순서대로
           var pick = on.filter(function (k) { return has[k]; }).concat(on.filter(function (k) { return !has[k]; })).slice(0, fit);
@@ -253,7 +259,7 @@
         }
         if (on.length) L.tooltip({ permanent: true, direction: 'center', className: 'fc-label ' + (hot ? 'hot' : 'calm') + (fit < 3 ? ' tight' : ''), interactive: false })
           .setLatLng(G.cellCenter(nx, ny)).setContent(on.map(function (k) { return html[k]; }).join('')).addTo(S.cells);
-        else if (!fit && S.show.p && pcp > 0)                        // 글자가 안 들어가는 크기: 칸 색(적설) + 강수가 있으면 초록 점
+        else if (!fit && S.show.p && pv > 0)                        // 글자가 안 들어가는 크기: 칸 색(적설) + 강수가 있으면 초록 점
           L.circleMarker(G.cellCenter(nx, ny), { radius: pcp >= 10 ? 4 : 2.5, color: '#14532d', weight: 1, fillColor: '#2f7d4f', fillOpacity: 1, interactive: false, className: 'fc-dot' }).addTo(S.cells);
       }
     });
@@ -282,15 +288,16 @@
       : '<span class="fc-stale">예보 없음</span>';
   }
   function cellPair(f) {
-    return f ? '<span class="fc-v s">' + num(f.max_snow_24h) + '<i>cm</i></span><span class="fc-v p">' + num(f.max_pcp_24h) + '<i>mm</i></span><span class="fc-v o">' + pct(f.max_pop_24h) + (f.max_pop_24h == null ? '' : '<i>%</i>') + '</span><span class="fc-v t">' + tmp(f.min_tmp) + '<i>℃</i></span>'
+    return f ? '<span class="fc-v s">' + rng(f.max_snow_24h, f.max_snow_hi) + '<i>cm</i></span><span class="fc-v p">' + rng(f.max_pcp_24h, f.max_pcp_hi) + '<i>mm</i></span><span class="fc-v o">' + pct(f.max_pop_24h) + (f.max_pop_24h == null ? '' : '<i>%</i>') + '</span><span class="fc-v t">' + tmp(f.min_tmp) + '<i>℃</i></span>'
       : '<span class="fc-v s">-</span><span class="fc-v p">-</span><span class="fc-v o">-</span><span class="fc-v t">-</span>';
   }
   function hqMax(hq) {               // 본부 줄: 적설·강수는 가장 큰 지사, 최저기온은 가장 추운 지사
-    var s = null, p = null, t = null, o = null;
+    var s = null, p = null, t = null, o = null, sh = null, ph = null;
     branchesOf(hq).forEach(function (id) { var f = bval(id); if (!f) return; if (s == null || f.max_snow_24h > s) s = f.max_snow_24h; if (p == null || f.max_pcp_24h > p) p = f.max_pcp_24h;
+      if (f.max_snow_hi != null && (sh == null || f.max_snow_hi > sh)) sh = f.max_snow_hi; if (f.max_pcp_hi != null && (ph == null || f.max_pcp_hi > ph)) ph = f.max_pcp_hi;
       if (f.max_pop_24h != null && (o == null || f.max_pop_24h > o)) o = f.max_pop_24h;
       if (f.min_tmp != null && (t == null || f.min_tmp < t)) t = f.min_tmp; });
-    return s == null && p == null ? null : { max_snow_24h: s, max_pcp_24h: p, max_pop_24h: o, min_tmp: t };
+    return s == null && p == null ? null : { max_snow_24h: s, max_pcp_24h: p, max_snow_hi: sh, max_pcp_hi: ph, max_pop_24h: o, min_tmp: t };
   }
   function renderTree() {
     var html = '<div class="fc-cols"><span></span><span>적설</span><span>강수</span><span>확률</span><span>최저</span></div>' + st().hqs.filter(function (h) { return !JC.isPrivate(h); }).map(function (hq) {
@@ -309,10 +316,10 @@
     var g = S.grid[S.hq]; if (!g || !g.cells) return '<div class="fc-detail muted">격자를 불러오는 중…</div>';
     var fresh = g.tmfc && Date.now() - Date.parse(g.tmfc) <= STALE;
     var rows = g.cells.filter(function (c) { return (c[2] || []).indexOf(id) >= 0; })
-      .map(function (c) { return { nx: c[0], ny: c[1], s: fresh ? c[3] : null, p: fresh ? c[4] : null, t: fresh ? c[5] : null, ta: fresh ? c[6] : null, o: fresh && c[8] != null ? c[8] : null }; })
+      .map(function (c) { return { nx: c[0], ny: c[1], s: fresh ? c[3] : null, p: fresh ? c[4] : null, t: fresh ? c[5] : null, ta: fresh ? c[6] : null, o: fresh && c[8] != null ? c[8] : null, ph: fresh ? c[9] : null, sh: fresh ? c[10] : null }; })
       .sort(function (a, b) { return (b.s || 0) - (a.s || 0) || (b.p || 0) - (a.p || 0) || (a.t == null ? 99 : a.t) - (b.t == null ? 99 : b.t); });
     return '<div class="fc-detail"><table><thead><tr><th>지명</th><th>적설(cm)</th><th>강수(mm)</th><th>확률(%)</th><th>최저(℃)</th><th>시각</th></tr></thead><tbody>' +
-      rows.map(function (r) { return '<tr data-cell="' + r.nx + ',' + r.ny + '"><td>' + esc(cellName(r.nx, r.ny)) + cellNo(r.nx, r.ny) + '</td><td>' + num(r.s) + '</td><td>' + num(r.p) + '</td><td>' + pct(r.o) + '</td><td>' + tmp(r.t) + '</td><td>' + esc(hh(r.ta)) + '</td></tr>'; }).join('') +
+      rows.map(function (r) { return '<tr data-cell="' + r.nx + ',' + r.ny + '"><td>' + esc(cellName(r.nx, r.ny)) + cellNo(r.nx, r.ny) + '</td><td>' + rng(r.s, r.sh) + '</td><td>' + rng(r.p, r.ph) + '</td><td>' + pct(r.o) + '</td><td>' + tmp(r.t) + '</td><td>' + esc(hh(r.ta)) + '</td></tr>'; }).join('') +
       '</tbody></table></div>';
   }
   function renderLegend() {             // 범례(2026-10-10 간단히): 칸 숫자 순서 + 적설량 색띠만

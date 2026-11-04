@@ -101,9 +101,10 @@ function makeSample(today) {
   // 예상 적설(샘플): 2시간 전 발표 단기예보, 다음 정시부터 24시간 신적설 합의 지사 최댓값. 확정한 지사는 확정 때 값 고정
   const hr = Math.floor(Date.now() / 3600e3) * 3600e3, fcTm = new Date(hr - 2 * 3600e3).toISOString(), fcStart = new Date(hr + 3600e3).toISOString(), fcEnd = new Date(hr + 25 * 3600e3).toISOString();   // 2시간 전 발표, 다음 정시부터 24시간
   // 최저기온(샘플): 24시간 중 가장 낮은 기온(℃)과 그 시각(시작 몇 시간 뒤)
-  const forecast = [["대관령", 14.2, 18.5, -12, 6, 92, 131, 90], ["양양", 9.0, 12.0, -4, 7, 93, 137, 80], ["춘천", 3.5, 6.2, -7, 5, 73, 134, 60], ["엄정", 0, 0.4, 1, 4, 76, 114, 30], ["강릉", 11.3, 15.0, -3, 6, 92, 133, 80]]      // 맨 끝 = 24시간 최고 강수확률(%)
-    .map(([n, v, p, t, th, nx, ny, o]) => ({ branch_id: B(n), issued_at: fcTm, max_snow_24h: v, max_pcp_24h: p, max_pop_24h: o, min_tmp: t, min_tmp_at: new Date(hr + (1 + th) * 3600e3).toISOString(), worst_nx: nx, worst_ny: ny, detail: { start_at: fcStart, end_at: fcEnd, pcp_nx: nx, pcp_ny: ny } }));
-  [["대관령", 12.1, 16.0, -10, 90], ["양양", 8.0, 10.5, -3, 70], ["엄정", 0, 0, 2, 20]].forEach(([n, v, p, t, o]) => Object.assign(requests.find(r => r.round_id === 2 && r.branch_id === B(n)), { fc_snow: v, fc_pcp: p, fc_pop: o, fc_tmin: t, fc_tmin_at: kst(1, "06:00"), fc_tmfc: kst(0, "05:00"), fc_at: at(0, 6) }));
+  // 적설·강수는 정수(기상청 격자 값), 맨 뒤 두 개 = 범위 위쪽(62: '1cm·1mm 미만' 시각마다 +1 — 춘천 적설 3~5, 엄정 강수 ~1)
+  const forecast = [["대관령", 14, 18, -12, 6, 92, 131, 90], ["양양", 9, 12, -4, 7, 93, 137, 80], ["춘천", 3, 6, -7, 5, 73, 134, 60, 5, 6], ["엄정", 0, 0, 1, 4, 76, 114, 30, 0, 1], ["강릉", 11, 15, -3, 6, 92, 133, 80]]      // 8번째 = 24시간 최고 강수확률(%)
+    .map(([n, v, p, t, th, nx, ny, o, vh, ph]) => ({ branch_id: B(n), issued_at: fcTm, max_snow_24h: v, max_pcp_24h: p, max_snow_hi: vh ?? v, max_pcp_hi: ph ?? p, max_pop_24h: o, min_tmp: t, min_tmp_at: new Date(hr + (1 + th) * 3600e3).toISOString(), worst_nx: nx, worst_ny: ny, detail: { start_at: fcStart, end_at: fcEnd, pcp_nx: nx, pcp_ny: ny } }));
+  [["대관령", 12, 16, -10, 90], ["양양", 8, 10, -3, 70], ["엄정", 0, 0, 2, 20]].forEach(([n, v, p, t, o]) => Object.assign(requests.find(r => r.round_id === 2 && r.branch_id === B(n)), { fc_snow: v, fc_pcp: p, fc_snow_hi: v, fc_pcp_hi: p, fc_pop: o, fc_tmin: t, fc_tmin_at: kst(1, "06:00"), fc_tmfc: kst(0, "05:00"), fc_at: at(0, 6) }));
   fix("대관령", "주의", [["L1022520", "강릉산지", "주의", "대설", kst(-1, "22:00"), kst(0, "01:00")]]); fix("양양", null, []); fix("엄정", null, [], "기상청 자료를 30분 넘게 받지 못함");
   // 강원 신속대응팀(강원본부 지원장비, 마이그레이션 48): 이름 고정 4대. 처음엔 모든 기준일자에서 미정, 경로 없음(기존 시연 숫자는 그대로)
   const team = [["GW1", "원주"], ["GW2", "양양"], ["GW3", "대관령"], ["GW4", "강릉"]].map(([id, name], i) => ({ id, name, sort: i + 1 }));

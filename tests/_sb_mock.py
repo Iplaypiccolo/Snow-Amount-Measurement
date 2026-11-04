@@ -97,22 +97,27 @@ class Mock:
         _ga = _json.load(open(_os.path.join(_os.path.dirname(__file__), "..", "data", "grid_assign.json"), encoding="utf-8"))
         _iss = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
         self.fc_issued = _iss.isoformat(); self.fc_start = (_iss + _dt.timedelta(hours=2)).isoformat(); self.fc_end = (_iss + _dt.timedelta(hours=26)).isoformat()
-        # 격자 = [nx, ny, 지사들, 적설, 강수, 최저기온, 최저 시각, 추이{s,p,t,r,vn}, 최고 강수확률] (마이그레이션 34·42·60)
+        # 격자 = [nx, ny, 지사들, 적설, 강수, 최저기온, 최저 시각, 추이{s,p,t,r,vn,pq,sq}, 최고 강수확률, 강수 범위 위쪽, 적설 범위 위쪽] (마이그레이션 34·42·60·62)
+        #  적설·강수는 정수(기상청 격자 값). 적설이 있고 강수 0 인 칸 = 12시 '~1mm'(pq), 강수가 있고 적설 0 인 칸 = 14시 '~1cm'(sq) → 범위 위쪽 +1
         def _cell(c):
-            s, p, t, k = round(((c[0] + c[1]) % 7) * 0.5, 1), round(((c[0] * c[1]) % 9) * 1.5, 1), -float((c[0] * 3 + c[1]) % 12), (c[0] % 10) + 3
+            s, p, t, k = (c[0] + c[1]) % 7, (c[0] * c[1]) % 9, -float((c[0] * 3 + c[1]) % 12), (c[0] % 10) + 3
             o = ((c[0] + 2 * c[1]) % 10) * 10                    # 최고 강수확률(%): 0~90
-            sr = {"s": [round(s / 4, 1) if 6 <= i < 10 else 0 for i in range(24)], "p": [round(p / 6, 1) if 2 <= i < 8 else 0 for i in range(24)], "t": [t + abs(i - k) * 0.5 for i in range(24)],
+            sr = {"s": [1 if 6 <= i < 6 + s else 0 for i in range(24)], "p": [1 if 2 <= i < 2 + p else 0 for i in range(24)], "t": [t + abs(i - k) * 0.5 for i in range(24)],
                   "r": [o if 2 <= i < 8 else max(o - 30, 0) for i in range(24)], "vn": 6}      # vn = 앞 6시각은 초단기예보 값(마이그레이션 60, 서버가 섞어 저장)
-            return [c[0], c[1], sorted(c[2]), s, p, t, (_iss + _dt.timedelta(hours=2 + k)).isoformat(), sr, o]
+            ph, sh = p, s
+            if s > 0 and p == 0: sr["pq"] = [1 if i == 12 else 0 for i in range(24)]; ph = 1
+            if p > 0 and s == 0: sr["sq"] = [1 if i == 14 else 0 for i in range(24)]; sh = 1
+            return [c[0], c[1], sorted(c[2]), s, p, t, (_iss + _dt.timedelta(hours=2 + k)).isoformat(), sr, o, ph, sh]
         self.fc_cells = [_cell(c) for c in _ga["cells"] if c[2]]
         _best = {}
-        for nx, ny, bs, s, p, t, ta, _sr, pop in self.fc_cells:
+        for nx, ny, bs, s, p, t, ta, _sr, pop, ph, sh in self.fc_cells:
             for b in bs:
-                o = _best.setdefault(b, {"branch_id": b, "issued_at": self.fc_issued, "max_snow_24h": -1, "max_pcp_24h": -1, "max_pop_24h": -1, "min_tmp": 99, "min_tmp_at": None, "worst_nx": nx, "worst_ny": ny, "detail": {"start_at": self.fc_start, "end_at": self.fc_end}})
+                o = _best.setdefault(b, {"branch_id": b, "issued_at": self.fc_issued, "max_snow_24h": -1, "max_pcp_24h": -1, "max_snow_hi": -1, "max_pcp_hi": -1, "max_pop_24h": -1, "min_tmp": 99, "min_tmp_at": None, "worst_nx": nx, "worst_ny": ny, "detail": {"start_at": self.fc_start, "end_at": self.fc_end}})
                 if s > o["max_snow_24h"]: o.update(max_snow_24h=s, worst_nx=nx, worst_ny=ny)
                 if p > o["max_pcp_24h"]: o["max_pcp_24h"] = p; o["detail"].update(pcp_nx=nx, pcp_ny=ny)
                 if t < o["min_tmp"]: o.update(min_tmp=t, min_tmp_at=ta)
                 if pop > o["max_pop_24h"]: o["max_pop_24h"] = pop
+                o["max_pcp_hi"] = max(o["max_pcp_hi"], ph); o["max_snow_hi"] = max(o["max_snow_hi"], sh)
         self.branch_forecast = list(_best.values()); self.fc_calls = []; self.fc_series_calls = []
         self.branches = [{"id": b, "name": d.replace("지사", ""), "hq_id": h} for _, d, b, h in names]
         self.hqs = [{"id": "H01", "name": "수도권", "sort": 1}, {"id": "H02", "name": "서울경기", "sort": 2}, {"id": "H03", "name": "강원", "sort": 3}, {"id": "H04", "name": "충북", "sort": 4}, {"id": "H07", "name": "광주전남", "sort": 7}]
@@ -278,7 +283,7 @@ class Mock:
                 if ser and len(ids) > 1: return send(400, {"message": "series for one branch only"})
                 (self.fc_series_calls if ser else self.fc_calls).append(sorted(ids))
                 return send(200, {"tmfc": self.fc_issued, "start_at": self.fc_start, "end_at": self.fc_end,
-                                  "cells": [[nx, ny, [b for b in bs if b in ids], s, p, t, ta, sr if ser else None, pop] for nx, ny, bs, s, p, t, ta, sr, pop in self.fc_cells if ids & set(bs)]})
+                                  "cells": [[nx, ny, [b for b in bs if b in ids], s, p, t, ta, sr if ser else None, pop, ph, sh] for nx, ny, bs, s, p, t, ta, sr, pop, ph, sh in self.fc_cells if ids & set(bs)]})
             if tbl == "warning_status" and "/rpc/" in path:
                 self.eq_calls.append((tbl, body)); return send(200, self.warn_status) if self.usable(u) else send(401, {"message": "login"})
             if tbl in ("save_fleet", "save_requests") and "/rpc/" in path:

@@ -76,9 +76,10 @@ def t_levels(b):
     check("<table" in poly and "fc-t3" in poly and "<svg" not in poly and "최저기온" in poly, "격자에 마우스 = 3시간 단위 표(그림 없음): " + poly[:120])
     rows = p.locator(".fc-detail tbody tr"); check(rows.count() == n, "옆 표에 격자 목록")
     top = max((c for c in m.fc_cells if d in c[2]), key=lambda c: c[3])
-    check(rows.first.locator("td").nth(1).inner_text() == f"{top[3]:.1f}", "적설 많은 격자부터")
+    check(rows.first.locator("td").nth(1).inner_text() == str(top[3]), "적설 많은 격자부터(정수, 2026-11-04)")
     bf = [x for x in m.branch_forecast if x["branch_id"] == d][0]
-    check(f"{bf['max_snow_24h']:.1f}" in p.locator(f"#fc-tree [data-fcbr='{d}']").inner_text(), "지사 줄 = 지사 격자 최댓값")
+    sn = str(bf['max_snow_24h']) if bf['max_snow_hi'] <= bf['max_snow_24h'] else f"{bf['max_snow_24h']}~{bf['max_snow_hi']}"
+    check(p.locator(f"#fc-tree [data-fcbr='{d}'] .fc-v.s").inner_text().replace("cm", "") == sn, f"지사 줄 = 지사 격자 최댓값(정수·범위): {sn}")
     p.click(f"#fc-tree [data-fcbr='{d}']"); p.wait_for_timeout(500); check(labels(p) == 0 and layers(p) > n, "지사를 다시 누르면 본부 보기로")
     p.click("#fc-tree [data-fchq='강원']"); p.wait_for_timeout(500); check(layers(p) == 0, "본부를 다시 누르면 전체(노선만)")
 
@@ -146,7 +147,7 @@ def t_pin_chart(b):
     check([leg.locator(f"[data-fcshow={k}]").is_checked() for k in "spot"] == [True, False, False, True], "체크박스 기본 = 적설·기온")
     prow = [r.locator("th.lb").inner_text() for r in pin0.locator("table.fc-t1").first.locator("tbody tr").all()]
     check(len(prow) == 4 and prow[2].startswith("확률") and "확률 최고" in pin0.locator(".fc-tt-sum").inner_text(), f"고정 창 표에 강수확률 줄·합계 줄에 확률 최고: {prow}")
-    mine = [c for c in m.fc_cells if d in c[2]]; hot = [c for c in mine if c[3] > 0 or c[4] > 0]
+    mine = [c for c in m.fc_cells if d in c[2]]; hot = [c for c in mine if max(c[3], c[10] or 0) > 0 or max(c[4], c[9] or 0) > 0]
     check(p.locator("#fmap .fc-label.hot").count() == len(hot) and p.locator("#fmap .fc-label.calm").count() == len(mine) - len(hot) and len(hot) > 0, f"지도 칸: 적설·강수가 있는 칸만 크게({len(hot)}칸), 나머지는 흐리게")
     lab = p.locator("#fmap .fc-label").first
     check(lab.locator("i").count() == 0 and lab.locator("span").count() == 0, "기본(적설·기온)에서는 칸에 강수·확률이 없음")
@@ -184,13 +185,13 @@ def t_legend_show(b):
     J(p, f"(() => {{ {S}.map.setZoom({z0} - 1, {{ animate: false }}); return null }})()"); p.wait_for_timeout(400)
     ks = kinds()
     check(labels(p) == len(mine) and all(x.count("+") == 1 for x in ks), f"한 단계 축소: 칸마다 두 줄만 {set(ks)}")
-    both = [c for c in mine if c[3] > 0 and c[4] > 0]
+    both = [c for c in mine if max(c[3], c[10] or 0) > 0 and max(c[4], c[9] or 0) > 0]      # 범위(~1)도 '있음'(62)
     check(len(both) > 0 and ks.count("B+SPAN") == len(both), f"두 줄일 때는 순서대로 적설·강수(확률·기온은 밀림): {ks.count('B+SPAN')} / {len(both)}")
     p.uncheck("#fc-legend [data-fcshow=p]"); p.uncheck("#fc-legend [data-fcshow=o]"); p.wait_for_timeout(200)
     check(set(kinds()) == {"B+EM"}, f"적설·기온만 체크하면 축소해도 그 둘 {set(kinds())}")
     p.check("#fc-legend [data-fcshow=p]"); p.wait_for_timeout(100)
     J(p, f"(() => {{ {S}.map.setZoom({z0} - 2, {{ animate: false }}); return null }})()"); p.wait_for_timeout(400)
-    wet = [c for c in mine if c[4] > 0]
+    wet = [c for c in mine if max(c[4], c[9] or 0) > 0]
     check(labels(p) == 0 and p.locator("#fmap path.fc-dot").count() == len(wet) and len(wet) > 0, f"두 단계 축소: 글자 없이 칸 색 + 강수가 있는 칸에 점({len(wet)}칸)")
     p.uncheck("#fc-legend [data-fcshow=p]"); p.wait_for_timeout(200); check(p.locator("#fmap path.fc-dot").count() == 0, "강수 체크를 끄면 점도 없음")
     p.check("#fc-legend [data-fcshow=o]"); p.wait_for_timeout(100)
@@ -202,7 +203,7 @@ def t_auto_pick(b):
     """지사를 고르면 격자 하나를 고른 채로 엶(2026-10-10). 순서: ① 적설 ② 강수 + 24시간 안에 한 번이라도 4℃ 이하 ③ 강수 ④ 최저 4℃ 이하. 아무것도 없으면 고르지 않음"""
     def case(setup, name):
         m = SBM.Mock(); d = next(x["branch_id"] for x in m.branch_forecast if sum(1 for c in m.fc_cells if x["branch_id"] in c[2]) >= 5); cs = [c for c in m.fc_cells if d in c[2]]
-        for c in cs: c[3] = 0; c[4] = 0; c[5] = 10.0; c[7] = {"s": [0] * 24, "p": [0] * 24, "t": [10.0] * 24, "r": [0] * 24}; c[8] = 0      # 모두 맑고 따뜻하게 만든 뒤 경우마다 바꿈
+        for c in cs: c[3] = 0; c[4] = 0; c[9] = None; c[10] = None; c[5] = 10.0; c[7] = {"s": [0] * 24, "p": [0] * 24, "t": [10.0] * 24, "r": [0] * 24}; c[8] = 0      # 모두 맑고 따뜻하게 만든 뒤 경우마다 바꿈
         want = setup(cs)
         p, _ = open_page(b, mock=m); J(p, f"(() => {{ SSOpenForecast('{d}'); return null }})()"); p.wait_for_timeout(1300)
         got = J(p, f"{S}.pin"); key = want and f"{want[0][0]},{want[0][1]}"
@@ -435,7 +436,26 @@ def t_first_page_equip_first_forecast(b):
     finally:
         T.FIRST["snow"] = True
 
-TESTS += [t_blend_no_toggle, t_pin_move_resize, t_phone_fit, t_eq_round_bar, t_eq_round_no_edit, t_first_page_equip, t_first_page_equip_first_forecast]
+def t_int_and_range(b):
+    """2026-11-04(62): 적설·강수는 정수로, '1mm·1cm 미만' 시각이 있으면 범위(0~3, 한 시각이면 ~1). 고정 창 표의 그 시각 칸은 '~1'"""
+    p, m = open_page(b)
+    p.click(".tab-btn[data-tab=forecast]"); p.wait_for_timeout(800)
+    txt = p.locator("#fc-tree").inner_text(); check("." not in txt.replace("본부", ""), "목록에 소수점 없음: " + txt[:120].replace("\n", " "))
+    c = next(c for c in m.fc_cells if c[9] > c[4] or c[10] > c[3]); d = c[2][0]
+    J(p, f"(() => {{ SSOpenForecast('{d}'); return null }})()"); p.wait_for_timeout(1300)
+    bf = [x for x in m.branch_forecast if x["branch_id"] == d][0]
+    want = lambda lo, hi: str(lo) if hi <= lo else ("~1" if lo == 0 and hi == 1 else f"{lo}~{hi}")
+    row = p.locator(f"#fc-tree [data-fcbr='{d}']")
+    check(row.locator(".fc-v.s").inner_text().replace("cm", "") == want(bf["max_snow_24h"], bf["max_snow_hi"]) and row.locator(".fc-v.p").inner_text().replace("mm", "") == want(bf["max_pcp_24h"], bf["max_pcp_hi"]),
+          f"지사 줄 범위: {row.inner_text()} / {bf}")
+    tr = p.locator(f".fc-detail tr[data-cell='{c[0]},{c[1]}'] td")
+    check(tr.nth(1).inner_text() == want(c[3], c[10]) and tr.nth(2).inner_text() == want(c[4], c[9]), f"격자 표 범위: {tr.all_inner_texts()}")
+    p.locator(f".fc-detail tr[data-cell='{c[0]},{c[1]}']").click(); p.wait_for_timeout(500)
+    tds = p.locator(".fc-pin .fc-tt td.tr").all_inner_texts()
+    check(tds == ["~1"], f"고정 창: '~1' 칸 하나: {tds}")
+    s = p.locator(".fc-pin .fc-tt-sum").inner_text(); check(want(c[3], c[10]) + "cm" in s.replace(" ", "") and want(c[4], c[9]) + "mm" in s.replace(" ", ""), "합계 줄 범위: " + s)
+
+TESTS += [t_int_and_range, t_blend_no_toggle, t_pin_move_resize, t_phone_fit, t_eq_round_bar, t_eq_round_no_edit, t_first_page_equip, t_first_page_equip_first_forecast]
 
 if __name__ == "__main__":
     only = sys.argv[1:]
