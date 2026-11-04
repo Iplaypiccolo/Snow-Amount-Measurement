@@ -599,10 +599,7 @@ table.matrix { font-size: 15px; min-width: 900px; }
    지원 불가(이날부터) 칸, 연속지원 표시, 숨기기·숨김 취소 */
 .slot.locked { opacity: .62; cursor: help; padding: 4px 6px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 5%, transparent); }
 .slot.locked .sl-n { font-weight: 600; }
-.slot.offday { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.slot.offday small { font-size: 11px; }
 .cont { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 6px; border-radius: 6px; color: var(--ink); background: color-mix(in srgb, var(--plow) 18%, transparent); white-space: nowrap; }
-.slot .offsel { margin-top: 4px; font-size: 12px; max-width: 150px; }
 .eq td.vact { white-space: nowrap; }
 .eq td.vact .btn + .btn { margin-left: 4px; }
 .eq th.unh { white-space: nowrap; }
@@ -933,7 +930,6 @@ table.fixcols th, table.fixcols td { overflow-wrap: anywhere; }
   .fs-table .l { min-width: 58px; }
   .savebar { padding: 6px 10px; margin-top: 6px; }
 }
-.eq.fixcols .slot .offsel { width: 100%; max-width: 100%; margin-top: 0; box-sizing: border-box; }
 .eq.fixcols .slot .cont { font-size: .84em; padding: 0 .25em; white-space: nowrap; flex: none; }
 
 /* 표 크기 개선(2026-11-03 시안 비교 뒤 사용자 선택: 이동 현황 2안, 나머지 표 C안). 컴퓨터만, 휴대폰은 그대로 */
@@ -1008,7 +1004,7 @@ table.fixcols th, table.fixcols td { overflow-wrap: anywhere; }
 .fs-table tbody .l, .fs-table .fs-sum th, .fs-table .fs-sum td:not(.tot) { background: var(--grp-bg); }
 .fs-tog { display: inline-flex; align-items: center; gap: .25em; border-color: var(--frame); background: var(--surface); }
 .fs-tog:hover { background: color-mix(in srgb, var(--plow) 18%, var(--surface)); }
-:is(#eqTable, #teamTable) .slot-x, .vid2, :is(#eqTable, #teamTable) .slot.offday { justify-content: center; }
+:is(#eqTable, #teamTable) .slot-x, .vid2 { justify-content: center; }
 @media (min-width: 861px) {
   /* 지사별 요청·편성 제목: 위아래를 넓히고 글자를 조금 키움(내용 줄은 그대로 촘촘하게) */
   #branchTable thead th { padding-top: 6px; padding-bottom: 6px; line-height: 1.25; }

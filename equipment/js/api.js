@@ -204,7 +204,7 @@ const Api = (() => {
       saveTeam(round, routes, status) {      // 서버 save_gw_team 흉내: 관리자·강원본부만, 지원 여부 먼저 → 경로(그 날짜를 맡은 기준일자에서 '지원'인 날만). 하나라도 안 되면 전부 취소
         if (!teamOk()) return done(err("42501", TEAM_ERR["42501"]));
         const rd = db.rounds.find(r => r.id === +round); if (!rd || (!routes.length && !status.length)) return done(err("22023", TEAM_ERR["22023"]));
-        if (status.some(x => !["", "O", "X", "M"].includes(x.status || "") || (x.status === "O" && x.off_from && x.off_from < rd.start_date))) return done(err("23514", TEAM_ERR["23514"]));
+        if (status.some(x => !["", "O"].includes(x.status || "") || x.off_from)) return done(err("23514", "지원 여부는 빈칸 또는 '지원'만 됩니다."));      // 66
         if (routes.some(r => (gov(r.date) || {}).id !== +round || r.stops.some(b => !db.branches.some(x => x.id === b)) || r.stops.some((s, i) => i > 0 && s === r.stops[i - 1]))) return done(err("23514", TEAM_ERR["23514"]));      // 64: 바로 연달아 같은 지사만 거절
         if (routes.some(r => !simTimesOk(r))) return done(err("SA008"));
         const keep = clone(db.teamStatus), row = tid => db.teamStatus.find(x => x.round_id === +round && x.team_id === tid);
@@ -299,6 +299,7 @@ const Api = (() => {
         const vof = id => db.vehicles.find(x => x.id === id) || {};
         if (routes.some(repeated)) return done(err("23514", "바로 앞과 같은 지사는 한 번만 들어갑니다."));      // 64
         if (routes.some(r => r.stops.length && !simTimesOk(r))) return done(err("SA008"));
+        if (status.some(x => !["", "O"].includes(x.status || "") || x.off_from)) return done(err("23514", "지원 여부는 빈칸 또는 '지원'만 됩니다."));      // 66
         if (status.some(x => vof(x.vehicle_id).org === POOL && (x.status !== "O" || x.off_from))) return done(err("23514", "지역본부 장비의 지원 여부는 늘 '지원'입니다."));
         if (can("equip.route") && routes.some(r => { const h = vof(r.vehicle_id).home_branch; return h && r.stops.includes(h); })) return done(err("SA005"));   // 지사 계정은 아래에서 먼저 42501(서버와 같은 순서, 55)
         if (!can("equip.route")) { const c = ownRoutesErr(); if (c) return done({ ok: false, message: ERR[c], code: c }); }

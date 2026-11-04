@@ -42,9 +42,9 @@ const POOL = "지역본부";                              // 지역본부 장비
 const isPool = v => !!v && v.org === POOL;
 const TEAM = "강원 신속대응팀";                         // 강원본부 지원장비(마이그레이션 48)의 기관 이름 — 서버에는 기관이 아니고 따로 된 표(gw_team)
 const isTeam = v => !!v && v.org === TEAM;
-const STATUS = { "": ["wait", ""], O: ["go", "지원"], X: ["stop", "지원 불가"], M: ["fix", "정비중"] };     // 정비중도 지원 불가. ''(빈칸) = 아직 안 고름 — '미정' 글자는 2026-11-04 없앰
-// 지원 여부 드롭다운: 빈칸은 저장된 값이 빈칸일 때만(한 번 고르면 지원·지원 불가·정비중 중에서만, 2026-11-04 사용자 결정)
-const statusOpts = (vid, st) => { const saved = (S.rstat.get(S.round + "|" + vid) || ST0).status || ""; return Object.keys(STATUS).filter(k => k || !saved).map(k => `<option value="${k}" ${st === k ? "selected" : ""}>${STATUS[k][1]}</option>`).join(""); };
+const STATUS = { "": ["wait", ""], O: ["go", "지원"] };     // 지원 여부 = 지원 또는 빈칸(2026-11-04 사용자 결정: 지원 불가·정비중 없앰, 서버 마이그레이션 66도 이 둘만 받음)
+// 지원 여부 드롭다운: 빈칸 · 지원(빈칸으로 되돌릴 수 있음)
+const statusOpts = (vid, st) => Object.keys(STATUS).map(k => `<option value="${k}" ${st === k ? "selected" : ""}>${STATUS[k][1]}</option>`).join("");
 const WD = "일월화수목금토";
 const todayISO = () => { const t = new Date(); return `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`; };
 function addDays(iso, n) { const [y, m, d] = iso.split("-").map(Number); const t = new Date(y, m - 1, d + n); return `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`; }
@@ -132,7 +132,7 @@ const vval = (v, f) => { const d = S.vdraft.get(v.id); return d && f in d ? d[f]
 /* ---------- 기준일자별 지원 여부(마이그레이션 38) ----------
    규칙: 어떤 날짜의 지원 여부는, 그 날짜를 기간 안에 둔 기준일자 중 시작일이 가장 늦은 것(govRound)이 정한다.
    - 경로는 (날짜, 장비) 한 줄을 모든 기준일자가 함께 씀. 지원 가능이 아닌 날의 경로는 지우지 않고 숨김(effRec) — 다시 지원 가능으로 하면 되살아남
-   - 지원 불가 시작일(off_from): 그 날짜부터 지원 불가(지원 여부가 '지원'일 때만). 기준일자의 지원 불가 = 시작일부터 불가 */
+   - 지원 불가 시작일(off_from): 2026-11-04 '지원 불가(이날부터)'를 없애 늘 비어 있음(서버도 막음). 예전 값을 읽을 때만 계산에 남겨 둠 */
 const roundEnd = r => addDays(r.start_date, (r.days || 10) - 1);
 const govRound = d => S.rounds.find(r => r.start_date <= d && d <= roundEnd(r)) || null;      // S.rounds 는 시작일이 늦은 순
 const ST0 = { status: "", off_from: null };
@@ -325,7 +325,7 @@ function setVeh(vid, f, val) {
   if (same(val, v[f])) delete d[f]; else d[f] = val;
   if (Object.keys(d).length) S.vdraft.set(vid, d); else S.vdraft.delete(vid);
 }
-function setStat(vid, patch) {           // 고른 기준일자의 지원 여부(지원/지원 불가/정비중/미정)·지원 불가 시작일
+function setStat(vid, patch) {           // 고른 기준일자의 지원 여부(지원/빈칸)
   const b = S.rstat.get(S.round + "|" + vid) || ST0, m = { status: b.status, off_from: b.off_from || null, ...(S.sdraft.get(vid) || {}), ...patch };
   if (m.status !== "O") m.off_from = null;
   if (m.status === b.status && (m.off_from || null) === (b.off_from || null)) S.sdraft.delete(vid); else S.sdraft.set(vid, { status: m.status, off_from: m.off_from || null });
@@ -773,7 +773,7 @@ function unhideHead() {
 // 지원 가능 대수(status O)는 지사별 요청·편성의 맨 위 줄에도 씀
 const fleetCount = (t, st, orgs) => { const r = curRound(); return !r ? 0 : S.vehicles.filter(v => shownIn(v, r) && (!t || v.type === t) && MOVE_TYPES.includes(v.type) && (!orgs || !orgs.size || orgs.has(v.org)) && (st === null || stOf(r.id, v.id).status === st)).length; };
 function renderOrgGrid() {
-  const rowsDef = [["O", "지원", "go"], ["X", "지원 불가", "stop"], ["M", "정비중", "fix"]], AO = [...S.orgs, POOL];      // '미정' 줄은 2026-11-04 뺌(계 = 빈칸 포함 전체)
+  const rowsDef = [["O", "지원", "go"]], AO = [...S.orgs, POOL];      // 2026-11-04: 지원 줄만(지원 불가·정비중·계 줄 없앰)
   const OC = [[null, MOVE_TYPES], ...S.orgs.map(o => [o, MOVE_TYPES]), [POOL, ["제설차"]]];        // 맨 앞 = 전체(강조), 지역본부는 제설차만
   const cols = OC.flatMap(([o, ts]) => ts.map(t => ({ o, t, k: `${o || "전체"}:${t}`, f: t === "제설차" ? "truck" : "blower" })));
   const last = c => c.o === null ? " tot" : "", edge = c => OC.find(x => x[0] === c.o)[1][0] === c.t ? " ed" : "";
@@ -784,7 +784,6 @@ function renderOrgGrid() {
   $("orgGrid").innerHTML = `<div class="fs-wrap"><table class="fs-table" id="fleetSum"><thead><tr><th class="l" rowspan="2">상태</th>${OC.map(([o, ts]) => `<th colspan="${ts.length}" class="ed${o ? "" : " tot"}">${esc(o || "전체")}</th>`).join("")}</tr>` +
     `<tr>${cols.map(c => `<th class="${(edge(c) + last(c)).trim()}">${c.t}</th>`).join("")}</tr></thead><tbody>` +
     rowsDef.map(([st, lab, cls]) => `<tr data-fsrow="${esc(lab)}"><th class="l"><span class="status ${cls}">${lab}</span></th>${cols.map(c => num(c, st)).join("")}</tr>`).join("") +
-    `<tr class="fs-sum" data-fsrow="계"><th class="l">계</th>${cols.map(c => num(c, null)).join("")}</tr>` +
     `<tr class="fs-asgn" data-fsrow="배정"><th class="l">${maxLines ? `<button type="button" class="fs-tog" data-fsopen aria-expanded="${open}" aria-label="배정지 ${open ? "접기" : "펴기"}">배정 <span aria-hidden="true">${open ? "▴" : "▾"}</span></button>` : "배정"}</th>${cols.map((c, i) => { const n = lists[i].reduce((a, x) => a + x[1], 0); return `<td class="${(n ? "" : "z") + last(c) + edge(c)}" data-fsa="${esc(c.k)}">${n}</td>`; }).join("")}</tr>` +
     (open ? `<tr class="fs-asg"><th class="l">배정지</th>${cols.map((c, i) => `<td class="${last(c).trim()}${edge(c)}" data-fsl="${esc(c.k)}">${lists[i].length ? lists[i].map(([b, n]) => `<div data-fsb="${esc(b.id)}">${esc(b.name)} ${n}</div>`).join("") : '<span class="muted">-</span>'}</td>`).join("")}</tr>` : "") + `</tbody></table></div>`;
 }
@@ -817,27 +816,18 @@ function lockedCell(v, d, g) {
   const at = [S.rmeta.get(rk(d, v.id)), st && st.updated_at].filter(Boolean).sort().pop();
   const tip = g ? `기준일자 ${fmtMD(g.start_date)}에서 수정${at ? " · " + fmtShort(at) : ""}` : "어느 기준일자 기간에도 들지 않는 날짜";
   const body = rec.stops.length ? rec.stops.map((x, j) => `<div class="sl-x slot-x"><span class="sl-n">${esc(bn(x))}</span> <small>${j === 0 && isCont(v.id, d, x) ? "연속지원" : esc(rec.times[j] || "")}</small></div>`).join("")
-    : g && st.status ? `<span class="muted">${esc(availOn(v.id, d) ? "-" : st.status === "O" ? "지원 불가" : STATUS[st.status][1])}</span>` : '<span class="muted">-</span>';
+    : '<span class="muted">-</span>';
   return `<div class="slot locked" title="${esc(tip)}" data-lock="${esc(g ? g.start_date : "")}">${body}</div>`;
-}
-// 지원 불가 시작일(off_from) 이후 칸. 시작일 칸에서는 [취소]로 되돌림(고칠 권한이 있을 때)
-function offCell(v, d, st) {
-  const first = d === st.off_from && canVeh(v);
-  return `<div class="slot offday"><span class="status stop">지원 불가</span>${d === st.off_from ? `<small class="muted">이날부터</small>` : ""}` +
-    (first ? ` <button type="button" class="btn sm" data-offclr="${esc(v.id)}" aria-label="${esc(vname(v))} 지원 불가 취소">취소</button>` : "") + `</div>`;
 }
 function slotCell(v, d, ed, confirmed) {
   const g = govRound(d), cr = curRound();
   if (!g || !cr || g.id !== cr.id) return lockedCell(v, d, g);          // 고른 기준일자가 맡지 않은 날짜 = 고칠 수 없음
   const st = stOf(cr.id, v.id);
-  if (st.status === "O" && st.off_from && d >= st.off_from) return offCell(v, d, st);
-  const later = d > cr.start_date;                                     // 지원일 2부터는 '지원 불가(이날부터)'를 고를 수 있음
   const rec = effRec(d, v.id), stops = rec.stops, k = rk(d, v.id), t = `vehicle_routes:${d},${v.id}`, changed = S.draft.has(k), vid = esc(v.id);
   const cont = j => j === 0 && isCont(v.id, d, stops[0]);            // 전날 마지막 지사 = 오늘 첫 지사 → 시각 대신 "연속지원"(입력해 둔 시각은 그대로 남음)
   const tIn = (val, j, extra, dis) => !extra && cont(j) ? `<span class="cont">연속지원</span>` : `<input class="ci tm" data-rt="${vid}" data-rd="${d}" data-fk="${extra ? "tn" : "t"}:${d}:${vid}:${j}" value="${esc(val || "")}" placeholder="--:--" maxlength="5" inputmode="numeric" ${dis ? "disabled" : ""} aria-label="${esc(vname(v))} ${esc(fmtMD(d))} 지사 ${j + 1} 도착 예상 시각">`;
-  const offSel = later && canVeh(v) && st.status === "O" && !isPool(v) ? `<select class="ci offsel" data-off="${vid}" data-rd="${d}" data-fk="off:${d}:${vid}" aria-label="${esc(vname(v))} ${esc(fmtMD(d))} 지원 여부"><option value="">지원</option><option value="1">지원 불가(이날부터)</option></select>` : "";
   const flag = d === cr.start_date ? flagTag(allocFlag(v, stops[0])) : "";       // 지원일 1: 관리자 배정을 넘겼거나 배정 없는 지사
-  if (!ed) {                     // 지원장비(기계화부) 계정: 자기 기관 장비의 도착 예상 시각·지원 불가(지원일 2부터) + 지원일 1의 지사 한 곳(배정받은 지사 중, 마이그레이션 43)
+  if (!ed) {                     // 지원장비(기계화부) 계정: 자기 기관 장비의 도착 예상 시각 + 지원일 1의 지사 한 곳(배정받은 지사 중, 마이그레이션 43)
     const timeEd = routeOwn(v);                                       // 예전 수준: 자기 기관(지사는 자기 지사 지역본부) 장비만 — '모든 기관' 권한이 있어도 지원일 칸은 자기 기관만
     // 2026-11-02: 지원일 1만이 아니라 관리자가 정한 기준일자의 모든 지원일(govRound 가 지금 기준일자인 날)에서 하루 한 곳씩
     // 지역본부 장비의 지사는 관리자만(마이그레이션 55) — 지사 계정은 아래 칸에서 정해진 지사 이름을 보고 도착 시각만 넣음
@@ -847,11 +837,11 @@ function slotCell(v, d, ed, confirmed) {
       const opts = `<option value="">${list.length ? "지사 선택" : "배정받은 지사 없음"}</option>` +
         list.map(b => `<option value="${b.id}"${cur === b.id ? " selected" : ""}${full(b) ? " disabled" : ""}>${esc(b.name)}${free ? "" : ` (${allocUsed(v.org, v.type, b.id, d)}/${allocCap(v.org, v.type, b.id)})`}</option>`).join("") +
         (cur && !ids.has(cur) ? `<option value="${esc(cur)}" selected>${esc(bn(cur))} (배정 없음)</option>` : "") +
-        (later && canVeh(v) && !isPool(v) ? `<option value="__off">지원 불가(이날부터)</option>` : "") + (cur ? `<option value="__del">지우기</option>` : "");
+        (cur ? `<option value="__del">지우기</option>` : "");
       return `<div class="slot${changed ? " changed" : ""}"${hvA(t)}><div class="slot-x"><select class="ci" data-ra="${vid}" data-rd="${d}" data-fk="ra:${d}:${vid}" aria-label="${esc(vname(v))} ${esc(fmtMD(d))} 피지원 지사(배정받은 지사 중)">${opts}</select>${cur ? tIn(rec.times[0], 0, false, false) : ""}</div>${flag}</div>`;
     }
-    if (!stops.length) return offSel ? `<div class="slot">${offSel}</div>` : `<span class="muted">-</span>`;
-    return `<div class="slot${changed ? " changed" : ""}"${hvA(t)}>${stops.map((x, j) => `<div class="sl-x slot-x"><span class="sl-n">${esc(bn(x))}</span>${timeEd ? tIn(rec.times[j], j, false, false) : cont(j) ? ` <small>연속지원</small>` : rec.times[j] ? ` <small>${esc(rec.times[j])}</small>` : ""}</div>`).join("")}${flag}${offSel}</div>`;
+    if (!stops.length) return `<span class="muted">-</span>`;
+    return `<div class="slot${changed ? " changed" : ""}"${hvA(t)}>${stops.map((x, j) => `<div class="sl-x slot-x"><span class="sl-n">${esc(bn(x))}</span>${timeEd ? tIn(rec.times[j], j, false, false) : cont(j) ? ` <small>연속지원</small>` : rec.times[j] ? ` <small>${esc(rec.times[j])}</small>` : ""}</div>`).join("")}${flag}</div>`;
   }
   // 표 위 [최초 지원] = 이 기준일자에 편성 확정된 지사만 / [수정본] = 모든 지사 (한 번에 적용)
   const home = isPool(v) ? v.home_branch : null, tm = isTeam(v);         // 지역본부 장비는 자기(출발) 지사로 못 보냄 → 목록에서 뺌
@@ -861,7 +851,7 @@ function slotCell(v, d, ed, confirmed) {
   const opts = (cur, j) => `<option value="">지사 선택</option>` + hqOrder.map(h => { const l = choices.filter(b => b.hq_id === h.id); return l.length ? `<optgroup label="${esc(h.name)}">${l.map(b => `<option value="${b.id}" ${cur === b.id ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</optgroup>` : ""; }).join("") +
     (cur && !ids.has(cur) ? `<option value="${esc(cur)}" selected>${esc(bn(cur))} (편성 확정 전)</option>` : "") +
     (pend.length ? `<optgroup label="편성 확정 전(요청만) — 고를 수 없음">${pend.map(b => `<option disabled>${esc(b.name)}</option>`).join("")}</optgroup>` : "") +
-    (later && j === 0 && !home ? `<option value="__off">지원 불가(이날부터)</option>` : "") + `<option value="__del">지우기</option>`;
+    `<option value="__del">지우기</option>`;
   const sel = (cur, j, extra) => `<select class="ci" data-rv="${vid}" data-rd="${d}" data-fk="${extra ? "rn" : "r"}:${d}:${vid}:${j}" ${off ? "disabled" : ""} aria-label="${esc(vname(v))} ${esc(fmtMD(d))} 피지원 지사 ${j + 1}">${opts(cur, extra ? 1 : j)}</select>` +
     tIn(extra ? "" : rec.times[j], j, extra, off);
   const extra = S.extraStop.has(k), list = stops.length ? stops : [""];
@@ -1529,14 +1519,12 @@ document.addEventListener("change", async e => {
   if (t.id === "zbr") return renderZones();
   if (t.dataset.rv) {                       // 경로 칸(관리자): 그 (날짜, 장비)의 지사 목록을 다시 모음
     const vid = t.dataset.rv, d = t.dataset.rd, v = vehById(vid); if (!v || !(isTeam(v) ? canTeam() : canRoute())) return refresh();
-    if (t.value === "__off") { setStat(vid, { off_from: d }); return patchVehicle(vid); }          // 지원 불가(이날부터): 이날·뒷날 칸이 지원 불가로
     const rc = readCell(vid, d);
     if (rc.stops.some((s, i) => i > 0 && s === rc.stops[i - 1])) toast("바로 앞과 같은 지사는 한 번만 들어갑니다(다른 지사를 들렀다 다시 오는 것은 됩니다)", true);
     S.extraStop.delete(rk(d, vid)); setRoute(d, vid, rc); return patchCell(vid, d);
   }
   if (t.dataset.ra) {                       // 기계화부: 그 지원일의 피지원 지사(배정받은 지사 중 한 곳, 2026-11-02 모든 지원일). 다른 칸의 남은 대수 표시도 바뀌므로 표를 다시 그림
     const vid = t.dataset.ra, d = t.dataset.rd, v = vehById(vid), cr = curRound(), g = govRound(d); if (!v || isPool(v) || !routeOwn(v) || !cr || !g || g.id !== cr.id) return refresh();
-    if (t.value === "__off") { if (!canVeh(v) || isPool(v) || d <= cr.start_date) return refresh(); setStat(vid, { off_from: d }); return patchVehicle(vid); }   // 지원일 2부터: 지원 불가(이날부터)
     const rec = recOf(d, vid), val = t.value === "__del" ? "" : t.value;
     setRoute(d, vid, val ? { stops: [val], times: [rec.stops[0] === val ? rec.times[0] || null : null], revised: false } : EMPTY);
     keepFocus(() => renderFleet()); return afterAnyChange();
@@ -1568,10 +1556,6 @@ document.addEventListener("change", async e => {
   if (t.dataset.vs) {                       // 지원 여부(고른 기준일자): 지원이 아니면 그 기준일자가 맡은 날의 경로는 숨겨짐(지우지 않음 — 다시 지원으로 하면 보임)
     const v = vehById(t.dataset.vs); if (!v || !canVeh(v) || !S.round) return refresh();
     setStat(v.id, { status: t.value }); return patchVehicle(v.id);
-  }
-  if (t.dataset.off) {                      // 지원일 2부터의 '지원 불가(이날부터)'(지원장비 계정도)
-    const v = vehById(t.dataset.off); if (!v || !canVeh(v) || !S.round) return refresh();
-    if (t.value) setStat(v.id, { off_from: t.dataset.rd }); return patchVehicle(v.id);
   }
   if (t.dataset.vb) {                       // 블로워 소·대: 제설기만, 둘 다 꺼도 됨
     const v = vehById(t.dataset.vb); if (!v || !canVeh(v) || v.type !== "제설기") return refresh();
@@ -1633,7 +1617,6 @@ document.addEventListener("click", e => {
   if ((x = c("[data-vhide]"))) return hideVehicle(x.dataset.vhide, false);
   if ((x = c("[data-unhide]"))) return hideVehicle(x.dataset.unhide, true);
   if (c("#unhideBtn")) { S.unhideOpen = !S.unhideOpen; return renderFleet(); }
-  if ((x = c("[data-offclr]"))) { const v = vehById(x.dataset.offclr); if (v && canVeh(v)) { setStat(v.id, { off_from: null }); patchVehicle(v.id); } return; }
   if (c("#roundMake")) return makeRound();
   if (c("#confirmAll")) return confirmAll();
   if ((x = c("[data-rsave-hq]"))) return saveHq(x.dataset.rsaveHq);                  // 본부 줄의 [일괄 저장](줄 접기보다 먼저)

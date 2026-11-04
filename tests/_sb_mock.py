@@ -295,6 +295,7 @@ class Mock:
                     st, rid = body.get("p_status") or [], body.get("p_round")
                     if any("status" in v for v in body["p_vehicles"]) or ((body["p_routes"] or st) and not any(r["id"] == rid for r in self.rounds)): return send(400, {"code": "22023", "message": "bad input"})
                     if any(not ok(v["id"]) for v in body["p_vehicles"]) or any(not ok(x["vehicle_id"]) for x in st) or any(not route_ok(r["vehicle_id"]) for r in body["p_routes"]): return send(403, {"code": "42501", "message": "route not allowed"})
+                    if any(x.get("status") not in ("", "O") or x.get("off_from") for x in st): return send(400, {"code": "23514", "message": "new row violates check constraint"})   # 66: 빈칸·지원만, 지원 불가 시작일 없음
                     for x in st:
                         cur = next((y for y in self.rstatus if y["round_id"] == rid and y["vehicle_id"] == x["vehicle_id"]), None)
                         if not cur: cur = {"round_id": rid, "vehicle_id": x["vehicle_id"]}; self.rstatus.append(cur)
