@@ -318,7 +318,7 @@ class Mock:
                     if "confirmed" not in r or any(k not in ("branch_id", "confirmed", "expect_at") for k in r):       # 누가 저장했는지(마이그레이션 50) — 확정·취소만이면 남기지 않음
                         cur.update(saved_at="2026-11-02T04:00:00Z", saved_lv="admin" if self.can(u, "req.confirm") else "hq" if self.can(u, "req.edit.hq") else "branch")
                 return send(200, {"rows": len(body["p_rows"]), "versions": versions})
-            if tbl == "create_round" and "/rpc/" in path:          # 새 기준일자 + 전체 장비 지원 여부 이어받기(마이그레이션 38)
+            if tbl == "create_round" and "/rpc/" in path:          # 새 기준일자 + 전체 장비 지원 여부 줄: 빈칸, 새 기간에 경로가 잡힌 지원 장비만 유지(마이그레이션 63)
                 self.eq_calls.append((tbl, body)); d = body["p_date"]
                 if not self.can(u, "req.confirm"): return send(403, {"code": "42501", "message": "no"})
                 if any(r["start_date"] >= d for r in self.rounds): return send(400, {"code": "23514", "message": "round must start after the latest one"})
@@ -327,7 +327,8 @@ class Mock:
                 for v in self.vehicles:
                     if v.get("hidden_after") and d > v["hidden_after"]: continue
                     p = next((x for x in self.rstatus if prev and x["round_id"] == prev["id"] and x["vehicle_id"] == v["id"]), None)
-                    self.rstatus.append({"round_id": nr["id"], "vehicle_id": v["id"], "status": p["status"] if p else "", "off_from": None, "updated_at": "2026-10-08T00:00:00Z"})
+                    keep = bool(p) and p["status"] == "O" and any(x["vehicle_id"] == v["id"] and x["date"] >= d and x["stops"] and (not p.get("off_from") or x["date"] < p["off_from"]) for x in self.routes)
+                    self.rstatus.append({"round_id": nr["id"], "vehicle_id": v["id"], "status": "O" if keep else "", "off_from": p.get("off_from") if keep and (p.get("off_from") or "") > d else None, "updated_at": "2026-10-08T00:00:00Z"})
                 return send(200, dict(nr, carried=len(self.vehicles)))
             if tbl in ("gw_team", "gw_team_routes", "gw_team_status") and req.method == "GET":     # 강원 신속대응팀(마이그레이션 48): 4대 고정, 경로·지원 여부는 비어 있음
                 if not self.usable(u): return send(200, [])

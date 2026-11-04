@@ -1,5 +1,5 @@
 -- ============================================================
--- 기준일자별 지원 여부(마이그레이션 38) 시험 — SQL Editor 에 통째로 붙여넣고 실행
+-- 기준일자별 지원 여부(마이그레이션 38·63) 시험 — SQL Editor 에 통째로 붙여넣고 실행
 -- 마지막에 일부러 오류를 내서 시험 자료(2099·2100년 기준일자, V9001~V9003 장비)를 전부 되돌립니다. "전체 N, 실패 0" 이어야 합니다.
 -- ※ 마이그레이션 38 을 적용한 뒤에 실행합니다. (적용 전 롤백 시험은 마이그레이션 SQL 뒤에 이 파일을 이어 붙여 한 번에 실행)
 -- ============================================================
@@ -36,8 +36,8 @@ begin
   select id into r1 from public.support_rounds where start_date = '2099-12-01';
   perform pg_temp.chk('마지막 기준일자보다 앞 날짜는 거절','authenticated',a,'select public.create_round(''2020-01-01'')','err:23514');
   select count(*) into nveh from public.vehicles where active;
-  perform pg_temp.yes('전체 장비가 넘어옴', (select count(*) from public.round_vehicle_status where round_id = r1) = nveh, 'rows=' || (select count(*) from public.round_vehicle_status where round_id = r1) || ' veh=' || nveh);
-  perform pg_temp.yes('정비중(V9004)도 그대로 넘어옴(기준일자가 없던 상태에서 처음 만들면 옛 열 값)', not noprev or (select status from public.round_vehicle_status where round_id = r1 and vehicle_id = 'V9004') = 'M');
+  perform pg_temp.yes('전체 장비 줄이 생김', (select count(*) from public.round_vehicle_status where round_id = r1) = nveh, 'rows=' || (select count(*) from public.round_vehicle_status where round_id = r1) || ' veh=' || nveh);
+  perform pg_temp.yes('63: 정비중(V9004)도 빈칸으로 시작', (select status from public.round_vehicle_status where round_id = r1 and vehicle_id = 'V9004') = '');
   perform pg_temp.yes('자동으로 넘긴 줄은 수정 기록에 없음', (select count(*) from public.audit_log where tab = 'round_vehicle_status') = c0);
   perform pg_temp.yes('새 V9001 은 미정', (select status from public.round_vehicle_status where round_id = r1 and vehicle_id = 'V9001') = '');
 
@@ -58,7 +58,11 @@ begin
   -- 4. 새 기준일자(12/3 시작): 겹치는 날짜는 새 기준일자가 맡음
   perform pg_temp.chk('새 기준일자 2099-12-03','authenticated',a,'select public.create_round(''2099-12-03'')','ok:1');
   select id into r2 from public.support_rounds where start_date = '2099-12-03';
-  perform pg_temp.yes('지원 가능 장비가 그대로 넘어옴', (select count(*) = 2 from public.round_vehicle_status where round_id = r2 and vehicle_id in ('V9001','V9002') and status = 'O'));
+  perform pg_temp.yes('63: 새 기준일자는 빈칸 — 단 새 기간(12/3~)에 경로가 있던 지원 장비(V9002)만 지원 유지, 12/2 경로뿐인 V9001 은 빈칸',
+    (select status from public.round_vehicle_status where round_id = r2 and vehicle_id = 'V9002') = 'O' and (select status from public.round_vehicle_status where round_id = r2 and vehicle_id = 'V9001') = ''
+    and not exists (select 1 from public.round_vehicle_status where round_id = r2 and vehicle_id not in ('V9002') and status <> ''),
+    (select string_agg(vehicle_id || '=' || status, ',') from public.round_vehicle_status where round_id = r2 and vehicle_id like 'V900%'));
+  perform pg_temp.chk('관리자: 새 기준일자에서 V9001·V9002 지원','authenticated',a,format('select public.save_fleet(''[]'', ''[]'', %s, ''[{"vehicle_id":"V9001","status":"O"},{"vehicle_id":"V9002","status":"O"}]'')', r2),'ok:1');
   perform pg_temp.yes('경로는 복사되지 않고 공유(12/3 한 줄 그대로)', (select count(*) = 1 from public.vehicle_routes where date = '2099-12-03'));
   perform pg_temp.chk('옛 기준일자에서 새 기준일자가 맡은 날짜(12/4)는 거절','authenticated',a,format('select public.save_fleet(''[]'', ''[{"date":"2099-12-04","vehicle_id":"V9001","stops":["B001"]}]'', %s)', r1),'err:23514');
   perform pg_temp.chk('옛 기준일자에서 12/3 지우기도 거절','authenticated',a,format('select public.save_fleet(''[]'', ''[{"date":"2099-12-03","vehicle_id":"V9002","stops":[]}]'', %s)', r1),'err:23514');
@@ -77,14 +81,15 @@ begin
   perform pg_temp.chk('불가 시작일은 지원 가능일 때만(X 이면 비움)','authenticated',a,format('select public.save_fleet(''[]'', ''[]'', %s, ''[{"vehicle_id":"V9003","status":"X","off_from":"2099-12-05"}]'')', r2),'ok:1');
   perform pg_temp.yes('X 이면 불가 시작일 비워짐', (select off_from is null from public.round_vehicle_status where round_id = r2 and vehicle_id = 'V9003'));
 
-  -- 6. 이어받기: 불가 시작일 처리
+  -- 6. 새 기준일자: 이어받지 않음 — 모든 장비 빈칸(63)
   perform pg_temp.chk('새 기준일자 2099-12-05(불가 시작일 당일)','authenticated',a,'select public.create_round(''2099-12-05'')','ok:1');
   select id into r3 from public.support_rounds where start_date = '2099-12-05';
-  perform pg_temp.yes('이미 불가가 시작된 장비는 지원 불가로 넘어옴', (select status = 'X' and off_from is null from public.round_vehicle_status where round_id = r3 and vehicle_id = 'V9001'));
+  perform pg_temp.yes('63: 새 기준일자는 모든 장비 빈칸(지원·불가 시작일 이어받지 않음)', not exists (select 1 from public.round_vehicle_status where round_id = r3 and (status <> '' or off_from is not null))
+    and (select count(*) from public.round_vehicle_status where round_id = r3) = (select count(*) from public.round_vehicle_status where round_id = r2));
   perform pg_temp.chk('V9002 를 12/7 부터 불가로','authenticated',a,format('select public.save_fleet(''[]'', ''[]'', %s, ''[{"vehicle_id":"V9002","status":"O","off_from":"2099-12-07"}]'')', r3),'ok:1');
   perform pg_temp.chk('새 기준일자 2099-12-06','authenticated',a,'select public.create_round(''2099-12-06'')','ok:1');
   select id into r4 from public.support_rounds where start_date = '2099-12-06';
-  perform pg_temp.yes('아직 시작 안 된 불가 시작일은 그대로 넘어옴', (select status = 'O' and off_from = '2099-12-07' from public.round_vehicle_status where round_id = r4 and vehicle_id = 'V9002'));
+  perform pg_temp.yes('63: 다음 기준일자도 빈칸(앞에서 지원·불가 시작일을 넣어도)', (select status = '' and off_from is null from public.round_vehicle_status where round_id = r4 and vehicle_id = 'V9002'));
 
   -- 7. 기준일자 삭제
   perform pg_temp.chk('마지막이 아닌 기준일자 삭제 거절','authenticated',a,format('delete from public.support_rounds where id = %s', r3),'err:23514');

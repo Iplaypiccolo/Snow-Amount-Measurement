@@ -138,7 +138,8 @@ def t_multi_stop_add_and_delete(p):
 
 def t_status_maintenance(p):
     tab(p, "fleet"); d0 = day(p, 0)
-    opts = p.locator("[data-vs=V002] option").all_inner_texts(); check(opts == ["미정", "지원", "지원 불가", "정비중"], opts)
+    opts = p.locator("[data-vs=V002] option").all_inner_texts(); sv = ev(p, "(S.rstat.get(S.round + '|V002') || ST0).status")
+    check(opts == (["", "지원", "지원 불가", "정비중"] if not sv else ["지원", "지원 불가", "정비중"]), f"'미정' 글자 없음, 빈칸은 저장된 값이 빈칸일 때만: {opts} ({sv!r})")
     p.select_option("[data-vs=V002]", "M"); p.wait_for_timeout(250)
     check(p.locator(rsel("V002", d0)).input_value() == "" and route(p, "V002", d0) == ["대관령"] and ev(p, f"effRec('{d0}', 'V002').stops.length") == 0, "정비중이면 경로를 지우지 않고 숨김(되돌리면 다시 보임)")
     check(p.locator(rsel("V002", d0)).is_disabled(), "정비중이면 경로 입력 잠금")
@@ -215,7 +216,9 @@ def t_round_create(p):
     check(p.locator("#roundSelBranch").input_value() == str(ev(p, "S.round")) and ev(p, "curRound().start_date") == d, "새 기준일자 선택됨")
     check(ev(p, "Object.keys(S.reqs).length") == 0 and p.locator("#branchTable tr.active").count() == 0, "새 기준일자는 요청 없음(기본 보기는 모든 지사라 줄은 보임)")
     tab(p, "fleet"); check(p.locator("#day1In").input_value() == d, "지원일 1 = 새 기준일자")
-    check(ev(p, "S.vehicles.every(v => stOf(S.round, v.id).status === (stOf(S.rounds[1].id, v.id).status))"), "전체 장비 지원 여부를 이전 기준일자에서 이어받음")
+    check(ev(p, "S.vehicles.every(v => { const s = stOf(S.round, v.id).status; return s === '' || (s === 'O' && stOf(S.rounds[1].id, v.id).status === 'O'); })") and ev(p, "S.vehicles.some(v => stOf(S.round, v.id).status === '')"),
+          "새 기준일자는 빈칸 — 경로가 잡힌 '지원' 장비만 지원 유지(63)")
+    check(p.locator("#fleetSum tr[data-fsrow='미정']").count() == 0, "장비 현황 표에 '미정' 줄 없음")
     tab(p, "branch"); p.fill("#newRoundDate", d); p.click("#roundMake"); p.wait_for_timeout(200); check("뒤 날짜" in toast(p), "같은 날짜(마지막보다 앞·같음) 거절")
 
 def t_history_tooltip_per_cell(p):
@@ -719,7 +722,8 @@ def t_round_status_rules(p):
     check("기준일자" in toast(p) and p.locator("#day1In").input_value() == d[0], "지원일 1을 기준일자 앞으로 고르면 거절")
     # 새 기준일자(모레) → 오늘 기준일자에서 모레부터는 잠김
     tab(p, "branch"); p.fill("#newRoundDate", d[2]); p.click("#roundMake"); p.wait_for_timeout(400); new = ev(p, "S.round")
-    check(ev(p, "stOf(S.round, 'V001').status") == "O" and ev(p, "stOf(S.round, 'V005').status") == "O", "지원 여부를 이어받음")
+    exp = ev(p, f"(() => {{ const o = S.vehicles.filter(v => !v.round_id).map(v => [v.id, stOf(S.round, v.id).status, stOf({old}, v.id).status === 'O' && [...S.routes.entries()].some(([k, r]) => k.endsWith('|' + v.id) && k.split('|')[0] >= '{d[2]}' && r.stops.length)]); return o; }})()")
+    check(ev(p, "stOf(S.round, 'V001').status") == "O" and all((s == "O") == keep and s in ("O", "") for _, s, keep in exp), f"63: 새 기간에 경로가 잡힌 지원 장비만 지원 유지, 나머지 빈칸: {exp}")
     p.select_option("#roundSelBranch", str(old)); p.wait_for_timeout(300); tab(p, "fleet")
     lk = p.locator(f"td[data-cell='{d[2]}|V001'] .slot.locked")
     check(lk.count() == 1 and ("기준일자 " + ev(p, f"fmtMD('{d[2]}')")) in lk.get_attribute("title") and p.locator(rsel("V001", d[2])).count() == 0, "새 기준일자가 맡은 날짜는 옛 기준일자에서 고칠 수 없음(말풍선)")
@@ -743,6 +747,7 @@ def t_round_status_rules(p):
     p.click("#save-fleet [data-revert]"); p.wait_for_timeout(200)
     # 지원장비 계정: 자기 기관 장비의 지원일 2부터 '지원 불가'
     as_user(p, "eq-sg"); tab(p, "fleet"); p.select_option("#roundSelFleet", str(new)); p.wait_for_timeout(300)
+    if ev(p, "stOf(S.round, 'V005').status") != "O": p.select_option("select[data-vs='V005']", "O"); p.wait_for_timeout(200)      # 63: 새 기준일자는 빈칸이라 먼저 '지원'
     check(p.locator(f"select[data-off=V005][data-rd='{d[3]}']").count() == 1 and p.locator("select[data-off=V013]").count() == 0, "지원장비 계정도 자기 기관 장비의 지원 불가(이날부터)")
     p.select_option(f"select[data-off=V005][data-rd='{d[3]}']", "1"); p.wait_for_timeout(200); confirm_fleet(p)
     check("확정했습니다" in toast(p) and ev(p, "stOf(S.round, 'V005').off_from") == d[3], toast(p))
@@ -1187,16 +1192,17 @@ def t_fleet_sum(p):
     bg = lambda sel: ev(p, "getComputedStyle(document.querySelector(`" + sel + "`)).backgroundColor")
     check(bg("#fleetSum thead th.tot") == "rgb(255, 243, 176)" and bg("#fleetSum tr[data-fsrow='지원'] td.tot") == "rgb(255, 243, 176)" and bg("#fleetSum tr[data-fsrow='지원'] td:not(.tot)") != "rgb(255, 243, 176)", "전체 칸 강조")
     check("이동정비차" not in p.locator("#orgGrid").inner_text(), "이동정비차 없음")
-    rows = [p.locator(f"#fleetSum tr[data-fsrow='{r}'] th").inner_text().replace("▾", "").replace("▴", "").strip() for r in ("지원", "지원 불가", "정비중", "미정", "계", "배정")]
-    check(rows == ["지원", "지원 불가", "정비중", "미정", "계", "배정"], f"행 = 상태: {rows}")
+    rows = [p.locator(f"#fleetSum tr[data-fsrow='{r}'] th").inner_text().replace("▾", "").replace("▴", "").strip() for r in ("지원", "지원 불가", "정비중", "계", "배정")]
+    check(p.locator("#fleetSum tr[data-fsrow='미정']").count() == 0, "미정 줄 없음")
+    check(rows == ["지원", "지원 불가", "정비중", "계", "배정"], f"행 = 상태('미정' 줄 없음): {rows}")
     cnt = lambda o, t, st: ev(p, f"(() => {{ const r = curRound(); return S.vehicles.filter(v => shownIn(v, r) && v.type === '{t}' && ({'true' if o is None else repr(o) + ' === v.org'}) && stOf(r.id, v.id).status === '{st}').length; }})()")
     c = lambda k: int(p.locator(f"#fleetSum [data-fs='{k}']").inner_text())
     for o in ("서울경기", "충북", "전북", "대구경북"):
         for t in ("제설차", "제설기"):
-            for k, st in (("O", "O"), ("X", "X"), ("M", "M"), ("none", "")): check(c(f"{o}:{t}:{k}") == cnt(o, t, st), f"{o} {t} {k}")
-            check(c(f"{o}:{t}:sum") == sum(c(f"{o}:{t}:{k}") for k in ("O", "X", "M", "none")), f"{o} {t} 계")
+            for k, st in (("O", "O"), ("X", "X"), ("M", "M")): check(c(f"{o}:{t}:{k}") == cnt(o, t, st), f"{o} {t} {k}")
+            check(c(f"{o}:{t}:sum") == sum(c(f"{o}:{t}:{k}") for k in ("O", "X", "M")) + cnt(o, t, ""), f"{o} {t} 계(빈칸 포함)")
     for t in ("제설차", "제설기"):
-        for k, st in (("O", "O"), ("X", "X"), ("M", "M"), ("none", "")): check(c(f"전체:{t}:{k}") == cnt(None, t, st), f"전체 {t} {k}")
+        for k, st in (("O", "O"), ("X", "X"), ("M", "M")): check(c(f"전체:{t}:{k}") == cnt(None, t, st), f"전체 {t} {k}")
     # 지원 여부를 바꾸면 바로 바뀜
     vid, org = ev(p, "(() => { const v = S.vehicles.find(v => v.type === '제설차' && !v.home_branch && shownIn(v, curRound()) && stOf(S.round, v.id).status !== 'M'); return [v.id, v.org]; })()")
     a0, n0 = c(f"{org}:제설차:M"), c(f"{org}:제설차:sum")

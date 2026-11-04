@@ -61,12 +61,12 @@ begin
   perform pg_temp.yes('기존 장비 경로·배정 표는 그대로', not exists (select 1 from public.vehicle_routes where date >= d0) and not exists (select 1 from public.round_allocations where round_id = rid));
   perform pg_temp.yes('수정 기록에 남음', exists (select 1 from public.audit_log where tab = 'gw_team_routes' and target = 'gw_team_routes:' || d0 || ',GW1' and kind = '추가'));
 
-  -- ⑤ 새 기준일자는 지원 여부를 이어받음(지원 불가 시작일이 새 기준일자 이전이면 지원 불가)
+  -- ⑤ 새 기준일자는 지원 여부를 이어받지 않음 — 4대 모두 빈칸(63)
   perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated')::text, true);
   select (public.create_round(d0 + 3, 4) ->> 'id')::bigint into rid2;
-  perform pg_temp.yes('이어받음: 원주 = 지원 불가(시작일 지남), 홍천 = 지원, 나머지 미정',
-    (select string_agg(team_id || '=' || status, ',' order by team_id) from public.gw_team_status where round_id = rid2) = 'GW1=X,GW2=O,GW3=,GW4=');
-  perform pg_temp.chk('새 기준일자에 홍천 경로','authenticated',gw,format(sv, rid2, format('[{"date":"%s","team_id":"GW2","stops":["B005"]}]', d0 + 4), '[]'),'ok:1');
+  perform pg_temp.yes('63: 이어받지 않음 — 4대 모두 빈칸',
+    (select string_agg(team_id || '=' || status, ',' order by team_id) from public.gw_team_status where round_id = rid2) = 'GW1=,GW2=,GW3=,GW4=');
+  perform pg_temp.chk('새 기준일자에 홍천 경로','authenticated',gw,format(sv, rid2, format('[{"date":"%s","team_id":"GW2","stops":["B005"]}]', d0 + 4), '[{"team_id":"GW2","status":"O"}]'),'ok:1');      -- 63: 새 기준일자는 빈칸이라 지원으로 고른 뒤
 
   -- ⑥ 기준일자를 지우면 그 기간의 팀 경로·지원 여부도 함께
   perform pg_temp.chk('새 기준일자 지우기','authenticated',a,format('delete from public.support_rounds where id = %s', rid2),'ok:1');

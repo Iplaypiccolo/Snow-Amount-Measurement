@@ -118,7 +118,7 @@ const Api = (() => {
     saveRequests(round, rows) {
       return SSAuth.authed("/rest/v1/rpc/save_requests", { method: "POST", body: { p_round: round, p_rows: rows } }).then(r => r.ok ? { ok: true, result: r.json } : fail(r)).catch(NET);
     },
-    createRound(date) {          // 서버 함수가 기준일자를 만들고 전체 장비 지원 여부를 이전 기준일자에서 이어받음(마이그레이션 38)
+    createRound(date) {          // 서버 함수가 기준일자를 만들고 전체 장비 지원 여부 줄을 만듦 — 빈칸, 새 기간에 경로가 잡힌 '지원' 장비만 지원 유지(마이그레이션 63)
       return SSAuth.authed("/rest/v1/rpc/create_round", { method: "POST", body: { p_date: date } })
         .then(r => r.ok && r.json && r.json.id ? { ok: true, round: { id: r.json.id, name: r.json.name, start_date: r.json.start_date, days: r.json.days } } : fail(r, "기준일자를 만들지 못했습니다.", ROUND_ERR)).catch(NET);
     },
@@ -351,12 +351,11 @@ const Api = (() => {
         const prev = db.rounds.slice().sort((a, b) => b.start_date.localeCompare(a.start_date))[0];
         const r = { id: Math.max(0, ...db.rounds.map(x => x.id)) + 1, name: date + " 기준", start_date: date, days: 10 }; db.rounds.push(r); log("추가", "support_rounds", "support_rounds:" + r.id, null, r);
         db.vehicles.filter(v => v.active !== false && !v.round_id && (!v.hidden_after || date <= v.hidden_after)).forEach(v => {      // 지역본부 장비(round_id 있음)는 이어받지 않음     // 전체 장비 지원 여부 이어받기(정비중·지원 불가 포함)
-          const p = prev && stRow(prev.id, v.id), st = p ? p.status : prev ? "" : (v.status || "");
-          const gone = p && p.status === "O" && p.off_from && p.off_from <= date;
-          db.status.push({ round_id: r.id, vehicle_id: v.id, status: gone ? "X" : st, off_from: !gone && p && p.status === "O" ? p.off_from || null : null, updated_at: new Date().toISOString() });
+          const p = prev && stRow(prev.id, v.id), keep = !!p && p.status === "O" && db.routes.some(x => x.vehicle_id === v.id && x.date >= date && x.stops.length && (!p.off_from || x.date < p.off_from));      // 63: 빈칸, 새 기간에 경로가 잡힌 지원 장비만 유지
+          db.status.push({ round_id: r.id, vehicle_id: v.id, status: keep ? "O" : "", off_from: keep && p.off_from > date ? p.off_from : null, updated_at: new Date().toISOString() });
         });
-        db.team.forEach(t => { const p = prev && db.teamStatus.find(x => x.round_id === prev.id && x.team_id === t.id), gone = p && p.status === "O" && p.off_from && p.off_from <= date;      // 강원 신속대응팀도 이어받음(마이그레이션 48)
-          db.teamStatus.push({ round_id: r.id, team_id: t.id, status: gone ? "X" : p ? p.status : "", off_from: !gone && p && p.status === "O" ? p.off_from || null : null, updated_at: new Date().toISOString() }); });
+        db.team.forEach(t => { const p = prev && db.teamStatus.find(x => x.round_id === prev.id && x.team_id === t.id), keep = !!p && p.status === "O" && db.teamRoutes.some(x => x.team_id === t.id && x.date >= date && x.stops.length && (!p.off_from || x.date < p.off_from));      // 강원 신속대응팀(63 같은 규칙)
+          db.teamStatus.push({ round_id: r.id, team_id: t.id, status: keep ? "O" : "", off_from: keep && p.off_from > date ? p.off_from : null, updated_at: new Date().toISOString() }); });
         return done({ ok: true, round: clone(r) });
       },
       deleteRound(id) {

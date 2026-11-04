@@ -42,7 +42,9 @@ const POOL = "지역본부";                              // 지역본부 장비
 const isPool = v => !!v && v.org === POOL;
 const TEAM = "강원 신속대응팀";                         // 강원본부 지원장비(마이그레이션 48)의 기관 이름 — 서버에는 기관이 아니고 따로 된 표(gw_team)
 const isTeam = v => !!v && v.org === TEAM;
-const STATUS = { "": ["wait", "미정"], O: ["go", "지원"], X: ["stop", "지원 불가"], M: ["fix", "정비중"] };     // 정비중도 지원 불가
+const STATUS = { "": ["wait", ""], O: ["go", "지원"], X: ["stop", "지원 불가"], M: ["fix", "정비중"] };     // 정비중도 지원 불가. ''(빈칸) = 아직 안 고름 — '미정' 글자는 2026-11-04 없앰
+// 지원 여부 드롭다운: 빈칸은 저장된 값이 빈칸일 때만(한 번 고르면 지원·지원 불가·정비중 중에서만, 2026-11-04 사용자 결정)
+const statusOpts = (vid, st) => { const saved = (S.rstat.get(S.round + "|" + vid) || ST0).status || ""; return Object.keys(STATUS).filter(k => k || !saved).map(k => `<option value="${k}" ${st === k ? "selected" : ""}>${STATUS[k][1]}</option>`).join(""); };
 const WD = "일월화수목금토";
 const todayISO = () => { const t = new Date(); return `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`; };
 function addDays(iso, n) { const [y, m, d] = iso.split("-").map(Number); const t = new Date(y, m - 1, d + n); return `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`; }
@@ -462,7 +464,7 @@ function fmtField(f, v) {
   if (f === "stops") return v.length ? v.map(bn).join(" → ") : "(없음)";
   if (f === "revised") return v ? "수정본" : "최초 지원";
   if (f === "times") return v.some(Boolean) ? v.map(x => x || "-").join(" → ") : "(없음)";
-  if (f === "status") return (STATUS[v] || STATUS[""])[1];
+  if (f === "status") return v ? (STATUS[v] || STATUS[""])[1] : "빈칸";
   if (f === "off_from" || f === "start_date") return fmtMD(v) + (f === "off_from" ? "부터" : "");
   if (f === "hidden_after") return fmtMD(addDays(v, 1)) + " 기준일자부터 숨김";
   if (f === "warning") return v ? "발효" : "없음";
@@ -737,8 +739,8 @@ function fleetRowHtml(v, dates, choices, all) {
     if (isPool(v)) return poolRowHtml(v, dates, choices);
     const ed = canVeh(v), r = curRound(), st = r ? stOf(r.id, v.id).status : "", [cls, label] = STATUS[st] || STATUS[""], tv = "vehicles:" + v.id;
     // 지원 여부 = 고른 기준일자의 값(기준일자가 바뀌면 따로). 기준일자가 없으면 고칠 수 없음
-    const statusCell = ed && r ? `<select class="ci" data-vs="${esc(v.id)}" data-fk="vs:${esc(v.id)}" aria-label="${esc(vname(v))} 지원 여부"${S.sdraft.has(v.id) ? ' data-changed="1"' : ""}>${Object.keys(STATUS).map(s => `<option value="${s}" ${st === s ? "selected" : ""}>${STATUS[s][1]}</option>`).join("")}</select>`
-      : r ? `<span class="status ${cls}">${label}</span>` : '<span class="muted">-</span>';
+    const statusCell = ed && r ? `<select class="ci" data-vs="${esc(v.id)}" data-fk="vs:${esc(v.id)}" aria-label="${esc(vname(v))} 지원 여부"${S.sdraft.has(v.id) ? ' data-changed="1"' : ""}>${statusOpts(v.id, st)}</select>`
+      : r ? (label ? `<span class="status ${cls}">${label}</span>` : "") : '<span class="muted">-</span>';
     const old = !plateNum(v) && vval(v, "plate");      // 예전 차량번호 형식이 남은 장비: 숫자를 새로 넣어야 함
     const plateCell = ed ? `<span class="pnum"${hvA(tv, "plate")}><span class="pfx">${esc(v.org)}</span><input class="ci" inputmode="numeric" maxlength="4" data-vp="${esc(v.id)}" data-fk="vp:${esc(v.id)}" value="${esc(plateNum(v))}" placeholder="901" aria-label="도공번호 숫자"><span class="sfx">호</span></span>${old ? `<div class="muted sm">예전 번호 ${esc(old)}</div>` : ""}`
       : H(tv, "plate", `<span class="plate">${esc(vname(v))}</span>`);
@@ -761,7 +763,7 @@ function unhideHead() {
 // 지원 가능 대수(status O)는 지사별 요청·편성의 맨 위 줄에도 씀
 const fleetCount = (t, st, orgs) => { const r = curRound(); return !r ? 0 : S.vehicles.filter(v => shownIn(v, r) && (!t || v.type === t) && MOVE_TYPES.includes(v.type) && (!orgs || !orgs.size || orgs.has(v.org)) && (st === null || stOf(r.id, v.id).status === st)).length; };
 function renderOrgGrid() {
-  const rowsDef = [["O", "지원", "go"], ["X", "지원 불가", "stop"], ["M", "정비중", "fix"], ["", "미정", "wait"]], AO = [...S.orgs, POOL];
+  const rowsDef = [["O", "지원", "go"], ["X", "지원 불가", "stop"], ["M", "정비중", "fix"]], AO = [...S.orgs, POOL];      // '미정' 줄은 2026-11-04 뺌(계 = 빈칸 포함 전체)
   const OC = [[null, MOVE_TYPES], ...S.orgs.map(o => [o, MOVE_TYPES]), [POOL, ["제설차"]]];        // 맨 앞 = 전체(강조), 지역본부는 제설차만
   const cols = OC.flatMap(([o, ts]) => ts.map(t => ({ o, t, k: `${o || "전체"}:${t}`, f: t === "제설차" ? "truck" : "blower" })));
   const last = c => c.o === null ? " tot" : "", edge = c => OC.find(x => x[0] === c.o)[1][0] === c.t ? " ed" : "";
@@ -918,8 +920,8 @@ function renderTeam() {
 }
 function teamRowHtml(v, dates) {
   const ed = canTeam(), r = curRound(), st = r ? stOf(r.id, v.id).status : "", [cls, label] = STATUS[st] || STATUS[""], id = esc(v.id);
-  const statusCell = ed && r ? `<select class="ci" data-vs="${id}" data-fk="vs:${id}" aria-label="${esc(vname(v))} 지원 여부">${Object.keys(STATUS).map(x => `<option value="${x}" ${st === x ? "selected" : ""}>${STATUS[x][1]}</option>`).join("")}</select>`
-    : r ? `<span class="status ${cls}">${label}</span>` : '<span class="muted">-</span>';
+  const statusCell = ed && r ? `<select class="ci" data-vs="${id}" data-fk="vs:${id}" aria-label="${esc(vname(v))} 지원 여부">${statusOpts(v.id, st)}</select>`
+    : r ? (label ? `<span class="status ${cls}">${label}</span>` : "") : '<span class="muted">-</span>';
   return `<tr class="${S.sdraft.has(v.id) ? "changed" : ""}" data-vrow="${id}"><td><span class="plate">${esc(v.name)}</span> <span class="muted sm">제설차</span></td><td>${statusCell}</td>` +
     dates.map(d => `<td data-cell="${esc(rk(d, v.id))}">${slotCell(v, d, ed, null)}</td>`).join("") + `</tr>`;
 }
@@ -1364,7 +1366,7 @@ async function openSheet(vid) {
   const v = vehById(vid); if (!v) return;
   const g = govRound(S.date), st = g ? stOf(g.id, v.id).status : "", [cls, label] = STATUS[st] || STATUS[""], rec = effRec(S.date, v.id), cur = rec.stops;   // 지원 여부 = 그 날짜를 맡은 기준일자의 값
   sheet.innerHTML = `<button type="button" class="sheet-close" id="sheetClose">닫기</button><span class="plate" style="font-size:18px">${esc(vname(v))}</span>
-    <h2 id="sheetTitle">${esc(v.org)} ${esc(v.type)}${hasBlower(v) ? ` · 블로워 ${esc(blowerText(v))}` : ""}</h2>${g ? `<span class="status ${cls}">${label}</span>` : ""}
+    <h2 id="sheetTitle">${esc(v.org)} ${esc(v.type)}${hasBlower(v) ? ` · 블로워 ${esc(blowerText(v))}` : ""}</h2>${g && label ? `<span class="status ${cls}">${label}</span>` : ""}
     <section><h3>${esc(fmtMD(S.date))} 이동</h3><dl class="kv"><dt>지원기관</dt><dd>${isPool(v) ? POOL : isTeam(v) ? TEAM : esc(v.org) + " 기계화부"}</dd>
       <dt>들르는 지사</dt><dd>${cur.length ? cur.map(x => esc(bn(x))).join(" → ") + "" : "-"}</dd>
       <dt>도착 예상</dt><dd>${cur.length ? cur.map((x, j) => `${esc(bn(x))} ${esc(j === 0 && isCont(v.id, S.date, x) ? "연속지원" : rec.times[j] ? fmtMD(S.date) + " " + rec.times[j] : "미정")}`).join("<br>") : "-"}</dd></dl></section>
