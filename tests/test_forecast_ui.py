@@ -555,6 +555,71 @@ def t_right_dock_and_tail_drag(b):
 
 TESTS += [t_right_dock_and_tail_drag]
 
+def tail_refresh_page(b):
+    import copy,json
+    p,m=open_page(b)
+    d=m.fc_cells[0][2][0]
+    J(p,f"(() => {{SSOpenForecast('{d}');return null}})()")
+    p.wait_for_function("document.querySelector('#fc-tail table')")
+    data=J(p,f'{S}.tailData')
+    complete=copy.deepcopy(data['tail']['bins'])
+    data['collecting']=True;data['tail']['bins']=complete[:2]
+    state={'data':data,'calls':0,'fail':False}
+    def reply(route):
+        state['calls']+=1
+        route.fulfill(status=503 if state['fail'] else 200,content_type='application/json',body=json.dumps(state['data']))
+    p.route('**/rpc/forecast_cell_tail',reply)
+    p.clock.install()
+    p.locator('.fc-detail tbody tr').nth(1).click()
+    p.wait_for_function('ForecastUI._state().tailData && ForecastUI._state().tailData.collecting===true')
+    return p,state,complete
+
+def t_tail_progressive_refresh(b):
+    p,state,complete=tail_refresh_page(b)
+    before=p.locator('#fc-tail tbody tr').first.locator('td').count()
+    J(p,"document.querySelector('#fc-tail .fc-scroll').scrollLeft=100")
+    scroll=J(p,"document.querySelector('#fc-tail .fc-scroll').scrollLeft")
+    geo=p.locator('#fc-tail').bounding_box()
+    state['data']['tail']['bins']=complete[:3]
+    p.clock.fast_forward(180000)
+    p.wait_for_function(f"document.querySelectorAll('#fc-tail tbody tr:first-child td').length==={before+1}")
+    check(state['calls']==2,'하루치가 아닌 다음 한 칸 도착 시 자동 추가')
+    check(p.locator('#fc-pin .fc-tt tbody tr').first.locator('td').count()==24,'윗창 24시간 유지')
+    check(J(p,"document.querySelector('#fc-tail .fc-scroll').scrollLeft")==scroll,'자동 추가 뒤 가로 스크롤 유지')
+    after=p.locator('#fc-tail').bounding_box()
+    check(abs(after['x']-geo['x'])<=1 and abs(after['width']-geo['width'])<=1,'창 위치와 크기 유지')
+
+def t_tail_refresh_visibility(b):
+    p,state,complete=tail_refresh_page(b)
+    J(p,"Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'))")
+    p.clock.fast_forward(180000)
+    check(state['calls']==1,'브라우저가 안 보이면 조회 중단')
+    J(p,"Object.defineProperty(document,'hidden',{configurable:true,get:()=>false});document.dispatchEvent(new Event('visibilitychange'))")
+    p.wait_for_function('ForecastUI._state().tailBusy==null')
+    check(state['calls']==2,'다시 보이면 밀린 자료 확인')
+    J(p,"document.querySelector('#view-forecast').style.display='none'")
+    p.clock.fast_forward(180000)
+    check(state['calls']==2,'다른 탭으로 이동하면 조회 중단')
+    J(p,"document.querySelector('#view-forecast').style.display='';document.dispatchEvent(new Event('visibilitychange'))")
+    p.wait_for_function('ForecastUI._state().tailBusy==null')
+    check(state['calls']==3,'예보 화면으로 돌아오면 재개')
+    p.locator('.fc-tail-x').click();p.locator('.fc-pin-x').click()
+    p.clock.fast_forward(600000)
+    check(state['calls']==3,'두 창을 모두 닫으면 조회 중단')
+
+def t_tail_refresh_failure_keeps_data(b):
+    p,state,complete=tail_refresh_page(b)
+    before=p.locator('#fc-tail tbody').inner_text();state['fail']=True
+    p.clock.fast_forward(180000)
+    p.wait_for_function('ForecastUI._state().tailRetry===true')
+    check(p.locator('#fc-tail tbody').inner_text()==before,'갱신 실패 때 기존 준비 자료 유지')
+    state['fail']=False;state['data']['tail']['bins']=complete[:3]
+    p.clock.fast_forward(180000)
+    p.wait_for_function('ForecastUI._state().tailRetry===false')
+    check(state['calls']==3,'실패 후 다음 주기에 재시도')
+
+TESTS += [t_tail_progressive_refresh,t_tail_refresh_visibility,t_tail_refresh_failure_keeps_data]
+
 if __name__ == "__main__":
     only = sys.argv[1:]
     with sync_playwright() as pw:

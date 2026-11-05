@@ -248,23 +248,52 @@
     applyBoxGeo(box,S.tailGeo);
     syncForecastMapSize();
   }
-  function ensureTail() {
-    var key=S.focus+':'+S.pin+':'+S.pinAt;
-    if(S.tailKey===key) return;
-    S.tailKey=key; S.tailData=null; S.tailError=false; S.tailClosed=false; S.nearClosed=false;
-    S.tailGeo=S.tailGeo || {scale:1.3,x:null,y:null}; renderTail();
+  function tailVisible() {
+    var view=$('view-forecast');
+    return !!(view && view.offsetParent && !document.hidden && S.pin && !(S.nearClosed && S.tailClosed));
+  }
+  function clearTailTimer() { clearTimeout(S.tailTimer); S.tailTimer=null; }
+  function scheduleTail() {
+    clearTailTimer();
+    if(!tailVisible() || !S.tailKey) return;
+    var key=S.tailKey, delay=S.tailRetry || !S.tailData || S.tailData.collecting ? 180000 : 600000;
+    S.tailTimer=setTimeout(function(){
+      S.tailTimer=null;
+      if(S.tailKey===key && tailVisible()) fetchTail(key,true);
+    },delay);
+  }
+  function fetchTail(key,refresh) {
+    if(S.tailBusy===key) return;
+    S.tailBusy=key;
     var xy=S.pin.split(',');
     SSAuth.authed('/rest/v1/rpc/forecast_cell_tail',{method:'POST',body:{p_nx:+xy[0],p_ny:+xy[1]}}).then(function(r){
       if(S.tailKey!==key || !S.pin) return;
       if(!r.ok || !r.json) throw new Error('forecast unavailable');
+      S.tailFetchedAt=Date.now(); S.tailRetry=false; S.tailError=false;
+      if(refresh && JSON.stringify(S.tailData)===JSON.stringify(r.json)) return;
+      var scrolls=['fc-pin','fc-tail'].map(function(id){var el=$(id).querySelector('.fc-scroll');return el?el.scrollLeft:0;});
       S.tailData=r.json; renderPin();
-    }).catch(function(){if(S.tailKey===key && S.pin){S.tailError=true;renderTail();}});
+      ['fc-pin','fc-tail'].forEach(function(id,i){var el=$(id).querySelector('.fc-scroll');if(el)el.scrollLeft=scrolls[i];});
+    }).catch(function(){
+      if(S.tailKey===key && S.pin){S.tailRetry=true;if(!S.tailData){S.tailError=true;renderTail();}}
+    }).then(function(){
+      if(S.tailBusy===key) S.tailBusy=null;
+      if(S.tailKey===key) scheduleTail();
+    });
+  }
+  function ensureTail() {
+    var key=S.focus+':'+S.pin+':'+S.pinAt;
+    if(S.tailKey===key) return;
+    clearTailTimer();
+    S.tailKey=key; S.tailData=null; S.tailError=false; S.tailRetry=false; S.tailClosed=false; S.nearClosed=false;
+    S.tailGeo=S.tailGeo || {scale:1.3,x:null,y:null}; renderTail();
+    fetchTail(key,false);
   }
   // 격자를 누르면 그 격자의 그림을 지도 오른쪽 위에 고정(지도 아무 데나 누르면 닫힘)
   function renderPin() {
     var box = $('fc-pin'); if (!box) return;
     var sr = S.pin && S.focus && S.series[S.focus] ? S.series[S.focus][S.pin] : null;
-    if (!sr) { box.hidden = true; box.innerHTML = ''; S.tailKey=null; $('fc-tail').hidden=true; syncForecastMapSize(); return; }
+    if (!sr) { clearTailTimer(); box.hidden = true; box.innerHTML = ''; S.tailKey=null; $('fc-tail').hidden=true; syncForecastMapSize(); return; }
     ensureTail();
     var start=S.series[S.focus]._start;
     if(S.tailData && S.tailData.status==='ok') { sr=S.tailData.upper.series; start=S.tailData.upper.start_at; }
@@ -449,6 +478,12 @@
   }
 
   function bind() {
+    document.addEventListener('visibilitychange',function(){
+      clearTailTimer();
+      if(tailVisible() && S.tailKey){
+        if(Date.now()-(S.tailFetchedAt||0)>=60000) fetchTail(S.tailKey,true); else scheduleTail();
+      }
+    });
     $('view-forecast').addEventListener('pointerdown', pinDrag);
     window.addEventListener('resize', applyPinGeo);
     $('view-forecast').addEventListener('change', function (e) {         // 범례 체크박스: 지도 칸에 보일 값
@@ -458,9 +493,9 @@
     $('view-forecast').addEventListener('click', function (e) {
       var t = e.target, h = t.closest && t.closest('[data-fchq]'); if (h) { setHq(S.hq === h.dataset.fchq ? 'ALL' : h.dataset.fchq); return; }
       var b = t.closest && t.closest('[data-fcbr]'); if (b) { focusBranch(b.dataset.fcbr); return; }
-      if (t.closest && t.closest('.fc-tail-x')) { S.tailClosed=true; renderTail(); return; }
+      if (t.closest && t.closest('.fc-tail-x')) { S.tailClosed=true; renderTail(); scheduleTail(); return; }
       if (t.closest && t.closest('[data-tail-retry]')) { S.tailKey=null; ensureTail(); return; }
-      if (t.closest && t.closest('.fc-pin-x')) { S.nearClosed=true; $('fc-pin').hidden=true; markSel(); renderTail(); return; }
+      if (t.closest && t.closest('.fc-pin-x')) { S.nearClosed=true; $('fc-pin').hidden=true; markSel(); renderTail(); scheduleTail(); return; }
       var c = t.closest && t.closest('[data-cell]'); if (c && S.map) { var k = c.dataset.cell.split(','); S.map.setView(G.cellCenter(+k[0], +k[1]), Math.max(S.map.getZoom(), 11)); if (S.focus) pinCell(c.dataset.cell); }
     });
   }
