@@ -277,6 +277,17 @@ class Mock:
                 return send(200, out)
             if tbl == "save_jurisdiction" and "/rpc/" in path: return self.save_rpc(u, body, send)
             if tbl == "branch_forecast": return send(200, self.branch_forecast if self.usable(u) else [])
+            if tbl == "forecast_cell_tail" and "/rpc/" in path:
+                if not self.usable(u): return send(401, {"message": "login"})
+                import datetime as dt
+                c = next((c for c in self.fc_cells if c[0] == body.get("p_nx") and c[1] == body.get("p_ny")), None)
+                if not c: return send(400, {"message": "cell"})
+                start = dt.datetime.fromisoformat(self.fc_end.replace("Z", "+00:00"))
+                bins = []
+                for i in range(8):
+                    a = start + dt.timedelta(hours=i*3); b = a + dt.timedelta(hours=2)
+                    bins.append({"first_at": a.isoformat(), "last_at": b.isoformat(), "hours": 2 if i==0 else 3, "expected_hours": 3, "partial": i==0, "snow": 3 if i<5 else None, "snow_hi": 4 if i<5 else None, "pcp": 6 if i<5 else None, "pcp_hi": 6 if i<5 else None, "tmin": -2, "pop": 80})
+                return send(200, {"status":"ok", "upper":{"series":c[7], "start_at":self.fc_start,"end_at":self.fc_end}, "tail":{"bins":bins}})
             if tbl == "forecast_grid" and "/rpc/" in path:
                 if not self.usable(u): return send(401, {"message": "login"})
                 ids = set((body or {}).get("p_branches") or []); ser = bool((body or {}).get("p_series"))

@@ -165,7 +165,7 @@
       E('forecast', '본부 펼치기', [upTo('#fc-tree .jr-hqpick.on', '.jr-hq')], '본부 클릭 → 지사 목록 · 지도에 그 본부 격자', [], { demo: fcHq }),
       E('forecast', '지사 고르기', [both(['#fc-tree .jr-br.on', '#fc-tree .fc-detail'])], '지사 클릭 → 그 지사 격자별 값 (적설 많은 순)', ['지명 클릭 → 지도에서 그 격자'], { demo: fcBranch }),
       E('forecast', '5km 격자', [fcCell], '기상청 예보 단위 = 5km × 5km 칸', ['칸 색 = 예상 적설 · 칸 글자 = 적설 / 강수', '마우스 → 그 칸 24시간 추이'], { demo: fcBranch }),
-      E('forecast', '시간별 추이', ['#fc-pin'], '격자 클릭 → 24시간 추이 고정 (적설 · 강수 · 기온)', ['그림에 마우스 → 시각별 값', '지도 빈 곳 클릭 → 닫힘'],
+      E('forecast', '시간별 추이', ['#fc-pin'], '격자 클릭 → 24시간·이후 예보를 별도 창으로 (적설 · 강수 · 기온)', ['그림에 마우스 → 시각별 값', '지도 빈 곳 클릭 → 닫힘'],
         { demo: function (d, undo) { fcBranch(d, undo); var pin = d.getElementById('fc-pin'); if (pin && pin.hidden) tap(q1(d, '#fc-tree tr[data-cell]')); } }),
       E('forecast', '칸 표시 · 범례', ['#fc-legend'], '지도 칸에 보일 값 고르기 · 적설량 색 기준', [], { demo: fcBranch }),
       { tab: 'snowtable', title: '연도별 신적설', desc: '지사 · 본부별 하루 신적설을 시즌 단위로 확인' },

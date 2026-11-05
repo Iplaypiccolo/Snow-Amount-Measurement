@@ -105,3 +105,30 @@ body.fc-pin-moving{user-select:none;}
   .fc-trend-box{width:min(283px,calc(100vw - 48px));}
   .leaflet-tooltip.fc-tip{white-space:normal;}
 }
+
+/* 기관별 장비 상단 표와 같은 머리글·항목명·내용 구분 */
+.fc-pin .fc-tt,.fc-tail .fc-tt{border:2px solid #52677b;}
+.fc-pin .fc-tt thead th,.fc-tail .fc-tt thead th{background:#24405c;color:#fff;border-color:#60788c;padding:5px 2px;font-weight:700;}
+.fc-pin .fc-tt thead th small,.fc-tail .fc-tt thead th small{color:#e0eaf1;}
+.fc-pin .fc-tt tbody th,.fc-tail .fc-tt tbody th{background:#dce6ee;color:#213d52;border-right:2px solid #70879a;}
+.fc-pin-head{background:#24405c;color:#fff;padding:7px;border-radius:4px;margin-bottom:8px;}
+.fc-pin-head .fc-no,.fc-pin-head .fc-pin-br,.fc-pin-head button{color:#fff;}
+.fc-tail{position:absolute;left:10px;bottom:10px;z-index:801;background:#fff;border:1px solid #33424f;border-radius:8px;padding:8px 10px;box-shadow:0 4px 14px #10243a2e;max-height:70%;overflow:auto;}
+.fc-tail[hidden]{display:none;}
+.fc-tail-x{margin-left:auto;border:0;background:none;color:#fff;font-size:18px;cursor:pointer;}
+.fc-tail .fc-tt{margin-bottom:8px;font-size:11px;}
+.fc-tail .fc-tt thead th{white-space:normal;line-height:1.5;}
+.fc-tail .fc-tt th.lb{width:68px;white-space:normal;}
+.fc-tail .fc-tt td{padding:5px 2px;}
+@media(max-width:760px){
+ .fc-pin{max-height:46%;}
+ .fc-tail{left:8px;right:8px;bottom:8px;max-height:46%;padding:6px 8px;box-sizing:border-box;z-index:1100;}
+ .fc-tail .fc-pin-in{width:auto;}
+}
+
+.fc-tail .fc-pin-head{color:#fff;}
+.fc-tail[style*="top"]{bottom:auto;}
+@media(min-width:761px){.fc-pin,.fc-tail{max-height:45%;overflow:auto;}}
+@media(max-width:760px){
+ #view-forecast .jr-mapbox:has(.fc-tail:not([hidden])){min-height:720px;}
+}

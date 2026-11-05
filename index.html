@@ -422,7 +422,7 @@
 </style>
   <link rel="stylesheet" href="jurisdiction/style.css?v=059ee1ab">
   <link rel="stylesheet" href="grid/style.css?v=3b375975">
-  <link rel="stylesheet" href="forecast/style.css?v=84adf614">
+  <link rel="stylesheet" href="forecast/style.css?v=d2984fdb">
   <link rel="stylesheet" href="auth/gate.css?v=8afc6104">
   <link rel="stylesheet" href="login/login-v2.css?v=fd865e8d">
   <script src="login/intro-preload.js?v=6834916e"></script>
@@ -529,7 +529,7 @@
 
       <h3>1. 기관별 24시간 예보 (예상 적설·강수·최저기온)</h3>
       <p>기상청 API허브 <span class="mono">nph-dfs_shrt_grd</span>(단기예보 격자, 5km)의 <b>1시간 신적설(SNO, cm)</b>, <b>1시간 강수량(PCP, mm)</b>, <b>1시간 기온(TMP, ℃)</b>을 씁니다.
-      단기예보 발표(02·05·08·11·14·17·20·23시) 15분 뒤부터 가장 최근 발표분을 받아(27시간치), <b>지금의 다음 정시부터 24시간</b>(매시 정각에 한 시간씩 앞으로 옮겨 다시 계산 — 예: 03시대면 04시~다음날 04시) 동안 격자마다 적설·강수는 더하고, 기온은 <b>가장 낮은 값과 그 시각</b>을 찾습니다(같은 값이면 이른 시각).
+      단기예보 발표(02·05·08·11·14·17·20·23시) 15분 뒤부터 가장 최근 발표분을 받아(제공되는 끝 시각까지), <b>지금의 다음 정시부터 24시간</b>(매시 정각에 한 시간씩 앞으로 옮겨 다시 계산 — 예: 03시대면 04시~다음날 04시) 동안 격자마다 적설·강수는 더하고, 기온은 <b>가장 낮은 값과 그 시각</b>을 찾습니다(같은 값이면 이른 시각).
       지사 값 = 그 지사에 편입된 격자(예보 격자 편입 탭 기준) 중 적설·강수는 <b>가장 큰 값</b>, 최저기온은 <b>가장 추운 격자</b>. 격자에 마우스를 올리면 시간별 추이가 보입니다. 지난 발표분은 남기지 않습니다.
       <b>앞 6시간은 초단기예보</b>(<span class="mono">nph-dfs_vsrt_grd</span>, 10분 간격 발표 — 받을 때마다 다시 계산)의 강수·강수확률·기온, 나머지 시각은 단기예보 값을 씁니다. 초단기예보에는 적설 항목이 없어 앞 6시간의 적설은 0으로 두고 강수만 보입니다. 기상청 격자 값은 정수(cm·mm)로만 와서 소수점 없이 보이고, '1mm 미만'·'1cm 미만'(강수형태는 있는데 양이 0인 시각)은 <b>~1</b>, 합계는 <b>0~3</b>처럼 범위로 보입니다(그런 시각마다 위쪽 +1). 초단기예보를 3시간 넘게 못 받으면 단기예보만 씁니다. 지사별 요청·편성(확정 때 고정되는 값 포함)도 같은 값입니다.</p>
 
@@ -585,12 +585,12 @@
 <script src="jurisdiction/ui.js?v=e953f16e" defer></script>
 <script src="grid/core.js?v=e04501e0" defer></script>
 <script src="grid/ui.js?v=7cfa34d7" defer></script>
-<script src="forecast/ui.js?v=b57e6688" defer></script>
+<script src="forecast/ui.js?v=6ca7903d" defer></script>
 <script src="auth/auth.js?v=3964044d" defer></script>
 <script src="auth/events.js?v=0c959479" defer></script>
 <script src="auth/gate.js?v=309218bc" defer></script>
 <script src="auth/snow.js?v=21f5a422" defer></script>
-<script src="guide/guide.js?v=6a92a3af" defer></script>
+<script src="guide/guide.js?v=55df5c77" defer></script>
 <script src="boot.js?v=4bacdaa6" defer></script>
 <script src="login/intro-loader.js?v=2c2f6b9d" defer></script>
 </body>

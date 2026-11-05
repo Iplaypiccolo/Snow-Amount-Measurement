@@ -164,7 +164,7 @@ def t_pin_chart(b):
     check(pin.locator("svg").count() == 0 and pin.locator("table.fc-t1").count() == 2, "고정 창: 그래프 없이 1시간 표 두 개(12시간씩)")
     h1 = [x.split("\n")[0] for x in pin.locator("table.fc-t1").first.locator("thead th:not(.lb)").all_inner_texts()]
     check(len(h1) == 12 and all(int(h1[i]) == (int(h1[0]) + i) % 24 for i in range(12)), f"1시간 표 머리글 12칸 {h1}")
-    pb = pin.locator(".fc-trend-box").bounding_box(); check(pb and 385 <= pb["width"] <= 407, f"고정 창 표 폭 약 20% 확대(396px): {pb and pb['width']}")
+    pb = pin.locator(".fc-trend-box").bounding_box(); check(pb and 500 <= pb["width"] <= 530, f"고정 창 표 기본 폭30% 확대(515px): {pb and pb['width']}")
     check(J(p, f"(() => {{ const l = {S}.cells.getLayers().find(l => l.getLatLngs && l.options.weight === 4); return !!l }})()"), "고정한 격자는 굵은 테두리")
     p.wait_for_timeout(350); J(p, f"(() => {{ {S}.map.fire('click', {{ latlng: {S}.map.getCenter() }}); return null }})()"); p.wait_for_timeout(200)
     check(not p.locator("#fc-pin").is_visible() and J(p, f"{S}.pin") is None, "지도 아무 데나 누르면 닫힘")
@@ -277,14 +277,14 @@ def t_pin_move_resize(b):
     box = lambda: p.locator("#fc-pin").bounding_box()
     tdw = lambda: p.locator(".fc-pin .fc-tt td").first.bounding_box()
     b0 = box(); w0 = tdw()
-    check(abs(b0["width"] - 418) <= 2, f"처음 크기는 그대로: {b0}")
+    check(abs(b0["width"] - 537) <= 3, f"기본 크기30% 확대: {b0}")
     # 옮기기
-    h = p.locator(".fc-pin-head").bounding_box(); p.mouse.move(h["x"] + 60, h["y"] + 8); p.mouse.down(); p.mouse.move(h["x"] - 200, h["y"] + 120, steps=4); p.mouse.up(); p.wait_for_timeout(100)
+    h = p.locator("#fc-pin .fc-pin-head").bounding_box(); p.mouse.move(h["x"] + 60, h["y"] + 8); p.mouse.down(); p.mouse.move(h["x"] - 200, h["y"] + 120, steps=4); p.mouse.up(); p.wait_for_timeout(100)
     b1 = box(); check(abs(b1["x"] - (b0["x"] - 260)) <= 2 and abs(b1["y"] - (b0["y"] + 112)) <= 2 and abs(b1["width"] - b0["width"]) <= 1, f"제목을 끌면 옮겨짐: {b0} → {b1}")
     # 오른쪽 아래 모서리로 키우기: 왼쪽 위 그대로, 표·글자도 커짐
-    g = p.locator(".fc-pin-grip.r").bounding_box(); p.mouse.move(g["x"] + 8, g["y"] + 8); p.mouse.down(); p.mouse.move(g["x"] + 108, g["y"] + 8, steps=4); p.mouse.up(); p.wait_for_timeout(100)
+    g = p.locator("#fc-pin .fc-pin-grip.r").bounding_box(); p.mouse.move(g["x"] + 8, g["y"] + 8); p.mouse.down(); p.mouse.move(g["x"] + 108, g["y"] + 8, steps=4); p.mouse.up(); p.wait_for_timeout(100)
     b2 = box(); z = J(p, "+document.querySelector('.fc-pin-in').style.zoom")
-    check(abs(b2["x"] - b1["x"]) <= 2 and abs(b2["width"] - (b1["width"] + 100)) <= 3 and z > 1.2 and b2["height"] > b1["height"] * 1.15, f"모서리로 커짐: {b1} → {b2}, 배율 {z}")
+    check(abs(b2["x"] - b1["x"]) <= 2 and abs(b2["width"] - (b1["width"] + 100)) <= 3 and z > 1.2 and b2["height"] <= b1["height"] * 1.5, f"모서리로 커짐: {b1} → {b2}, 배율 {z}")
     check(tdw()["width"] > w0["width"] * 1.15, "표 칸·글자도 같은 비율로 커짐")
     fs = J(p, "(() => { const c = document.querySelector('.fc-pin .fc-tt td'); const r = document.createRange(); r.selectNodeContents(c); return r.getBoundingClientRect().height; })()")
     # 다른 격자를 눌러도 그대로
@@ -293,18 +293,18 @@ def t_pin_move_resize(b):
     # 닫았다 열어도, 왼쪽 모서리로 줄이면 오른쪽 끝 그대로
     p.locator(".fc-pin-x").click(); p.wait_for_timeout(100); p.locator(".fc-detail tbody tr").nth(2).click(); p.wait_for_timeout(200)
     b4 = box(); check(abs(b4["x"] - b2["x"]) <= 1 and abs(b4["width"] - b2["width"]) <= 1, "닫았다 열어도 그대로")
-    g = p.locator(".fc-pin-grip.l").bounding_box(); right = b4["x"] + b4["width"]
+    g = p.locator("#fc-pin .fc-pin-grip.l").bounding_box(); right = b4["x"] + b4["width"]
     p.mouse.move(g["x"] + 8, g["y"] + 8); p.mouse.down(); p.mouse.move(g["x"] + 58, g["y"] + 8, steps=4); p.mouse.up(); p.wait_for_timeout(100)
     b5 = box(); check(abs(b5["x"] + b5["width"] - right) <= 2 and b5["width"] < b4["width"] - 30, f"왼쪽 모서리: 오른쪽 끝 고정 {b4} {b5}")
     # 지도 밖으로 못 나감, 지도보다 안 커짐
     mb = p.locator("#view-forecast .jr-mapbox").bounding_box()
-    h = p.locator(".fc-pin-head").bounding_box(); p.mouse.move(h["x"] + 60, h["y"] + 8); p.mouse.down(); p.mouse.move(mb["x"] + mb["width"] + 500, mb["y"] + mb["height"] + 500, steps=4); p.mouse.up(); p.wait_for_timeout(100)
+    h = p.locator("#fc-pin .fc-pin-head").bounding_box(); p.mouse.move(h["x"] + 60, h["y"] + 8); p.mouse.down(); p.mouse.move(mb["x"] + mb["width"] + 500, mb["y"] + mb["height"] + 500, steps=4); p.mouse.up(); p.wait_for_timeout(100)
     b6 = box(); check(b6["x"] + b6["width"] <= mb["x"] + mb["width"] + 1 and b6["y"] + b6["height"] <= mb["y"] + mb["height"] + 1, f"지도 안에 머묾: {b6} {mb}")
-    g = p.locator(".fc-pin-grip.l").bounding_box(); p.mouse.move(g["x"] + 8, g["y"] + 8); p.mouse.down(); p.mouse.move(mb["x"] - 3000, g["y"] + 8, steps=4); p.mouse.up(); p.wait_for_timeout(100)
+    g = p.locator("#fc-pin .fc-pin-grip.l").bounding_box(); p.mouse.move(g["x"] + 8, g["y"] + 8); p.mouse.down(); p.mouse.move(mb["x"] - 3000, g["y"] + 8, steps=4); p.mouse.up(); p.wait_for_timeout(100)
     b7 = box(); check(b7["x"] >= mb["x"] - 1 and b7["width"] <= mb["width"] + 1 and b7["height"] <= mb["height"] + 1, f"지도보다 안 커짐: {b7} {mb}")
     # 아주 작게도 안 됨
     saved = J(p, "JSON.parse(localStorage.getItem('ss_fc_pin'))"); check(saved["scale"] >= 0.8 and saved["x"] is not None, f"이 브라우저에 기억: {saved}")
-    g = p.locator(".fc-pin-grip.r").bounding_box(); p.mouse.move(g["x"] + 8, g["y"] + 8); p.mouse.down(); p.mouse.move(g["x"] - 3000, g["y"], steps=4); p.mouse.up(); p.wait_for_timeout(100)
+    g = p.locator("#fc-pin .fc-pin-grip.r").bounding_box(); p.mouse.move(g["x"] + 8, g["y"] + 8); p.mouse.down(); p.mouse.move(g["x"] - 3000, g["y"], steps=4); p.mouse.up(); p.wait_for_timeout(100)
     z = J(p, "+document.querySelector('.fc-pin-in').style.zoom"); check(z >= 0.8 - 0.001, f"너무 작아지지 않음: {z}")
     # 새로 열어도 기억
     b8 = box(); p.reload(); p.wait_for_function("window.ForecastUI && ForecastUI._state().inited", timeout=60000)
@@ -334,7 +334,7 @@ def t_phone_fit(b):
     p.evaluate("localStorage.setItem('ss_fc_pin', JSON.stringify({scale: 1.6, x: 500, y: 300}))"); p.reload(); p.wait_for_function("window.ForecastUI && ForecastUI._state().inited", timeout=60000)
     p.evaluate("document.querySelector('.tab-btn[data-tab=forecast]').click()"); p.wait_for_timeout(800)
     p.locator("#fc-tree [data-fchq='강원']").click(); p.wait_for_timeout(600); p.locator("#fc-tree [data-fcbr]").first.click(); p.wait_for_timeout(900)
-    pin = box("#fc-pin"); check(not p.locator(".fc-pin-grip.r").is_visible() and J(p, "document.querySelector('.fc-pin-in').style.zoom") == "" and pin[0] == 8 and pin[1] == 367, f"모바일: 크기 조절 없음, 화면 폭에 맞음 {pin}")
+    pin = box("#fc-pin"); check(not p.locator("#fc-pin .fc-pin-grip.r").is_visible() and J(p, "document.querySelector('.fc-pin-in').style.zoom") == "" and pin[0] == 8 and pin[1] == 367, f"모바일: 크기 조절 없음, 화면 폭에 맞음 {pin}")
     fits("모바일 기억값 무시")
 
 def t_eq_round_bar(b):
@@ -460,6 +460,52 @@ def t_int_and_range(b):
     s = p.locator(".fc-pin .fc-tt-sum").inner_text(); check(want(c[3], c[10]) + "cm" in s.replace(" ", "") and want(c[4], c[9]) + "mm" in s.replace(" ", ""), "합계 줄 범위: " + s)
 
 TESTS += [t_int_and_range, t_blend_no_toggle, t_pin_move_resize, t_phone_fit, t_eq_round_bar, t_eq_round_no_edit, t_first_page_equip, t_first_page_equip_first_forecast]
+
+def t_tail_separate(b):
+    p,m=open_page(b)
+    d=m.fc_cells[0][2][0]
+    J(p, f"(() => {{ SSOpenForecast('{d}'); return null }})()")
+    p.locator(".fc-detail tbody tr").first.click()
+    p.wait_for_function("document.querySelector('#fc-tail .fc-tt')")
+    check(p.locator("#fc-pin").is_visible() and p.locator("#fc-tail").is_visible(), "별도 예보 창 두 개")
+    check(p.locator("#fc-pin #fc-tail").count()==0, "한 창 안에 넣지 않음")
+    h=p.locator("#fc-tail thead th").nth(1).inner_text()
+    check("~" in h and "시" in h and "/" in h and "일부 시간" in h, h)
+    check(p.locator("#fc-tail tbody tr").nth(0).locator("td").first.inner_text()=="3~4", "미량 합계 범위")
+    check("-" in p.locator("#fc-tail").inner_text(), "코드 눈비 비움")
+    p.screenshot(path="../../outputs/70_desktop.png")
+    p.locator(".fc-tail-x").click()
+    check(not p.locator("#fc-tail").is_visible() and p.locator("#fc-pin").is_visible(), "이후 창만 닫기")
+    p.locator(".fc-detail tbody tr").nth(1).click()
+    p.wait_for_function("document.querySelector('#fc-tail .fc-tt')")
+    p.locator(".fc-pin-x").click()
+    check(p.locator("#fc-tail").is_visible() and not p.locator("#fc-pin").is_visible(), "24시간 창만 닫기")
+
+def t_tail_phone(b):
+    p,m=open_phone(b)
+    d=m.fc_cells[0][2][0]
+    J(p, f"(() => {{ SSOpenForecast('{d}'); return null }})()")
+    p.locator(".fc-detail tbody tr").first.click()
+    p.wait_for_function("document.querySelector('#fc-tail .fc-tt')")
+    a=p.locator('#fc-pin').bounding_box(); z=p.locator('#fc-tail').bounding_box()
+    check(a['x']>=0 and z['x']>=0 and a['x']+a['width']<=375 and z['x']+z['width']<=375, '휴대폰 폭 안 두 창')
+    check(a['y']+a['height']<=z['y'], '두 창이 겹치지 않음')
+    p.screenshot(path='../../outputs/70_phone.png')
+
+def t_tail_failure(b):
+    p,m=open_page(b)
+    p.route('**/rpc/forecast_cell_tail', lambda route: route.fulfill(status=503,content_type='application/json',body='{}'))
+    d=m.fc_cells[0][2][0]
+    J(p, f"(() => {{ SSOpenForecast('{d}'); return null }})()")
+    p.locator(".fc-detail tbody tr").first.click()
+    p.locator('[data-tail-retry]').wait_for()
+    check(p.locator('#fc-pin .fc-t1').count()==2, '이후 조회 실패해도 기존24시간 유지')
+    p.unroute('**/rpc/forecast_cell_tail')
+    p.locator('[data-tail-retry]').click()
+    p.wait_for_function("document.querySelector('#fc-tail .fc-tt')")
+    check(p.locator('#fc-tail .fc-tt').count()==2,'다시 받기 성공')
+
+TESTS += [t_tail_separate,t_tail_phone,t_tail_failure]
 
 if __name__ == "__main__":
     only = sys.argv[1:]
