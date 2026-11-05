@@ -146,3 +146,5 @@ body.fc-pin-moving{user-select:none;}
 .fc-pin .fc-tt th,.fc-pin .fc-tt td,.fc-tail .fc-tt th,.fc-tail .fc-tt td{text-align:center;vertical-align:middle;}
 .fc-tail .fc-tt thead th{line-height:1.1;}
 @media(max-width:760px){.fc-tail .fc-tt{font-size:10px;}}
+
+@media(min-width:761px){.fc-tail{left:auto;right:10px;bottom:auto;}}

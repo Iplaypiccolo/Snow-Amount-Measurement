@@ -524,6 +524,37 @@ def t_tail_failure(b):
 
 TESTS += [t_tail_separate,t_tail_phone,t_tail_failure]
 
+def t_right_dock_and_tail_drag(b):
+    p,m=open_page(b)
+    d=m.fc_cells[0][2][0]
+    J(p,f"(() => {{ SSOpenForecast('{d}'); return null }})()")
+    p.wait_for_function("document.querySelector('#fc-tail table')")
+    p.wait_for_timeout(250)  # fcPop opens at scale .97; measure after the .15s animation.
+    a=p.locator('#fc-pin').bounding_box();z=p.locator('#fc-tail').bounding_box();mb=p.locator('#fmap').bounding_box()
+    check(abs(a['x']+a['width']-mb['x']-mb['width']+10)<=2 and abs(z['x']+z['width']-mb['x']-mb['width']+10)<=2,f'두 창 지도 오른쪽에 배치 {a} {z} {mb}')
+    check(z['y']>=a['y']+a['height'],'오른쪽에 세로로 겹치지 않게')
+    point=J(p,f"(() => {{const k={S}.pin.split(',');const q={S}.map.latLngToContainerPoint(GridCore.cellCenter(+k[0],+k[1]));return {{x:q.x,y:q.y}};}})()")
+    check(mb['x']+point['x']<a['x'],'선택 격자는 창 왼쪽에 보임')
+    p.screenshot(path='../../outputs/73_docked.png')
+    scale=J(p,"document.querySelector('#fc-tail .fc-pin-in').style.zoom")
+    h=p.locator('#fc-tail .fc-pin-head').bounding_box()
+    p.mouse.move(h['x']+60,h['y']+10);p.mouse.down();p.mouse.move(h['x']-60,h['y']+70,steps=5);p.mouse.up()
+    moved=p.locator('#fc-tail').bounding_box()
+    check(abs(moved['width']-z['width'])<=1 and abs(moved['height']-z['height'])<=1,'제목 이동 후 폭과 높이 유지')
+    check(abs(moved['x']-z['x']+120)<=2 and abs(moved['y']-z['y']-60)<=2,'위치만 이동')
+    check(J(p,"document.querySelector('#fc-tail .fc-pin-in').style.zoom")==scale,'이동 중 글자 배율 유지')
+    J(p,"window.dispatchEvent(new Event('resize'))")
+    after=p.locator('#fc-tail').bounding_box()
+    check(abs(after['width']-z['width'])<=1 and abs(after['height']-z['height'])<=1,'화면 재배치 후에도 이동한 창 크기 유지')
+    p.screenshot(path='../../outputs/73_desktop.png')
+    q,m2=open_page(b);q.set_viewport_size({'width':1024,'height':900})
+    J(q,f"(() => {{SSOpenForecast('{d}');return null}})()")
+    q.wait_for_function("document.querySelector('#fc-tail table')");q.wait_for_timeout(250)
+    visible=J(q,f"(() => {{const s={S},k=s.pin.split(','),xs=GridCore.cellCorners(+k[0],+k[1]).map(c=>s.map.latLngToContainerPoint(c).x),r=document.querySelector('#fc-pin').getBoundingClientRect(),m=document.querySelector('#fmap').getBoundingClientRect();return {{left:Math.min(...xs),right:Math.max(...xs),pane:r.left-m.left}};}})()")
+    check(visible['left']>=0 and visible['right']<visible['pane'],f'1024px에서도 선택 격자 전체가 창 왼쪽에 보임 {visible}')
+
+TESTS += [t_right_dock_and_tail_drag]
+
 if __name__ == "__main__":
     only = sys.argv[1:]
     with sync_playwright() as pw:

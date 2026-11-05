@@ -156,7 +156,7 @@
   // 고정 창 위치·크기(컴퓨터 화면만, 2026-11-03): scale = 글자·표 배율, x·y = 지도 안 왼쪽 위(null = 처음 자리 오른쪽 위). 지도보다 커지거나 밖으로 나가지 않게 맞춤
   var PIN_KEY = 'ss_fc_pin', PIN_BODY = 396, PIN_PAD = 22, PIN_MIN = 0.8;      // PIN_BODY·PIN_PAD = 배율 1일 때 표 폭·창 안팎 여백(px)
   function isPhone() { return window.matchMedia('(max-width:760px)').matches; }
-  function loadPinGeo() { try { var j = JSON.parse(localStorage.getItem(PIN_KEY) || 'null'); if (j && j.scale > 0) return { scale: +j.scale, x: j.x == null ? null : +j.x, y: j.y == null ? null : +j.y }; } catch (e) {} return { scale: 1.3, x: null, y: null }; }
+  function loadPinGeo() { try { var j = JSON.parse(localStorage.getItem(PIN_KEY) || 'null'); if (j && j.scale > 0) return { scale: +j.scale, x: j.layout==='right-v1' && j.x!=null?+j.x:null, y: j.layout==='right-v1' && j.y!=null?+j.y:null, layout:'right-v1' }; } catch (e) {} return { scale: 1.3, x: null, y: null, layout:'right-v1' }; }
   function savePinGeo() { try { localStorage.setItem(PIN_KEY, JSON.stringify(S.pinGeo)); } catch (e) {} }
   function applyPinGeo() { applyBoxGeo($('fc-pin'), S.pinGeo); renderTail(); }
   function applyBoxGeo(box, geo) {
@@ -164,10 +164,29 @@
     if (isPhone()) { box.style.left = box.style.top = box.style.right = ''; inner.style.zoom = ''; return; }
     var g = geo, mb = box.parentNode, mw = mb.clientWidth, mh = mb.clientHeight; if (!mw || !mh) return;
     var sc = Math.max(PIN_MIN, g.scale); inner.style.zoom = sc;
-    var k = Math.min(1, (mw - PIN_PAD) / (box.offsetWidth - PIN_PAD), (mh - PIN_PAD) / (box.offsetHeight - PIN_PAD));
+    var leftRoom=Math.min(160,mw*0.25);
+    var k = Math.min(1, (mw - leftRoom - PIN_PAD) / (box.offsetWidth - PIN_PAD), (mh - PIN_PAD) / (box.offsetHeight - PIN_PAD));
     if (k < 1) { sc = Math.max(PIN_MIN, sc * k); inner.style.zoom = sc; }
-    if (g.x != null) { box.style.right = 'auto'; box.style.left = Math.max(0, Math.min(g.x, mw - box.offsetWidth)) + 'px'; box.style.top = Math.max(0, Math.min(g.y, mh - box.offsetHeight)) + 'px'; }
+    if (g.x != null) { box.style.bottom='auto'; box.style.right = 'auto'; box.style.left = Math.max(0, Math.min(g.x, mw - box.offsetWidth)) + 'px'; box.style.top = Math.max(0, Math.min(g.y, mh - box.offsetHeight)) + 'px'; }
     return sc;
+  }
+  function movePinBox(box,geo,x,y,w,h) {
+    // 위치 이동은 위/아래 동시 지정을 피하고 크기·글자 배율을 다시 계산하지 않는다.
+    box.style.right='auto';box.style.bottom='auto';
+    geo.x=Math.max(0,Math.min(x,box.parentNode.clientWidth-w));
+    geo.y=Math.max(0,Math.min(y,box.parentNode.clientHeight-h-10));
+    box.style.left=geo.x+'px';box.style.top=geo.y+'px';
+  }
+  function forecastRightPadding() {
+    if(isPhone() || !S.pin) return 40;
+    var map=$('fmap'),mw=map.clientWidth,reserve=40;
+    ['fc-pin','fc-tail'].forEach(function(id){var b=$(id);if(b&&!b.hidden&&Math.abs(mw-b.offsetLeft-b.offsetWidth)<=20)reserve=Math.max(reserve,b.offsetWidth+30);});
+    return Math.min(reserve,Math.max(40,mw-40));
+  }
+  function revealForecastCell() {
+    if(isPhone() || !S.map || !S.pin) return;
+    var xy=S.pin.split(','),p=S.map.latLngToContainerPoint(G.cellCenter(+xy[0],+xy[1])),free=S.map.getSize().x-forecastRightPadding();
+    if(p.x>free-20 || p.x<20) S.map.panBy([p.x-free/2,0],{animate:false});
   }
   function pinDrag(e) {
     if (isPhone()) return;
@@ -177,7 +196,7 @@
     geo.x = x0; geo.y = y0; e.preventDefault();
     function mv(ev) {
       var dx = ev.clientX - sx, dy = ev.clientY - sy;
-      if (!grip) { geo.x = x0 + dx; geo.y = y0 + dy; applyBoxGeo(box, geo); return; }
+      if (!grip) { movePinBox(box,geo,x0+dx,y0+dy,w0,r.height); return; }
       geo.scale = Math.max(PIN_MIN, ((left ? w0 - dx : w0 + dx) - PIN_PAD) / PIN_BODY);
       if (left) geo.x = 0;                                 // 왼쪽 모서리: 오른쪽 끝을 그대로 두고 왼쪽으로 커짐
       geo.scale = applyBoxGeo(box, geo) || geo.scale;
@@ -217,8 +236,15 @@
       '</div></div><span class="fc-pin-grip l" data-grip="l"></span><span class="fc-pin-grip r" data-grip="r"></span>';
     box.hidden=false;
     var legend=$('fc-legend'), near=$('fc-pin'), lh=legend?legend.offsetHeight:0;
-    box.style.bottom=S.tailGeo.y != null ? 'auto' : (lh+20)+'px';
-    box.style.maxHeight=Math.max(80,box.parentNode.clientHeight-(near&&!near.hidden?near.offsetHeight:0)-lh-40)+'px';
+    if(isPhone()) {
+      box.style.top='';box.style.bottom=(lh+20)+'px';
+      box.style.maxHeight=Math.max(80,box.parentNode.clientHeight-(near&&!near.hidden?near.offsetHeight:0)-lh-40)+'px';
+    } else {
+      box.style.bottom='auto';
+      var top=S.tailGeo.y!=null?S.tailGeo.y:near&&!near.hidden?near.offsetTop+near.offsetHeight+12:10;
+      box.style.top=top+'px';
+      box.style.maxHeight=Math.max(80,box.parentNode.clientHeight-top-10)+'px';
+    }
     applyBoxGeo(box,S.tailGeo);
     syncForecastMapSize();
   }
@@ -251,7 +277,7 @@
     box.hidden = !!S.nearClosed; applyPinGeo();
   }
   function markSel() { var rows = document.querySelectorAll('#fc-tree .fc-detail tr[data-cell]'); for (var i = 0; i < rows.length; i++) rows[i].classList.toggle('sel', !S.nearClosed && rows[i].dataset.cell === S.pin); }
-  function pinCell(key) { S.pin = key; S.pinWhy = null; S.pinAt = Date.now(); renderPin(); drawCells(); markSel(); }
+  function pinCell(key) { S.pin = key; S.pinWhy = null; S.pinAt = Date.now(); renderPin(); drawCells(); markSel(); revealForecastCell(); }
   function unpin() { if (!S.pin) return; S.pin = null; S.pinWhy = null; renderPin(); drawCells(); markSel(); }
   // 지사를 고르면 눈여겨볼 격자 하나를 골라 1시간 표를 바로 엶(2026-10-10). 순서: ① 적설 있음 ② 강수 있음 + 24시간 안에 한 번이라도 4℃ 이하 ③ 강수 있음 ④ 최저기온 4℃ 이하
   //  각 단계에서는 값이 가장 센 칸(적설 최대 / 강수 최대 / 강수 최대 / 기온 최저). 해당하는 칸이 없으면 고르지 않음
@@ -334,7 +360,15 @@
     if (S.hq === 'ALL') { S.map.setView([36.4, 127.9], 7); return; }
     var g = S.grid[S.hq]; if (!g || !g.cells || !g.cells.length) return;
     var pts = g.cells.filter(function (c) { return !S.focus || (c[2] || []).indexOf(S.focus) >= 0; }).map(function (c) { return G.cellCenter(c[0], c[1]); });
-    if (pts.length) S.map.fitBounds(L.latLngBounds(pts), { padding: [40, 40], maxZoom: S.focus ? 11 : 9 });
+    if (pts.length) {
+      S.map.fitBounds(L.latLngBounds(pts), {padding:[40,40],maxZoom:S.focus?11:9,animate:false});
+      if(!isPhone() && S.pin){
+        var minX=Math.min.apply(null,pts.map(function(p){return S.map.latLngToContainerPoint(p).x;}));
+        var shift=Math.min(forecastRightPadding()/2,Math.max(0,minX-40));
+        if(shift>0)S.map.panBy([shift,0],{animate:false});
+        revealForecastCell();
+      }
+    }
   }
   function ensureMap() {
     if (S.map) { setTimeout(function () { S.map.invalidateSize(); }, 50); return; }
