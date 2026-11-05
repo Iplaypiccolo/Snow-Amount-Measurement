@@ -16,6 +16,9 @@ def picker(p):
     T.check(T.ev(p,"stOf(S.round,'V001').crew")==['a','마'] and T.ev(p,'fleetDirty()'),'코드 두 줄·확정 전 변경')
     p.click('#fleetDownload');T.check('먼저 확정' in T.toast(p),'미확정 배정은 엑셀에 넣지 않음')
     T.confirm_fleet(p);T.check(T.ev(p,"stOf(S.round,'V001').crew")==['a','마'] and not T.ev(p,'fleetDirty()'),'서버(샘플) 저장')
+    T.check(p.locator('#fleetDownload').is_enabled(),'확정 직후 저장하기 다시 활성화')
+    with p.expect_download() as dl:p.click('#fleetDownload')
+    with zipfile.ZipFile(dl.value.path()) as z:T.check(z.testzip() is None,'새로고침 없이 확정 직후 다운로드')
     p.locator('[data-crew="V001"]').first.click();p.locator('[data-crewclear]').click();p.locator('[data-crewapply]').click()
     p.click('#save-fleet [data-revert]');T.check(T.ev(p,"stOf(S.round,'V001').crew")==['a','마'],'되돌리기는 저장된 인원 복원')
 

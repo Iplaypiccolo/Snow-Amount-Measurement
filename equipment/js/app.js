@@ -1490,7 +1490,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !sheet.hid
 /* ============================================================
    [9] 저장 바·그리기
    ============================================================ */
-function busy(t, on) { const bar = $("save-" + t); bar.classList.toggle("busy", on); bar.querySelectorAll("button").forEach(b => { b.disabled = on || b.disabled; }); }
+function busy(t, on) { const bar = $("save-" + t); bar.classList.toggle("busy", on); bar.querySelectorAll("button").forEach(b => { b.disabled = on || b.disabled; }); if(t === "fleet") $("fleetDownload").disabled = on; }
 function updateSavebars() {
   const fb = $("save-fleet"), bb = $("save-branch"), ab = $("save-alloc");
   fb.hidden = !(can("equip.edit.all") || can("equip.edit.own") || myPoolN() > 0 || (canPoolAdd() && fleetDirty())); bb.hidden = true; ab.hidden = !canRoute() || !S.round;
