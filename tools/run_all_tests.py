@@ -31,6 +31,7 @@ SUITES = [
     ('적설 요약본 시즌별 받기', 'tests/test_snow_split.js', 'node'),
     ('관할 계산', 'tests/test_jurisdiction_core.js', 'node'),
     ('관할 새로고침 없는 재적용', 'tests/test_reapply.js', 'node'),
+    ('예보3시간 연결 계산', 'tests/test_forecast_series.js', 'node'),
     ('격자 계산', 'tests/test_grid_core.js', 'node'),
     ('본부·지사 순서 일치', 'tests/test_hierarchy_order.py', 'py'),
     ('구간 연속성·무결성', 'tests/test_sections_continuity.py', 'py'),

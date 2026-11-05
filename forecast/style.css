@@ -132,3 +132,12 @@ body.fc-pin-moving{user-select:none;}
 @media(max-width:760px){
  #view-forecast .jr-mapbox:has(.fc-tail:not([hidden])){min-height:720px;}
 }
+
+/* 두 창 모두 한 줄 타임라인: 창 폭/글자 배율과 표 전체 폭을 분리한다. */
+.fc-scroll{width:100%;overflow-x:auto;overscroll-behavior-x:contain;padding-bottom:5px;}
+.fc-scroll .fc-tt{width:max-content;min-width:100%;table-layout:auto;}
+.fc-scroll .fc-tt td,.fc-scroll .fc-tt thead tr:last-child th{min-width:38px;white-space:nowrap;padding:4px 5px;}
+.fc-scroll .fc-three td,.fc-scroll .fc-three thead tr:last-child th{min-width:76px;}
+.fc-scroll .fc-tt .lb{position:sticky;left:0;z-index:1;min-width:58px;white-space:nowrap;}
+.fc-scroll .fc-tt thead .lb{z-index:2;}
+@media(max-width:760px){#view-forecast .jr-mapbox:has(.fc-tail:not([hidden])){min-height:640px;}}
