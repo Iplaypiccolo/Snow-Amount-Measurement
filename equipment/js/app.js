@@ -25,7 +25,7 @@
    ============================================================ */
 // 배포 직후 브라우저에 예전 index.html(최대 10분 저장)이 남아 있으면 새 app.js 와 화면 틀이 맞지 않아 탭이 비어 보임
 // (GitHub Pages 는 ?v= 꼬리표와 관계없이 최신 파일을 줌). 판번호가 다르면 주소를 바꿔 한 번만 새로 받는다.
-const UI_VERSION = "2026110202";
+const UI_VERSION = "2026110501";
 (() => {
   const m = document.querySelector('meta[name="ui-version"]');
   if ((m && m.content) === UI_VERSION) return;
@@ -135,7 +135,7 @@ const vval = (v, f) => { const d = S.vdraft.get(v.id); return d && f in d ? d[f]
    - 지원 불가 시작일(off_from): 2026-11-04 '지원 불가(이날부터)'를 없애 늘 비어 있음(서버도 막음). 예전 값을 읽을 때만 계산에 남겨 둠 */
 const roundEnd = r => addDays(r.start_date, (r.days || 10) - 1);
 const govRound = d => S.rounds.find(r => r.start_date <= d && d <= roundEnd(r)) || null;      // S.rounds 는 시작일이 늦은 순
-const ST0 = { status: "", off_from: null };
+const ST0 = { status: "", off_from: null, crew: [] };
 const stOf = (rid, vid) => { const b = S.rstat.get(rid + "|" + vid) || ST0, d = rid === S.round ? S.sdraft.get(vid) : null; return d ? { ...b, ...d } : b; };
 const availOn = (vid, d) => { const r = govRound(d); if (!r) return false; const x = stOf(r.id, vid); return x.status === "O" && (!x.off_from || d < x.off_from); };
 const effRec = (d, vid) => availOn(vid, d) ? recOf(d, vid) : EMPTY;                       // 화면에 보이는 경로(지원 불가인 날은 없음)
@@ -326,9 +326,9 @@ function setVeh(vid, f, val) {
   if (Object.keys(d).length) S.vdraft.set(vid, d); else S.vdraft.delete(vid);
 }
 function setStat(vid, patch) {           // 고른 기준일자의 지원 여부(지원/빈칸)
-  const b = S.rstat.get(S.round + "|" + vid) || ST0, m = { status: b.status, off_from: b.off_from || null, ...(S.sdraft.get(vid) || {}), ...patch };
+  const b = S.rstat.get(S.round + "|" + vid) || ST0, m = { status: b.status, off_from: b.off_from || null, crew: b.crew || [], ...(S.sdraft.get(vid) || {}), ...patch };
   if (m.status !== "O") m.off_from = null;
-  if (m.status === b.status && (m.off_from || null) === (b.off_from || null)) S.sdraft.delete(vid); else S.sdraft.set(vid, { status: m.status, off_from: m.off_from || null });
+  if (m.status === b.status && (m.off_from || null) === (b.off_from || null) && same(m.crew, b.crew || [])) S.sdraft.delete(vid); else S.sdraft.set(vid, { status: m.status, off_from: m.off_from || null, crew: m.crew.slice() });
   [...S.draft].forEach(([k, x]) => { const [d, v] = k.split("|"); if (v === vid && x.stops.length && !availOn(vid, d)) S.draft.delete(k); });   // 지원 불가가 된 날의 고친 경로는 버림(서버가 받지 않음)
 }
 function setReq(b, f, val) {
@@ -372,7 +372,7 @@ async function ensureStatus() {          // 불러 둔 날짜 범위에 걸치�
   const r = await Api.statuses(ids);
   if (!r.ok) return toast(r.message, true);
   ids.forEach(id => S.stLoaded.add(id));
-  r.rows.forEach(x => S.rstat.set(x.round_id + "|" + x.vehicle_id, { status: x.status || "", off_from: x.off_from || null, updated_at: x.updated_at || null }));
+  r.rows.forEach(x => S.rstat.set(x.round_id + "|" + x.vehicle_id, { status: x.status || "", off_from: x.off_from || null, crew: (x.crew || []).slice(), updated_at: x.updated_at || null }));
 }
 async function loadReqs() {        // 못 읽으면 S.reqsBad: 값이 0대·미확정으로 보여 잘못 확정·저장하지 않도록 표를 숨기고 저장을 막음(2026-11-03)
   S.reqsBad = false;
@@ -459,7 +459,7 @@ function toast(msg, isErr) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 3500);
 }
 const TAB_LABEL = { gw_team_routes: "신속대응팀 경로", gw_team_status: "신속대응팀 지원 여부", vehicles: "장비", vehicle_routes: "경로", round_vehicle_status: "지원 여부", round_requests: "지사 요청", round_allocations: "기관별 배치", support_rounds: "기준일자", branch_zone_overrides: "특보구역" };
-const FIELD = { offer_truck: "타지사 지원 가능", rented: "임차", home_branch: "출발 지사", truck: "배정 제설차", blower: "배정 제설기", fc_snow: "확정 예상 적설", fc_pcp: "확정 예상 강수", fc_pop: "확정 강수확률", wx_manual: "기상현황 직접입력", wx_snow: "직접 적설", wx_pcp: "직접 강수", wx_tmin: "직접 최저기온", wx_tmin_at: "직접 최저기온 시각", fc_tmin: "확정 최저기온", wx_level: "직접 대설특보", wx_fc: "직접 특보 발표", wx_ef: "직접 특보 발효", plate: "도공번호", status: "지원 여부", stops: "경로", revised: "구분", times: "도착 예상", snow_cm: "예상 적설", warning: "특보", req_truck: "요청 제설차", req_blower: "요청 제설기",
+const FIELD = { crew: "운전원", offer_truck: "타지사 지원 가능", rented: "임차", home_branch: "출발 지사", truck: "배정 제설차", blower: "배정 제설기", fc_snow: "확정 예상 적설", fc_pcp: "확정 예상 강수", fc_pop: "확정 강수확률", wx_manual: "기상현황 직접입력", wx_snow: "직접 적설", wx_pcp: "직접 강수", wx_tmin: "직접 최저기온", wx_tmin_at: "직접 최저기온 시각", fc_tmin: "확정 최저기온", wx_level: "직접 대설특보", wx_fc: "직접 특보 발표", wx_ef: "직접 특보 발효", plate: "도공번호", status: "지원 여부", stops: "경로", revised: "구분", times: "도착 예상", snow_cm: "예상 적설", warning: "특보", req_truck: "요청 제설차", req_blower: "요청 제설기",
   blower_s: "블로워 소", blower_l: "블로워 대", off_from: "지원 불가 시작일", hidden_after: "숨김", days: "기간(일)", assigned_truck: "편성 제설차", assigned_blower: "편성 제설기", arrive_at: "도착 요청", reason: "사유", confirmed: "확정", start_date: "기준일자", type: "장비", org: "기관", warn_level: "확정 특보", include: "특보구역" };
 const HIDE = new Set(["fc_tmfc", "fc_at", "zone_code", "warn_zones", "warn_base", "warn_at", "warn_note", "updated_by", "updated_at", "confirmed_by", "confirmed_at", "created_by", "created_at", "round_id", "branch_id", "vehicle_id", "team_id", "date", "id", "sort", "active", "name", "end_date"]);
 function fmtField(f, v) {
@@ -710,11 +710,11 @@ function renderFleet() {
   const dates = windowDates(), head = dates.map((d, i) => `<th class="dayh">지원일 ${i + 1}<span class="sub">` +
     (i === 0 && rt ? `<input class="ci" type="date" id="day1In" value="${esc(d)}"${r ? ` min="${esc(r.start_date)}"` : ""} aria-label="지원일 1 날짜(나머지 지원일은 하루씩 자동, 기준일자보다 앞은 안 됨)">` : esc(fmtMD(d))) + `</span></th>`).join("");
   const rows = fleetRows().map(v => fleetRowHtml(v, dates, choices, all)).join("");
-  $("eqTable").innerHTML = `<thead><tr>${isPhoneW() ? "<th>도공번호</th><th>장비</th><th>블로워</th>" : "<th>도공번호 · 장비 · 블로워</th>"}<th>지원 여부</th>${head}${actCol() ? `<th class="unh">${canAllVeh() ? unhideHead() : ""}</th>` : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${(isPhoneW() ? 5 : 3) + dates.length}" class="empty">${S.fleetGo ? "지원 여부가 '지원'인 장비가 없습니다." : "장비가 없습니다."}${addRow && !S.fleetGo ? " 위의 [장비 추가]로 넣으세요." : ""}</td></tr>`}</tbody>`;
-  const eqFixed = isPhoneW() ? [plateEm(), 5.8, 5.4, 5.8] : [plateEm(), 5.8], eqAct = actCol() ? (isPhoneW() ? (canAllVeh() ? 7 : 4) : 4.2) : 0;
-  dayCols($("eqTable"), eqFixed, dates.length, eqAct);
+  $("eqTable").innerHTML = `<thead><tr>${isPhoneW() ? "<th>도공번호</th><th>장비</th><th>블로워</th>" : "<th>도공번호 · 장비 · 블로워</th>"}<th>지원 여부</th><th>운전원</th>${head}${actCol() ? `<th class="unh">${canAllVeh() ? unhideHead() : ""}</th>` : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${(isPhoneW() ? 6 : 4) + dates.length}" class="empty">${S.fleetGo ? "지원 여부가 '지원'인 장비가 없습니다." : "장비가 없습니다."}${addRow && !S.fleetGo ? " 위의 [장비 추가]로 넣으세요." : ""}</td></tr>`}</tbody>`;
+  const eqFixed = isPhoneW() ? [plateEm(), 5.8, 5.4, 5.8, 5.4] : [plateEm(), 5.8, 5.4], eqAct = actCol() ? (isPhoneW() ? (canAllVeh() ? 7 : 4) : 4.2) : 0;
+  dayCols($("eqTable"), eqFixed, dates.length, eqAct, 10.8);
   // 위쪽 장비 현황 표는 지원일 칸 수와 상관없이 같은 크기(글자 그대로, 지원일 4칸 표의 폭)로 가운데에(2026-11-03 사용자 요청). 칸 수에 따라 달라지는 건 아래 표뿐
-  const sumW = isPhoneW() ? 0 : em(10.8) + em(5.8) + em(11.7) * 4 + em(eqAct);
+  const sumW = isPhoneW() ? 0 : em(plateEm()) + em(5.8) + em(5.4) + em(10.8) * 4 + em(eqAct);
   $("orgGrid").style.maxWidth = sumW ? sumW + 2 + "px" : ""; fitPanel($("eqTable"), sumW + 2);
   placeUnhide();
 }
@@ -742,7 +742,7 @@ function poolRowHtml(v, dates, choices) {
     : `<span class="plate">${nm}</span>`;
   return `<tr class="pool${S.vdraft.has(v.id) ? " changed" : ""}" data-vrow="${id}" data-home="${esc(bid)}">${idCells(nameCell, esc(v.type), blowerCell(v, false))}` +
     `<td><span class="status go">지원</span>${offerOk(bid) ? "" : ` <span class="tag warn pool-wait" title="이 지사의 타지사 지원 가능 대수가 확정되지 않았습니다(확정이 취소됨)">확정 전</span>`}</td>` +
-    dates.map(d => `<td data-cell="${esc(rk(d, v.id))}">${slotCell(v, d, canRoute(), choices)}</td>`).join("") +
+    `<td class="crew-cell"><span class="muted">—</span></td>` + dates.map(d => `<td data-cell="${esc(rk(d, v.id))}">${slotCell(v, d, canRoute(), choices)}</td>`).join("") +
     (actCol() ? `<td class="vact">${ed ? `<button type="button" class="btn sm danger" data-vdel="${id}">삭제</button>` : ""}</td>` : "") + `</tr>`;
 }
 function fleetRowHtml(v, dates, choices, all) {
@@ -755,9 +755,45 @@ function fleetRowHtml(v, dates, choices, all) {
     const plateCell = ed ? `<span class="pnum"${hvA(tv, "plate")}><span class="pfx">${esc(v.org)}</span><input class="ci" inputmode="numeric" maxlength="4" data-vp="${esc(v.id)}" data-fk="vp:${esc(v.id)}" value="${esc(plateNum(v))}" placeholder="901" aria-label="도공번호 숫자"><span class="sfx">호</span></span>${old ? `<div class="muted sm">예전 번호 ${esc(old)}</div>` : ""}`
       : H(tv, "plate", `<span class="plate">${esc(vname(v))}</span>`);
     const changed = S.vdraft.has(v.id) || S.sdraft.has(v.id) ? " changed" : "";
-    return `<tr class="${changed}" data-vrow="${esc(v.id)}">${idCells(plateCell, esc(v.type), blowerCell(v, ed))}<td>${statusCell}</td>${dates.map(d => `<td data-cell="${esc(rk(d, v.id))}">${slotCell(v, d, canRoute(), choices)}</td>`).join("")}` +
+    return `<tr class="${changed}" data-vrow="${esc(v.id)}">${idCells(plateCell, esc(v.type), blowerCell(v, ed))}<td>${statusCell}</td><td class="crew-cell">${crewCell(v)}</td>${dates.map(d => `<td data-cell="${esc(rk(d, v.id))}">${slotCell(v, d, canRoute(), choices)}</td>`).join("")}` +
       (canAllVeh() ? `<td class="vact"><button type="button" class="btn sm" data-vhide="${esc(v.id)}">숨기기</button><button type="button" class="btn sm danger" data-vdel="${esc(v.id)}">삭제</button></td>` : actCol() ? `<td class="vact"></td>` : "") + `</tr>`;
 }
+
+let crewPick = null;
+function crewCell(v) {
+  const r=curRound(), crew=r?(stOf(r.id,v.id).crew||[]):[];
+  return [0,1].map(i=>canVeh(v)&&r?`<button type="button" class="crew-slot" data-crew="${esc(v.id)}" aria-label="${esc(vname(v))} 운전원 ${i+1} 선택">${esc(crew[i]||`선택 ${i+1}`)}</button>`:`<span class="crew-code">${esc(crew[i]||'—')}</span>`).join('');
+}
+function openCrew(id) {
+  const v=vehById(id);if(!v||isPool(v)||!canVeh(v)||!curRound())return;
+  lastFocus=document.activeElement;crewPick={id,tab:'driver',crew:[...(stOf(S.round,id).crew||[])]};renderCrewPicker();
+  sheet.querySelector('[role="tab"]').focus();
+}
+function renderCrewPicker() {
+  if(!crewPick)return;
+  const p=crewPick, list=p.tab==='driver'?SSCrew.drivers:SSCrew.mechanics;
+  sheet.classList.add('crew-sheet');sheet.hidden=false;backdrop.hidden=false;
+  sheet.innerHTML=`<button type="button" class="sheet-close" id="sheetClose">취소</button><h2 id="sheetTitle">${esc(vname(vehById(p.id)))} 인원 선택</h2><div class="crew-tabs" role="tablist" aria-label="인원 구분">${[['driver','운전원'],['mechanic','정비원']].map(([id,name])=>`<button type="button" role="tab" data-crewtab="${id}" aria-selected="${p.tab===id}">${name}</button>`).join('')}</div><div class="crew-options" role="tabpanel" aria-label="${p.tab==='driver'?'운전원':'정비원'} 코드">${list.map(c=>`<label><input type="checkbox" data-crewcode="${c}" aria-label="${c}" ${p.crew.includes(c)?'checked':p.crew.length===2?'disabled':''}><span>${c}</span></label>`).join('')}</div><p class="crew-selected">선택: ${p.crew.map(esc).join(', ')||'없음'} <span class="muted">(최대 2명)</span></p><div class="crew-actions"><button type="button" class="btn" data-crewclear>선택 해제</button><button type="button" class="btn primary" data-crewapply>적용</button></div>`;
+  $('sheetClose').onclick=closeSheet;
+}
+async function downloadFleet() {
+  const round=curRound();if(!round)return toast('기준일자를 선택해 주세요.',true);
+  if(fleetDirty())return toast('변경사항을 먼저 확정한 뒤 저장해 주세요.',true);
+  const date=round.start_date, button=$('fleetDownload');button.disabled=true;
+  try {
+    const [routes,status]=await Promise.all([Api.routes(date,date),Api.statuses([round.id])]);
+    if(!routes.ok||!status.ok)return toast(!routes.ok?routes.message:status.message,true);
+    const route=new Map(routes.rows.map(x=>[x.vehicle_id,x])), stat=new Map(status.rows.filter(x=>+x.round_id===+round.id).map(x=>[x.vehicle_id,x]));
+    const records=S.vehicles.filter(v=>shownIn(v,round)&&(!S.fleetOrgs.size||S.fleetOrgs.has(v.org))).map(v=>({org:v.org,type:v.type,number:plateNum(v),mechanized:S.orgs.includes(v.org)&&!isPool(v),support:(stat.get(v.id)||{}).status==='O',destination:((route.get(v.id)||{}).stops||[]).map(bn).join(' → '),crew:(stat.get(v.id)||{}).crew||[]}));
+    if(records.some(x=>x.mechanized&&x.support&&x.destination&&!x.number))return toast('도공번호가 없는 지원 장비가 있습니다. 번호를 확정한 뒤 저장해 주세요.',true);
+    const rows=SSCrew.rows(records);if(!rows.length)return toast('첫 지원일에 지원기관이 배정된 기계화부 지원 장비가 없습니다.',true);
+    const blob=new Blob([SSReport.zip(SSCrew.xlsxFiles(rows))],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);a.download=`기계화부_지원장비_${date}.xlsx`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);
+    toast(`${fmtMD(date)} 지원 장비 ${rows.length}대를 저장했습니다.`);
+  } catch(e) { toast('엑셀 파일을 만들지 못했습니다. 다시 시도해 주세요.',true); }
+  finally { button.disabled=false; }
+}
+
 function placeUnhide() {        // 숨김 취소 목록: 표가 가로로 스크롤되는 상자 안이라 잘리지 않게 화면 기준으로 버튼 아래에 띄움
   const b = $("unhideBtn"), pop = document.querySelector(".unhide-pop"); if (!b || !pop) return;
   const r = b.getBoundingClientRect(); pop.style.top = (r.bottom + 4) + "px"; pop.style.left = Math.max(8, Math.min(innerWidth - pop.offsetWidth - 8, r.right - pop.offsetWidth)) + "px";
@@ -876,11 +912,11 @@ async function confirmFleet() {
   if (S.preview) return toast("미리보기에서는 확정할 수 없습니다. '내 아이디'로 돌아오세요.", true);
   const vehicles = [...S.vdraft].map(([id, f]) => ({ id, ...f })), routes = draftKeys(false).map(k => { const [date, vehicle_id] = k.split("|"), x = S.draft.get(k);
     return { date, vehicle_id, stops: x.stops, revised: x.revised, times: x.times.some(Boolean) ? x.times : null }; });
-  const status = sdraftKeys(false).map(vehicle_id => { const x = S.sdraft.get(vehicle_id); return { vehicle_id, status: x.status, off_from: x.off_from || null }; });       // 신속대응팀 변경은 그 탭의 [확정]으로
+  const status = sdraftKeys(false).map(vehicle_id => { const x = S.sdraft.get(vehicle_id); return { vehicle_id, status: x.status, off_from: x.off_from || null, crew: (x.crew || []).slice() }; });       // 신속대응팀 변경은 그 탭의 [확정]으로
   if (orderBlock(draftKeys(false))) return;
   if (!vehicles.length && !routes.length && !status.length) return;
   if ((routes.length || status.length) && !S.round) return toast("기준일자가 없어 지원 여부·경로를 확정할 수 없습니다. 지사별 요청·편성에서 기준일자를 먼저 만드세요.", true);
-  const what = [routes.length ? `경로 ${routes.length}칸` : "", status.length ? `지원 여부 ${status.length}대` : "", vehicles.length ? `장비 ${vehicles.length}대(번호·블로워)` : ""].filter(Boolean).join(", ");
+  const what = [routes.length ? `경로 ${routes.length}칸` : "", status.length ? `지원 여부·운전원 ${status.length}대` : "", vehicles.length ? `장비 ${vehicles.length}대(번호·블로워)` : ""].filter(Boolean).join(", ");
   if (!confirm(`${what} 변경을 확정할까요?\n지원 여부는 기준일자 ${fmtMD(curRound().start_date)} 것으로 저장되고, 경로는 날짜별로 남습니다.`)) return;
   busy("fleet", true);
   const r = await Api.saveFleet(vehicles, routes, S.round, status);
@@ -888,7 +924,7 @@ async function confirmFleet() {
   if (!r.ok) return toast(r.message, true);
   const now = new Date().toISOString();
   vehicles.forEach(p => Object.assign(vehById(p.id), p)); sortVehicles();
-  status.forEach(x => S.rstat.set(S.round + "|" + x.vehicle_id, { status: x.status, off_from: x.off_from, updated_at: now }));
+  status.forEach(x => S.rstat.set(S.round + "|" + x.vehicle_id, { status: x.status, off_from: x.off_from, crew: (x.crew || []).slice(), updated_at: now }));
   routes.forEach(x => { const k = rk(x.date, x.vehicle_id); if (x.stops.length) { S.routes.set(k, normRec(x)); S.rmeta.set(k, now); } else S.routes.delete(k); });
   clearDrafts(false);
   await loadAudit(); refresh();
@@ -1057,15 +1093,15 @@ syncFP();
 const em = n => Math.round(n * FP());
 // 지원일 칸(2026-11-03 사용자 요청: 칸이 많아도 컴퓨터에서는 가로 스크롤 없이 다 보이게): 보통은 지사·시각을 한 줄로(11.7em).
 // 다 안 들어오면 글자를 13px 까지 줄이고, 그래도 안 들어오면 지사·시각을 위아래 두 줄로(칸 폭 6.9~11.7em, 표 폭을 화면에 맞춤). 휴대폰은 176px 에 옆으로 밀어서 봄
-function dayFit(fixedEm, n) {
+function dayFit(fixedEm, n, dayEm = 11.7) {
   if (isPhoneW()) return { fp: 12.5, day: 176 / 12.5, stack: false };
-  const room = tableRoom(), tenth = x => Math.floor(x * 10) / 10, one = room / (fixedEm + 11.7 * n);
-  if (one >= 13) return { fp: Math.min(FP(), tenth(one)), day: 11.7, stack: false };
+  const room = tableRoom(), tenth = x => Math.floor(x * 10) / 10, one = room / (fixedEm + dayEm * n);
+  if (one >= 13) return { fp: Math.min(FP(), tenth(one)), day: dayEm, stack: false };
   const fp = Math.max(12, Math.min(FP(), tenth(room / (fixedEm + 6.9 * n))));
   return { fp, day: Math.max(6.9, Math.min(11.7, tenth((room / fp - fixedEm) / n))), stack: true };
 }
-function dayCols(table, fixedEm, n, actEm) {
-  const f = dayFit(fixedEm.reduce((a, w) => a + w, 0) + actEm, n), px = w => Math.round(w * f.fp);
+function dayCols(table, fixedEm, n, actEm, dayEm = 11.7) {
+  const f = dayFit(fixedEm.reduce((a, w) => a + w, 0) + actEm, n, dayEm), px = w => Math.round(w * f.fp);
   table.style.fontSize = isPhoneW() ? "" : f.fp + "px"; table.classList.toggle("stack", f.stack);
   fixCols(table, [...fixedEm.map(px), ...Array(n).fill(px(f.day)), ...(actEm ? [px(actEm)] : [])], true);
 }
@@ -1437,7 +1473,7 @@ async function setZone(code, include) {   // include: true 더함 / false 자동
   const z = await Api.zoneData(); if (z.ok) { S.zdata = z; renderZones(); renderWarnNow(); }
   await Promise.all([loadWarn(), loadAudit()]); paintWarn(); renderLog(); if (!$("panel-move").hidden) renderDest(); toast(`${bn(bid)} 지사 특보구역을 바꿨습니다`);
 }
-function closeSheet() { sheet.classList.remove("wide"); sheet.hidden = true; backdrop.hidden = true; hideTip(); if (lastFocus) lastFocus.focus(); lastFocus = null;
+function closeSheet() { crewPick=null; sheet.classList.remove("wide", "crew-sheet"); sheet.hidden = true; backdrop.hidden = true; hideTip(); if (lastFocus) lastFocus.focus(); lastFocus = null;
   if (history.state && history.state.ssSheet) { try { history.back(); } catch (e) {} } }      // 창을 열 때 남긴 기록 한 칸을 지움(뒤로가기로 닫은 경우는 이미 지워짐)
 // 뒤로가기(2026-11-02 사용자 요청): 창(장비 상세·보고서 미리 보기 등)이 열리면 기록 한 칸 → 뒤로가기는 창만 닫음. 장비 화면만 따로 열었으면 이전 탭으로
 new MutationObserver(() => { if (!sheet.hidden && !(history.state && history.state.ssSheet)) { try { history.pushState({ ...(history.state || {}), ssSheet: 1 }, ""); } catch (e) {} } })
@@ -1465,7 +1501,7 @@ function updateSavebars() {
   fb.classList.toggle("dirty", fd); bb.classList.toggle("dirty", bd); ab.classList.toggle("dirty", ad);
   ab.querySelector(".save-state").textContent = ad ? `확정하지 않은 변경: ${S.adraft.size}칸` + (S.preview ? " (미리보기 — 확정 불가)" : "") : "변경 사항 없음";
   ab.querySelector("[data-revert]").disabled = !ad; ab.querySelector("[data-save]").disabled = !ad || S.preview;
-  fb.querySelector(".save-state").textContent = fd ? `확정하지 않은 변경: 경로 ${draftKeys(false).length}칸${sdraftKeys(false).length ? ` · 지원 여부 ${sdraftKeys(false).length}대` : ""}${S.vdraft.size ? ` · 장비 ${S.vdraft.size}대` : ""}` + (S.preview ? " (미리보기 — 확정 불가)" : "") : "변경 사항 없음";
+  fb.querySelector(".save-state").textContent = fd ? `확정하지 않은 변경: 경로 ${draftKeys(false).length}칸${sdraftKeys(false).length ? ` · 지원 여부·운전원 ${sdraftKeys(false).length}대` : ""}${S.vdraft.size ? ` · 장비 ${S.vdraft.size}대` : ""}` + (S.preview ? " (미리보기 — 확정 불가)" : "") : "변경 사항 없음";
   bb.querySelector(".save-state").textContent = bd ? `저장하지 않은 변경: ${S.rdraft.size}개 지사` + (S.preview ? " (미리보기 — 저장 불가)" : "") : "변경 사항 없음";
   const bdn = $("brDirty"); if (bdn) { bdn.textContent = bd ? `저장하지 않은 지사 ${S.rdraft.size}곳` + (S.preview ? " (미리보기 — 저장 불가)" : "") : ""; bdn.hidden = !bd; }
   fb.querySelector("[data-revert]").disabled = !fd; fb.querySelector("[data-save]").disabled = !fd || S.preview;
@@ -1553,6 +1589,7 @@ document.addEventListener("change", async e => {
   if (t.id === "modeInit" || t.id === "modeRev") {     // [최초 지원]/[수정본]: 둘 중 하나, 표 전체에 한 번에 적용
     S.revisedMode = t.id === "modeRev" ? t.checked : !t.checked; return renderFleet();
   }
+  if(t.dataset.crewcode && crewPick) { const code=t.dataset.crewcode; crewPick.crew=t.checked?crewPick.crew.concat(code):crewPick.crew.filter(c=>c!==code); renderCrewPicker(); const item=sheet.querySelector(`[data-crewcode="${CSS.escape(code)}"]`);if(item)item.focus();return; }
   if (t.dataset.vs) {                       // 지원 여부(고른 기준일자): 지원이 아니면 그 기준일자가 맡은 날의 경로는 숨겨짐(지우지 않음 — 다시 지원으로 하면 보임)
     const v = vehById(t.dataset.vs); if (!v || !canVeh(v) || !S.round) return refresh();
     setStat(v.id, { status: t.value }); return patchVehicle(v.id);
@@ -1611,6 +1648,11 @@ document.addEventListener("click", e => {
   if (c("[data-reload]")) return reloadAll();
   if ((x = c("[data-save]"))) return x.dataset.save === "fleet" ? confirmFleet() : x.dataset.save === "gwteam" ? confirmTeam() : x.dataset.save === "alloc" ? saveAlloc() : saveBranch();
   if ((x = c("[data-revert]"))) { if (!confirm("확정·저장하지 않은 변경을 모두 취소할까요?")) return; if (x.dataset.revert === "fleet") clearDrafts(false); else if (x.dataset.revert === "gwteam") clearDrafts(true); else if (x.dataset.revert === "alloc") S.adraft.clear(); else S.rdraft.clear(); return refresh(); }
+  if((x=c("[data-crew]")))return openCrew(x.dataset.crew);
+  if((x=c("[data-crewtab]"))&&crewPick){crewPick.tab=x.dataset.crewtab;renderCrewPicker();return;}
+  if(c("[data-crewclear]")&&crewPick){crewPick.crew=[];return renderCrewPicker();}
+  if(c("[data-crewapply]")&&crewPick){const p=crewPick;if(!SSCrew.valid(p.crew))return;setStat(p.id,{crew:p.crew});closeSheet();return refresh();}
+  if(c("#fleetDownload"))return downloadFleet();
   if (c("#fleetReset")) return resetFleet();
   if (c("#vehAdd")) return addVehicle();
   if ((x = c("[data-vdel]"))) return deleteVehicle(x.dataset.vdel);

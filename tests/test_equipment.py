@@ -1147,7 +1147,7 @@ def t_fixed_columns(p):
     # 기관별 장비·강원본부 지원장비(2026-11-03): 지원일 칸은 늘 같은 폭, 칸 수만큼 표가 줄고 늘어남. 드롭다운은 글자보다 좁아지지 않음
     wrap = lambda tid: f"document.querySelector('#{tid}').parentElement"
     p.set_viewport_size({"width": 1366, "height": 800}); p.wait_for_timeout(150)
-    for tb, tid, sel, fixed in (("fleet", "eqTable", "#colsSel", 2), ("gwteam", "teamTable", "#colsSelTeam", 2)):
+    for tb, tid, sel, fixed in (("fleet", "eqTable", "#colsSel", 3), ("gwteam", "teamTable", "#colsSelTeam", 2)):
         tab(p, tb); tw = lambda: ev(p, f"Math.round(document.querySelector('#{tid}').getBoundingClientRect().width)")
         p.select_option(sel, "6"); p.wait_for_timeout(250); w6 = widths(tid); t6 = tw()
         check(not ev(p, f"{wrap(tid)}.scrollWidth > {wrap(tid)}.clientWidth + 1"), f"{tid}: 지원일 6칸은 1366 화면에 스크롤 없이: {t6}")
@@ -1303,8 +1303,8 @@ def t_tables_sizes(p):
     p.select_option("#colsSel", "4"); p.wait_for_timeout(200)
     # 휴대폰: 작은 글자, 세로가 짧음, 칸 폭은 그대로
     p.set_viewport_size({"width": 375, "height": 800}); p.wait_for_timeout(350); tab(p, "fleet")
-    check(fs("#eqTable") == 12.5 and rowh("eqTable") <= 34, f"휴대폰: 글자 {fs('#eqTable')}, 줄 {rowh('eqTable')}")
-    check(ev(p, "document.querySelector('#eqTable colgroup col:nth-child(5)').style.width") == "176px", "휴대폰 지원일 칸 폭은 그대로")
+    check(fs("#eqTable") == 12.5 and rowh("eqTable") <= 65, f"휴대폰: 인원 두 줄을 포함한 글자 {fs('#eqTable')}, 줄 {rowh('eqTable')}")
+    check(ev(p, "document.querySelector('#eqTable colgroup col:nth-child(6)').style.width") == "176px", "휴대폰 인원 열 다음 지원일 칸 폭은 그대로")
     check(ev(p, "[...document.querySelectorAll('#eqTable thead th')].slice(0, 4).map(t => t.textContent)") == ["도공번호", "장비", "블로워", "지원 여부"] and p.locator("#eqTable .vid2").count() == 0, "휴대폰 칸 구성은 그대로")
     check(ev(p, "document.querySelector('#panel-fleet').style.maxWidth") == "", "휴대폰은 폭을 맞추지 않음")
     check(ev(p, "document.scrollingElement.scrollWidth") <= 376, "휴대폰: 화면이 옆으로 밀리지 않음")
@@ -1782,7 +1782,7 @@ def t_server_equip_confirm(b):
     tab(p, "fleet"); check(p.locator("[data-vs=V001]").count() == 1 and p.locator("[data-vs=V002]").count() == 0 and p.locator("select[data-rv]").count() == 0, "자기 기관 도공번호·지원 여부만(경로는 관리자)")
     d0 = m.today
     p.select_option("[data-vs=V001]", "O" if ev(p, "stOf(S.round, 'V001').status") != "O" else ""); s1 = ev(p, "stOf(S.round, 'V001').status"); p.fill("[data-vp=V001]", "911"); p.press("[data-vp=V001]", "Tab"); p.wait_for_timeout(150); confirm_fleet(p)
-    check(m.eq_calls[-1] == ("save_fleet", {"p_vehicles": [{"id": "V001", "plate": "서울경기911"}], "p_routes": [], "p_round": 1, "p_status": [{"vehicle_id": "V001", "status": s1, "off_from": None}]}), m.eq_calls)
+    check(m.eq_calls[-1] == ("save_fleet", {"p_vehicles": [{"id": "V001", "plate": "서울경기911"}], "p_routes": [], "p_round": 1, "p_status": [{"vehicle_id": "V001", "status": s1, "off_from": None, "crew": []}]}), m.eq_calls)
     check(next(x for x in m.rstatus if x["round_id"] == 1 and x["vehicle_id"] == "V001")["status"] == s1, "서버의 기준일자별 지원 여부에 저장")
     check("확정했습니다" in toast(p), toast(p))
     p.close()

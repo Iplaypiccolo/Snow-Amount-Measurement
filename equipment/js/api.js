@@ -70,7 +70,7 @@ const Api = (() => {
         .then(([r, t]) => r.ok && t.ok ? { ok: true, rows: r.json.concat(t.json.map(asVeh)) } : fail(r.ok ? t : r, "경로를 불러오지 못했습니다.")).catch(NET);
     },
     statuses(ids) {      // 기준일자별 지원 여부(마이그레이션 38) + 강원 신속대응팀(48). 기준일자마다 따로, 1,000줄이 넘으면 나눠 읽음
-      return Promise.all([...ids.map(id => restAll(`round_vehicle_status?select=round_id,vehicle_id,status,off_from,updated_at&round_id=eq.${+id}&order=vehicle_id`)),
+      return Promise.all([...ids.map(id => restAll(`round_vehicle_status?select=round_id,vehicle_id,status,off_from,crew,updated_at&round_id=eq.${+id}&order=vehicle_id`)),
         restAll(`gw_team_status?select=round_id,team_id,status,off_from,updated_at&round_id=in.(${ids.map(Number).join(",")})&order=round_id,team_id`).then(r => r.ok ? { ...r, json: r.json.map(asVeh) } : r)])
         .then(rs => rs.every(r => r.ok) ? { ok: true, rows: rs.flatMap(r => r.json) } : fail(rs.find(r => !r.ok), "지원 여부를 불러오지 못했습니다.")).catch(NET);
     },
@@ -299,6 +299,7 @@ const Api = (() => {
         const vof = id => db.vehicles.find(x => x.id === id) || {};
         if (routes.some(repeated)) return done(err("23514", "바로 앞과 같은 지사는 한 번만 들어갑니다."));      // 64
         if (routes.some(r => r.stops.length && !simTimesOk(r))) return done(err("SA008"));
+        if (status.some(x => x.crew!==undefined&&!SSCrew.valid(x.crew))) return done(err("23514", "인원은 코드가 다른 두 명까지 선택할 수 있습니다."));
         if (status.some(x => !["", "O"].includes(x.status || "") || x.off_from)) return done(err("23514", "지원 여부는 빈칸 또는 '지원'만 됩니다."));      // 66
         if (status.some(x => vof(x.vehicle_id).org === POOL && (x.status !== "O" || x.off_from))) return done(err("23514", "지역본부 장비의 지원 여부는 늘 '지원'입니다."));
         if (can("equip.route") && routes.some(r => { const h = vof(r.vehicle_id).home_branch; return h && r.stops.includes(h); })) return done(err("SA005"));   // 지사 계정은 아래에서 먼저 42501(서버와 같은 순서, 55)
@@ -315,9 +316,9 @@ const Api = (() => {
         if (routes.some(r => (gov(r.date) || {}).id !== +round)) return done({ ok: false, message: FLEET_ERR["23514"] });
         const before = clone(db.status);                                           // 하나라도 안 되면 전부 취소(서버 함수와 같게)
         status.forEach(x => { let row = stRow(+round, x.vehicle_id); if (!row) { row = { round_id: +round, vehicle_id: x.vehicle_id, status: "", off_from: null }; db.status.push(row); }
-          row.status = x.status || ""; row.off_from = row.status === "O" ? x.off_from || null : null; row.updated_at = new Date().toISOString(); });
+          if(x.crew!==undefined)row.crew=x.crew.slice(); row.status = x.status || ""; row.off_from = row.status === "O" ? x.off_from || null : null; row.updated_at = new Date().toISOString(); });
         if (routes.some(r => r.stops.length && !avail(r.vehicle_id, r.date))) { db.status = before; return done({ ok: false, message: FLEET_ERR["23514"] }); }
-        status.forEach(x => log("수정", "round_vehicle_status", `round_vehicle_status:${round},${x.vehicle_id}`, null, { status: x.status, off_from: x.off_from || null }));
+        status.forEach(x => log("수정", "round_vehicle_status", `round_vehicle_status:${round},${x.vehicle_id}`, null, { status: x.status, off_from: x.off_from || null, ...(x.crew!==undefined?{crew:x.crew}: {}) }));
         vehicles.forEach(p => { const v = db.vehicles.find(x => x.id === p.id), from = {}, to = {}; Object.keys(p).filter(k => k !== "id" && v[k] !== p[k]).forEach(k => { from[k] = v[k]; to[k] = p[k]; v[k] = p[k]; }); if (Object.keys(to).length) log("수정", "vehicles", "vehicles:" + v.id, from, to); });
         routes.forEach(r => {
           const i = db.routes.findIndex(x => x.date === r.date && x.vehicle_id === r.vehicle_id), t = `vehicle_routes:${r.date},${r.vehicle_id}`;
@@ -365,7 +366,7 @@ const Api = (() => {
         const r = { id: Math.max(0, ...db.rounds.map(x => x.id)) + 1, name: date + " 기준", start_date: date, days: 10 }; db.rounds.push(r); log("추가", "support_rounds", "support_rounds:" + r.id, null, r);
         db.vehicles.filter(v => v.active !== false && !v.round_id && (!v.hidden_after || date <= v.hidden_after)).forEach(v => {      // 지역본부 장비(round_id 있음)는 이어받지 않음     // 전체 장비 지원 여부 이어받기(정비중·지원 불가 포함)
           const p = prev && stRow(prev.id, v.id), keep = !!p && p.status === "O" && db.routes.some(x => x.vehicle_id === v.id && x.date >= date && x.stops.length && (!p.off_from || x.date < p.off_from));      // 63: 빈칸, 새 기간에 경로가 잡힌 지원 장비만 유지
-          db.status.push({ round_id: r.id, vehicle_id: v.id, status: keep ? "O" : "", off_from: keep && p.off_from > date ? p.off_from : null, updated_at: new Date().toISOString() });
+          db.status.push({ round_id: r.id, vehicle_id: v.id, crew: p&&p.crew?p.crew.slice():[], status: keep ? "O" : "", off_from: keep && p.off_from > date ? p.off_from : null, updated_at: new Date().toISOString() });
         });
         db.team.forEach(t => { const p = prev && db.teamStatus.find(x => x.round_id === prev.id && x.team_id === t.id), keep = !!p && p.status === "O" && db.teamRoutes.some(x => x.team_id === t.id && x.date >= date && x.stops.length && (!p.off_from || x.date < p.off_from));      // 강원 신속대응팀(63 같은 규칙)
           db.teamStatus.push({ round_id: r.id, team_id: t.id, status: keep ? "O" : "", off_from: keep && p.off_from > date ? p.off_from : null, updated_at: new Date().toISOString() }); });

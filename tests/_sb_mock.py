@@ -312,6 +312,8 @@ class Mock:
                     if any("status" in v for v in body["p_vehicles"]) or ((body["p_routes"] or st) and not any(r["id"] == rid for r in self.rounds)): return send(400, {"code": "22023", "message": "bad input"})
                     if any(not ok(v["id"]) for v in body["p_vehicles"]) or any(not ok(x["vehicle_id"]) for x in st) or any(not route_ok(r["vehicle_id"]) for r in body["p_routes"]): return send(403, {"code": "42501", "message": "route not allowed"})
                     if any(x.get("status") not in ("", "O") or x.get("off_from") for x in st): return send(400, {"code": "23514", "message": "new row violates check constraint"})   # 66: 빈칸·지원만, 지원 불가 시작일 없음
+                    allowed_crew='abcdefghijklmnopqrstuvwxyz가나다라마바사아자차카타파하'
+                    if any('crew' in x and (not isinstance(x['crew'],list) or len(x['crew'])>2 or any(not isinstance(c,str) or len(c)!=1 or c not in allowed_crew for c in x['crew']) or len(set(x['crew']))!=len(x['crew'])) for x in st): return send(400, {'code':'23514','message':'bad crew'})
                     for x in st:
                         cur = next((y for y in self.rstatus if y["round_id"] == rid and y["vehicle_id"] == x["vehicle_id"]), None)
                         if not cur: cur = {"round_id": rid, "vehicle_id": x["vehicle_id"]}; self.rstatus.append(cur)
@@ -345,7 +347,7 @@ class Mock:
                     if v.get("hidden_after") and d > v["hidden_after"]: continue
                     p = next((x for x in self.rstatus if prev and x["round_id"] == prev["id"] and x["vehicle_id"] == v["id"]), None)
                     keep = bool(p) and p["status"] == "O" and any(x["vehicle_id"] == v["id"] and x["date"] >= d and x["stops"] and (not p.get("off_from") or x["date"] < p["off_from"]) for x in self.routes)
-                    self.rstatus.append({"round_id": nr["id"], "vehicle_id": v["id"], "status": "O" if keep else "", "off_from": p.get("off_from") if keep and (p.get("off_from") or "") > d else None, "updated_at": "2026-10-08T00:00:00Z"})
+                    self.rstatus.append({"round_id": nr["id"], "vehicle_id": v["id"], "status": "O" if keep else "", "crew": list(p.get("crew",[])) if p else [], "off_from": p.get("off_from") if keep and (p.get("off_from") or "") > d else None, "updated_at": "2026-10-08T00:00:00Z"})
                 return send(200, dict(nr, carried=len(self.vehicles)))
             if tbl in ("gw_team", "gw_team_routes", "gw_team_status") and req.method == "GET":     # 강원 신속대응팀(마이그레이션 48): 4대 고정, 경로·지원 여부는 비어 있음
                 if not self.usable(u): return send(200, [])
