@@ -33,6 +33,7 @@ SUITES = [
     ('관할 새로고침 없는 재적용', 'tests/test_reapply.js', 'node'),
     ('예보3시간 연결 계산', 'tests/test_forecast_series.js', 'node'),
     ('격자 계산', 'tests/test_grid_core.js', 'node'),
+    ('고속도로 2km 격자 생성', 'tests/test_section_grid_geometry.py', 'py'),
     ('본부·지사 순서 일치', 'tests/test_hierarchy_order.py', 'py'),
     ('구간 연속성·무결성', 'tests/test_sections_continuity.py', 'py'),
     ('화면 파일 꼬리표(캐시)', 'tests/test_asset_stamps.py', 'py'),

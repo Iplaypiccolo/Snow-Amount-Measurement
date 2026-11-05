@@ -31,7 +31,7 @@ def run(name, fn, b):
 
 def admin(p): p.wait_for_timeout(100)      # 이 탭은 관리자에게만 보이고, 관리자 모드 체크박스는 없음(열려 있으면 바로 편집 가능)
 S = "GridUI._state()"
-def ring_cells(p, n=3): return J(p, f"GRID.baseline.ring.slice(0, {n}).map(c => c[0] + ',' + c[1])")
+def ring_cells(p, n=3): return J(p, f"[...{S}.res.assign].filter(e=>e[1].size===0).slice(0,{n}).map(e=>e[0])")
 def click_cell(p, k): J(p, f"(() => {{ {S}.rects['{k}'].fire('click'); return null }})()"); p.wait_for_timeout(80)
 def first_branch(p, hq=None):
     return J(p, "(() => { const s = GridUI._state(); return s.state.order.find(id => s.ids.has(id)) })()")
@@ -43,7 +43,7 @@ def t_tab_loads(b):
     n = J(p, f"Object.keys({S}.rects).length")
     expected=J(p,"new Set(GRID.baseline.cells.map(c=>c.slice(0,2).join(',')).concat(GRID.baseline.ring.map(c=>c.join(',')),Object.values(GRID.baseline.sectionCells).flat().map(c=>c.join(',')))).size")
     check(n == expected, f"기존 후보와 현행 노선 격자 {n}/{expected}")
-    check("934칸" in p.locator("#gr-summary").inner_text(), p.locator("#gr-summary").inner_text())
+    check("1489칸" in p.locator("#gr-summary").inner_text(), p.locator("#gr-summary").inner_text())
     check("편입 격자" in p.locator("#gr-summary").inner_text() and "수집 분할" not in p.locator("#gr-summary").inner_text() and p.locator(".gr-badge").count() == 0, "편입 칸 수만(예전 호출량·분할 계산 문구 없음, 2026-10-05)")
     check(p.locator("#gr-admin").count() == 0 and "관리자 모드" not in p.locator("#view-grid").inner_text(), "관리자 모드 체크박스가 없어야 함")
     check(p.locator("#gr-tools").is_visible() and p.locator("#gr-savebar").is_visible(), "관리자에게는 편집 도구가 바로 보여야 함")
@@ -212,13 +212,14 @@ def t_box_select(b):
 def t_union_after_add_and_cancel(b):
     """후보 칸을 모두 편입하면 편입 칸 수가 늘고, 모두 취소하면 원래대로(예전 '호출 한도' 판정은 예보 방식이 바뀌어 없앰)"""
     p = open_grid(b); admin(p)
-    br = first_branch(p); ring = J(p, "GRID.baseline.ring.map(c => c[0] + ',' + c[1])")
+    br = first_branch(p); u0=union(p)
+    ring = J(p, f"[...{S}.res.assign].filter(e=>e[1].size===0).map(e=>e[0])")
     J(p, f"(() => {{ const s = {S}; {json.dumps(ring)}.forEach(k => s.selected[k] = true); }})()")
     p.evaluate("GridUI.show()"); p.wait_for_timeout(200); p.select_option("#gr-dest", br); p.click("#gr-selbar [data-act=add]"); p.wait_for_timeout(500)
-    check(union(p) == 934 + 1389, f"합집합 {union(p)}")
-    check(str(934 + 1389) + "칸" in p.locator("#gr-summary").inner_text(), "요약에 늘어난 칸 수")
+    check(union(p) == u0 + len(ring), f"합집합 {union(p)}")
+    check(str(u0 + len(ring)) + "칸" in p.locator("#gr-summary").inner_text(), "요약에 늘어난 칸 수")
     p.click("#gr-savebar [data-act=cancel]"); p.wait_for_timeout(300)
-    check(union(p) == 934, "모두 취소 후 934칸")
+    check(union(p) == u0, "모두 취소 후 확대 기본 편입 복원")
 
 def t_focus_branch(b):
     p = open_grid(b); br = first_branch(p)

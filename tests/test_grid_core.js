@@ -124,12 +124,14 @@ test('노선 재계산 후에도 수동 추가·제외가 우선', () => {
   const r=G.resolve(G.routeBaseline(b,s),[{t:'remove',from:'B060',cells:[[70,80]]},{t:'add',to:'B060',cells:[[71,81]]}],new Set(['B060']));
   assert.strictEqual(r.assign.get('70,80').size,0);assert.ok(r.assign.get('71,81').has('B060'));
 });
-test('구간 격자 자료: 현행 모든 구간 포함·기존 기본 편입 재현', () => {
+test('구간 격자 자료: 현행 모든 구간 포함·2km 확대로 기존 도로 칸 유지', () => {
   const sc=D('data/section_grid.json').sections,J=require('../jurisdiction/core.js');
   assert.deepStrictEqual(Object.keys(sc).sort(),sections.sections.map(s=>s.id).sort());
   Object.values(sc).forEach(cs=>{assert.ok(cs.length);cs.forEach(c=>assert.ok(G.validCell(c)));});
   const r=G.resolve(G.routeBaseline({...base,sectionCells:sc},J.resolve(sections,[])),[],ids);
-  assert.deepStrictEqual(G.summarize(r.assign),G.summarize(G.resolve(base,[],ids).assign));
+  assert.strictEqual(D('data/section_grid.json').radiusKm,2);
+  assert.strictEqual(G.summarize(r.assign).union,1489);
+  G.resolve(base,[],ids).assign.forEach((bs,k)=>bs.forEach(id=>assert.ok(r.assign.get(k).has(id),'기존 도로 칸 유지 '+k)));
 });
 
 const ok = results.filter(r => r[1]).length;
