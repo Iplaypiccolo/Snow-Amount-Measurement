@@ -48,6 +48,21 @@
   var validCell = function (c) { return Array.isArray(c) && c.length === 2 && c[0] % 1 === 0 && c[1] % 1 === 0 && c[0] >= 1 && c[0] <= NX_MAX && c[1] >= 1 && c[1] <= NY_MAX; };
 
   /* ---------- 기본 편입 + 이벤트 적용 ---------- */
+  // 도로 좌표 → 격자 관계는 고정 자료, 소속은 현재 관할 상태에서 가져온다.
+  // 수동 편입/제외 이력은 이 자동 편입 위에 resolve()가 적용한다.
+  function routeBaseline(baseline, state) {
+    if (!baseline.sectionCells) return baseline;
+    var cells = new Map();
+    (baseline.cells || []).forEach(function(c){ cells.set(key(c[0],c[1]),new Set()); });
+    Object.keys(baseline.sectionCells).forEach(function(sid){
+      var owner=state.owner[sid], b=state.branches[owner];
+      (baseline.sectionCells[sid] || []).forEach(function(c){
+        var k=key(c[0],c[1]);if(!cells.has(k))cells.set(k,new Set());
+        if(b && b.hq!=='민자')cells.get(k).add(owner);
+      });
+    });
+    return {cells:Array.from(cells,function(e){var c=unkey(e[0]);return [c[0],c[1],Array.from(e[1]).sort()];}),ring:baseline.ring || []};
+  }
   // 돌려주는 값: { assign: Map("nx,ny" → Set(기관 id)), cells: 화면에 보일 모든 격자 키, applied, skipped }
   function resolve(baseline, events, validBranchIds) {
     var assign = new Map(), all = new Set();
@@ -130,7 +145,7 @@
 
   var api = {
     toGrid: toGrid, fromGrid: fromGrid, cellCenter: cellCenter, cellCorners: cellCorners, key: key, unkey: unkey, validCell: validCell,
-    resolve: resolve, summarize: summarize, budget: budget, impact: impact, cellsInBox: cellsInBox,
+    resolve: resolve, routeBaseline: routeBaseline, summarize: summarize, budget: budget, impact: impact, cellsInBox: cellsInBox,
     CELLS_PER_RUN: CELLS_PER_RUN, RUN_INTERVAL_MIN: RUN_INTERVAL_MIN, NX_MAX: NX_MAX, NY_MAX: NY_MAX
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

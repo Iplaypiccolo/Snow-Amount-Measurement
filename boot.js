@@ -17,7 +17,9 @@
     SSEvents.load('jurisdiction'),
     // 예보 격자 편입(기본 편입 + 저장된 변경): 없어도 기존 화면은 그대로 동작
     // 격자 권한이 있을 때만 불러옴: 예보 격자 편입 탭은 grid.edit 권한 계정에서만 보입니다
-    canGrid ? fetch('data/grid_assign.json', {cache: 'no-cache'}).then(function(r){return r.ok ? r.json() : null;}).catch(function(){return null;}) : Promise.resolve(null),
+    canGrid ? Promise.all(['data/grid_assign.json','data/section_grid.json'].map(function(url){
+      return fetch(url, {cache:'no-cache'}).then(function(r){if(!r.ok)throw new Error('grid');return r.json();});
+    })).then(function(d){d[0].sectionCells=d[1].sections;return d[0];}).catch(function(){return null;}) : Promise.resolve(null),
     canGrid ? SSEvents.load('grid') : Promise.resolve({events: [], source: 'skip'})
   ]).then(function(results){
     window.ROADS_DATA = results[0];

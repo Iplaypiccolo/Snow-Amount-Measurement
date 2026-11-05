@@ -40,7 +40,9 @@ def shared(p): return J(p, f"{S}.sum.shared")
 
 def t_tab_loads(b):
     p = open_grid(b)
-    n = J(p, f"Object.keys({S}.rects).length"); check(n == 1072 + 1389, f"격자 칸 {n}")
+    n = J(p, f"Object.keys({S}.rects).length")
+    expected=J(p,"new Set(GRID.baseline.cells.map(c=>c.slice(0,2).join(',')).concat(GRID.baseline.ring.map(c=>c.join(',')),Object.values(GRID.baseline.sectionCells).flat().map(c=>c.join(',')))).size")
+    check(n == expected, f"기존 후보와 현행 노선 격자 {n}/{expected}")
     check("934칸" in p.locator("#gr-summary").inner_text(), p.locator("#gr-summary").inner_text())
     check("편입 격자" in p.locator("#gr-summary").inner_text() and "수집 분할" not in p.locator("#gr-summary").inner_text() and p.locator(".gr-badge").count() == 0, "편입 칸 수만(예전 호출량·분할 계산 문구 없음, 2026-10-05)")
     check(p.locator("#gr-admin").count() == 0 and "관리자 모드" not in p.locator("#view-grid").inner_text(), "관리자 모드 체크박스가 없어야 함")
@@ -271,6 +273,26 @@ def t_hq_tabs_and_per_branch_view(b):
 
 TESTS = [t_hq_tabs_and_per_branch_view, t_tab_loads, t_popup_info_for_unselected_cell, t_remove_needs_no_branch_choice, t_remove_shared_cells_asks_which_branch, t_remove_button_state, t_add_remove_and_save, t_grid_save_failure_and_reload, t_grid_history_failure_blocks_save, t_share_between_branches, t_box_select, t_union_after_add_and_cancel, t_focus_branch,
          t_colors_match_other_tab, t_new_branch_from_jurisdiction_appears]
+def t_route_move_updates_new_branch_grid(b):
+    m=SBM.Mock()
+    for seq,kind,payload in [(1,'addBranch',{'id':'B900','hq':'강원','name':'신설노선시험'}),(2,'move',{'to':'B900','sections':['S1019']})]:
+        m.events['jurisdiction_events'].append({'id':seq,'kind':kind,'payload':payload,'at':'2026-11-05T00:00:00Z'})
+    p=open_grid(b,m)
+    cells=J(p,"GRID.baseline.sectionCells.S1019.map(c=>c.join(','))")
+    check(len(cells)>0,'신설 노선의 구간 격자 존재')
+    check(J(p,"GridUI._state().sum.perBranch.B900")==len(cells),'신설 기관 노선에 맞춰 자동 편입')
+    # 관할 저장 완료가 넘기는 최신 이력을 같은 페이지에 재적용한다.
+    J(p,"(() => {JURIS.committed.push({t:'move',to:'B001',sections:['S1019']});reapplyJurisdiction(JURIS.committed);GridUI.show();})()")
+    check(J(p,"GridUI._state().sum.perBranch.B900 || 0")==0,'노선을 넘긴 기관에서 자동 해제')
+    check(J(p,"(() => {const s=GridUI._state(),line=s.lines.getLayers().find(l=>l.options.sectionId==='S1019');return line.options.color===JurisCore.colorOf(s.state,'B001',s.hqView);})()"),'노선 색도 새 소속에 맞게 갱신')
+    for k in cells:
+        check(J(p,f"GridUI._state().res.assign.get('{k}').has('B001')"),'넘겨받은 기관에 같은 칸 자동 편입')
+    J(p,"(() => {JURIS.committed.push({t:'move',to:'NONE',sections:['S1019']});reapplyJurisdiction(JURIS.committed);GridUI.show();})()")
+    for k in cells:
+        check(not J(p,f"GridUI._state().res.assign.get('{k}').has('B900')"),'미지정 전환 후 이전 신설기관 복원 안 됨')
+
+TESTS += [t_route_move_updates_new_branch_grid]
+
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch()

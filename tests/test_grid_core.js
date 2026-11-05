@@ -106,6 +106,32 @@ test('영역 선택: 사각형 안에 중심이 들어오는 격자만 고른다
   assert.strictEqual(G.cellsInBox(all, 0, 0, 1, 1).length, 0);
 });
 
+test('노선 이동: 새 지사로 자동 편입하고 공유 구간의 이전 지사는 유지', () => {
+  const b={cells:[[60,127,['B001']]],sectionCells:{S1:[[60,127]],S2:[[60,127]]}};
+  const state={owner:{S1:'B002',S2:'B001'},branches:{B001:{hq:'강원'},B002:{hq:'강원'}}};
+  assert.deepStrictEqual(G.routeBaseline(b,state).cells[0][2],['B001','B002']);
+  state.owner.S2='B002';assert.deepStrictEqual(G.routeBaseline(b,state).cells[0][2],['B002']);
+  assert.deepStrictEqual(b.cells[0][2],['B001'],'원본 불변');
+});
+test('신설 지사 자동 편입, 미지정·민자 전환 시 자동 해제', () => {
+  const b={cells:[],sectionCells:{S1:[[70,80]]}},s={owner:{S1:'B060'},branches:{B060:{hq:'광주전남'},B061:{hq:'민자'}}};
+  assert.deepStrictEqual(G.routeBaseline(b,s).cells,[[70,80,['B060']]]);
+  s.owner.S1='B061';assert.deepStrictEqual(G.routeBaseline(b,s).cells,[[70,80,[]]]);
+  s.owner.S1=null;assert.deepStrictEqual(G.routeBaseline(b,s).cells,[[70,80,[]]]);
+});
+test('노선 재계산 후에도 수동 추가·제외가 우선', () => {
+  const b={cells:[],sectionCells:{S1:[[70,80]]}},s={owner:{S1:'B060'},branches:{B060:{hq:'광주전남'}}};
+  const r=G.resolve(G.routeBaseline(b,s),[{t:'remove',from:'B060',cells:[[70,80]]},{t:'add',to:'B060',cells:[[71,81]]}],new Set(['B060']));
+  assert.strictEqual(r.assign.get('70,80').size,0);assert.ok(r.assign.get('71,81').has('B060'));
+});
+test('구간 격자 자료: 현행 모든 구간 포함·기존 기본 편입 재현', () => {
+  const sc=D('data/section_grid.json').sections,J=require('../jurisdiction/core.js');
+  assert.deepStrictEqual(Object.keys(sc).sort(),sections.sections.map(s=>s.id).sort());
+  Object.values(sc).forEach(cs=>{assert.ok(cs.length);cs.forEach(c=>assert.ok(G.validCell(c)));});
+  const r=G.resolve(G.routeBaseline({...base,sectionCells:sc},J.resolve(sections,[])),[],ids);
+  assert.deepStrictEqual(G.summarize(r.assign),G.summarize(G.resolve(base,[],ids).assign));
+});
+
 const ok = results.filter(r => r[1]).length;
 results.forEach(r => console.log((r[1] ? 'PASS ' : 'FAIL ') + r[0] + (r[1] ? '' : '  → ' + r[2])));
 console.log('\n' + ok + '/' + results.length + ' 통과');

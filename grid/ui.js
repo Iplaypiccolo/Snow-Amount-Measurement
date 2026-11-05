@@ -28,8 +28,9 @@
     var jev = (window.JURIS && (window.JURIS.session || window.JURIS.committed)) || [];
     S.state = JC.resolve(window.JURIS.doc, jev);
     S.ids = new Set(S.state.order.filter(function (id) { return !JC.isPrivate(S.state.branches[id].hq); }));   // 민자는 예보 대상 아님
-    S.res = G.resolve(GR().baseline, events(), S.ids);
-    S.committedRes = G.resolve(GR().baseline, base(), S.ids);
+    S.routeBase = G.routeBaseline(GR().baseline, S.state);
+    S.res = G.resolve(S.routeBase, events(), S.ids);
+    S.committedRes = G.resolve(S.routeBase, base(), S.ids);
     S.sum = G.summarize(S.res.assign);
   }
   function cellBranches(k) { var set = S.res.assign.get(k); return set ? Array.from(set) : []; }
@@ -70,7 +71,7 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(S.map);
     S.lines = L.layerGroup().addTo(S.map);
     window.JURIS.doc.sections.forEach(function (sec) {
-      L.polyline(sec.coords.map(function (c) { return [c[1], c[0]]; }), { weight: 2, opacity: 0.75, interactive: false, color: colorOf(S.state.owner[sec.id]) }).addTo(S.lines);
+      L.polyline(sec.coords.map(function (c) { return [c[1], c[0]]; }), { sectionId:sec.id, weight: 2, opacity: 0.75, interactive: false, color: colorOf(S.state.owner[sec.id]) }).addTo(S.lines);
     });
     S.res.cells.forEach(rectFor);
     bindBox();
@@ -97,6 +98,7 @@
     return st;
   }
   function restyle() {
+    if(S.lines)S.lines.eachLayer(function(line){line.setStyle({color:colorOf(S.state.owner[line.options.sectionId])});});
     S.res.cells.forEach(function (k) { if (!S.rects[k]) rectFor(k); });
     Object.keys(S.rects).forEach(function (k) {
       var r = S.rects[k], isRing = !cellBranches(k).length && !S.res.cells.has(k);
@@ -270,7 +272,7 @@
     });
   }
   function preview() {
-    var im = G.impact(GR().baseline, S.ids, base(), events());
+    var im = G.impact(S.routeBase, S.ids, base(), events());
     var rows = im.branches.map(function (b) { return '<tr><td>' + esc(branchName(b.id)) + '</td><td>' + b.before + ' → ' + b.after + '칸</td></tr>'; }).join('') || '<tr><td colspan="2">바뀌는 기관이 없습니다.</td></tr>';
     modal('<h3>변경 미리보기</h3><div class="jr-tablewrap"><table class="jr-table"><thead><tr><th>기관</th><th>편입 격자 수</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       '<table class="jr-table" style="margin-top:10px"><tbody><tr><th>호출 대상 격자(합집합)</th><td>' + im.union[0] + ' → <b>' + im.union[1] + '칸</b></td></tr>' +
