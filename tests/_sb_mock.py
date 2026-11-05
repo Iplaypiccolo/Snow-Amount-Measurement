@@ -284,9 +284,14 @@ class Mock:
                 if not c: return send(400, {"message": "cell"})
                 start = dt.datetime.fromisoformat(self.fc_end.replace("Z", "+00:00"))
                 bins = []
+                a = start
                 for i in range(8):
-                    a = start + dt.timedelta(hours=i*3); b = a + dt.timedelta(hours=2)
-                    bins.append({"first_at": a.isoformat(), "last_at": b.isoformat(), "hours": 2 if i==0 else 3, "expected_hours": 3, "partial": i==0, "snow": 3 if i<5 else None, "snow_hi": 4 if i<5 else None, "pcp": 6 if i<5 else None, "pcp_hi": 6 if i<5 else None, "tmin": -2, "pop": 80})
+                    # Match the real RPC's end-aligned KST00/03/06 bins, including a short first bin.
+                    b = dt.datetime.fromtimestamp(((int(a.timestamp())-3600)//10800)*10800+10800, a.tzinfo)
+                    expected = int((b-a).total_seconds()/3600)+1
+                    hours = expected-1 if i==0 and expected>1 else expected
+                    bins.append({"first_at": a.isoformat(), "last_at": b.isoformat(), "hours": hours, "expected_hours": expected, "partial": hours<3, "snow": 3 if i<5 else None, "snow_hi": 4 if i<5 else None, "pcp": 6 if i<5 else None, "pcp_hi": 6 if i<5 else None, "tmin": -2, "pop": 80})
+                    a = b + dt.timedelta(hours=1)
                 return send(200, {"status":"ok", "upper":{"series":c[7], "start_at":self.fc_start,"end_at":self.fc_end}, "tail":{"bins":bins}})
             if tbl == "forecast_grid" and "/rpc/" in path:
                 if not self.usable(u): return send(401, {"message": "login"})
