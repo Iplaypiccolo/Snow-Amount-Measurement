@@ -28,6 +28,7 @@ SUITES = [
     ('예상 적설 받기 함수', 'tests/test_collect_forecast.mjs', 'node'),
     ('일별 예보 API 안전 점검', 'tests/test_daily_probe.mjs', 'node'),
     ('중기 예보 수집·완전성 검사', 'tests/test_collect_midterm.mjs', 'node'),
+    ('일별 예보 대표지점 연결', 'tests/test_daily_regions.py', 'py'),
     ('적설 자동 수집 함수', 'tests/test_collect_snow.mjs', 'node'),
     ('적설 요약본 → 화면 계산', 'tests/test_snow_snapshot.js', 'node'),
     ('적설 요약본 시즌별 받기', 'tests/test_snow_split.js', 'node'),
