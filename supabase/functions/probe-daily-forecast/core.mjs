@@ -1,9 +1,11 @@
 // 일별 예보 준비용 읽기 전용 점검. 기존 수집 토큰만 허용하며 DB에는 쓰지 않는다.
 // 임의 URL/인증키/과거기간은 받지 않는다. zones 모드의구역코드/페이지는검증후허용한다.
-import { gridStats } from '../collect-forecast/core.mjs';
+import { gridStats, pickCells } from '../collect-forecast/core.mjs';
 
 const BASE = 'https://apihub.kma.go.kr/api/typ01/';
-const KINDS = ['regions', 'land', 'temperature', 'SKY', 'TMN', 'TMX', 'zones'];
+const KINDS = ['regions', 'land', 'temperature', 'SKY', 'TMN', 'TMX', 'zones', 'shortland', 'shortland2'];
+const SAMPLE_CELLS = [[60,127],[89,130],[56,67],[80,83],[65,72]];
+const SAMPLE_REGIONS = new Set(['11B10101','11D20201','21F20802','11H20503','11F20405','11F20603']);
 const reply = (status, body) => new Response(JSON.stringify(body), {
   status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
 });
@@ -20,6 +22,10 @@ export function issue(now, mid = true) {
 
 export function requestFor(kind, now, query = {}) {
   if (!KINDS.includes(kind)) return null;
+  if (kind === 'shortland' || kind === 'shortland2') return {
+    path: 'url/' + (kind === 'shortland' ? 'fct_afs_dl.php' : 'fct_afs_dl2.php'),
+    params: { reg: '', disp: '1', help: '1' }, // 두 발표시각 생략은 공식 명세의 최신 자료 조회.
+  };
   if (kind === 'zones') {
     const page = query.page ?? 1, regId = query.regId ?? '';
     if (!Number.isInteger(page) || page < 1 || page > 20 || typeof regId !== 'string' || (regId !== '' && !/^[0-9A-Z]{8}$/.test(regId))) return null;
@@ -91,12 +97,21 @@ export async function handle(req, deps) {
   } else if (['SKY', 'TMN', 'TMX'].includes(kind)) {
     out.stats = gridStats(text);
     out.ok = out.ok && out.stats?.ok === true;
+    if (out.ok) {
+      const vals = pickCells(text, SAMPLE_CELLS);
+      out.samples = SAMPLE_CELLS.map(([nx,ny],i) => ({ nx, ny, value: vals[i] > -90 ? vals[i] : null }));
+    }
     if (!out.ok) out.text = text.slice(0, 800);
   } else {
     out.text = text.slice(0, 80000);
     out.truncated = text.length > 80000;
     out.rows = text.split(/\r?\n/).filter(s => s.trim() && !s.trim().startsWith('#')).length;
     out.ok = out.ok && out.rows > 0 && !/<html|<error|API\s*key|인증키|ERROR_MESSAGE/i.test(text);
+    if (kind === 'shortland' || kind === 'shortland2') {
+      // 원본이 보호 한도를 넘어도 분석 표본은 원본 전체에서 고른다. 저장용 자료로 쓰지 않는다.
+      out.sampleRows = text.split(/\r?\n/).filter(s => SAMPLE_REGIONS.has(s.trim().split(/[,\s]+/,1)[0])).slice(0,60);
+      out.tail = text.slice(-300);
+    }
   }
   return reply(200, out);
 }

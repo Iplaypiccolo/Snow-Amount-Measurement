@@ -42,6 +42,30 @@ await test('좌표·상위구역·전체개수해석', async () => {const w=worl
 await test('구역단일객체도배열로해석', async()=>{const w=world({text:JSON.stringify({response:{header:{resultCode:'00'},body:{totalCount:1,items:{item:{regId:'11B00000',lat:0,lon:0}}}}})});const b=await(await handle(req({kind:'zones',regId:'11B00000'}),w.deps)).json();assert(b.ok);assert.equal(b.items[0].lat,null);});
 await test('구역API오류에서키가리기',async()=>{const w=world();w.text=JSON.stringify({response:{header:{resultCode:'30',resultMsg:w.key}}});const b=await(await handle(req({kind:'zones'}),w.deps)).json();assert.equal(b.ok,false);assert(!JSON.stringify(b).includes(w.key));});
 await test('구역API임의주소입력거부',async()=>{const w=world();assert.equal((await handle(req({kind:'zones',url:'https://evil.invalid'}),w.deps)).status,400);assert.equal(w.calls.length,0);});
+await test('단기 육상 두 형식은 공식 고정 URL·최신 발표만',()=>{
+  for(const [kind,path]of[['shortland','fct_afs_dl.php'],['shortland2','fct_afs_dl2.php']]){
+    const s=requestFor(kind,now);assert.equal(s.path,'url/'+path);assert.deepEqual(s.params,{reg:'',disp:'1',help:'1'});
+  }
+});
+await test('단기 육상 임의 구역·기간 입력 거부',async()=>{
+  const w=world();assert.equal((await handle(req({kind:'shortland',reg:'11B10101'}),w.deps)).status,400);
+  assert.equal((await handle(req({kind:'shortland2',tmfc1:'2013121106'}),w.deps)).status,400);assert.equal(w.calls.length,0);
+});
+await test('절단 뒤에 있는 단기 육상 표본도 전체에서 추출',async()=>{
+  const w=world({text:'# '+'x'.repeat(81000)+'\n11B10101,2026110617,2026110700,A02\n11D20201,2026110617,2026110700,A02\n11H20201,excluded\n#7777END'});
+  const b=await(await handle(req({kind:'shortland'}),w.deps)).json();assert(b.truncated);assert.equal(b.sampleRows.length,2);assert(b.sampleRows[1].startsWith('11D20201,'));assert(b.tail.endsWith('#7777END'));
+});
+await test('단기 육상 표본에도 키 반사 제거',async()=>{
+  const w=world();w.text='11B10101,'+w.key+'\n'+encodeURIComponent(w.key);
+  const b=await(await handle(req({kind:'shortland2'}),w.deps)).json();assert(!JSON.stringify(b).includes(w.key));assert(!b.tail.includes(encodeURIComponent(w.key)));
+});
+await test('단기 육상 표본 과다 출력 제한',async()=>{
+  const w=world({text:Array(100).fill('11B10101,value').join('\n')});const b=await(await handle(req({kind:'shortland'}),w.deps)).json();assert.equal(b.sampleRows.length,60);
+});
+await test('격자 표본에서0과결측구분',async()=>{
+  const values=Array(149*253).fill('1');values[(127-1)*149+60-1]='0';values[(130-1)*149+89-1]='-999';
+  const b=await(await handle(req({kind:'TMN'}),world({text:values.join(',')}).deps)).json();assert.equal(b.samples[0].value,0);assert.equal(b.samples[1].value,null);assert.equal(b.samples.length,5);
+});
 for (const [n, ok, e] of results) console.log(`${ok ? 'PASS' : 'FAIL'} ${n}${e ? ': ' + e : ''}`);
 const passed = results.filter(r => r[1]).length;
 console.log(`${passed}/${results.length} 통과`);

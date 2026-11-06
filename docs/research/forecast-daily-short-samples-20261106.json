@@ -1,0 +1,119 @@
+{
+  "source": "동일5km 격자 중심 좌표의 날씨누리 일별 표와 KMA TMN/TMX 공식 격자 자료 비교",
+  "note": "2026-11-06 20시 발표, 내일 2026-11-07 표본10개. 전체 날짜/전국 격자 동일성을 검증한 것은 아님.",
+  "issues": [
+    [
+      "시간별예보 : 11.06.(금) 20:00",
+      "중기예보 : 11.06.(금) 18:00"
+    ],
+    [
+      "시간별예보 : 11.06.(금) 20:00",
+      "중기예보 : 11.06.(금) 18:00"
+    ],
+    [
+      "시간별예보 : 11.06.(금) 20:00",
+      "중기예보 : 11.06.(금) 18:00"
+    ],
+    [
+      "시간별예보 : 11.06.(금) 20:00",
+      "중기예보 : 11.06.(금) 18:00"
+    ],
+    [
+      "시간별예보 : 11.06.(금) 20:00",
+      "중기예보 : 11.06.(금) 18:00"
+    ]
+  ],
+  "checks": [
+    {
+      "nx": 60,
+      "ny": 127,
+      "kind": "TMN",
+      "date": "2026-11-07",
+      "api_value": -1,
+      "kma_value": -1,
+      "matches": true
+    },
+    {
+      "nx": 60,
+      "ny": 127,
+      "kind": "TMX",
+      "date": "2026-11-07",
+      "api_value": 9,
+      "kma_value": 9,
+      "matches": true
+    },
+    {
+      "nx": 89,
+      "ny": 130,
+      "kind": "TMN",
+      "date": "2026-11-07",
+      "api_value": -5,
+      "kma_value": -5,
+      "matches": true
+    },
+    {
+      "nx": 89,
+      "ny": 130,
+      "kind": "TMX",
+      "date": "2026-11-07",
+      "api_value": 5,
+      "kma_value": 5,
+      "matches": true
+    },
+    {
+      "nx": 56,
+      "ny": 67,
+      "kind": "TMN",
+      "date": "2026-11-07",
+      "api_value": 2,
+      "kma_value": 2,
+      "matches": true
+    },
+    {
+      "nx": 56,
+      "ny": 67,
+      "kind": "TMX",
+      "date": "2026-11-07",
+      "api_value": 12,
+      "kma_value": 12,
+      "matches": true
+    },
+    {
+      "nx": 80,
+      "ny": 83,
+      "kind": "TMN",
+      "date": "2026-11-07",
+      "api_value": 0,
+      "kma_value": 0,
+      "matches": true
+    },
+    {
+      "nx": 80,
+      "ny": 83,
+      "kind": "TMX",
+      "date": "2026-11-07",
+      "api_value": 12,
+      "kma_value": 12,
+      "matches": true
+    },
+    {
+      "nx": 65,
+      "ny": 72,
+      "kind": "TMN",
+      "date": "2026-11-07",
+      "api_value": 3,
+      "kma_value": 3,
+      "matches": true
+    },
+    {
+      "nx": 65,
+      "ny": 72,
+      "kind": "TMX",
+      "date": "2026-11-07",
+      "api_value": 11,
+      "kma_value": 11,
+      "matches": true
+    }
+  ],
+  "all_match": true
+}
