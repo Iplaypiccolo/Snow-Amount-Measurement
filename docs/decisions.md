@@ -696,3 +696,10 @@
 - API6종 정상,3개 지점 중기54항목 일치. 저장 SQL은docs/sql/forecast_midterm_cache_74.review.sql에 검토용으로 보존하며 **운영 미적용·사용자 승인 대기**. 화면과 정기 수집은 아직 구현하지 않았다. docs/forecast-daily-plan.md 참고.
 
 — ✍ Codex 작성
+
+
+## 중기 자료 저장 SQL 승인·적용 (2026-11-06)
+
+사용자가 “적용해”로 검토 SQL74 적용을 승인했다. 원문 SHA-256을 확인하고 Supabase snow-support에 `20261106080055_forecast_midterm_cache_74`로 적용했다. 새 비공개 캐시(최대3행)와 서버 전용 저장 함수만 추가했다. 실제 저장·입력 검사·권한 시험 후 전부 롤백하여 시험 자료0행. 기존 예보 함수·정책·cron 불변. 자동 수집·격자 연결·일별 화면은 아직 다음 단계다.
+
+— ✍ Codex 작성
