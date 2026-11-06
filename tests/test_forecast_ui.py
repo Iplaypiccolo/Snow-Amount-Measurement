@@ -463,7 +463,11 @@ def t_int_and_range(b):
 TESTS += [t_int_and_range, t_blend_no_toggle, t_pin_move_resize, t_phone_fit, t_eq_round_bar, t_eq_round_no_edit, t_first_page_equip, t_first_page_equip_first_forecast]
 
 def t_tail_separate(b):
-    p,m=open_page(b)
+    # 22시대 동적 자료에는 첫 칸23~24만 있고22~24가 없을 수 있다.
+    # 자정 표기를 검증하는 이 시험의 예보창만 고정한다.
+    m=SBM.Mock();m.fc_start='2026-11-06T10:00:00+09:00';m.fc_end='2026-11-07T10:00:00+09:00'
+    for row in m.branch_forecast:row['detail'].update(start_at=m.fc_start,end_at=m.fc_end)
+    p,m=open_page(b,m)
     d=m.fc_cells[0][2][0]
     J(p, f"(() => {{ SSOpenForecast('{d}'); return null }})()")
     p.locator(".fc-detail tbody tr").first.click()

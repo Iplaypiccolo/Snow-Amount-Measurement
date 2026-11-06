@@ -1,0 +1,207 @@
+{
+  "notes": "20시 발표 공식 TMN/TMX의 실제 저장과 로그인 계정 문맥 조회. 11/7의4곳8개 값은 이전 같은 발표 날씨누리 표본과 일치. 전국/모든 날짜의 날씨누리 일치 검증은 아님.",
+  "initial": {
+    "ok": true,
+    "sky": false,
+    "saved": 8,
+    "empty": 0,
+    "done": true,
+    "waiting": false,
+    "issued_at": "2026-11-06T11:00:00+00:00",
+    "remaining": 0,
+    "usage": {
+      "calls": 8,
+      "bytes": 2730376,
+      "retries": 0,
+      "saved": true
+    }
+  },
+  "repeat": {
+    "ok": true,
+    "sky": false,
+    "saved": 0,
+    "empty": 0,
+    "done": true,
+    "waiting": false,
+    "issued_at": "2026-11-06T11:00:00+00:00",
+    "remaining": 0,
+    "usage": {
+      "calls": 0,
+      "bytes": 0,
+      "retries": 0,
+      "saved": true
+    }
+  },
+  "missing_cells": [
+    [
+      103,
+      99
+    ],
+    [
+      103,
+      100
+    ]
+  ],
+  "samples": [
+    {
+      "nx": 89,
+      "ny": 130,
+      "result": {
+        "nx": 89,
+        "ny": 130,
+        "sky": [],
+        "status": "ok",
+        "temperatures": [
+          {
+            "date": "2026-11-07",
+            "tmax": 5,
+            "tmin": -5,
+            "tmax_issued_at": "2026-11-06T11:00:00+00:00",
+            "tmin_issued_at": "2026-11-06T11:00:00+00:00"
+          },
+          {
+            "date": "2026-11-08",
+            "tmax": 6,
+            "tmin": -3,
+            "tmax_issued_at": "2026-11-06T11:00:00+00:00",
+            "tmin_issued_at": "2026-11-06T11:00:00+00:00"
+          },
+          {
+            "date": "2026-11-09",
+            "tmax": 7,
+            "tmin": -1,
+            "tmax_issued_at": "2026-11-06T11:00:00+00:00",
+            "tmin_issued_at": "2026-11-06T11:00:00+00:00"
+          },
+          {
+            "date": "2026-11-10",
+            "tmax": 8,
+            "tmin": -3,
+            "tmax_issued_at": "2026-11-06T11:00:00+00:00",
+            "tmin_issued_at": "2026-11-06T11:00:00+00:00"
+          }
+        ]
+      }
+    },
+    {
+      "nx": 56,
+      "ny": 67,
+      "result": {
+        "nx": 56,
+        "ny": 67,
+        "sky": [],
+        "status": "ok",
+        "temperatures": [
+          {
+            "date": "2026-11-07",
+            "tmax": 12,
+            "tmin": 2,
+            "tmax_issued_at": "2026-11-06T11:00:00+00:00",
+            "tmin_issued_at": "2026-11-06T11:00:00+00:00"
+          },
+          {
+            "date": "2026-11-08",
+            "tmax": 14,
+            "tmin": 3,
+            "tmax_issued_at": "2026-11-06T11:00:00+00:00",
+            "tmin_issued_at": "2026-11-06T11:00:00+00:00"
+          },
+          {
+            "date": "2026-11-09",
+            "tmax": 12,
+            "tmin": 8,
+            "tmax_issued_at": "2026-11-06T11:00:00+00:00",
+            "tmin_issued_at": "2026-11-06T11:00:00+00:00"
+          },
+          {
+            "date": "2026-11-10",
+            "tmax": 13,
+            "tmin": 1,
+            "tmax_issued_at": "2026-11-06T11:00:00+00:00",
+            "tmin_issued_at": "2026-11-06T11:00:00+00:00"
+          }
+        ]
+      }
+    },
+    {
+      "nx": 80,
+      "ny": 83,
+      "result": {
+        "nx": 80,
+        "ny": 83,
+        "sky": [],
+        "status": "ok",
+        "temperatures": [
+          {
+            "date": "2026-11-07",
+            "tmax": 12,
+            "tmin": 0,
+            "tmax_issued_at": "2026-11-06T11:00:00+00:00",
+            "tmin_issued_at": "2026-11-06T11:00:00+00:00"
+          },
+          {
+            "date": "2026-11-08",
+            "tmax": 12,
+            "tmin": 1,
+            "tmax_issued_at": "2026-11-06T11:00:00+00:00",
+            "tmin_issued_at": "2026-11-06T11:00:00+00:00"
+          },
+          {
+            "date": "2026-11-09",
+            "tmax": 14,
+            "tmin": 6,
+            "tmax_issued_at": "2026-11-06T11:00:00+00:00",
+            "tmin_issued_at": "2026-11-06T11:00:00+00:00"
+          },
+          {
+            "date": "2026-11-10",
+            "tmax": 14,
+            "tmin": -1,
+            "tmax_issued_at": "2026-11-06T11:00:00+00:00",
+            "tmin_issued_at": "2026-11-06T11:00:00+00:00"
+          }
+        ]
+      }
+    },
+    {
+      "nx": 65,
+      "ny": 72,
+      "result": {
+        "nx": 65,
+        "ny": 72,
+        "sky": [],
+        "status": "ok",
+        "temperatures": [
+          {
+            "date": "2026-11-07",
+            "tmax": 11,
+            "tmin": 3,
+            "tmax_issued_at": "2026-11-06T11:00:00+00:00",
+            "tmin_issued_at": "2026-11-06T11:00:00+00:00"
+          },
+          {
+            "date": "2026-11-08",
+            "tmax": 13,
+            "tmin": 2,
+            "tmax_issued_at": "2026-11-06T11:00:00+00:00",
+            "tmin_issued_at": "2026-11-06T11:00:00+00:00"
+          },
+          {
+            "date": "2026-11-09",
+            "tmax": 12,
+            "tmin": 7,
+            "tmax_issued_at": "2026-11-06T11:00:00+00:00",
+            "tmin_issued_at": "2026-11-06T11:00:00+00:00"
+          },
+          {
+            "date": "2026-11-10",
+            "tmax": 14,
+            "tmin": 1,
+            "tmax_issued_at": "2026-11-06T11:00:00+00:00",
+            "tmin_issued_at": "2026-11-06T11:00:00+00:00"
+          }
+        ]
+      }
+    }
+  ]
+}
