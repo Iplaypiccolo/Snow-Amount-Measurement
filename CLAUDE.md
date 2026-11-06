@@ -90,3 +90,6 @@ python tools/run_all_tests.py            # 전체 시험 (약 5분, 병렬). --f
 - 첫 화면·관리 콘솔에 CSP 가 있어 화면 시험의 `wait_for_function(문자열)` 이 막힌다 → 첫 화면 시험 페이지는 `bypass_csp=True`, CSP 자체는 `t_csp_blocks_injected_script` 가 확인.
 - 일회용 시작 토큰을 settings 에 넣는 일은 Claude Code 안전 장치가 막는다 → 서버 함수 호출은 관리자 로그인(관리 콘솔)으로.
 - 화면 시험은 가짜 서버를 쓴다. **실제 서버와 사이트에서는 아직 확인하지 못한 것이 많다**(`docs/handoff.md` 의 "확인 필요" 목록).
+
+
+- 일별 예보 준비(2026-11-06): PC1시간/3시간/일별 독립3창(일별은3시간 아래),모바일1창3탭. 실제 `probe-daily-forecast` v2로 기존키의중기3종·SKY/TMN/TMX200확인,3개지점중기54항목일치. 전체481/481. 새캐시SQL74는docs/sql/forecast_midterm_cache_74.review.sql에검토용보존·로컬23/23, **운영미적용·사용자승인대기**. UI·정기수집미구현. 기온점검응답절단주의·공식구역연결未검증. 상세docs/forecast-daily-plan.md.
