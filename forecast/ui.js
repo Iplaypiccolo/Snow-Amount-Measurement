@@ -1,5 +1,5 @@
 /* ============================================================
-   forecast/ui.js — "기관별 24시간 예보" 탭
+   forecast/ui.js — "기관별 예보" 탭
    - 기상청 단기예보(5km 격자)의 24시간 예상 적설(cm)·강수량(mm) 합과 최저기온(℃, 그 시각)을 지사 관할 노선도 위에 보여 줍니다.
      값은 서버가 매시 정각에 "다음 정시부터 24시간"으로 다시 계산한 격자별 값(forecast_cells)입니다(예보 자료는 3시간마다 새로 받음).
    - 단계: 전체 = 고속도로 노선만(본부 색) / 본부 = 그 본부 지사들의 격자(지사 색) / 지사 = 그 지사 격자마다 적설·강수·최저기온,
@@ -20,7 +20,8 @@
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function p2(n) { return String(n).padStart(2, '0'); }
-  function fmtHour(iso) { var d = new Date(iso); return isNaN(d) ? '-' : (d.getMonth() + 1) + '/' + d.getDate() + ' ' + p2(d.getHours()) + '시'; }
+  function kstDateLabel(iso) { var d=new Date(Date.parse(iso)+9*3600e3); return isNaN(d)?'-':(d.getUTCMonth()+1)+'/'+d.getUTCDate()+'('+ '일월화수목금토'[d.getUTCDay()]+')'; }
+  function fmtHour(iso) { var d = new Date(Date.parse(iso)+9*3600e3); return isNaN(d) ? '-' : kstDateLabel(iso) + ' ' + p2(d.getUTCHours()) + '시'; }
   function num(v) { return v == null ? '-' : String(Math.round(v)); }                             // 적설·강수(2026-11-04): 기상청 격자 값은 정수로만 옴 → 소수점 없이
   // 범위(마이그레이션 62): '1mm·1cm 미만' 시각마다 위쪽 +1 → '0~3', 한 시각뿐이면 '~1'. hi 가 없으면(예전 자료) 아래쪽만
   function rng(lo, hi) { if (lo == null) return '-'; var a = Math.round(lo), b = hi == null ? a : Math.round(hi); return b > a ? (a === 0 && b === 1 ? '~1' : a + '~' + b) : String(a); }
@@ -68,7 +69,7 @@
     $('view-forecast').innerHTML =
       '<div class="jr-wrap">' +
       '<div class="jr-side">' +
-        '<div class="jr-head"><b>기관별 24시간 예보</b></div>' +
+        '<div class="jr-head"><b>기관별 예보</b></div>' +
         '<div id="fc-meta" class="fc-meta"></div>' +
         '<div id="fc-tree" class="jr-tree"></div>' +
       '</div>' +
@@ -115,7 +116,7 @@
   function cellNum(v, tc) { if (v == null) return '<td class="z">-</td>'; if (tc) return '<td class="v tr">' + rng(v, v + tc) + '</td>'; return v === 0 ? '<td class="z"></td>' : '<td class="v">' + num(v) + '</td>'; }      // tc = 그 칸의 '~1' 시각 수
   function cellTmp(v) { return v == null ? '<td class="z">-</td>' : '<td class="v' + (v < 0 ? ' neg' : '') + '">' + tmp(v) + '</td>'; }
   function forecastHeader(slots, hourly) {
-    function date(x){var d=new Date(Date.parse(x)+9*3600e3);return (d.getUTCMonth()+1)+'/'+d.getUTCDate();}
+    function date(x){return kstDateLabel(x);}
     function hour(x){return p2(new Date(Date.parse(x)+9*3600e3).getUTCHours());}
     var days=[],times='';
     slots.forEach(function(b){
@@ -133,7 +134,7 @@
     for (var i = from; i < to; i += step) {
       var d = hourAt(start, i), part = function (k) { return (sr[k] || []).slice(i, Math.min(i + step, to)); };
       var prev = i > 0 ? hourAt(start, i - step) : null, newDay = d && (i === 0 || (prev && prev.getDate() !== d.getDate()));   // 날짜는 맨 처음 칸과 날짜가 바뀌는 칸에만
-      head += '<th' + (i < vn ? ' class="vs"' : '') + '>' + (d ? p2(d.getHours()) : '') + (newDay ? '<small>' + (d.getMonth() + 1) + '/' + d.getDate() + '</small>' : '') + '</th>';
+      head += '<th' + (i < vn ? ' class="vs"' : '') + '>' + (d ? p2(d.getHours()) : '') + (newDay ? '<small>' + kstDateLabel(d.toISOString()) + '</small>' : '') + '</th>';
       rs += mark(cellNum(sumOf(part('s')), cntOf(part('sq'))), i); rp += mark(cellNum(sumOf(part('p')), cntOf(part('pq'))), i); rt += mark(cellTmp(minOf(part('t'))), i); if (hasPop) ro += mark(cellPop(maxOf(part('r'))), i);
     }
     var u = step === 1 ? '' : (step + '시간 '), slots=[];
@@ -300,7 +301,7 @@
     if(S.tailData && S.tailData.status==='ok') { sr=S.tailData.upper.series; start=S.tailData.upper.start_at; }
     renderTail();
     var k = S.pin.split(','), g = S.grid[S.hq], c = g && g.cells ? g.cells.filter(function (x) { return x[0] === +k[0] && x[1] === +k[1]; })[0] : null;
-    box.innerHTML = '<div class="fc-pin-in"><div class="fc-pin-head"><b>24시간 예보 · ' + esc(cellName(+k[0], +k[1])) + '</b>' + cellNo(+k[0], +k[1]) + ' <span class="fc-pin-br">' + (c ? esc((c[2] || []).map(bname).join(', ')) : '') + '</span>' +
+    box.innerHTML = '<div class="fc-pin-in"><div class="fc-pin-head"><b>1시간 예보 · ' + esc(cellName(+k[0], +k[1])) + '</b>' + cellNo(+k[0], +k[1]) + ' <span class="fc-pin-br">' + (c ? esc((c[2] || []).map(bname).join(', ')) : '') + '</span>' +
       '<button type="button" class="fc-pin-x" aria-label="닫기">×</button></div>' + (S.pinWhy ? '<div class="fc-pin-why">' + esc(S.pinWhy) + '</div>' : '') + trendBox(sr, start, true) +
       '</div>' +
       '<span class="fc-pin-grip l" data-grip="l" aria-hidden="true"></span><span class="fc-pin-grip r" data-grip="r" aria-hidden="true"></span>';

@@ -1,5 +1,5 @@
 """
-'기관별 24시간 예보' 탭 화면 자동 테스트 — 브라우저로 직접 눌러 봅니다(가짜 서버 tests/_sb_mock.py).
+'기관별 예보' 탭 화면 자동 테스트 — 브라우저로 직접 눌러 봅니다(가짜 서버 tests/_sb_mock.py).
 실행 (저장소 맨 위 폴더에서):  pip install playwright && playwright install chromium  →  python tests/test_forecast_ui.py
 지도 라이브러리(Leaflet)를 인터넷에서 받습니다. 막힌 곳이면 환경변수 LEAFLET_DIR 를 지정하세요(tests/test_jurisdiction_ui.py 와 같음).
 """
@@ -88,7 +88,7 @@ def t_open_from_equipment(b):
     p, m = open_page(b)
     d = bid(p, "춘천")
     J(p, f"(() => {{ SSOpenForecast('{d}'); return null }})()"); p.wait_for_timeout(1200)
-    check(p.locator(".tab-btn[data-tab=forecast]").get_attribute("class").find("active") >= 0 and J(p, f"{S}.focus") == d, "강설량 측정 → 기관별 24시간 예보 → 춘천")
+    check(p.locator(".tab-btn[data-tab=forecast]").get_attribute("class").find("active") >= 0 and J(p, f"{S}.focus") == d, "강설량 측정 → 기관별 예보 → 춘천")
     check(labels(p) == len([c for c in m.fc_cells if d in c[2]]), "그 지사 격자 값이 보임")
     p2, _ = open_page(b, hash=f"#fc={d}"); p2.wait_for_timeout(1500)
     check(J(p2, f"{S}.focus") == d and p2.locator("#view-forecast").is_visible(), "#fc=지사번호 로 열어도 그 지사")
@@ -100,11 +100,11 @@ def t_branch_user_can_view(b):
     check(p.locator("#fc-tree [data-fchq]").count() == 9, "지사 계정도 목록이 보임")
 
 def t_first_tab_and_order(b):
-    """강설량 측정 탭 순서(2026-10-05): 기관별 24시간 예보(처음 열림) → 연도별 신적설 → 관측소 지도 → 관할 → 데이터 출처 → 예보 격자 편입(권한)"""
+    """강설량 측정 탭 순서(2026-10-05): 기관별 예보(처음 열림) → 연도별 신적설 → 관측소 지도 → 관할 → 데이터 출처 → 예보 격자 편입(권한)"""
     p, m = open_page(b); p.wait_for_timeout(800)
     tabs = [t for t in p.locator(".tab-btn").all_inner_texts()]
-    check(tabs == ["기관별 24시간 예보", "연도별 신적설", "관측소 지도", "기관별 관할 고속도로", "데이터 출처", "예보 격자 편입"], tabs)
-    check("active" in p.locator(".tab-btn[data-tab=forecast]").get_attribute("class") and p.locator("#view-forecast").is_visible() and not p.locator("#view-snowtable").is_visible(), "처음 열면 기관별 24시간 예보")
+    check(tabs == ["기관별 예보", "연도별 신적설", "관측소 지도", "기관별 관할 고속도로", "데이터 출처", "예보 격자 편입"], tabs)
+    check("active" in p.locator(".tab-btn[data-tab=forecast]").get_attribute("class") and p.locator("#view-forecast").is_visible() and not p.locator("#view-snowtable").is_visible(), "처음 열면 기관별 예보")
     check(J(p, f"{S}.lines.getLayers().length") > 900, "예보 지도가 그려짐")
     p.click(".tab-btn[data-tab=snowtable]"); p.wait_for_timeout(300)
     check(p.locator("#snowTableWrap table").is_visible() and not p.locator("#view-forecast").is_visible(), "연도별 신적설로 바꾸면 표")
@@ -412,7 +412,7 @@ def t_first_page_equip(b):
         frame.wait_for_selector("#matrix tbody tr", timeout=20000); check(p.locator(".eq-btn[data-eqtab=move]").get_attribute("class").count("active") == 1, "첫 탭 = 이동 현황")
         check(not m.fc_calls and J(p, f"{S}.map === null"), "강설량 측정 자료·지도는 아직 안 만듦")
         p.click(".page-btn[data-page=snow]"); p.wait_for_timeout(1200)
-        check(p.locator("#view-forecast").is_visible() and "active" in p.locator(".tab-btn[data-tab=forecast]").get_attribute("class"), "강설량 측정 = 기관별 24시간 예보부터")
+        check(p.locator("#view-forecast").is_visible() and "active" in p.locator(".tab-btn[data-tab=forecast]").get_attribute("class"), "강설량 측정 = 기관별 예보부터")
         check(J(p, f"{S}.map.getSize().x") > 300 and J(p, f"{S}.lines.getLayers().length") > 900 and p.locator("#fc-tree [data-fchq]").count() == 9, "지도·목록이 제대로 그려짐")
         p.click(".tab-btn[data-tab=map]"); p.wait_for_timeout(900)
         size = J(p, "(() => { const m = document.querySelector('#view-map .leaflet-container') || document.querySelector('#map'); return m ? m.getBoundingClientRect().width : 0; })()")
@@ -636,6 +636,23 @@ def t_tail_code_cell_arrives(b):
     check('3시간 누적량이 아닙니다' in rows.nth(0).locator('td').last.get_attribute('title'),'시간당 강도 의미 안내')
 
 TESTS += [t_tail_code_cell_arrives]
+
+def t_weekday_and_hourly_title(b):
+    m=SBM.Mock();m.fc_start='2026-11-06T23:00:00+09:00';m.fc_end='2026-11-07T23:00:00+09:00'
+    for row in m.branch_forecast:row['detail'].update(start_at=m.fc_start,end_at=m.fc_end)
+    p,m=open_page(b,m)
+    J(p,f"(() => {{SSOpenForecast('{m.fc_cells[0][2][0]}');return null}})()")
+    p.wait_for_function("document.querySelector('#fc-tail table')")
+    check(p.locator('.tab-btn[data-tab=forecast]').inner_text()=='기관별 예보','상단 메뉴 이름')
+    check(p.locator('#fc-pin .fc-pin-head b').inner_text().startswith('1시간 예보 ·'),'창 제목은1시간 예보')
+    days=p.locator('#fc-pin thead tr').first.inner_text()
+    check('11/6(금)' in days and '11/7(토)' in days,'한국 날짜의 요일과 자정 경계')
+    for root in ['#fc-pin','#fc-tail']:
+        labels=p.locator(root+' thead tr').first.locator('th:not(.lb)').all_inner_texts()
+        check(all(any('('+d+')' in label for d in '일월화수목금토') for label in labels),'두 표의 날짜 뒤 요일')
+    check('(금)' in p.locator('#fc-meta').inner_text() and '(토)' in p.locator('#fc-meta').inner_text(),'예보 구간 요일')
+
+TESTS += [t_weekday_and_hourly_title]
 
 if __name__ == "__main__":
     only = sys.argv[1:]

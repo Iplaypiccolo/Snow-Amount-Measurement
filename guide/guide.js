@@ -159,7 +159,7 @@
       { center: true, kicker: 'WELCOME', title: '제설 업무 시스템', html:
         '<div class="sg-who-card"><span class="sg-dot"></span><div><small>접속 계정</small><b>' + esc((me() || {}).display_name || '') + '</b><span class="sg-role">' + esc(ROLE[rk]) + '</span></div></div>' +
         '<div class="sg-two"><div class="sg-tile"><i class="cy"></i><b>강설량 측정</b><span>예보 · 신적설 · 관측소 · 관할</span></div><div class="sg-tile"><i class="vi"></i><b>장비 지원</b><span>요청 · 승인 · 배정 · 이동</span></div></div>' },
-      { tab: 'forecast', title: '기관별 24시간 예보', desc: '기관별 앞으로 24시간 예상 적설 · 강수 · 최저기온 확인' },
+      { tab: 'forecast', title: '기관별 예보', desc: '기관별 앞으로 24시간 예상 적설 · 강수 · 최저기온 확인' },
       E('forecast', '예보 구간', ['#fc-meta'], '다음 정시부터 24시간 (합 · 최저)', ['앞 6시간 = 초단기예보(10분마다) · 적설 항목이 없어 0', '나머지 = 단기예보']),
       E('forecast', '본부 목록', ['#fc-tree .fc-row'], '본부별 24시간 최대 적설 · 강수 · 확률 · 최저기온', ['본부 클릭 → 지사 목록']),
       E('forecast', '본부 펼치기', [upTo('#fc-tree .jr-hqpick.on', '.jr-hq')], '본부 클릭 → 지사 목록 · 지도에 그 본부 격자', [], { demo: fcHq }),
@@ -301,7 +301,7 @@
   }
   function tabBtn(page, name) { return doc.querySelector(page === 'equip' ? '.eq-btn[data-eqtab="' + name + '"]' : '.tab-btn[data-tab="' + name + '"]'); }
   function fdoc() { var f = $('equipFrame'); try { return f && f.getAttribute('src') && f.contentDocument && f.contentDocument.readyState !== 'loading' ? f.contentDocument : null; } catch (e) { return null; } }
-  var TABNAME = { forecast: '기관별 24시간 예보', snowtable: '연도별 신적설', map: '관측소 지도', jurisdiction: '기관별 관할 고속도로', sources: '데이터 출처', grid: '예보 격자 편입',
+  var TABNAME = { forecast: '기관별 예보', snowtable: '연도별 신적설', map: '관측소 지도', jurisdiction: '기관별 관할 고속도로', sources: '데이터 출처', grid: '예보 격자 편입',
     move: '이동 현황', branch: '지사별 요청·편성', fleet: '기관별 장비', alloc: '기관별 배치', gwteam: '강원본부 지원장비', log: '로그 기록' };
 
   // 단계의 칸 찾기 → { els, item }
