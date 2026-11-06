@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict');
-const {combine}=require('../forecast/series.js');
+const {combine,qualitative}=require('../forecast/series.js');
 const H=3600000;let n=0;
 function test(name,fn){fn();n++;console.log('PASS '+name);}
 function sample(h=13){const start=Date.parse('2026-11-05T00:00:00+09:00')+h*H;
@@ -19,10 +19,19 @@ test('24시간 경계의 같은3시간 칸은 합치고 중복하지 않음',()=
  const bs=combine(d),last=bs.at(-1);assert.equal(last.hours,3);assert.equal(last.pcp,10);assert.equal(last.tmin,-9);assert.equal(last.pop,80);
  assert.equal(bs.reduce((s,b)=>s+b.hours,0),26);
 });
-test('코드·혼합·양 결측인 먼 칸은 기온/확률이 있어도 제외',()=>{const d=sample(),t=Date.parse(d.upper.start_at)+24*H;
+test('코드·혼합·양 결측인 먼 칸도 기온/확률이 있으면 유지',()=>{const d=sample(),t=Date.parse(d.upper.start_at)+24*H;
  d.tail.bins=[0,1,2].map((i)=>({first_at:new Date(t+i*3*H).toISOString(),last_at:new Date(t+(i*3+2)*H).toISOString(),hours:3,snow:i===2?1:null,pcp:null,pop:90,tmin:4,code_hours:i===1?1:0}));
- assert.deepEqual(combine(d),combine({...d,tail:{bins:[]}}));
+ assert.equal(combine(d).length,combine({...d,tail:{bins:[]}}).length+3);
 });
+
+test('적설 정성 코드2는 많은 눈이며2cm 합계가 아님',()=>{const q=qualitative({amount_kind:'code',snow_code:2},'snow');assert.equal(q.text,'많은 눈');assert.ok(q.title.includes('시간당 1cm 이상'));});
+test('강수 정성 코드1·2·3의 강도 표현',()=>{assert.deepEqual([1,2,3].map(pcp_code=>qualitative({amount_kind:'code',pcp_code},'pcp').text),['약한 비','비','강한 비']);});
+test('정성0은 빈칸이고 미확인 코드는0으로 만들지 않음',()=>{assert.equal(qualitative({amount_kind:'code',snow_code:0},'snow').text,'');for(const snow_code of [null,9,-1,1.5])assert.equal(qualitative({amount_kind:'code',snow_code},'snow').text,'-');});
+test('혼합 구간은 양으로 합산하지 않고 정성 포함 표시',()=>{assert.equal(qualitative({amount_kind:'mixed'},'pcp').text,'정성 포함');assert.equal(qualitative({amount_kind:'numeric'},'pcp'),null);});
+test('먼 정성 한 칸이 도착하면 즉시 한 칸 추가·기온/확률 유지',()=>{const d=sample(13),before=combine(d).length,t=Date.parse(d.upper.start_at)+24*H;
+ d.tail.bins=[{first_at:new Date(t).toISOString(),last_at:new Date(t+2*H).toISOString(),hours:3,amount_kind:'code',snow:2,pcp:3,snow_code:2,pcp_code:3,tmin:-4,pop:90}];
+ const bs=combine(d);assert.equal(bs.length,before+1);assert.equal(bs.at(-1).snow,null);assert.equal(bs.at(-1).pcp,null);assert.equal(bs.at(-1).pop,90);assert.equal(qualitative(bs.at(-1),'snow').text,'많은 눈');});
+test('숫자와 코드가 같은 칸 경계에서 합쳐져도 합계로 만들지 않음',()=>{const d=sample(14),t=Date.parse(d.upper.start_at)+24*H;d.tail.bins=[{first_at:new Date(t).toISOString(),last_at:new Date(t+H).toISOString(),hours:2,amount_kind:'code',snow_code:2,pcp_code:3,tmin:-9,pop:80}];const b=combine(d).at(-1);assert.equal(b.amount_kind,'mixed');assert.equal(b.snow,null);assert.equal(b.pcp,null);assert.equal(b.tmin,-9);});
 test('정량0은 시간 칸 유지·미량 상한 유지',()=>{const d=sample();d.upper.series.s.fill(0);d.upper.series.p.fill(0);const bs=combine(d);assert.equal(bs.length,8);assert.equal(bs[0].pcp,0);assert.ok(bs[0].pcp_hi>0);});
 test('자정 칸은22~00 양쪽 날짜를 보존',()=>{const b=combine(sample(22))[0];assert.equal(b.hours,3);assert.notEqual(b.first_at.slice(0,10),new Date(Date.parse(b.last_at)+9*H).toISOString().slice(0,10));});
 test('빈 이후 자료여도 가까운24시간 유지·입력 불변',()=>{const d=sample(),before=JSON.stringify(d);assert.ok(combine(d).length);assert.equal(JSON.stringify(d),before);assert.deepEqual(combine({status:'stale'}),[]);});

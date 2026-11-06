@@ -489,7 +489,7 @@ def t_tail_separate(b):
     check(not clip,'3시간 칸 글자 안 잘림')
 
     amounts=p.locator('#fc-tail tbody tr').nth(0).locator('td').all_inner_texts()+p.locator('#fc-tail tbody tr').nth(1).locator('td').all_inner_texts()
-    check('-' not in amounts,'정량 없는 먼 칸 제외(영하 기온은 유지)')
+    check('-' not in amounts and '많은 눈' in amounts and '강한 비' in amounts,'먼 정성 칸도 강도 표현으로 유지(영하 기온 유지)')
     p.screenshot(path="../../outputs/72_desktop.png")
     p.locator(".fc-tail-x").click()
     check(not p.locator("#fc-tail").is_visible() and p.locator("#fc-pin").is_visible(), "이후 창만 닫기")
@@ -619,6 +619,23 @@ def t_tail_refresh_failure_keeps_data(b):
     check(state['calls']==3,'실패 후 다음 주기에 재시도')
 
 TESTS += [t_tail_progressive_refresh,t_tail_refresh_visibility,t_tail_refresh_failure_keeps_data]
+
+def t_tail_code_cell_arrives(b):
+    p,state,complete=tail_refresh_page(b)
+    state['data']['tail']['bins']=complete[:5]
+    p.clock.fast_forward(180000)
+    p.wait_for_function('ForecastUI._state().tailData.tail.bins.length===5')
+    before=p.locator('#fc-tail tbody tr').first.locator('td').count()
+    state['data']['tail']['bins']=complete[:6]
+    p.clock.fast_forward(180000)
+    p.wait_for_function(f"document.querySelectorAll('#fc-tail tbody tr:first-child td').length==={before+1}")
+    rows=p.locator('#fc-tail tbody tr')
+    check(rows.nth(0).locator('td').last.inner_text()=='보통 눈','먼 칸의 눈 강도 표현')
+    check(rows.nth(1).locator('td').last.inner_text()=='비','강수 코드2를2mm로 더하지 않음')
+    check(rows.nth(2).locator('td').last.inner_text()=='80' and rows.nth(3).locator('td').last.inner_text()=='-2','먼 칸 확률/기온 유지')
+    check('3시간 누적량이 아닙니다' in rows.nth(0).locator('td').last.get_attribute('title'),'시간당 강도 의미 안내')
+
+TESTS += [t_tail_code_cell_arrives]
 
 if __name__ == "__main__":
     only = sys.argv[1:]

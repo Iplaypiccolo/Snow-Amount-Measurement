@@ -213,12 +213,13 @@
   }
   function tailTables(data) {
     var bins=window.ForecastSeries.combine(data);
-    if(!bins.length)return '<p>표시할 정량 예보 자료가 없습니다.</p>';
+    if(!bins.length)return '<p>표시할 예보 자료가 없습니다.</p>';
     var html='<div class="fc-scroll" tabindex="0" aria-label="3시간 예보 가로 스크롤"><table class="fc-tt fc-three"><thead>'+forecastHeader(bins,false)+'</thead><tbody>';
     [['신적설 cm','snow','snow_hi'],['강수 mm','pcp','pcp_hi'],['확률 %','pop'],['최저 ℃','tmin']].forEach(function(row){
       html+='<tr><th class="lb">'+row[0]+'</th>'+bins.map(function(b){
-        var value=row[2]?(b[row[1]]===0&&b[row[2]]===0?'':rng(b[row[1]],b[row[2]])):tmp(b[row[1]]);
-        return '<td>'+esc(value)+'</td>';
+        var qual=row[2]?window.ForecastSeries.qualitative(b,row[1]):null;
+        var value=qual?qual.text:row[2]?(b[row[1]]===0&&b[row[2]]===0?'':rng(b[row[1]],b[row[2]])):tmp(b[row[1]]);
+        return '<td'+(qual?' title="'+esc(qual.title)+'"':'')+'>'+esc(value)+'</td>';
       }).join('')+'</tr>';
     });
     return html+'</tbody></table></div>';
