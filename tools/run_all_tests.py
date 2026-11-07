@@ -30,6 +30,8 @@ SUITES = [
     ('중기 예보 수집·완전성 검사', 'tests/test_collect_midterm.mjs', 'node'),
     ('일별 예보 대표지점 연결', 'tests/test_daily_regions.py', 'py'),
     ('일별 보강 수집·입력 검사', 'tests/test_collect_daily_aux.mjs', 'node'),
+    ('일별 지역대표 날씨 수집', 'tests/test_collect_daily_weather.mjs', 'node'),
+    ('일별 예보 표·원값 표시', 'tests/test_daily_view.js', 'node'),
     ('적설 자동 수집 함수', 'tests/test_collect_snow.mjs', 'node'),
     ('적설 요약본 → 화면 계산', 'tests/test_snow_snapshot.js', 'node'),
     ('적설 요약본 시즌별 받기', 'tests/test_snow_split.js', 'node'),

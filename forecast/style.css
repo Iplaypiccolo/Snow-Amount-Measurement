@@ -148,3 +148,35 @@ body.fc-pin-moving{user-select:none;}
 @media(max-width:760px){.fc-tail .fc-tt{font-size:10px;}}
 
 @media(min-width:761px){.fc-tail{left:auto;right:10px;bottom:auto;}}
+
+/* 日별은 기존 표와 같은 머리글/항목 색. 가로로 밀어 7일을 확인한다. */
+.fc-daily{position:absolute;right:10px;z-index:801;background:#fff;border:1px solid #33424f;border-radius:8px;padding:8px 10px;box-shadow:0 4px 14px #10243a2e;overflow:auto;box-sizing:border-box;max-width:calc(100% - 20px);}
+.fc-daily[hidden],.fc-mobile[hidden]{display:none;}
+.fc-daily-x{margin-left:auto;border:0;background:none;color:#fff;font-size:18px;cursor:pointer;}
+.fc-daily-table{border-collapse:collapse;text-align:center;border:2px solid #52677b;font-size:11px;table-layout:auto;width:max-content;min-width:100%;}
+.fc-daily-table th,.fc-daily-table td{border:1px solid #c9d3dc;padding:4px 5px;min-width:36px;vertical-align:middle;}
+.fc-daily-table thead th{background:#24405c;color:#fff;font-weight:700;}
+.fc-daily-table tbody th{background:#dce6ee;color:#213d52;min-width:58px;border-right:2px solid #70879a;}
+.fc-daily-table .fc-sat{color:#9ed8ff;}.fc-daily-table .fc-sun{color:#ffb8b8;}
+.fc-daily-table .fc-low{color:#087bc4;font-weight:700;}.fc-daily-table .fc-high{color:#c02024;font-weight:700;}
+.fc-weather-icon{display:block;font-size:25px;line-height:1.3;}
+.fc-weather-name{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;}
+.fc-daily-source{font-size:10px;color:#526171;line-height:1.5;margin-top:5px;white-space:normal;overflow-wrap:anywhere;}
+.fc-mobile-head{display:flex;align-items:center;gap:8px;background:#24405c;color:#fff;border-radius:5px;padding:6px;}
+.fc-mobile-head [role=tablist]{display:flex;flex:1;gap:4px;}
+.fc-mobile-head button{border:1px solid #7f97ac;border-radius:4px;padding:7px 12px;color:#fff;background:transparent;cursor:pointer;}
+.fc-mobile-head [aria-selected=true]{background:#fff;color:#24405c;font-weight:700;}
+.fc-mobile-head .fc-mobile-close{border:0;padding:1px 8px;font-size:24px;}
+@media(min-width:761px){.fc-mobile{display:none;}}
+@media(max-width:760px){
+  .fc-mobile{position:fixed;left:8px;right:8px;bottom:12px;max-height:65vh;overflow:auto;background:#fff;border:1px solid #33424f;border-radius:8px;padding:6px;box-shadow:0 4px 18px #10243a50;z-index:1200;box-sizing:border-box;}
+  .fc-mobile>.fc-pin,.fc-mobile>.fc-tail,.fc-mobile>.fc-daily{position:static;max-height:none!important;max-width:none;width:100%;padding:6px 2px;border:0;box-shadow:none;overflow:visible;box-sizing:border-box;}
+  .fc-mobile .fc-pin-in{width:auto;zoom:1!important;}
+  .fc-mobile .fc-pin-x,.fc-mobile .fc-tail-x,.fc-mobile .fc-daily-x{display:none;}
+  .fc-mobile .fc-pin-head{font-size:12px;padding:5px;}
+  .fc-mobile[data-active=hourly]>#fc-tail,.fc-mobile[data-active=hourly]>#fc-daily,
+  .fc-mobile[data-active=three]>#fc-pin,.fc-mobile[data-active=three]>#fc-daily,
+  .fc-mobile[data-active=daily]>#fc-pin,.fc-mobile[data-active=daily]>#fc-tail{display:none;}
+  #view-forecast .jr-mapbox:has(.fc-mobile:not([hidden])){min-height:420px;}
+  .fc-daily-table{font-size:11px;}.fc-weather-icon{font-size:24px;}
+}

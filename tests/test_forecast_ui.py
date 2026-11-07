@@ -330,12 +330,12 @@ def t_phone_fit(b):
     pin = box("#fc-pin"); check(p.locator("#fc-pin").is_visible() and pin[0] >= 0 and pin[1] <= 375 and pin[3] <= box("#view-forecast .jr-mapbox")[3], f"추이 표가 지도 안에: {pin}")
     p.locator(".fc-detail tbody tr").nth(1).click(); p.wait_for_timeout(400); fits("격자 누름")
     check(p.locator("#fc-pin").is_visible(), "격자를 누르면 표가 뜸")
-    p.locator(".fc-pin-x").click(); p.wait_for_timeout(200); check(not p.locator("#fc-pin").is_visible(), "닫기 버튼으로 닫힘")
+    p.locator(".fc-mobile-close").click(); p.wait_for_timeout(200); check(not p.locator("#fc-mobile").is_visible(), "공통 닫기 버튼으로 닫힘")
     # 모바일에는 옮기기·크기 조절 없음(컴퓨터에서 기억한 값이 있어도)
     p.evaluate("localStorage.setItem('ss_fc_pin', JSON.stringify({scale: 1.6, x: 500, y: 300}))"); p.reload(); p.wait_for_function("window.ForecastUI && ForecastUI._state().inited", timeout=60000)
     p.evaluate("document.querySelector('.tab-btn[data-tab=forecast]').click()"); p.wait_for_timeout(800)
     p.locator("#fc-tree [data-fchq='강원']").click(); p.wait_for_timeout(600); p.locator("#fc-tree [data-fcbr]").first.click(); p.wait_for_timeout(900)
-    pin = box("#fc-pin"); check(not p.locator("#fc-pin .fc-pin-grip.r").is_visible() and J(p, "document.querySelector('.fc-pin-in').style.zoom") == "" and pin[0] == 8 and pin[1] == 367, f"모바일: 크기 조절 없음, 화면 폭에 맞음 {pin}")
+    pin = box("#fc-pin"); mobile=box('#fc-mobile'); check(not p.locator("#fc-pin .fc-pin-grip.r").is_visible() and J(p, "document.querySelector('.fc-pin-in').style.zoom") == "" and mobile[0] == 8 and mobile[1] == 367 and pin[0]>=mobile[0] and pin[1]<=mobile[1], f"모바일: 크기 조절 없음, 공통 창 안 화면 폭에 맞음 {pin}")
     fits("모바일 기억값 무시")
 
 def t_eq_round_bar(b):
@@ -508,9 +508,11 @@ def t_tail_phone(b):
     J(p, f"(() => {{ SSOpenForecast('{d}'); return null }})()")
     p.locator(".fc-detail tbody tr").first.click()
     p.wait_for_function("document.querySelector('#fc-tail .fc-tt')")
-    a=p.locator('#fc-pin').bounding_box(); z=p.locator('#fc-tail').bounding_box()
-    check(a['x']>=0 and z['x']>=0 and a['x']+a['width']<=375 and z['x']+z['width']<=375, '휴대폰 폭 안 두 창')
-    check(a['y']+a['height']<=z['y'], '두 창이 겹치지 않음')
+    a=p.locator('#fc-mobile').bounding_box()
+    check(a['x']>=0 and a['x']+a['width']<=375, '휴대폰 폭 안 하나의 예보창')
+    check(p.locator('#fc-pin').is_visible() and not p.locator('#fc-tail').is_visible(), '처음은1시간 탭')
+    p.locator('#fc-tab-three').click()
+    check(p.locator('#fc-tail').is_visible() and not p.locator('#fc-pin').is_visible(), '3시간 탭 전환')
     p.screenshot(path='../../outputs/72_phone.png')
 
 def t_tail_failure(b):
@@ -657,6 +659,67 @@ def t_weekday_and_hourly_title(b):
     check('(금)' in p.locator('#fc-meta').inner_text() and '(토)' in p.locator('#fc-meta').inner_text(),'예보 구간 요일')
 
 TESTS += [t_weekday_and_hourly_title]
+
+def t_daily_desktop(b):
+    p,m=open_page(b)
+    d=m.fc_cells[0][2][0]
+    J(p,f"SSOpenForecast('{d}')")
+    p.locator('.fc-detail tbody tr').first.click()
+    p.wait_for_selector('#fc-daily table')
+    check(all(p.locator('#'+i).is_visible() for i in ['fc-pin','fc-tail','fc-daily']), 'PC 독립3창')
+    check(p.locator('#fc-daily thead tr').first.locator('th[colspan="2"]').count()==7,'오늘 포함7일')
+    text=p.locator('#fc-daily').inner_text()
+    check('지역대표' in text and '발표' in text and '격자' in text,'지역대표/발표/격자기온 구분')
+    check('0%' in text and '0°' in text,'0 원값 유지')
+    p.screenshot(path='../../outputs/97_daily_desktop.png')
+    a=p.locator('#fc-tail').bounding_box();z=p.locator('#fc-daily').bounding_box();mb=p.locator('#fmap').bounding_box()
+    check(z['y']>=a['y']+a['height'] and abs(z['x']+z['width']-(mb['x']+mb['width']-10))<3,'일별은3시간 아래 오른쪽')
+    height=z['height'];h=p.locator('#fc-daily .fc-pin-head').bounding_box()
+    p.mouse.move(h['x']+40,h['y']+10);p.mouse.down();p.mouse.move(h['x']+20,h['y']-15,steps=4);p.mouse.up()
+    check(abs(p.locator('#fc-daily').bounding_box()['height']-height)<2,'일별 이동 중 높이 유지')
+    p.locator('.fc-daily-x').click()
+    check(not p.locator('#fc-daily').is_visible() and p.locator('#fc-tail').is_visible(),'일별만 닫기')
+
+def t_daily_phone_tabs(b):
+    p,m=open_phone(b);d=m.fc_cells[0][2][0]
+    J(p,f"SSOpenForecast('{d}')");p.locator('.fc-detail tbody tr').first.click()
+    check(p.locator('#fc-mobile [role=tab]').count()==3,'휴대폰1창3탭')
+    check(p.locator('#fc-pin').is_visible() and not p.locator('#fc-tail').is_visible(),'초기1시간 탭')
+    p.locator('#fc-tab-daily').click();p.wait_for_selector('#fc-daily table')
+    check(not p.locator('#fc-pin').is_visible() and not p.locator('#fc-tail').is_visible() and p.locator('#fc-daily').is_visible(),'일별 탭만 표시')
+    check(p.locator('#fc-tab-daily').get_attribute('aria-selected')=='true','선택 탭 접근성')
+    p.screenshot(path='../../outputs/97_daily_phone.png')
+    p.locator('#fc-tab-daily').press('ArrowLeft')
+    check(p.locator('#fc-tail').is_visible(),'키보드 탭 이동')
+    p.locator('.fc-mobile-close').click()
+    check(not p.locator('#fc-mobile').is_visible(),'하나의 닫기 버튼')
+
+def t_daily_failure_and_late_response(b):
+    p,m=open_page(b);d=m.fc_cells[0][2][0]
+    p.route('**/rpc/forecast_daily_cell',lambda route:route.fulfill(status=503,content_type='application/json',body='{}'))
+    J(p,f"SSOpenForecast('{d}')");p.locator('.fc-detail tbody tr').first.click()
+    p.wait_for_selector('[data-daily-retry]')
+    check(p.locator('#fc-pin .fc-tt').is_visible() and p.locator('#fc-tail .fc-tt').is_visible(),'일별 실패해도 시간표 유지')
+    p.unroute('**/rpc/forecast_daily_cell');p.locator('[data-daily-retry]').click();p.wait_for_selector('#fc-daily table')
+    p.set_viewport_size({'width':375,'height':812});p.locator('#fc-tab-daily').click()
+    check(p.locator('#fc-daily').is_visible() and not p.locator('#fc-pin').is_visible(),'PC→휴대폰 전환')
+    p.set_viewport_size({'width':1400,'height':900})
+    check(all(p.locator('#'+i).is_visible() for i in ['fc-pin','fc-tail','fc-daily']),'휴대폰→PC3창 복원')
+
+TESTS += [t_daily_desktop,t_daily_phone_tabs,t_daily_failure_and_late_response]
+
+def t_daily_late_selection(b):
+    p,m=open_page(b);d=m.fc_cells[0][2][0]
+    J(p,"""(() => {const old=SSAuth.authed;let first=true;SSAuth.authed=function(path,options){if(path.includes('/forecast_daily_cell')&&first){first=false;return new Promise(resolve=>{window.finishOldDaily=resolve;});}return old.apply(this,arguments);};return null;})()""")
+    J(p,f"SSOpenForecast('{d}')");p.wait_for_function("typeof window.finishOldDaily==='function'")
+    p.locator('.fc-detail tbody tr').nth(1).click();p.wait_for_selector('#fc-daily table')
+    J(p,"""finishOldDaily({ok:true,json:{days:[{date:'2026-11-07',periods:[{forecast_at:'2026-11-07T00:00:00+09:00',period_hours:12,pop:99,weather:'old'}]}]}})""")
+    p.wait_for_timeout(100)
+    check('99%' not in p.locator('#fc-daily').inner_text(),'이전 선택의 늦은 일별 응답 무시')
+    p.locator('.fc-daily-x').click();p.locator('.fc-detail tbody tr').nth(1).click();p.wait_for_selector('#fc-daily table')
+    check(p.locator('#fc-daily').is_visible(),'같은 격자를 다시 선택하면 일별도 열림')
+
+TESTS += [t_daily_late_selection]
 
 if __name__ == "__main__":
     only = sys.argv[1:]

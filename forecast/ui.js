@@ -181,7 +181,7 @@
   function forecastRightPadding() {
     if(isPhone() || !S.pin) return 40;
     var map=$('fmap'),mw=map.clientWidth,reserve=40;
-    ['fc-pin','fc-tail'].forEach(function(id){var b=$(id);if(b&&!b.hidden&&Math.abs(mw-b.offsetLeft-b.offsetWidth)<=20)reserve=Math.max(reserve,b.offsetWidth+30);});
+    ['fc-pin','fc-tail','fc-daily'].forEach(function(id){var b=$(id);if(b&&!b.hidden&&Math.abs(mw-b.offsetLeft-b.offsetWidth)<=20)reserve=Math.max(reserve,b.offsetWidth+30);});
     return Math.min(reserve,Math.max(40,mw-40));
   }
   function revealForecastCell() {
@@ -191,9 +191,9 @@
   }
   function pinDrag(e) {
     if (isPhone()) return;
-    var t = e.target, grip = t.closest && t.closest('.fc-pin-grip'), head = t.closest && t.closest('.fc-pin-head'); if (!grip && (!head || t.closest('.fc-pin-x,.fc-tail-x'))) return;
-    var box = t.closest('.fc-pin,.fc-tail'), geo = box.id === 'fc-tail' ? S.tailGeo : S.pinGeo, r = box.getBoundingClientRect(), mr = box.parentNode.getBoundingClientRect(), sx = e.clientX, sy = e.clientY, x0 = r.left - mr.left, y0 = r.top - mr.top, w0 = r.width, left = grip && grip.dataset.grip === 'l';
-    box.style.zIndex='802'; $(box.id==='fc-pin'?'fc-tail':'fc-pin').style.zIndex='801';
+    var t = e.target, grip = t.closest && t.closest('.fc-pin-grip'), head = t.closest && t.closest('.fc-pin-head'); if (!grip && (!head || t.closest('.fc-pin-x,.fc-tail-x,.fc-daily-x'))) return;
+    var box = t.closest('.fc-pin,.fc-tail,.fc-daily'), geo = box.id === 'fc-daily' ? window.ForecastDaily.geo() : box.id === 'fc-tail' ? S.tailGeo : S.pinGeo, r = box.getBoundingClientRect(), mr = box.parentNode.getBoundingClientRect(), sx = e.clientX, sy = e.clientY, x0 = r.left - mr.left, y0 = r.top - mr.top, w0 = r.width, left = grip && grip.dataset.grip === 'l';
+    ['fc-pin','fc-tail','fc-daily'].forEach(function(id){var el=$(id);if(el)el.style.zIndex=el===box?'802':'801';});
     geo.x = x0; geo.y = y0; e.preventDefault();
     function mv(ev) {
       var dx = ev.clientX - sx, dy = ev.clientY - sy;
@@ -249,6 +249,7 @@
     }
     applyBoxGeo(box,S.tailGeo);
     syncForecastMapSize();
+    if(window.ForecastDaily)window.ForecastDaily.layout();
   }
   function tailVisible() {
     var view=$('view-forecast');
@@ -295,7 +296,7 @@
   function renderPin() {
     var box = $('fc-pin'); if (!box) return;
     var sr = S.pin && S.focus && S.series[S.focus] ? S.series[S.focus][S.pin] : null;
-    if (!sr) { clearTailTimer(); box.hidden = true; box.innerHTML = ''; S.tailKey=null; $('fc-tail').hidden=true; syncForecastMapSize(); return; }
+    if (!sr) { clearTailTimer(); box.hidden = true; box.innerHTML = ''; S.tailKey=null; $('fc-tail').hidden=true; if(window.ForecastDaily)window.ForecastDaily.sync(null); syncForecastMapSize(); return; }
     ensureTail();
     var start=S.series[S.focus]._start;
     if(S.tailData && S.tailData.status==='ok') { sr=S.tailData.upper.series; start=S.tailData.upper.start_at; }
@@ -306,6 +307,7 @@
       '</div>' +
       '<span class="fc-pin-grip l" data-grip="l" aria-hidden="true"></span><span class="fc-pin-grip r" data-grip="r" aria-hidden="true"></span>';
     box.hidden = !!S.nearClosed; applyPinGeo();
+    if(window.ForecastDaily)window.ForecastDaily.sync(S.pin,cellName(+k[0],+k[1]),S.pinAt);
   }
   function markSel() { var rows = document.querySelectorAll('#fc-tree .fc-detail tr[data-cell]'); for (var i = 0; i < rows.length; i++) rows[i].classList.toggle('sel', !S.nearClosed && rows[i].dataset.cell === S.pin); }
   function pinCell(key) { S.pin = key; S.pinWhy = null; S.pinAt = Date.now(); renderPin(); drawCells(); markSel(); revealForecastCell(); }
@@ -520,5 +522,5 @@
   }
   // 다른 화면(장비 지원)에서 그 지사로 바로 오기
   function openBranch(id) { S.pendingFocus = id; }
-  window.ForecastUI = { init: init, show: show, openBranch: openBranch, _state: function () { return S; } };
+  window.ForecastUI = { init: init, show: show, openBranch: openBranch, closeSelection: unpin, _state: function () { return S; } };
 })();

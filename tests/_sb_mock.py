@@ -277,6 +277,17 @@ class Mock:
                 return send(200, out)
             if tbl == "save_jurisdiction" and "/rpc/" in path: return self.save_rpc(u, body, send)
             if tbl == "branch_forecast": return send(200, self.branch_forecast if self.usable(u) else [])
+            if tbl == "forecast_daily_cell" and "/rpc/" in path:
+                if not self.usable(u): return send(401, {"message": "login"})
+                import datetime as dt
+                c = next((c for c in self.fc_cells if c[0] == body.get("p_nx") and c[1] == body.get("p_ny")), None)
+                if not c: return send(400, {"message": "cell"})
+                tz = dt.timezone(dt.timedelta(hours=9)); today = dt.datetime.now(tz).date(); days = []
+                for i in range(7):
+                    date = today + dt.timedelta(days=i)
+                    periods = [{"reg_id":"11D20201" if i<5 else "11D20000", "forecast_at":dt.datetime.combine(date,dt.time(h),tz).isoformat(),"period_hours":12,"sky":"DB01" if i<5 else "WB03","precip":"0" if i<5 else "WB09","pop":0 if i<5 else 60,"weather":"맑음" if i<5 else "구름많고 비","source":"short_land" if i<5 else "midterm_land","issued_at":self.fc_issued} for h in (0,12)]
+                    days.append({"date":date.isoformat(),"periods":periods,"tmin":0 if i==0 else -3,"tmax":9,"temperature_source":"grid_aux" if i<5 else "midterm_temperature","tmin_issued_at":self.fc_issued,"tmax_issued_at":self.fc_issued})
+                return send(200,{"nx":c[0],"ny":c[1],"status":"ok","region":{"temp_id":"11D20201","land_id":"11D20000","label":"평창군 대관령면","method":"named_place","distance_km":1.2,"short_land_name":"대관령","midterm_land_name":"강원영서"},"days":days})
             if tbl == "forecast_cell_tail" and "/rpc/" in path:
                 if not self.usable(u): return send(401, {"message": "login"})
                 import datetime as dt

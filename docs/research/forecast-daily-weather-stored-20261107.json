@@ -1,0 +1,216 @@
+{
+  "verified_date_kst": "2026-11-07",
+  "collector": {
+    "issue_kst": "2026-11-07T05:00:00+09:00",
+    "regions": 203,
+    "period_rows": 1624,
+    "calls": 1,
+    "bytes": 154798,
+    "retries": 0,
+    "usage_saved": true,
+    "repeat_kick": null
+  },
+  "samples": [
+    {
+      "days": 7,
+      "name": "대관령",
+      "today": {
+        "date": "2026-11-07",
+        "tmax": 6,
+        "tmin": -5,
+        "periods": [
+          {
+            "pop": 0,
+            "sky": "DB01",
+            "precip": "0",
+            "reg_id": "11D20201",
+            "source": "short_land",
+            "weather": "맑음",
+            "issued_at": "2026-11-06T20:00:00+00:00",
+            "forecast_at": "2026-11-06T15:00:00.000Z",
+            "period_hours": 12
+          },
+          {
+            "pop": 0,
+            "sky": "DB01",
+            "precip": "0",
+            "reg_id": "11D20201",
+            "source": "short_land",
+            "weather": "맑음",
+            "issued_at": "2026-11-06T20:00:00+00:00",
+            "forecast_at": "2026-11-07T03:00:00.000Z",
+            "period_hours": 12
+          }
+        ],
+        "tmax_issued_at": "2026-11-06T23:00:00+00:00",
+        "tmin_issued_at": "2026-11-06T17:00:00+00:00",
+        "temperature_source": "grid_aux"
+      },
+      "region": {
+        "label": "강원특별자치도 평창군 대관령면",
+        "method": "named_place",
+        "status": "ok",
+        "land_id": "11D20000",
+        "temp_id": "11D20201",
+        "dong_code": "5176038000",
+        "distance_km": 2.96,
+        "short_land_name": "대관령",
+        "midterm_land_name": "강원영동"
+      },
+      "periods": 14,
+      "last_date": "2026-11-13",
+      "last_temperature_source": "midterm_temperature"
+    },
+    {
+      "days": 7,
+      "name": "영암",
+      "today": {
+        "date": "2026-11-07",
+        "tmax": 11,
+        "tmin": 2,
+        "periods": [
+          {
+            "pop": 0,
+            "sky": "DB01",
+            "precip": "0",
+            "reg_id": "21F20802",
+            "source": "short_land",
+            "weather": "맑음",
+            "issued_at": "2026-11-06T20:00:00+00:00",
+            "forecast_at": "2026-11-06T15:00:00.000Z",
+            "period_hours": 12
+          },
+          {
+            "pop": 0,
+            "sky": "DB01",
+            "precip": "0",
+            "reg_id": "21F20802",
+            "source": "short_land",
+            "weather": "맑음",
+            "issued_at": "2026-11-06T20:00:00+00:00",
+            "forecast_at": "2026-11-07T03:00:00.000Z",
+            "period_hours": 12
+          }
+        ],
+        "tmax_issued_at": "2026-11-06T23:00:00+00:00",
+        "tmin_issued_at": "2026-11-06T17:00:00+00:00",
+        "temperature_source": "grid_aux"
+      },
+      "region": {
+        "label": "전남광주통합특별시 영암군 덕진면",
+        "method": "named_place",
+        "status": "ok",
+        "land_id": "11F20000",
+        "temp_id": "21F20802",
+        "dong_code": "1280031000",
+        "distance_km": 2.55,
+        "short_land_name": "영암",
+        "midterm_land_name": "전라남도"
+      },
+      "periods": 14,
+      "last_date": "2026-11-13",
+      "last_temperature_source": "midterm_temperature"
+    },
+    {
+      "days": 7,
+      "name": "합천",
+      "today": {
+        "date": "2026-11-07",
+        "tmax": 11,
+        "tmin": 0,
+        "periods": [
+          {
+            "pop": 0,
+            "sky": "DB01",
+            "precip": "0",
+            "reg_id": "11H20503",
+            "source": "short_land",
+            "weather": "맑음",
+            "issued_at": "2026-11-06T20:00:00+00:00",
+            "forecast_at": "2026-11-06T15:00:00.000Z",
+            "period_hours": 12
+          },
+          {
+            "pop": 0,
+            "sky": "DB01",
+            "precip": "0",
+            "reg_id": "11H20503",
+            "source": "short_land",
+            "weather": "맑음",
+            "issued_at": "2026-11-06T20:00:00+00:00",
+            "forecast_at": "2026-11-07T03:00:00.000Z",
+            "period_hours": 12
+          }
+        ],
+        "tmax_issued_at": "2026-11-06T23:00:00+00:00",
+        "tmin_issued_at": "2026-11-06T17:00:00+00:00",
+        "temperature_source": "grid_aux"
+      },
+      "region": {
+        "label": "경상남도 합천군 용주면",
+        "method": "named_place",
+        "status": "ok",
+        "land_id": "11H20000",
+        "temp_id": "11H20503",
+        "dong_code": "4889046000",
+        "distance_km": 2.66,
+        "short_land_name": "합천",
+        "midterm_land_name": "경상남도"
+      },
+      "periods": 14,
+      "last_date": "2026-11-13",
+      "last_temperature_source": "midterm_temperature"
+    },
+    {
+      "days": 7,
+      "name": "순천",
+      "today": {
+        "date": "2026-11-07",
+        "tmax": 10,
+        "tmin": 3,
+        "periods": [
+          {
+            "pop": 0,
+            "sky": "DB01",
+            "precip": "0",
+            "reg_id": "11F20405",
+            "source": "short_land",
+            "weather": "맑음",
+            "issued_at": "2026-11-06T20:00:00+00:00",
+            "forecast_at": "2026-11-06T15:00:00.000Z",
+            "period_hours": 12
+          },
+          {
+            "pop": 0,
+            "sky": "DB01",
+            "precip": "0",
+            "reg_id": "11F20405",
+            "source": "short_land",
+            "weather": "맑음",
+            "issued_at": "2026-11-06T20:00:00+00:00",
+            "forecast_at": "2026-11-07T03:00:00.000Z",
+            "period_hours": 12
+          }
+        ],
+        "tmax_issued_at": "2026-11-06T23:00:00+00:00",
+        "tmin_issued_at": "2026-11-06T17:00:00+00:00",
+        "temperature_source": "grid_aux"
+      },
+      "region": {
+        "label": "전남광주통합특별시 순천시 주암면",
+        "method": "named_place",
+        "status": "ok",
+        "land_id": "11F20000",
+        "temp_id": "11F20405",
+        "dong_code": "1215035000",
+        "distance_km": 2.86,
+        "short_land_name": "순천시",
+        "midterm_land_name": "전라남도"
+      },
+      "periods": 14,
+      "last_date": "2026-11-13",
+      "last_temperature_source": "midterm_temperature"
+    }
+  ],
+  "cache_match_periods": "56"
+}
