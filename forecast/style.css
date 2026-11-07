@@ -145,6 +145,8 @@ body.fc-pin-moving{user-select:none;}
 /* 예보 창의 모든 표 칸 가운데 정렬. 3시간 칸은 내용에 필요한 폭만 사용. */
 .fc-pin .fc-tt th,.fc-pin .fc-tt td,.fc-tail .fc-tt th,.fc-tail .fc-tt td{text-align:center;vertical-align:middle;}
 .fc-tail .fc-tt thead th{line-height:1.1;}
+.fc-tail .fc-qual-label{display:block;font-size:9px;line-height:1.25;color:#c7e7ff;white-space:nowrap;}
+.fc-tail .fc-tt td.fc-qual{background:#edf5fb;color:#24405c;white-space:nowrap;}
 @media(max-width:760px){.fc-tail .fc-tt{font-size:10px;}}
 
 @media(min-width:761px){.fc-tail{left:auto;right:10px;bottom:auto;}}

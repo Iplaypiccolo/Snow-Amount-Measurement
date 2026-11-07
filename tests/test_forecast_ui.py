@@ -494,6 +494,9 @@ def t_tail_separate(b):
 
     amounts=p.locator('#fc-tail tbody tr').nth(0).locator('td').all_inner_texts()+p.locator('#fc-tail tbody tr').nth(1).locator('td').all_inner_texts()
     check('-' not in amounts and '많은 눈' in amounts and '강한 비' in amounts,'먼 정성 칸도 강도 표현으로 유지(영하 기온 유지)')
+    check('강설 없음' in amounts and '강수 없음' in amounts,'정성0은빈칸대신없음표시')
+    check(p.locator('#fc-tail .fc-qual-label').count()==3 and p.locator('#fc-pin .fc-qual-label').count()==0,'먼3시간구간만정성예보표시')
+    check(p.locator('#fc-tail tbody tr').nth(0).locator('td.fc-qual').count()==3 and p.locator('#fc-tail tbody tr').nth(2).locator('td.fc-qual').count()==0,'적설강수만정성·확률기온숫자유지')
     p.screenshot(path="../../outputs/72_desktop.png")
     p.locator(".fc-tail-x").click()
     check(not p.locator("#fc-tail").is_visible() and p.locator("#fc-pin").is_visible(), "이후 창만 닫기")

@@ -123,7 +123,8 @@
       var day=date(b.first_at), end=hour(b.last_at);
       if(!hourly && end==='00' && Date.parse(b.last_at)>Date.parse(b.first_at)) end='24';
       var prev=days[days.length-1];if(prev&&prev.day===day)prev.n++;else days.push({day:day,n:1});
-      times+='<th'+(b.vs?' class="vs"':'')+'>'+hour(b.first_at)+(hourly?'':'~'+end)+(b.partial?'<small>'+(b.hours===b.expected_hours?b.hours+'시간':'일부 '+b.hours+'/'+b.expected_hours+'시간')+'</small>':'')+'</th>';
+      var qual=!hourly&&window.ForecastSeries.qualitative(b,'snow');
+      times+='<th'+(b.vs?' class="vs"':'')+'>'+hour(b.first_at)+(hourly?'':'~'+end)+(b.partial?'<small>'+(b.hours===b.expected_hours?b.hours+'시간':'일부 '+b.hours+'/'+b.expected_hours+'시간')+'</small>':'')+(qual?'<small class="fc-qual-label">'+(qual.text==='정성 포함'?'정성 포함':'정성예보')+'</small>':'')+'</th>';
     });
     return '<tr><th class="lb">일자</th>'+days.map(function(d){return '<th colspan="'+d.n+'">'+esc(d.day)+'</th>';}).join('')+'</tr><tr><th class="lb">시간</th>'+times+'</tr>';
   }
@@ -216,7 +217,7 @@
       html+='<tr><th class="lb">'+row[0]+'</th>'+bins.map(function(b){
         var qual=row[2]?window.ForecastSeries.qualitative(b,row[1]):null;
         var value=qual?qual.text:row[2]?(b[row[1]]===0&&b[row[2]]===0?'':rng(b[row[1]],b[row[2]])):tmp(b[row[1]]);
-        return '<td'+(qual?' title="'+esc(qual.title)+'"':'')+'>'+esc(value)+'</td>';
+        return '<td'+(qual?' class="fc-qual" title="'+esc(qual.title)+'"':'')+'>'+esc(value)+'</td>';
       }).join('')+'</tr>';
     });
     return html+'</tbody></table></div>';
