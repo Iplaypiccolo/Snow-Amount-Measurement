@@ -1,0 +1,58 @@
+{
+  "passed": true,
+  "count": 12,
+  "guard_fixture_note": "로컬 스텁의 정의 지문만 교체; SQL 함수 본체는 원문 그대로",
+  "tests": [
+    {
+      "name": "기존 함수 정의가 바뀌면 적용 거부",
+      "ok": true
+    },
+    {
+      "name": "SQL80 본체 로컬 PostgreSQL 적용",
+      "ok": true
+    },
+    {
+      "name": "기존24시간/3시간/수집상태 불변",
+      "ok": true
+    },
+    {
+      "name": "추가24개 시각과 시작/끝 경계",
+      "ok": true
+    },
+    {
+      "name": "0℃/0강수량/미량 플래그 보존",
+      "ok": true
+    },
+    {
+      "name": "빠진 시간은null·3시간합계 역산 없음",
+      "ok": true
+    },
+    {
+      "name": "발표별 격자순서 변화에도 정확한 추출",
+      "ok": true
+    },
+    {
+      "name": "코드를mm/cm로 표시하지 않고 기온/확률 유지",
+      "ok": true
+    },
+    {
+      "name": "기온 결측/확률 상한/초단기 범위 유지",
+      "ok": true
+    },
+    {
+      "name": "미제공/오래된 예보는 인공48시간 생성 안 함",
+      "ok": true
+    },
+    {
+      "name": "로그인/유효격자 검사 위임",
+      "ok": true
+    },
+    {
+      "name": "로그인 역할만 실행 가능",
+      "ok": true
+    }
+  ],
+  "sql_sha256": "5defce264ef44821ca43c8bbaf231cb5198197b83b114f857c9d3b19e0260eff",
+  "production_applied": true,
+  "migration": "20261107031153_forecast_hourly_48_80"
+}

@@ -5,7 +5,7 @@ const p={forecast_at:'2026-11-07T00:00:00+09:00',period_hours:12,sky:'DB01',prec
 const day={date:'2026-11-07',periods:[p],tmin:0,tmax:9,temperature_source:'grid_aux',tmin_issued_at:p.issued_at,tmax_issued_at:p.issued_at};
 test('한국 날짜·토/일 색 구분·오전오후',()=>{const h=V.table({days:[day,{...day,date:'2026-11-08'}]});assert(h.includes('11/7(토)'));assert(h.includes('11/8(일)'));assert(h.includes('fc-sat'));assert(h.includes('fc-sun'));assert(h.includes('오전'));assert(h.includes('오후'));});
 test('0℃·0%와 결측 구분',()=>{const h=V.table({days:[day]});assert(h.includes('0°'));assert(h.includes('0%'));assert(h.includes('>-</td>'));const n=V.table({days:[{...day,tmin:null,tmax:null,periods:[]}]});assert(!n.includes('0°'));assert(!n.includes('0%'));});
-test('지역대표 기온으로 재계산/정렬 안 함·발표시각 보존',()=>{const h=V.table({days:[{...day,tmin:11,tmax:5}]});assert(h.indexOf('11°')<h.indexOf('5°'));assert(h.includes('선택 격자'));assert(h.includes('11/6 17:00'));});
+test('기온원값순서유지·모달의마우스설명제거',()=>{const h=V.table({days:[{...day,tmin:11,tmax:5}]});assert(h.indexOf('11°')<h.indexOf('5°'));assert(!h.includes(' title='));});
 test('하루 원값은 오전오후로 복제하지 않음',()=>{const h=V.table({days:[{...day,periods:[{...p,period_hours:24,pop:60}]}]});assert(h.includes('>하루</th>'));assert.equal((h.match(/60%/g)||[]).length,1);assert.equal((h.match(/fc-weather-icon/g)||[]).length,1);});
 test('날씨 원문 HTML은 문자로만',()=>{const h=V.table({days:[{...day,periods:[{...p,weather:'<img src=x onerror=alert(1)>'}]}]});assert(!h.includes('<img'));assert(h.includes('&lt;img'));});
 test('7일만 표시·누락 자료 빈칸',()=>{const h=V.table({days:Array.from({length:8},(_,i)=>({...day,date:'2026-11-'+String(7+i).padStart(2,'0')}))});assert(h.includes('11/13(금)'));assert(!h.includes('11/14'));});

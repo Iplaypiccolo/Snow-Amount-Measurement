@@ -123,8 +123,7 @@
       var day=date(b.first_at), end=hour(b.last_at);
       if(!hourly && end==='00' && Date.parse(b.last_at)>Date.parse(b.first_at)) end='24';
       var prev=days[days.length-1];if(prev&&prev.day===day)prev.n++;else days.push({day:day,n:1});
-      var qual=!hourly&&window.ForecastSeries.qualitative(b,'snow');
-      times+='<th'+(b.vs?' class="vs"':'')+'>'+hour(b.first_at)+(hourly?'':'~'+end)+(b.partial?'<small>'+(b.hours===b.expected_hours?b.hours+'시간':'일부 '+b.hours+'/'+b.expected_hours+'시간')+'</small>':'')+(qual?'<small class="fc-qual-label">'+(qual.text==='정성 포함'?'정성 포함':'정성예보')+'</small>':'')+'</th>';
+      times+='<th'+(b.vs?' class="vs"':'')+'>'+hour(b.first_at)+(hourly?'':'~'+end)+(b.partial?'<small>'+(b.hours===b.expected_hours?b.hours+'시간':'일부 '+b.hours+'/'+b.expected_hours+'시간')+'</small>':'')+'</th>';
     });
     return '<tr><th class="lb">일자</th>'+days.map(function(d){return '<th colspan="'+d.n+'">'+esc(d.day)+'</th>';}).join('')+'</tr><tr><th class="lb">시간</th>'+times+'</tr>';
   }
@@ -149,7 +148,7 @@
   function trendBox(sr, start, big) {
     if (!sr) return '';
     if (!big) return '<div class="fc-trend-box">' + tableBlock(sr, start, 0, 24, 3) + '<div class="fc-tt-cap">칸 = 그 시각부터 3시간 합 (기온은 최저' + (sr.r && sr.r.length ? ', 확률은 최고' : '') + ')</div></div>';
-    return '<div class="fc-trend-box big"><div class="fc-scroll" tabindex="0" aria-label="24시간 예보 가로 스크롤">'+tableBlock(sr,start,0,24,1)+'</div></div>';
+    return '<div class="fc-trend-box big"><div class="fc-scroll" tabindex="0" aria-label="48시간 예보 가로 스크롤">'+tableBlock(sr,start,0,Math.min(48,(sr.s||[]).length),1)+'</div></div>';
   }
   // 고정 창 위치·크기(컴퓨터 화면만, 2026-11-03): scale = 글자·표 배율, x·y = 지도 안 왼쪽 위(null = 처음 자리 오른쪽 위). 지도보다 커지거나 밖으로 나가지 않게 맞춤
   var PIN_KEY = 'ss_fc_pin', PIN_BODY = 440, PIN_PAD = 14, PIN_MIN = 0.8;      // PIN_BODY·PIN_PAD = 배율 1일 때 표 폭·창 안팎 여백(px)
@@ -216,8 +215,8 @@
     [['신적설 cm','snow','snow_hi'],['강수 mm','pcp','pcp_hi'],['확률 %','pop'],['최저 ℃','tmin']].forEach(function(row){
       html+='<tr><th class="lb">'+row[0]+'</th>'+bins.map(function(b){
         var qual=row[2]?window.ForecastSeries.qualitative(b,row[1]):null;
-        var value=qual?qual.text:row[2]?(b[row[1]]===0&&b[row[2]]===0?'':rng(b[row[1]],b[row[2]])):tmp(b[row[1]]);
-        return '<td'+(qual?' class="fc-qual" title="'+esc(qual.title)+'"':'')+'>'+esc(value)+'</td>';
+        var value=qual?(qual.text==='정성 포함'?'-':qual.text):row[2]?(b[row[1]]===0&&b[row[2]]===0?'':rng(b[row[1]],b[row[2]])):tmp(b[row[1]]);
+        return '<td'+(qual?' class="fc-qual"':'')+'>'+esc(value)+'</td>';
       }).join('')+'</tr>';
     });
     return html+'</tbody></table></div>';
@@ -266,7 +265,7 @@
     if(S.tailBusy===key) return;
     S.tailBusy=key;
     var xy=S.pin.split(',');
-    SSAuth.authed('/rest/v1/rpc/forecast_cell_tail',{method:'POST',body:{p_nx:+xy[0],p_ny:+xy[1]}}).then(function(r){
+    SSAuth.authed('/rest/v1/rpc/forecast_cell_detail',{method:'POST',body:{p_nx:+xy[0],p_ny:+xy[1]}}).then(function(r){
       if(S.tailKey!==key || !S.pin) return;
       if(!r.ok || !r.json) throw new Error('forecast unavailable');
       S.tailFetchedAt=Date.now(); S.tailRetry=false; S.tailError=false;
@@ -296,7 +295,7 @@
     if (!sr) { clearTailTimer(); box.hidden = true; box.innerHTML = ''; S.tailKey=null; $('fc-tail').hidden=true; if(window.ForecastDaily)window.ForecastDaily.sync(null); syncForecastMapSize(); return; }
     ensureTail();
     var start=S.series[S.focus]._start;
-    if(S.tailData && S.tailData.status==='ok') { sr=S.tailData.upper.series; start=S.tailData.upper.start_at; }
+    if(S.tailData && S.tailData.status==='ok') { var hourly=window.ForecastSeries.hourly48(S.tailData);sr=hourly.series; start=hourly.start_at; }
     renderTail();
     var k = S.pin.split(','), g = S.grid[S.hq], c = g && g.cells ? g.cells.filter(function (x) { return x[0] === +k[0] && x[1] === +k[1]; })[0] : null;
     box.innerHTML = '<div class="fc-pin-in"><div class="fc-pin-head"><b><span class="fc-period">1시간</span><span class="fc-place">' + esc(cellName(+k[0], +k[1])) + '</span></b>' +

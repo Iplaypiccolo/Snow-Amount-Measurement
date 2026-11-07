@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict');
-const {combine,qualitative}=require('../forecast/series.js');
+const {combine,qualitative,hourly48}=require('../forecast/series.js');
 const H=3600000;let n=0;
 function test(name,fn){fn();n++;console.log('PASS '+name);}
 function sample(h=13){const start=Date.parse('2026-11-05T00:00:00+09:00')+h*H;
@@ -35,4 +35,6 @@ test('숫자와 코드가 같은 칸 경계에서 합쳐져도 합계로 만들�
 test('정량0은 시간 칸 유지·미량 상한 유지',()=>{const d=sample();d.upper.series.s.fill(0);d.upper.series.p.fill(0);const bs=combine(d);assert.equal(bs.length,8);assert.equal(bs[0].pcp,0);assert.ok(bs[0].pcp_hi>0);});
 test('자정 칸은22~00 양쪽 날짜를 보존',()=>{const b=combine(sample(22))[0];assert.equal(b.hours,3);assert.notEqual(b.first_at.slice(0,10),new Date(Date.parse(b.last_at)+9*H).toISOString().slice(0,10));});
 test('빈 이후 자료여도 가까운24시간 유지·입력 불변',()=>{const d=sample(),before=JSON.stringify(d);assert.ok(combine(d).length);assert.equal(JSON.stringify(d),before);assert.deepEqual(combine({status:'stale'}),[]);});
+test('48시간은원래24시간과별도시간별원값을그대로연결',()=>{const d=sample();d.upper.series.vn=6;d.hourly_tail={start_at:new Date(Date.parse(d.upper.start_at)+24*H).toISOString(),end_at:new Date(Date.parse(d.upper.start_at)+48*H).toISOString(),series:{s:[0,2],p:[1,3],t:[0,-5],r:[0,80],sq:[false,true],pq:[true,false]}};const before=JSON.stringify(d),r=hourly48(d);assert.equal(r.series.s.length,48);assert.deepEqual(r.series.s.slice(0,24),d.upper.series.s);assert.deepEqual(r.series.s.slice(24,27),[0,2,null]);assert.equal(r.series.t[24],0);assert.equal(r.series.r[24],0);assert.equal(r.series.vn,6);assert.equal(r.series.sq[25],true);assert.equal(JSON.stringify(d),before);});
+test('추가원값없음/연결시각오류때3시간합계를분할하지않음',()=>{const d=sample();assert.equal(hourly48(d),d.upper);d.hourly_tail={start_at:d.upper.start_at,series:{s:[100]}};assert.equal(hourly48(d),d.upper);});
 console.log(`${n}/${n} 통과`);

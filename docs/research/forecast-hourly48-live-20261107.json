@@ -1,0 +1,90 @@
+{
+  "migration": "20261107031153_forecast_hourly_48_80",
+  "sql_sha256": "5defce264ef44821ca43c8bbaf231cb5198197b83b114f857c9d3b19e0260eff",
+  "old_upper_and_tail_unchanged": true,
+  "fields_verified": [
+    "snow",
+    "rain",
+    "temperature",
+    "pop",
+    "snow_trace_flag",
+    "rain_trace_flag"
+  ],
+  "samples": [
+    {
+      "name": "대관령",
+      "raw_hours_checked": 96,
+      "status": "ok",
+      "total_slots": 48,
+      "upper_start": "2026-11-07T04:00:00+00:00",
+      "hour25_at": "2026-11-08T04:00:00+00:00",
+      "window_end": "2026-11-09T04:00:00+00:00",
+      "extra_t_available": 24,
+      "hour25": {
+        "pop": 60,
+        "rain": 0,
+        "snow": 0,
+        "temperature": 5
+      }
+    },
+    {
+      "name": "영암",
+      "raw_hours_checked": 96,
+      "status": "ok",
+      "total_slots": 48,
+      "upper_start": "2026-11-07T04:00:00+00:00",
+      "hour25_at": "2026-11-08T04:00:00+00:00",
+      "window_end": "2026-11-09T04:00:00+00:00",
+      "extra_t_available": 24,
+      "hour25": {
+        "pop": 30,
+        "rain": 0,
+        "snow": 0,
+        "temperature": 14
+      }
+    },
+    {
+      "name": "합천",
+      "raw_hours_checked": 96,
+      "status": "ok",
+      "total_slots": 48,
+      "upper_start": "2026-11-07T04:00:00+00:00",
+      "hour25_at": "2026-11-08T04:00:00+00:00",
+      "window_end": "2026-11-09T04:00:00+00:00",
+      "extra_t_available": 24,
+      "hour25": {
+        "pop": 30,
+        "rain": 0,
+        "snow": 0,
+        "temperature": 13
+      }
+    },
+    {
+      "name": "순천",
+      "raw_hours_checked": 96,
+      "status": "ok",
+      "total_slots": 48,
+      "upper_start": "2026-11-07T04:00:00+00:00",
+      "hour25_at": "2026-11-08T04:00:00+00:00",
+      "window_end": "2026-11-09T04:00:00+00:00",
+      "extra_t_available": 24,
+      "hour25": {
+        "pop": 30,
+        "rain": 0,
+        "snow": 0,
+        "temperature": 13
+      }
+    }
+  ],
+  "permissions": {
+    "anon": false,
+    "authenticated": true,
+    "service_role": false
+  },
+  "bad_cell_rejected": true,
+  "null_cell_rejected": true,
+  "no_login_rejected": true,
+  "cron_hash": "af5d0cc2f2cd402e1880999499b4ce63",
+  "policies_hash": "c30a43ed1321cec87422a25bc02a0907",
+  "old_functions_hash": "a6b0c39e321a9641db2b778c7fadbdc6"
+}

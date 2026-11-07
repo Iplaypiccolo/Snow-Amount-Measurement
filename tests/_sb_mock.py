@@ -288,7 +288,7 @@ class Mock:
                     periods = [{"reg_id":"11D20201" if i<5 else "11D20000", "forecast_at":dt.datetime.combine(date,dt.time(h),tz).isoformat(),"period_hours":12,"sky":"DB01" if i<5 else "WB03","precip":"0" if i<5 else "WB09","pop":0 if i<5 else 60,"weather":"맑음" if i<5 else "구름많고 비","source":"short_land" if i<5 else "midterm_land","issued_at":self.fc_issued} for h in (0,12)]
                     days.append({"date":date.isoformat(),"periods":periods,"tmin":0 if i==0 else -3,"tmax":9,"temperature_source":"grid_aux" if i<5 else "midterm_temperature","tmin_issued_at":self.fc_issued,"tmax_issued_at":self.fc_issued})
                 return send(200,{"nx":c[0],"ny":c[1],"status":"ok","region":{"temp_id":"11D20201","land_id":"11D20000","label":"평창군 대관령면","method":"named_place","distance_km":1.2,"short_land_name":"대관령","midterm_land_name":"강원영서"},"days":days})
-            if tbl == "forecast_cell_tail" and "/rpc/" in path:
+            if tbl in ("forecast_cell_tail", "forecast_cell_detail") and "/rpc/" in path:
                 if not self.usable(u): return send(401, {"message": "login"})
                 import datetime as dt
                 c = next((c for c in self.fc_cells if c[0] == body.get("p_nx") and c[1] == body.get("p_ny")), None)
@@ -303,7 +303,17 @@ class Mock:
                     hours = expected-1 if i==0 and expected>1 else expected
                     bins.append({"first_at": a.isoformat(), "last_at": b.isoformat(), "hours": hours, "expected_hours": expected, "partial": hours<3, "snow": 3 if i<5 else None, "snow_hi": 4 if i<5 else None, "pcp": 6 if i<5 else None, "pcp_hi": 6 if i<5 else None, "tmin": -2, "pop": 80, "amount_kind":"numeric" if i<5 else "code", "quantity_hours":hours if i<5 else 0, "code_hours":0 if i<5 else hours, "snow_code":None if i<5 else [1,2,0][i-5], "pcp_code":None if i<5 else [2,3,0][i-5]})
                     a = b + dt.timedelta(hours=1)
-                return send(200, {"status":"ok", "upper":{"series":c[7], "start_at":self.fc_start,"end_at":self.fc_end}, "tail":{"bins":bins}})
+                payload={"status":"ok", "upper":{"series":c[7], "start_at":self.fc_start,"end_at":self.fc_end}, "tail":{"bins":bins}}
+                if tbl == 'forecast_cell_detail':
+                    # 별도의 가짜 시간별 원값. 실제 코드는3시간합계를나누지않는다.
+                    hourly={'s':[],'p':[],'t':[],'r':[],'sq':[],'pq':[],'vn':0}
+                    for i in range(24):
+                        t=start+dt.timedelta(hours=i)
+                        source=next((b for b in bins if dt.datetime.fromisoformat(b['first_at'])<=t<=dt.datetime.fromisoformat(b['last_at'])),None)
+                        numeric=source is not None and source['amount_kind']=='numeric'
+                        for k,v in [('s',1 if numeric else None),('p',2 if numeric else None),('t',-2 if source else None),('r',80 if source else None),('sq',False if numeric else None),('pq',False if numeric else None)]:hourly[k].append(v)
+                    payload['hourly_tail']={'start_at':start.isoformat(),'end_at':(start+dt.timedelta(hours=24)).isoformat(),'series':hourly}
+                return send(200,payload)
             if tbl == "forecast_grid" and "/rpc/" in path:
                 if not self.usable(u): return send(401, {"message": "login"})
                 ids = set((body or {}).get("p_branches") or []); ser = bool((body or {}).get("p_series"))

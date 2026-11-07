@@ -139,9 +139,9 @@ def t_pin_chart(b):
     # 표 머리글 날짜: 맨 처음 칸과 날짜가 바뀌는(00시) 칸에만 — 둘째 줄 첫 칸에는 붙이지 않음
     days=pin0.locator('table.fc-t1 thead tr').first.locator('th:not(.lb)')
     check(all('/' in x for x in days.all_inner_texts()),'윗행 날짜')
-    check(sum(int(x.get_attribute('colspan')) for x in days.all())==24,'날짜 묶음24시각')
+    check(sum(int(x.get_attribute('colspan')) for x in days.all())==48,'날짜 묶음48시각')
     hours=pin0.locator('table.fc-t1 thead tr').last.locator('th:not(.lb)').all_inner_texts()
-    check(len(hours)==24 and all(x.isdigit() for x in hours),'아랫행24개 시각')
+    check(len(hours)==48 and all(x.isdigit() for x in hours),'아랫행48개 시각')
     leg = p.locator("#fc-legend")
     check(leg.locator(".fc-show").inner_text().split() == ["적설", "강수", "확률", "기온"] and leg.locator(".fc-ramp li").count() == 6 and "cm" not in leg.inner_text() and "mm" not in leg.inner_text() and "마우스" not in leg.inner_text(),
           "범례: 체크박스(적설·강수·확률·기온) + 적설량 색띠만: " + leg.inner_text().replace("\n", " "))
@@ -164,7 +164,7 @@ def t_pin_chart(b):
     check(pin.is_visible() and key and J(p,f'{S}.pin')==key, f"격자를 누르면 그 격자 그림 고정: {key}")
     check(pin.locator("svg").count() == 0 and pin.locator("table.fc-t1").count() == 1, "고정 창:24개 시각 한 표")
     h1 = [x.split("\n")[0] for x in pin.locator("table.fc-t1").first.locator("thead tr").last.locator("th:not(.lb)").all_inner_texts()]
-    check(len(h1) == 24 and all(int(h1[i].replace("시", "")) == (int(h1[0].replace("시", "")) + i) % 24 for i in range(24)), f"1시간 표 머리글24칸 {h1}")
+    check(len(h1) == 48 and all(int(h1[i].replace("시", "")) == (int(h1[0].replace("시", "")) + i) % 24 for i in range(48)), f"1시간 표 머리글48칸 {h1}")
     pb = pin.locator(".fc-trend-box").bounding_box(); check(pb and 350 <= pb["width"] <= 400, f"왼쪽 제목을 제외한 촘촘한 표 폭: {pb and pb['width']}")
     check(J(p, f"(() => {{ const l = {S}.cells.getLayers().find(l => l.getLatLngs && l.options.weight === 4); return !!l }})()"), "고정한 격자는 굵은 테두리")
     p.wait_for_timeout(350); J(p, f"(() => {{ {S}.map.fire('click', {{ latlng: {S}.map.getCenter() }}); return null }})()"); p.wait_for_timeout(200)
@@ -264,7 +264,7 @@ def t_blend_no_toggle(b):
     br = J(p, f"{S}.state.order.find(id => {S}.state.branches[id].hq === '강원')")
     p.click(f"#fc-tree [data-fcbr='{br}']"); p.wait_for_timeout(800)
     t1 = p.locator(".fc-pin .fc-tt").first
-    check(p.locator(".fc-pin .fc-tt").count() == 1 and t1.locator("thead tr").last.locator("th:not(.lb)").count() == 24, "같은24시간 한 줄 표")
+    check(p.locator(".fc-pin .fc-tt").count() == 1 and t1.locator("thead tr").last.locator("th:not(.lb)").count() == 48, "48시간 한 줄 표")
     check(t1.locator("thead th.vs").count() == 6 and t1.locator("td.vs").count() == 24, "앞 6시각 전부(적설·강수·확률·기온) 색칠, 다른 시간은 색칠하지 않음")
     sn = t1.locator("tbody tr").nth(0).locator("td.vs").all_inner_texts(); check(sn == ["1"] * 6, f"앞 6시간 신적설 = 단기 값 1: {sn}")
     cap = p.locator(".fc-pin").inner_text(); check("색칠한 칸" not in cap and "크기 조절" not in cap and p.locator("#fc-pin .fc-pin-note, #fc-pin .fc-tt-cap").count()==0, "모달 하단 설명 삭제")
@@ -495,7 +495,7 @@ def t_tail_separate(b):
     amounts=p.locator('#fc-tail tbody tr').nth(0).locator('td').all_inner_texts()+p.locator('#fc-tail tbody tr').nth(1).locator('td').all_inner_texts()
     check('-' not in amounts and '많은 눈' in amounts and '강한 비' in amounts,'먼 정성 칸도 강도 표현으로 유지(영하 기온 유지)')
     check('강설 없음' in amounts and '강수 없음' in amounts,'정성0은빈칸대신없음표시')
-    check(p.locator('#fc-tail .fc-qual-label').count()==3 and p.locator('#fc-pin .fc-qual-label').count()==0,'먼3시간구간만정성예보표시')
+    check(p.locator('#fc-tail .fc-qual-label').count()==0 and '정성' not in p.locator('#fc-tail').inner_text(),'정성예보안내단어제거')
     check(p.locator('#fc-tail tbody tr').nth(0).locator('td.fc-qual').count()==3 and p.locator('#fc-tail tbody tr').nth(2).locator('td.fc-qual').count()==0,'적설강수만정성·확률기온숫자유지')
     p.screenshot(path="../../outputs/72_desktop.png")
     p.locator(".fc-tail-x").click()
@@ -520,13 +520,13 @@ def t_tail_phone(b):
 
 def t_tail_failure(b):
     p,m=open_page(b)
-    p.route('**/rpc/forecast_cell_tail', lambda route: route.fulfill(status=503,content_type='application/json',body='{}'))
+    p.route('**/rpc/forecast_cell_detail', lambda route: route.fulfill(status=503,content_type='application/json',body='{}'))
     d=m.fc_cells[0][2][0]
     J(p, f"(() => {{ SSOpenForecast('{d}'); return null }})()")
     p.locator(".fc-detail tbody tr").first.click()
     p.locator('[data-tail-retry]').wait_for()
     check(p.locator('#fc-pin .fc-t1').count()==1, '이후 조회 실패해도 기존24시간 유지')
-    p.unroute('**/rpc/forecast_cell_tail')
+    p.unroute('**/rpc/forecast_cell_detail')
     p.locator('[data-tail-retry]').click()
     p.wait_for_function("document.querySelector('#fc-tail .fc-tt')")
     check(p.locator('#fc-tail .fc-tt').count()==1,'다시 받기 성공')
@@ -577,7 +577,7 @@ def tail_refresh_page(b):
     def reply(route):
         state['calls']+=1
         route.fulfill(status=503 if state['fail'] else 200,content_type='application/json',body=json.dumps(state['data']))
-    p.route('**/rpc/forecast_cell_tail',reply)
+    p.route('**/rpc/forecast_cell_detail',reply)
     p.clock.install()
     p.locator('.fc-detail tbody tr').nth(1).click()
     p.wait_for_function('ForecastUI._state().tailData && ForecastUI._state().tailData.collecting===true')
@@ -593,7 +593,7 @@ def t_tail_progressive_refresh(b):
     p.clock.fast_forward(180000)
     p.wait_for_function(f"document.querySelectorAll('#fc-tail tbody tr:first-child td').length==={before+1}")
     check(state['calls']==2,'하루치가 아닌 다음 한 칸 도착 시 자동 추가')
-    check(p.locator('#fc-pin .fc-tt tbody tr').first.locator('td').count()==24,'윗창 24시간 유지')
+    check(p.locator('#fc-pin .fc-tt tbody tr').first.locator('td').count()==48,'윗창 48시간 유지')
     check(J(p,"document.querySelector('#fc-tail .fc-scroll').scrollLeft")==scroll,'자동 추가 뒤 가로 스크롤 유지')
     after=p.locator('#fc-tail').bounding_box()
     check(abs(after['x']-geo['x'])<=1 and abs(after['width']-geo['width'])<=1,'창 위치와 크기 유지')
@@ -642,7 +642,7 @@ def t_tail_code_cell_arrives(b):
     check(rows.nth(0).locator('td').last.inner_text()=='보통 눈','먼 칸의 눈 강도 표현')
     check(rows.nth(1).locator('td').last.inner_text()=='비','강수 코드2를2mm로 더하지 않음')
     check(rows.nth(2).locator('td').last.inner_text()=='80' and rows.nth(3).locator('td').last.inner_text()=='-2','먼 칸 확률/기온 유지')
-    check('3시간 누적량이 아닙니다' in rows.nth(0).locator('td').last.get_attribute('title'),'시간당 강도 의미 안내')
+    check(p.locator('#fc-tail [title]').count()==0,'마우스설명제거')
 
 TESTS += [t_tail_code_cell_arrives]
 
@@ -672,8 +672,7 @@ def t_daily_desktop(b):
     check(all(p.locator('#'+i).is_visible() for i in ['fc-pin','fc-tail','fc-daily']), 'PC 독립3창')
     check(p.locator('#fc-daily thead tr').first.locator('th[colspan="2"]').count()==7,'오늘 포함7일')
     text=p.locator('#fc-daily').inner_text()
-    hints=p.locator('#fc-daily td[title]').evaluate_all('(xs)=>xs.map(x=>x.title).join(" ")')
-    check('지역대표' in hints and '발표' in hints and '선택 격자' in hints and p.locator('#fc-daily details').count()==0,'출처는값도움말로유지·하단설명제거')
+    check(p.locator('#fc-daily [title]').count()==0 and p.locator('#fc-daily details').count()==0,'일별마우스설명도모두제거')
     check('0%' in text and '0°' in text,'0 원값 유지')
     p.screenshot(path='../../outputs/97_daily_desktop.png')
     a=p.locator('#fc-tail').bounding_box();z=p.locator('#fc-daily').bounding_box();mb=p.locator('#fmap').bounding_box()
@@ -761,6 +760,21 @@ def t_centered_mobile_label(b):
     p.wait_for_timeout(200);p.screenshot(path='../../outputs/98_centered_phone.png')
 
 TESTS += [t_compact_modals_and_wheel,t_centered_mobile_label]
+
+def t_hourly_48_without_hover_notes(b):
+    p,m=open_page(b);d=m.fc_cells[0][2][0]
+    J(p,"""(() => {const old=SSAuth.authed;SSAuth.authed=function(path,options){return old.apply(this,arguments).then(r=>{if(path.includes('/forecast_cell_detail')&&r.json&&r.json.hourly_tail)r.json.hourly_tail.series.s[1]=null;return r;});};return null;})()""")
+    J(p,f"SSOpenForecast('{d}')");p.locator('.fc-detail tbody tr').first.click()
+    p.wait_for_function("document.querySelectorAll('#fc-pin thead tr:last-child th:not(.lb)').length===48")
+    rows=p.locator('#fc-pin tbody tr')
+    check(rows.nth(0).locator('td').nth(24).inner_text()=='1' and rows.nth(0).locator('td').nth(25).inner_text()=='-','추가시간별원값·결측보존')
+    check(rows.nth(1).locator('td').nth(24).inner_text()=='2' and rows.nth(3).locator('td').nth(24).inner_text()=='-2','시간별강수기온원값')
+    p.wait_for_selector('#fc-daily table')
+    for root in ['#fc-pin','#fc-tail','#fc-daily']:
+        check(p.locator(root+' [title]').count()==0 and p.locator(root+' svg title').count()==0,'모든모달마우스설명없음 '+root)
+        check('정성' not in p.locator(root).inner_text(),'정성예보문구없음 '+root)
+
+TESTS += [t_hourly_48_without_hover_notes]
 
 if __name__ == "__main__":
     only = sys.argv[1:]

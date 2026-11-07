@@ -44,6 +44,15 @@
       b.partial=b.hours<3 || b.hours<b.expected_hours;return b;
     }).filter(function(b){return b.snow!=null || b.pcp!=null || b.tmin!=null || b.pop!=null || b.snow_code!=null || b.pcp_code!=null;});
   }
-  var api={combine:combine,qualitative:qualitative};
+  function hourly48(data){
+    var upper=data.upper,extra=data.hourly_tail;
+    if(!extra||!extra.series||Date.parse(extra.start_at)!==Date.parse(upper.start_at)+24*H)return upper;
+    var series={vn:upper.series.vn||0};
+    ['s','p','t','r','sq','pq'].forEach(function(k){
+      series[k]=Array.from({length:48},function(_,i){var a=i<24?upper.series:extra.series,j=i%24;return a[k]&&a[k][j]!=null?a[k][j]:null;});
+    });
+    return{start_at:upper.start_at,end_at:extra.end_at,series:series};
+  }
+  var api={combine:combine,qualitative:qualitative,hourly48:hourly48};
   if(typeof module!=='undefined' && module.exports) module.exports=api;else root.ForecastSeries=api;
 })(typeof window!=='undefined'?window:this);

@@ -6,7 +6,6 @@
   function $(id){return document.getElementById(id);}
   function phone(){return window.matchMedia('(max-width:760px)').matches;}
   function esc(x){return String(x==null?'':x).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
-  function stamp(x){var d=new Date(Date.parse(x)+9*3600000);return isNaN(d)?'-':(d.getUTCMonth()+1)+'/'+d.getUTCDate()+' '+String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0');}
   function icon(p){
     if(!p)return '';
     if(p.precip==='2'||p.precip==='WB13')return '🌨️';
@@ -26,26 +25,18 @@
       html+='<tr><th class="lb">'+{weather:'날씨',temperature:'최저·최고<br>℃',pop:'강수확률'}[row]+'</th>';
       days.forEach(function(day){var hs=halves(day),whole=hs[0]&&hs[0]===hs[1];hs.forEach(function(p,i){
         if(row!=='temperature'&&whole&&i===1)return;
-        var span=row!=='temperature'&&whole?' colspan="2"':'',value='-',title='';
+        var span=row!=='temperature'&&whole?' colspan="2"':'',value='-';
         if(row==='temperature'){
-          var v=day[i===0?'tmin':'tmax'],issued=day[i===0?'tmin_issued_at':'tmax_issued_at'];
+          var v=day[i===0?'tmin':'tmax'];
           if(v!=null&&Number.isFinite(v))value=esc(v)+'°';
-          title=(i===0?'아침 최저':'낮 최고')+' · '+(day.temperature_source==='grid_aux'?'선택 격자':'지역대표')+' · '+stamp(issued)+' 발표';
-        }else if(p){var r=data.region||{};title=p.weather+' · '+(p.source==='short_land'?(r.short_land_name||p.reg_id):(r.midterm_land_name||p.reg_id))+' 지역대표 · '+stamp(p.issued_at)+' 발표';
+        }else if(p){
           if(row==='weather')value='<span class="fc-weather-icon" aria-hidden="true">'+icon(p)+'</span><span class="fc-weather-name">'+esc(p.weather)+'</span>';
           else if(p.pop!=null)value=esc(p.pop)+'%';
         }
-        html+='<td'+span+' class="'+(row==='temperature'?(i===0?'fc-low':'fc-high'):'')+'"'+(title?' title="'+esc(title)+'"':'')+'>'+value+'</td>';
+        html+='<td'+span+' class="'+(row==='temperature'?(i===0?'fc-low':'fc-high'):'')+'">'+value+'</td>';
       });});html+='</tr>';
     });
     return html+'</tbody></table></div>';
-  }
-  function sources(data){
-    var r=data.region||{},found={};
-    (data.days||[]).forEach(function(d){(d.periods||[]).forEach(function(p){found[p.source+'|'+p.issued_at]=p;});});
-    var lines=Object.keys(found).map(function(k){var p=found[k],near=p.source==='short_land';return(near?'단기 ':'중기 ')+(near?(r.short_land_name||p.reg_id):(r.midterm_land_name||p.reg_id))+' 지역대표 · '+stamp(p.issued_at)+' 발표';});
-    return '<details class="fc-daily-source"><summary>날씨: '+esc(r.short_land_name||r.label||'지역')+' 지역대표 · 기온: 격자/중기 · 발표</summary>'+lines.map(function(s){return '<div>'+esc(s)+'</div>';}).join('')+
-      '<div title="'+esc((r.label||'')+' · '+(r.method==='nearest_town'?'가까운 공식 읍면동 대표':'공식 지명 대표')+(r.distance_km!=null?' · '+r.distance_km+'km':''))+'">기온: 가까운 날 격자 · 먼 날 지역대표</div></details>';
   }
   function visible(){var v=$('view-forecast');return !!(D.key&&!D.closed&&v&&v.offsetParent&&!document.hidden&&(!phone()||D.tab==='daily'));}
   function schedule(){clearTimeout(D.timer);D.timer=null;if(visible())D.timer=setTimeout(fetchDaily,D.error?180000:600000);}
