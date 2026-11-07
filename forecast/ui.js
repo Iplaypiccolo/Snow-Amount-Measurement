@@ -144,20 +144,16 @@
       (hasPop ? '<tr><th class="lb o">확률<small>%</small></th>' + ro + '</tr>' : '') +
       '<tr><th class="lb t">' + (step === 1 ? '기온' : '최저기온') + '<small>℃</small></th>' + rt + '</tr></tbody></table>';
   }
-  function totalLine(sr) {
-    var s = sumOf(sr.s || []), p = sumOf(sr.p || []);
-    return '<div class="fc-tt-sum">24시간 합 · 적설 <b>' + rng(s, s == null ? null : s + cntOf(sr.sq || [])) + '</b>cm · 강수 <b>' + rng(p, p == null ? null : p + cntOf(sr.pq || [])) + '</b>mm' + (sr.r && sr.r.length ? ' · 확률 최고 <b>' + pct(maxOf(sr.r)) + '</b>%' : '') + ' · 최저 <b>' + tmp(minOf(sr.t || [])) + '</b>℃</div>';
-  }
   // big = false: 마우스 말풍선, true: 24개 시각을 한 줄로 가로 스크롤
   function trendBox(sr, start, big) {
     if (!sr) return '';
     if (!big) return '<div class="fc-trend-box">' + tableBlock(sr, start, 0, 24, 3) + '<div class="fc-tt-cap">칸 = 그 시각부터 3시간 합 (기온은 최저' + (sr.r && sr.r.length ? ', 확률은 최고' : '') + ')</div></div>';
-    return '<div class="fc-trend-box big">' + '<div class="fc-scroll" tabindex="0" aria-label="24시간 예보 가로 스크롤">'+tableBlock(sr,start,0,24,1)+'</div>' + totalLine(sr) + '</div>';
+    return '<div class="fc-trend-box big"><div class="fc-scroll" tabindex="0" aria-label="24시간 예보 가로 스크롤">'+tableBlock(sr,start,0,24,1)+'</div></div>';
   }
   // 고정 창 위치·크기(컴퓨터 화면만, 2026-11-03): scale = 글자·표 배율, x·y = 지도 안 왼쪽 위(null = 처음 자리 오른쪽 위). 지도보다 커지거나 밖으로 나가지 않게 맞춤
-  var PIN_KEY = 'ss_fc_pin', PIN_BODY = 396, PIN_PAD = 22, PIN_MIN = 0.8;      // PIN_BODY·PIN_PAD = 배율 1일 때 표 폭·창 안팎 여백(px)
+  var PIN_KEY = 'ss_fc_pin', PIN_BODY = 440, PIN_PAD = 14, PIN_MIN = 0.8;      // PIN_BODY·PIN_PAD = 배율 1일 때 표 폭·창 안팎 여백(px)
   function isPhone() { return window.matchMedia('(max-width:760px)').matches; }
-  function loadPinGeo() { try { var j = JSON.parse(localStorage.getItem(PIN_KEY) || 'null'); if (j && j.scale > 0) return { scale: +j.scale, x: j.layout==='right-v1' && j.x!=null?+j.x:null, y: j.layout==='right-v1' && j.y!=null?+j.y:null, layout:'right-v1' }; } catch (e) {} return { scale: 1.3, x: null, y: null, layout:'right-v1' }; }
+  function loadPinGeo() { try { var j = JSON.parse(localStorage.getItem(PIN_KEY) || 'null'); if (j && j.scale > 0 && j.layout==='compact-v2') return j; } catch (e) {} return { scale: 1, x: null, y: null, layout:'compact-v2' }; }
   function savePinGeo() { try { localStorage.setItem(PIN_KEY, JSON.stringify(S.pinGeo)); } catch (e) {} }
   function applyPinGeo() { applyBoxGeo($('fc-pin'), S.pinGeo); renderTail(); }
   function applyBoxGeo(box, geo) {
@@ -233,7 +229,7 @@
     var box=$('fc-tail'); if (!box) return;
     if (!S.pin || S.tailClosed) { box.hidden=true; syncForecastMapSize(); return; }
     var d=S.tailData, k=S.pin.split(',');
-    box.innerHTML='<div class="fc-pin-in"><div class="fc-pin-head"><b>3시간 예보 · '+esc(cellName(+k[0],+k[1]))+'</b><button class="fc-tail-x" type="button" aria-label="이후 예보 닫기">×</button></div><div class="fc-tail-body">'+
+    box.innerHTML='<div class="fc-pin-in"><div class="fc-pin-head"><b><span class="fc-period">3시간</span><span class="fc-place">'+esc(cellName(+k[0],+k[1]))+'</span></b><button class="fc-tail-x" type="button" aria-label="이후 예보 닫기">×</button></div><div class="fc-tail-body">'+
       (S.tailError?'<p>이후 예보를 불러오지 못했습니다. <button type="button" data-tail-retry>다시 받기</button></p>':!d?'<p role="status">이후 예보를 불러오는 중…</p>':d.status!=='ok'?'<p>최신 예보 자료가 없습니다.</p>':tailTables(d))+
       '</div></div><span class="fc-pin-grip l" data-grip="l"></span><span class="fc-pin-grip r" data-grip="r"></span>';
     box.hidden=false;
@@ -289,7 +285,7 @@
     if(S.tailKey===key) return;
     clearTailTimer();
     S.tailKey=key; S.tailData=null; S.tailError=false; S.tailRetry=false; S.tailClosed=false; S.nearClosed=false;
-    S.tailGeo=S.tailGeo || {scale:1.3,x:null,y:null}; renderTail();
+    S.tailGeo=S.tailGeo || {scale:1,x:null,y:null}; renderTail();
     fetchTail(key,false);
   }
   // 격자를 누르면 그 격자의 그림을 지도 오른쪽 위에 고정(지도 아무 데나 누르면 닫힘)
@@ -302,12 +298,12 @@
     if(S.tailData && S.tailData.status==='ok') { sr=S.tailData.upper.series; start=S.tailData.upper.start_at; }
     renderTail();
     var k = S.pin.split(','), g = S.grid[S.hq], c = g && g.cells ? g.cells.filter(function (x) { return x[0] === +k[0] && x[1] === +k[1]; })[0] : null;
-    box.innerHTML = '<div class="fc-pin-in"><div class="fc-pin-head"><b>1시간 예보 · ' + esc(cellName(+k[0], +k[1])) + '</b>' + cellNo(+k[0], +k[1]) + ' <span class="fc-pin-br">' + (c ? esc((c[2] || []).map(bname).join(', ')) : '') + '</span>' +
-      '<button type="button" class="fc-pin-x" aria-label="닫기">×</button></div>' + (S.pinWhy ? '<div class="fc-pin-why">' + esc(S.pinWhy) + '</div>' : '') + trendBox(sr, start, true) +
+    box.innerHTML = '<div class="fc-pin-in"><div class="fc-pin-head"><b><span class="fc-period">1시간</span><span class="fc-place">' + esc(cellName(+k[0], +k[1])) + '</span></b>' +
+      '<button type="button" class="fc-pin-x" aria-label="닫기">×</button></div>' + trendBox(sr, start, true) +
       '</div>' +
       '<span class="fc-pin-grip l" data-grip="l" aria-hidden="true"></span><span class="fc-pin-grip r" data-grip="r" aria-hidden="true"></span>';
     box.hidden = !!S.nearClosed; applyPinGeo();
-    if(window.ForecastDaily)window.ForecastDaily.sync(S.pin,cellName(+k[0],+k[1]),S.pinAt);
+    if(window.ForecastDaily)window.ForecastDaily.sync(S.pin,cellName(+k[0],+k[1])+(c?' · '+(c[2]||[]).map(bname).join(', '):''),S.pinAt);
   }
   function markSel() { var rows = document.querySelectorAll('#fc-tree .fc-detail tr[data-cell]'); for (var i = 0; i < rows.length; i++) rows[i].classList.toggle('sel', !S.nearClosed && rows[i].dataset.cell === S.pin); }
   function pinCell(key) { S.pin = key; S.pinWhy = null; S.pinAt = Date.now(); renderPin(); drawCells(); markSel(); revealForecastCell(); }
